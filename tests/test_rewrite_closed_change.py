@@ -33,7 +33,7 @@ COMMANDS = {"edit": gedit_main, "reword": greword_main, "fix": fix_main}
 
 @pytest.fixture
 def rows(stack_repo: Path) -> list[Commit]:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    git("config", "ger.webUrl", "https://g.example", cwd=stack_repo)
     return stack_rows_mb_to_head(stack_repo)
 
 
@@ -141,9 +141,9 @@ def test_the_check_says_nothing_when_gerrit_cannot_be_asked(
     gerrit: object, web_url: str | None, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     if web_url is None:
-        git("config", "--unset", "gerrit.webUrl", cwd=stack_repo, check=False)
+        git("config", "--unset", "ger.webUrl", cwd=stack_repo, check=False)
     else:
-        git("config", "gerrit.webUrl", web_url, cwd=stack_repo)
+        git("config", "ger.webUrl", web_url, cwd=stack_repo)
     row = stack_rows_mb_to_head(stack_repo)[0]
     monkeypatch.chdir(stack_repo)
     run = RunContext.open(stack_repo, settings=Settings.from_cwd(stack_repo), gerrit=gerrit)  # type: ignore[arg-type]

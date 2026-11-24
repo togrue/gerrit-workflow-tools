@@ -10,7 +10,7 @@ GER=(uv run --project "$ROOT" ger)
 W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT
 git clone -q "ssh://$HOST:$PORT/ci-demo" "$W/ci-demo"; cd "$W/ci-demo"
 git config user.email admin@example.com; git config user.name Admin
-git config gerrit.webUrl "http://$HOST:$HTTP_PORT"; git config gerrit.allowInsecureHttp true
+git config ger.webUrl "http://$HOST:$HTTP_PORT"; git config ger.allowInsecureHttp true
 curl -s -o .git/hooks/commit-msg "http://$HOST:$HTTP_PORT/tools/hooks/commit-msg"
 chmod +x .git/hooks/commit-msg
 echo "loop $(date +%s)" >> NOTES.md; git add NOTES.md; git commit -q -m "ci-loop: harmless change"

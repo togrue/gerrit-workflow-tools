@@ -15,7 +15,7 @@ export type GerState =
   | "no-repo"
   /** The program `ger.executable` names is not there. */
   | "no-executable"
-  /** The checkout lacks Gerrit settings (`gerrit.webUrl`, credentials): `ger setup` fixes it. */
+  /** The checkout lacks Gerrit settings (`ger.webUrl`, credentials): `ger setup` fixes it. */
   | "setup"
   /** `ger serve` speaks an API version this extension cannot use: ger or the extension needs updating. */
   | "incompatible"

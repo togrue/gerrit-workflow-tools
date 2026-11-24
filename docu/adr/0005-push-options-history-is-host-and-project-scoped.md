@@ -15,7 +15,7 @@ topics from unrelated repos pollute the prompt.
 **Key by clone path or by git remote name** was rejected: clones of the same
 project would not share, and remote names like `origin` collide across repos.
 
-**Key by `gerrit.project` alone** was rejected: the same project path can exist
+**Key by `ger.project` alone** was rejected: the same project path can exist
 on more than one Gerrit host; host-scoped cache layout already exists for
 `cache.db` and inbox state.
 
@@ -31,7 +31,7 @@ alone.
 - Stored lines keep reviewers, topic, and `wip`/`private`. Strategy keywords
   (`push` / `lazy` / `overwrite`) are never persisted; a CLI
   `--reviewer-strategy` is merged into the visible prompt for the session only.
-- When `gerrit.webUrl` or project identity is missing, history is neither read
+- When `ger.webUrl` or project identity is missing, history is neither read
   nor written. History is recalled with Up/Down and never prefills the line; the
   `-i` and `r` prompts prefill from `--reviewers`, then the reviewers registry,
-  then `branch.*.gerritReviewers`.
+  then `branch.*.gerReviewers`.

@@ -117,7 +117,7 @@ def load_ci_content_providers(
     """**CI content providers** in match order: ``CONTENT_PROVIDERS`` of the local, then the
     global ``.ger/ci/registry.py``, then the built-in Jenkins provider.
 
-    Providers are matched by URL host/pattern, not by ``gerrit.project``, so every tier's
+    Providers are matched by URL host/pattern, not by ``ger.project``, so every tier's
     list is used. Entries without ``matches`` / ``fetch`` are skipped with a warning.
     """
     from gerrit_workflow_tools.core.ci_jenkins import JenkinsProvider

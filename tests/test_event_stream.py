@@ -350,9 +350,9 @@ def test_off_never_connects() -> None:
     [
         (
             {
-                "gerrit.webUrl": "https://review.example.com",
+                "ger.webUrl": "https://review.example.com",
                 "remote.origin.url": "https://review.example.com/a/proj",
-                "gerrit.user": "me",
+                "ger.user": "me",
             },
             SshTarget("review.example.com", DEFAULT_SSH_PORT, "me"),
         ),
@@ -361,14 +361,14 @@ def test_off_never_connects() -> None:
             SshTarget("review.example.com", 29418, "bob"),
         ),
         (
-            {"remote.origin.url": "ssh://review.example.com/proj", "gerrit.user": "me"},
+            {"remote.origin.url": "ssh://review.example.com/proj", "ger.user": "me"},
             SshTarget("review.example.com", None, "me"),
         ),
         ({"remote.origin.url": "gerrit:proj.git"}, SshTarget("gerrit", None, None)),  # an ssh config alias
         ({"remote.origin.url": "git@host.example:proj"}, SshTarget("host.example", None, "git")),
         (
             {
-                "gerrit.webUrl": "https://review.example.com",
+                "ger.webUrl": "https://review.example.com",
                 "ger.eventStreamHost": "ssh.example.com",
                 "ger.eventStreamPort": "2222",
                 "ger.eventStreamUser": "events",
@@ -376,10 +376,10 @@ def test_off_never_connects() -> None:
             SshTarget("ssh.example.com", 2222, "events"),
         ),
         (
-            {"remote.origin.url": "C:\\repos\\proj", "gerrit.webUrl": "http://g.example:8080"},
+            {"remote.origin.url": "C:\\repos\\proj", "ger.webUrl": "http://g.example:8080"},
             SshTarget("g.example", 29418),
         ),
-        ({"gerrit.remote": "gerrit", "remote.gerrit.url": "ssh://g.example:29419/p"}, SshTarget("g.example", 29419)),
+        ({"ger.remote": "gerrit", "remote.gerrit.url": "ssh://g.example:29419/p"}, SshTarget("g.example", 29419)),
     ],
 )
 def test_the_ssh_target_comes_from_overrides_the_remote_or_the_web_url(
@@ -392,7 +392,7 @@ def test_the_ssh_target_comes_from_overrides_the_remote_or_the_web_url(
     ("config", "reason"),
     [
         ({}, "no Gerrit host"),
-        ({"gerrit.webUrl": "https://g.example", "ger.eventStreamPort": "ssh"}, "not a port"),
+        ({"ger.webUrl": "https://g.example", "ger.eventStreamPort": "ssh"}, "not a port"),
     ],
 )
 def test_no_ssh_target_says_why(config: dict[str, str], reason: str) -> None:

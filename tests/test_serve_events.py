@@ -138,8 +138,8 @@ def test_an_injected_gerrit_without_an_event_source_never_tries_ssh(stack_repo: 
 def test_off_and_no_host_are_off_with_a_reason(tmp_path: Path) -> None:
     git("init", "-q", cwd=tmp_path)
     no_host = follow_events(tmp_path, Settings.from_cwd(tmp_path), activity=Activity(), lock=threading.Lock())
-    assert (no_host.status.state, no_host.status.reason) == (StreamState.OFF, "gerrit.webUrl is not set")
-    git("config", "gerrit.webUrl", WEB, cwd=tmp_path)
+    assert (no_host.status.state, no_host.status.reason) == (StreamState.OFF, "ger.webUrl is not set")
+    git("config", "ger.webUrl", WEB, cwd=tmp_path)
     git("config", "ger.eventStream", "off", cwd=tmp_path)
     off = follow_events(tmp_path, Settings.from_cwd(tmp_path), activity=Activity(), lock=threading.Lock())
     assert (off.status.state, off.status.reason) == (StreamState.OFF, "ger.eventStream is off")

@@ -39,7 +39,7 @@ from tests.integration.repo_builder import build_linear_chain
 
 
 def _configure_gerrit_project(repo, project: str) -> None:
-    git("config", "gerrit.project", project, cwd=repo)
+    git("config", "ger.project", project, cwd=repo)
 
 
 def _clear_gerrit_cache(repo: Path) -> None:

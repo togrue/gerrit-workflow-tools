@@ -43,7 +43,7 @@ test("with several folders, the first in a checkout is used, and the note says w
 
 test("a failure to load leaves the state its reason calls for; the server classifies Gerrit and git", () => {
   assert.equal(failureState(new ExecutableNotFound("ger")), "no-executable");
-  assert.equal(failureState(new GerApiError("CONFIG", "gerrit.webUrl is not set", 500)), "setup");
+  assert.equal(failureState(new GerApiError("CONFIG", "ger.webUrl is not set", 500)), "setup");
   assert.equal(failureState(new ServeFailed("not inside a git worktree", "GIT")), "no-repo");
   assert.equal(failureState(new GerApiError("GIT", "a git command failed", 500)), "failed");
   assert.equal(failureState(new ServeFailed("Traceback …")), "failed");

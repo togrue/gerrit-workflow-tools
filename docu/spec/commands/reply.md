@@ -4,7 +4,7 @@
 |--|--|
 | **Status** | **Partial**: `ger reply CHAIN` (write, update, discard), `ger reply --publish` and publishing with `ger push` are implemented. Planned (see [Delivery](#delivery)): the guided reply, the `unpublished-drafts` attention reason, and `ger edit` listing the open chains at each stop |
 | **Module** | `cli_reply.py`; draft round trips on `CommentApi` in `core/gerrit/comments.py`; chain merging in `core/comment_chains.py` |
-| **Requires** | `gerrit.webUrl`, credentials |
+| **Requires** | `ger.webUrl`, credentials |
 
 Answer an inline comment chain as a **draft**, and later publish your drafts. This closes the author's review loop from the terminal: `ger show` reads the chains, you (or an agent) fix the code, `ger reply` answers each chain, and the answers reach reviewers when you push.
 
@@ -129,7 +129,7 @@ With `--json`: `{"changes": [{"change": <triplet>, "url": ..., "drafts": N, "lab
 
 `ger push` looks for your drafts on the changes it is about to push: one `has:draft` query for those change numbers. When there are any:
 
-- **On a TTY**, the push options line is the usual one with `publish-drafts` at its end, and the status line shows `Drafts publish N`. Enter adds Gerrit's `publish-comments` push option ([Gerrit: publish-comments](https://gerrit-review.googlesource.com/Documentation/user-upload.html#publish-comments)), which publishes your drafts on every change the push updates. Without `publish-drafts` on the line, the push keeps them. `gerrit.pushPublishDrafts = false` starts the line without it ([Configuration](../../Configuration.md)). Without a terminal on stdout the prompt is `Push and publish N draft(s)? [Y/n/p/r]`, and `p` pushes without publishing.
+- **On a TTY**, the push options line is the usual one with `publish-drafts` at its end, and the status line shows `Drafts publish N`. Enter adds Gerrit's `publish-comments` push option ([Gerrit: publish-comments](https://gerrit-review.googlesource.com/Documentation/user-upload.html#publish-comments)), which publishes your drafts on every change the push updates. Without `publish-drafts` on the line, the push keeps them. `ger.pushPublishDrafts = false` starts the line without it ([Configuration](../../Configuration.md)). Without a terminal on stdout the prompt is `Push and publish N draft(s)? [Y/n/p/r]`, and `p` pushes without publishing.
 - **With `-y`**, drafts are published only when `--publish-comments` is also given. Scripts and agents never publish by accident.
 - Drafts on a change the push does **not** update (behind the ready boundary, or with nothing new) stay drafts. The preview lists them by change.
 
@@ -254,7 +254,7 @@ Shared table: [exit-codes.md](../exit-codes.md). No new codes.
 | `3` | Chain or change not found; `--discard` with no draft |
 | `4` | Comment id matched more than one change; ambiguous changeish |
 | `5` | Gerrit rejected a write, including a partial publish |
-| `6` | Missing `gerrit.webUrl` or credentials |
+| `6` | Missing `ger.webUrl` or credentials |
 
 ---
 

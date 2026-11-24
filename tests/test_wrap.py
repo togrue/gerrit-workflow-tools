@@ -39,9 +39,9 @@ def test_fit_header_keeps_the_tail() -> None:
 
 def test_wrap_width_defaults_and_rejects_invalid_values() -> None:
     assert Settings.from_map({}).wrap_width == 120
-    assert Settings.from_map({"gerrit.wrapWidth": "80"}).wrap_width == 80
-    assert Settings.from_map({"gerrit.wrapWidth": "0"}).wrap_width == 120
-    assert Settings.from_map({"gerrit.wrapWidth": "nope"}).wrap_width == 120
+    assert Settings.from_map({"ger.wrapWidth": "80"}).wrap_width == 80
+    assert Settings.from_map({"ger.wrapWidth": "0"}).wrap_width == 120
+    assert Settings.from_map({"ger.wrapWidth": "nope"}).wrap_width == 120
 
 
 def _chain(*, message: str, path: str, context: str = "") -> CommentChain:

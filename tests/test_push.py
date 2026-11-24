@@ -130,7 +130,7 @@ def test_gpush_dry_run_never_writes_upstream(stack_repo_unconfigured: Path, monk
 def test_gpush_vanilla_upstream_runs_plain_git_push(
     stack_repo_unconfigured: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Upstream on a remote other than gerrit.remote → ``git push`` with no extra args (B1)."""
+    """Upstream on a remote other than ger.remote → ``git push`` with no extra args (B1)."""
     repo = stack_repo_unconfigured
     git("remote", "add", "origin", str(repo.resolve()), cwd=repo)
     git("remote", "add", "fork", str(repo.resolve()), cwd=repo)
@@ -257,7 +257,7 @@ def test_gpush_noninteractive_stdin_requires_yes(stack_repo: Path, monkeypatch: 
 
 
 def test_gpush_cancel_at_prompt(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
+    git("config", "ger.lastPushedBranch", "true", cwd=stack_repo)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     prompts: list[str] = []
 
@@ -343,9 +343,9 @@ def test_gpush_yes_lazy_without_rest_credentials_errors(stack_repo: Path, monkey
 
 
 def test_gpush_yes_lazy_no_new_changes_still_applies_rest(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
-    git("config", "gerrit.user", "testuser", cwd=stack_repo)
-    git("config", "gerrit.password", "testpass", cwd=stack_repo)
+    git("config", "ger.webUrl", "https://g.example.test", cwd=stack_repo)
+    git("config", "ger.user", "testuser", cwd=stack_repo)
+    git("config", "ger.password", "testpass", cwd=stack_repo)
     ready = compute_ready(stack_repo, stop_pattern=r"^test!")
     assert ready.push_range
     rows = commits_in_range(stack_repo, ready.push_range, first_parent=True)
@@ -628,9 +628,9 @@ def test_gpush_reviewer_failure_is_a_warning_and_still_records_the_push(
         def set_reviewers_batch(self, change_id: str, **_kw: object) -> dict[str, object]:
             raise GerritApiError("Gerrit HTTP 400")
 
-    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
-    git("config", "gerrit.user", "testuser", cwd=stack_repo)
-    git("config", "gerrit.password", "testpass", cwd=stack_repo)
+    git("config", "ger.webUrl", "https://g.example.test", cwd=stack_repo)
+    git("config", "ger.user", "testuser", cwd=stack_repo)
+    git("config", "ger.password", "testpass", cwd=stack_repo)
     rows = commits_in_range(stack_repo, "main..feature")[:2]
     details = build_details_by_change_id(rows, per_index_overrides=[{"reviewers": []} for _ in rows])
     mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
@@ -652,9 +652,9 @@ def test_gpush_reviewer_failure_is_a_warning_and_still_records_the_push(
 
 def test_gpush_lazy_reaches_freshly_pushed_changes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The post-push reviewer pass must not read the pre-push "no such change" verdict."""
-    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
-    git("config", "gerrit.user", "testuser", cwd=stack_repo)
-    git("config", "gerrit.password", "testpass", cwd=stack_repo)
+    git("config", "ger.webUrl", "https://g.example.test", cwd=stack_repo)
+    git("config", "ger.user", "testuser", cwd=stack_repo)
+    git("config", "ger.password", "testpass", cwd=stack_repo)
     commits = commits_in_range(stack_repo, "main..feature")[:2]
     run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore({}))
     details = build_details_by_change_id(commits, per_index_overrides=[{"reviewers": []}, {"reviewers": []}])
@@ -674,9 +674,9 @@ def test_gpush_lazy_reaches_freshly_pushed_changes(stack_repo: Path, monkeypatch
 def test_gpush_yes_overwrite_prints_per_commit_assignment_lines(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
-    git("config", "gerrit.user", "testuser", cwd=stack_repo)
-    git("config", "gerrit.password", "testpass", cwd=stack_repo)
+    git("config", "ger.webUrl", "https://g.example.test", cwd=stack_repo)
+    git("config", "ger.user", "testuser", cwd=stack_repo)
+    git("config", "ger.password", "testpass", cwd=stack_repo)
     ready = compute_ready(stack_repo, stop_pattern=r"^test!")
     assert ready.push_range
     rows = commits_in_range(stack_repo, ready.push_range, first_parent=True)
@@ -745,8 +745,8 @@ def test_gpush_dry_run_variants_exit_zero(stack_repo: Path, monkeypatch: pytest.
 def test_gpush_dry_run_highlights_warning_patterns(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     rows = stack_rows_mb_to_head(stack_repo)
     first_subject = rows[0].subject
-    git("config", "gerrit.stopPattern", r"^does-not-match$", cwd=stack_repo)
-    git("config", "gerrit.warningPattern", f"^{re.escape(first_subject)}$", cwd=stack_repo)
+    git("config", "ger.stopPattern", r"^does-not-match$", cwd=stack_repo)
+    git("config", "ger.warningPattern", f"^{re.escape(first_subject)}$", cwd=stack_repo)
     code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "--all", "--color", "always"], monkeypatch)
     assert code == 0
     assert ANSI_YELLOW in out
@@ -757,7 +757,7 @@ def test_gpush_dry_run_highlights_stop_boundary_subject(stack_repo: Path, monkey
     rows = stack_rows_mb_to_head(stack_repo)
     assert len(rows) >= 2
     boundary_subject = rows[1].subject
-    git("config", "gerrit.stopPattern", f"^{re.escape(boundary_subject)}$", cwd=stack_repo)
+    git("config", "ger.stopPattern", f"^{re.escape(boundary_subject)}$", cwd=stack_repo)
     code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "--color", "always"], monkeypatch)
     assert code == 0
     assert "Stopped at commit" in out
@@ -766,15 +766,15 @@ def test_gpush_dry_run_highlights_stop_boundary_subject(stack_repo: Path, monkey
 
 
 def test_gpush_show_attributes_fails_without_weburl(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
+    git("config", "ger.pushShowAttributes", "true", cwd=stack_repo)
     code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 1
-    assert "gerrit.webUrl" in err or "webUrl" in err
+    assert "ger.webUrl" in err or "webUrl" in err
 
 
 def test_gpush_show_attributes_fails_without_credentials(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
-    git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
+    git("config", "ger.webUrl", "https://g.example.test", cwd=stack_repo)
+    git("config", "ger.pushShowAttributes", "true", cwd=stack_repo)
     code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 1
     assert "credentials" in err.lower()
@@ -783,10 +783,10 @@ def test_gpush_show_attributes_fails_without_credentials(stack_repo: Path, monke
 def test_gpush_show_attributes_unchanged_when_matching_reviewers(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
-    git("config", "gerrit.user", "testuser", cwd=stack_repo)
-    git("config", "gerrit.password", "testpass", cwd=stack_repo)
-    git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
+    git("config", "ger.webUrl", "https://g.example.test", cwd=stack_repo)
+    git("config", "ger.user", "testuser", cwd=stack_repo)
+    git("config", "ger.password", "testpass", cwd=stack_repo)
+    git("config", "ger.pushShowAttributes", "true", cwd=stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(
         rows,
@@ -813,10 +813,10 @@ def test_gpush_show_attributes_unchanged_when_matching_reviewers(
 def test_gpush_show_attributes_shows_arrow_when_reviewers_differ(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
-    git("config", "gerrit.user", "testuser", cwd=stack_repo)
-    git("config", "gerrit.password", "testpass", cwd=stack_repo)
-    git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
+    git("config", "ger.webUrl", "https://g.example.test", cwd=stack_repo)
+    git("config", "ger.user", "testuser", cwd=stack_repo)
+    git("config", "ger.password", "testpass", cwd=stack_repo)
+    git("config", "ger.pushShowAttributes", "true", cwd=stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(
         rows,
@@ -842,10 +842,10 @@ def test_gpush_show_attributes_shows_arrow_when_reviewers_differ(
 def test_gpush_show_attributes_wip_no_arrow_when_reviewers_match(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
-    git("config", "gerrit.user", "testuser", cwd=stack_repo)
-    git("config", "gerrit.password", "testpass", cwd=stack_repo)
-    git("config", "gerrit.pushShowAttributes", "true", cwd=stack_repo)
+    git("config", "ger.webUrl", "https://g.example.test", cwd=stack_repo)
+    git("config", "ger.user", "testuser", cwd=stack_repo)
+    git("config", "ger.password", "testpass", cwd=stack_repo)
+    git("config", "ger.pushShowAttributes", "true", cwd=stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(
         rows,
@@ -927,8 +927,8 @@ def test_gpush_confirm_reviewers_then_push_includes_percent_r(
 def test_gpush_saves_typed_options_only_after_a_push(
     confirm_answer: str, saved: list[str], stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    git("config", "gerrit.webUrl", "https://g.example.test", cwd=stack_repo)
-    git("config", "gerrit.project", "proj", cwd=stack_repo)
+    git("config", "ger.webUrl", "https://g.example.test", cwd=stack_repo)
+    git("config", "ger.project", "proj", cwd=stack_repo)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     answers = iter(["r", confirm_answer])
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
@@ -1041,7 +1041,7 @@ def test_gpush_interactive_forbidden_with_yes(stack_repo: Path, monkeypatch: pyt
 
 
 def test_gpush_success_updates_last_push_branch(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
+    git("config", "ger.lastPushedBranch", "true", cwd=stack_repo)
     expected_tip = compute_ready(stack_repo, stop_pattern=r"^test!").push_tip_sha
     assert expected_tip
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
@@ -1053,7 +1053,7 @@ def test_gpush_success_updates_last_push_branch(stack_repo: Path, monkeypatch: p
 
 
 def test_gpush_skips_last_push_when_config_false(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.lastPushedBranch", "false", cwd=stack_repo)
+    git("config", "ger.lastPushedBranch", "false", cwd=stack_repo)
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
     monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
@@ -1063,14 +1063,14 @@ def test_gpush_skips_last_push_when_config_false(stack_repo: Path, monkeypatch: 
 
 
 def test_gpush_dry_run_does_not_create_last_push_branch(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
+    git("config", "ger.lastPushedBranch", "true", cwd=stack_repo)
     code, _out, _err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0
     assert not ref_exists(stack_repo, "refs/heads/lastPush/feature")
 
 
 def test_gpush_failed_push_does_not_update_last_push(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.lastPushedBranch", "true", cwd=stack_repo)
+    git("config", "ger.lastPushedBranch", "true", cwd=stack_repo)
     monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
     mock_run = MagicMock(return_value=MagicMock(returncode=1))
     monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
@@ -1114,7 +1114,7 @@ def _add_self_origin_and_fetch(repo: Path) -> None:
     if git("remote", "get-url", "origin", cwd=repo, check=False).returncode != 0:
         git("remote", "add", "origin", str(repo.resolve()), cwd=repo)
     git("fetch", "origin", cwd=repo)
-    git("config", "gerrit.project", "testproj", cwd=repo, check=False)
+    git("config", "ger.project", "testproj", cwd=repo, check=False)
 
 
 def _advance_main_with_commit(repo: Path) -> None:
@@ -1133,7 +1133,7 @@ def _advance_main_with_commit(repo: Path) -> None:
 def test_gpush_warn_not_rebased_when_remote_ahead(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _add_self_origin_and_fetch(stack_repo)
     _advance_main_with_commit(stack_repo)
-    git("config", "gerrit.push.remotePolicy", "warn-not-rebased", cwd=stack_repo)
+    git("config", "ger.pushRemotePolicy", "warn-not-rebased", cwd=stack_repo)
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0
     assert "About to push commits:" in out
@@ -1144,7 +1144,7 @@ def test_gpush_warn_not_rebased_when_remote_ahead(stack_repo: Path, monkeypatch:
 def test_gpush_error_not_rebased_exits(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _add_self_origin_and_fetch(stack_repo)
     _advance_main_with_commit(stack_repo)
-    git("config", "gerrit.push.remotePolicy", "error-not-rebased", cwd=stack_repo)
+    git("config", "ger.pushRemotePolicy", "error-not-rebased", cwd=stack_repo)
     code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 1
     assert "error:" in err.lower()
@@ -1160,7 +1160,7 @@ def test_gpush_warn_policy_skips_when_fetch_impossible(stack_repo: Path, monkeyp
         return git(*args, **kwargs)
 
     monkeypatch.setattr("gerrit_workflow_tools.core.push_checks.git", git_fetch_fail)
-    git("config", "gerrit.push.remotePolicy", "warn-not-rebased", cwd=stack_repo)
+    git("config", "ger.pushRemotePolicy", "warn-not-rebased", cwd=stack_repo)
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
     assert code == 0, err
     assert "About to push commits:" in out
@@ -1417,6 +1417,6 @@ def test_gpush_options_on_outdated_changes_name_the_newer_patchsets(
     code, _out, err = run_cli(stack_repo, gpush_main, argv, monkeypatch, gerrit=store)
     assert code == 0, err
     assert "push options not applied" in err and "Gerrit has newer patchsets of these changes" in err
-    assert "`ger checkout change:100 --update`" in err and "gerrit.token" not in err
+    assert "`ger checkout change:100 --update`" in err and "ger.token" not in err
     writes = ("set_wip", "set_topic", "set_private", "set_reviewers_batch", "delete_reviewer")
     assert not any(store.calls_to(method) for method in writes)

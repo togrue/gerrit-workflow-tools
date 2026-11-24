@@ -18,7 +18,7 @@ Then read **[Reading-ger-log.md](Reading-ger-log.md)** to interpret daily `ger l
 |-------|----------|
 | [Getting-Started.md](Getting-Started.md) | First-run setup (install, config, hook, verify) |
 | [Reading-ger-log.md](Reading-ger-log.md) | Columns, tokens, attention hints, summary line |
-| [Configuration.md](Configuration.md) | All `gerrit.*` and `branch.*` git config keys |
+| [Configuration.md](Configuration.md) | All `ger.*` and `branch.*` git config keys |
 | [Completion.md](Completion.md) | Bash tab completion install |
 | [Server-load.md](Server-load.md) | What each command asks of the Gerrit server, and how to read that off the server's log |
 

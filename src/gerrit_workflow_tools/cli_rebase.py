@@ -53,20 +53,20 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Rebase the current branch onto the fetched remote-tracking tip of the upstream "
-            "target on gerrit.remote. Default: gerrit.rebaseOntoRemote."
+            "target on ger.remote. Default: ger.rebaseOntoRemote."
         ),
     )
     p.add_argument(
         "--no-onto-remote",
         action="store_true",
-        help="Override gerrit.rebaseOntoRemote: use merge-base with the target (default behavior).",
+        help="Override ger.rebaseOntoRemote: use merge-base with the target (default behavior).",
     )
     p.add_argument(
         "--drop-merged-equivalent",
         action="store_true",
         help=(
             "Turn merged commits that are provably equivalent to the merged Gerrit revision into "
-            "drop lines in the todo. Default: gerrit.rebaseDropMergedEquivalent."
+            "drop lines in the todo. Default: ger.rebaseDropMergedEquivalent."
         ),
     )
     p.add_argument(

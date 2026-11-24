@@ -44,7 +44,7 @@ def _change_row(
 
 
 def _configure_stack_repo_project(repo: Path, project: str = "myproject") -> None:
-    git("config", "gerrit.project", project, cwd=repo)
+    git("config", "ger.project", project, cwd=repo)
 
 
 def _set_upstream_to_dev(repo: Path) -> None:
@@ -107,7 +107,7 @@ def test_resolve_stack_context_project_override(tmp_path: Path) -> None:
     git("add", "f", cwd=repo)
     git("commit", "-m", "init", cwd=repo)
     git("remote", "add", "origin", "ssh://user@gerrit.example.com/a/remote/proj.git", cwd=repo)
-    git("config", "gerrit.project", "cfg/override", cwd=repo)
+    git("config", "ger.project", "cfg/override", cwd=repo)
     git("checkout", "-b", "feature", cwd=repo)
     configure_gerrit_target(repo, "main")
 
@@ -126,7 +126,7 @@ def test_effective_gerrit_destination_branch_gerrit_target_override(tmp_path: Pa
     git("remote", "add", "origin", "ssh://user@gerrit.example.com/a/team/proj.git", cwd=repo)
     git("checkout", "-b", "feature", cwd=repo)
     _set_upstream_to_dev(repo)
-    git("config", "branch.feature.gerritTarget", "main", cwd=repo)
+    git("config", "branch.feature.gerTarget", "main", cwd=repo)
 
     assert Settings.from_cwd(repo).branch_gerrit_target("feature") == "main"
     assert effective_gerrit_destination_branch(repo, "feature", settings=Settings.from_cwd(repo)) == "main"
@@ -146,7 +146,7 @@ def test_resolve_stack_context_errors_when_project_missing(tmp_path: Path) -> No
     git("checkout", "-b", "feature", cwd=repo)
     configure_gerrit_target(repo, "main")
 
-    with pytest.raises(ChangeResolutionError, match=r"gerrit\.project"):
+    with pytest.raises(ChangeResolutionError, match=r"ger\.project"):
         resolve_stack_context(repo, branch="feature", settings=Settings.from_cwd(repo))
 
 
@@ -160,7 +160,7 @@ def test_resolve_stack_context_errors_when_destination_missing(tmp_path: Path) -
     git("remote", "add", "origin", "ssh://user@gerrit.example.com/a/proj.git", cwd=repo)
     git("checkout", "-b", "feature", cwd=repo)
 
-    with pytest.raises(ChangeResolutionError, match="gerritTarget"):
+    with pytest.raises(ChangeResolutionError, match="gerTarget"):
         resolve_stack_context(repo, branch="feature", settings=Settings.from_cwd(repo))
 
 

@@ -129,16 +129,16 @@ def _ssh_remote(url: str) -> SshTarget | None:
 def discover_ssh_target(settings: Settings) -> SshTarget:
     """Gerrit's ssh daemon for this repository, from what ger already knows. No network.
 
-    ``ger.eventStreamHost`` / ``…Port`` / ``…User`` win. Otherwise the ``gerrit.remote`` URL when
-    it is an ssh URL, else the host of ``gerrit.webUrl`` on Gerrit's default port 29418 with
-    ``gerrit.user``. Raises :class:`EventSourceUnavailable` when no host can be named.
+    ``ger.eventStreamHost`` / ``…Port`` / ``…User`` win. Otherwise the ``ger.remote`` URL when
+    it is an ssh URL, else the host of ``ger.webUrl`` on Gerrit's default port 29418 with
+    ``ger.user``. Raises :class:`EventSourceUnavailable` when no host can be named.
     """
     remote_url = settings.remote_url(settings.gerrit_remote) or ""
     remote = _ssh_remote(remote_url.strip())
     web_host = urlsplit(settings.gerrit_web_url or "").hostname
     host = settings.event_stream_ssh("Host") or (remote.host if remote else web_host)
     if not host:
-        raise EventSourceUnavailable("no Gerrit host to connect to: set gerrit.webUrl or ger.eventStreamHost")
+        raise EventSourceUnavailable("no Gerrit host to connect to: set ger.webUrl or ger.eventStreamHost")
     raw_port = settings.event_stream_ssh("Port")
     if raw_port is not None and not (raw_port.isdigit() and 0 < int(raw_port) < 65536):
         raise EventSourceUnavailable(f"ger.eventStreamPort is not a port: {raw_port!r}")

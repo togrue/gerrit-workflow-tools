@@ -129,8 +129,8 @@ def test_showing_changes_asks_the_to_review_query_once_and_only_for_those_that_l
 
 
 def test_a_custom_to_review_query_is_asked_for_changes_that_do_not_list_you(stack_repo: Path) -> None:
-    """``inbox.toReviewQuery`` may select changes without ``reviewer:self``: none is skipped for it."""
-    subprocess.run(["git", "config", "inbox.toReviewQuery", "is:open topic:team-review"], cwd=stack_repo, check=True)
+    """``ger.inboxToReviewQuery`` may select changes without ``reviewer:self``: none is skipped for it."""
+    subprocess.run(["git", "config", "ger.inboxToReviewQuery", "is:open topic:team-review"], cwd=stack_repo, check=True)
     store = _store(stack_repo, _theirs(900, asks_you=False))
     shown = _shown(GerApi(stack_repo, gerrit=store), 900)
     assert any("topic:team-review" in query and "change:900" in query for query in store.queries())

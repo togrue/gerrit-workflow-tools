@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import ConfigError, Settings
+from gerrit_workflow_tools.core.config_keys import LEGACY_KEYS
 from gerrit_workflow_tools.core.git_run import UnknownRevisionError, commit_sha_or_none, git
 
 
@@ -46,7 +47,8 @@ def missing_upstream_error(branch: str, *, askable: bool = True) -> MissingUpstr
     )
 
 
-_RECENT_UPSTREAM_KEY = "gerrit.recentUpstreamAbbrev"
+_RECENT_UPSTREAM_KEY = "ger.recentUpstreamAbbrev"
+_RECENT_UPSTREAM_LEGACY_KEY = LEGACY_KEYS[_RECENT_UPSTREAM_KEY]
 _RECENT_UPSTREAM_LIMIT = 20
 
 
@@ -183,15 +185,18 @@ def local_branch_exists(cwd: Path | str | None, branch: str) -> bool:
 
 
 def read_recent_upstream_abbrevs(cwd: Path | str | None) -> list[str]:
-    p = git("config", "--global", "--get-all", _RECENT_UPSTREAM_KEY, cwd=cwd, check=False)
-    if p.returncode != 0:
-        return []
-    return _dedupe_preserve_order((p.stdout or "").splitlines())
+    """The remembered upstreams; the old key name answers until the next write moves them."""
+    for key in (_RECENT_UPSTREAM_KEY, _RECENT_UPSTREAM_LEGACY_KEY):
+        p = git("config", "--global", "--get-all", key, cwd=cwd, check=False)
+        if p.returncode == 0 and (p.stdout or "").strip():
+            return _dedupe_preserve_order((p.stdout or "").splitlines())
+    return []
 
 
 def _write_recent_upstream_abbrevs(cwd: Path | str | None, values: list[str]) -> None:
     current = _dedupe_preserve_order(values)[:_RECENT_UPSTREAM_LIMIT]
     git("config", "--global", "--unset-all", _RECENT_UPSTREAM_KEY, cwd=cwd, check=False)
+    git("config", "--global", "--unset-all", _RECENT_UPSTREAM_LEGACY_KEY, cwd=cwd, check=False)
     for value in current:
         git("config", "--global", "--add", _RECENT_UPSTREAM_KEY, value, cwd=cwd)
 

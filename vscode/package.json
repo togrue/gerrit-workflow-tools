@@ -142,7 +142,7 @@
       },
       {
         "view": "ger.overview",
-        "contents": "This repository is not set up for Gerrit yet: ger needs its web address (`gerrit.webUrl`) and your credentials, and `ger setup` asks for them.\n[Run ger setup](command:ger.setup)\n[Retry](command:ger.refresh)",
+        "contents": "This repository is not set up for Gerrit yet: ger needs its web address (`ger.webUrl`) and your credentials, and `ger setup` asks for them.\n[Run ger setup](command:ger.setup)\n[Retry](command:ger.refresh)",
         "when": "ger.state == setup"
       },
       {

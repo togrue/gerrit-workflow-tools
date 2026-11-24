@@ -26,12 +26,12 @@ def _comment(cwd: Path, argv: list[str], monkeypatch: pytest.MonkeyPatch, store:
 
 
 def _on_gerrit(repo: Path) -> ChangeStore:
-    git("config", "gerrit.webUrl", WEB, cwd=repo)
+    git("config", "ger.webUrl", WEB, cwd=repo)
     return ChangeStore(build_details_by_change_id(stack_rows_mb_to_head(repo)), web_base=WEB)
 
 
 def _nothing_on_gerrit(repo: Path) -> ChangeStore:
-    git("config", "gerrit.webUrl", WEB, cwd=repo)
+    git("config", "ger.webUrl", WEB, cwd=repo)
     return ChangeStore({}, web_base=WEB)
 
 

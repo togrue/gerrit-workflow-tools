@@ -4,7 +4,7 @@
 |--|--|
 | **Status** | Implemented |
 | **Module** | `src/gerrit_workflow_tools/cli_rebase.py`, `rebase_enricher.py` |
-| **Requires** | Gerrit enrichment: `gerrit.webUrl` + credentials |
+| **Requires** | Gerrit enrichment: `ger.webUrl` + credentials |
 
 Start **`git rebase -i`** with Gerrit status annotations on each `pick` line (patchset, Verified, CR, comments, attention note).
 
@@ -47,8 +47,8 @@ stack. `REV` is the commit to rebase *from*, which normally sits below the stack
 
 | Option | Description |
 |--------|-------------|
-| `--onto-remote` | Rebase onto fetched `refs/remotes/<gerrit.remote>/<target>` tip |
-| `--no-onto-remote` | Force merge-base behavior (overrides `gerrit.rebaseOntoRemote`) |
+| `--onto-remote` | Rebase onto fetched `refs/remotes/<ger.remote>/<target>` tip |
+| `--no-onto-remote` | Force merge-base behavior (overrides `ger.rebaseOntoRemote`) |
 | `--drop-merged-equivalent` | Mark provably merged-equivalent commits as `drop` in todo |
 | `--autosquash` | Fold `fixup!` / `squash!` commits (what [`ger fix`](fix.md) makes) into their targets: `git rebase -i --autosquash`. The way `ger fix`, `ger log` and `ger push` tell you to squash one. Without it, git's `rebase.autosquash` decides, as for a plain `git rebase -i`: you see the todo either way |
 | `--continue` | Go on with the rebase underway: `git rebase --continue`. Refused while paths are still unmerged, with the shared next step, over unstaged changes to tracked files, and where nothing is left to apply |
@@ -104,8 +104,8 @@ A rebase that stops on a conflict ends with the shared next step ([edit.md](edit
 
 | Key | Default | Effect |
 |-----|---------|--------|
-| `gerrit.rebaseOntoRemote` | off | Default for `--onto-remote` |
-| `gerrit.rebaseDropMergedEquivalent` | off | Default for `--drop-merged-equivalent` |
+| `ger.rebaseOntoRemote` | off | Default for `--onto-remote` |
+| `ger.rebaseDropMergedEquivalent` | off | Default for `--drop-merged-equivalent` |
 
 ---
 

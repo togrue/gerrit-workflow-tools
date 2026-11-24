@@ -4,7 +4,7 @@
 |--|--|
 | **Status** | Implemented |
 | **Module** | `src/gerrit_workflow_tools/cli_log.py` |
-| **Requires** | `gerrit.webUrl`, credentials |
+| **Requires** | `ger.webUrl`, credentials |
 
 Compact overview of the local commit chain vs Gerrit (CI, votes, unresolved comment counts, patchset alignment). Answers: *what needs attention next?*
 
@@ -32,8 +32,8 @@ ger log [options] [REV_RANGE]
 | `--ai`, `--format {human,ai}` | `ai`: one plain line per commit for a model to read (see [Output (`--ai`)](#output---ai)) |
 | `--color WHEN` | `always` \| `auto` \| `never`; `auto` honours `NO_COLOR` ([Configuration.md](../../Configuration.md#colour)) |
 | `--hyperlinks WHEN` | `always` \| `auto` \| `never`. When on, text URLs become a clickable `Open in gerrit` (OSC 8) and that compact link is shown by default. JSON always includes the raw `gerrit_url`. |
-| `--url`, `--show-url` | Gerrit web URL per line (forced on). Default: on when hyperlinks are on, otherwise `gerrit.logShowUrl`. |
-| `--show-change-id` | Show full Change-Id on an indented continuation line (default: `gerrit.logShowChangeId`) |
+| `--url`, `--show-url` | Gerrit web URL per line (forced on). Default: on when hyperlinks are on, otherwise `ger.logShowUrl`. |
+| `--show-change-id` | Show full Change-Id on an indented continuation line (default: `ger.logShowChangeId`) |
 | `-v`, `--verbose` | Add indented `CI:` pipeline lines and a `Reviewers:` line (`alice, bob (cc: carol)`; omitted when Gerrit lists nobody) below each commit; primary line unchanged. Repeat (`-vv`) to also show Change-Id. |
 | `--debug-log` | Log git commands to stderr (repeat for more detail) |
 | `--follow-merges` | Include merge commits in range (see shared helper in `cli_common`) |
@@ -52,7 +52,7 @@ Columns: patchset token (`p`/`n`/`o`/`-`), Verified, Code-Review, comment marker
 
 Below the summary, dim **next lines** (`cli_log.next_steps`) name the ger command for a state the stack is in: the upstream moved on after a fetch (`origin/main has 1 new commit; rebase onto it with `ger rebase origin/main``; when a commit would stop that rebase, `; "Refactor parser init" would conflict in a.txt` or `; "Refactor parser init" would become empty: its change is already upstream`; and `; 1 commit is already upstream and dropped` for what the rebase leaves out: previewed without touching the worktree, as `GET /stack` serves it), WIP changes on Gerrit (`ger push --ready`), a merged commit (`ger rebase --onto-remote --drop-merged-equivalent`; once the upstream moved on, the one line above names the rebase instead, `ger rebase origin/main --drop-merged-equivalent`, its `argv`), a **diverged** or outdated change (`ger checkout change:<n> --update`), and what `chain blocked` means (a change below is not submittable yet). One line per state, none when there is nothing to do.
 
-Subject highlighting uses `gerrit.stopPattern` / `gerrit.warningPattern` when color is on.
+Subject highlighting uses `ger.stopPattern` / `ger.warningPattern` when color is on.
 
 ### During a rebase
 
@@ -145,10 +145,10 @@ Per commit: `sha`, `summary`, `rebase` (where the rebase underway stands on it: 
 
 | Key | Effect |
 |-----|--------|
-| `gerrit.logShowUrl` | Force Gerrit URLs in text output even when hyperlinks are off (same as `--url` / `--show-url`). Compact `Open in gerrit` links are already shown by default when OSC 8 hyperlinks are on. |
-| `gerrit.logShowChangeId` | Default for `--show-change-id` |
-| `gerrit.webUrl`, auth | Required for API |
-| `gerrit.stopPattern`, `gerrit.warningPattern` | Subject highlighting |
+| `ger.logShowUrl` | Force Gerrit URLs in text output even when hyperlinks are off (same as `--url` / `--show-url`). Compact `Open in gerrit` links are already shown by default when OSC 8 hyperlinks are on. |
+| `ger.logShowChangeId` | Default for `--show-change-id` |
+| `ger.webUrl`, auth | Required for API |
+| `ger.stopPattern`, `ger.warningPattern` | Subject highlighting |
 
 Full list: [Configuration.md](../../Configuration.md).
 

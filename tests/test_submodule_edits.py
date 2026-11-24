@@ -43,7 +43,7 @@ class SubStack:
 
 @pytest.fixture
 def sub_stack(stack_repo: Path, tmp_path: Path) -> SubStack:
-    git("config", "gerrit.webUrl", WEB, cwd=stack_repo)
+    git("config", "ger.webUrl", WEB, cwd=stack_repo)
     git("switch", "-q", "main", cwd=stack_repo)
     add_submodule(stack_repo, tmp_path)
     git("update-ref", "refs/remotes/origin/main", "main", cwd=stack_repo)

@@ -1,6 +1,6 @@
 """Integration: a Gerrit that refuses the credentials, or is not there at all.
 
-Against the real server a wrong ``gerrit.token`` is an HTTP 401, and a dead host a refused
+Against the real server a wrong ``ger.token`` is an HTTP 401, and a dead host a refused
 connection. Either way every command says so in one line and never guesses (exit-codes.md,
 ``GERRIT``): ``ger log`` and ``ger show`` still show the local commit with its Gerrit state
 unknown and exit 5, ``ger edit`` refuses to walk on unknown state, and the ``ger push``
@@ -48,12 +48,12 @@ def broken_gerrit(
     """Break *pushed_repo*'s Gerrit configuration one way; yield the message ger must print."""
     ctx = gerrit_integration_context
     if request.param == "wrong-token":
-        key, value = "gerrit.token", "not-the-token"
+        key, value = "ger.token", "not-the-token"
         message = f"Gerrit at {urlparse(ctx.http_base).netloc} rejected the credentials (HTTP 401)"
     else:
-        key, value = "gerrit.webUrl", UNREACHABLE_WEB_URL
+        key, value = "ger.webUrl", UNREACHABLE_WEB_URL
         message = f"Gerrit unreachable at {urlparse(UNREACHABLE_WEB_URL).netloc} (connection refused)"
-    original = {"gerrit.token": ctx.dev_password, "gerrit.webUrl": ctx.http_base}[key]
+    original = {"ger.token": ctx.dev_password, "ger.webUrl": ctx.http_base}[key]
     git("config", key, value, cwd=pushed_repo)
     try:
         yield message

@@ -4,9 +4,9 @@
 |--|--|
 | **Status** | **Implemented** |
 | **Module** | `cli_checkout.py`; the decision and the git work in `core/change_checkout.py`; the patchset from `core/gerrit_patchset.py` |
-| **Requires** | A git repository, `gerrit.webUrl`, credentials |
+| **Requires** | A git repository, `ger.webUrl`, credentials |
 
-Check a Gerrit change out to work on it: rework a change of yours on another machine, take over a colleague's, or pick up a new patchset someone pushed. The change lands on a local branch whose upstream is the change's **target branch** on `gerrit.remote`, so `ger log` shows its review chain as the **local stack** and `ger push` uploads a new patchset, with nothing to set up.
+Check a Gerrit change out to work on it: rework a change of yours on another machine, take over a colleague's, or pick up a new patchset someone pushed. The change lands on a local branch whose upstream is the change's **target branch** on `ger.remote`, so `ger log` shows its review chain as the **local stack** and `ger push` uploads a new patchset, with nothing to set up.
 
 `ger review` is the other way to check a change out: for reading someone's work, in the review worktree, staged. `ger checkout` is for changing it, in this checkout.
 
@@ -26,7 +26,7 @@ The current patchset is checked out unless the changeish names one (a `refs/chan
 
 ## The branch
 
-A change with no local version goes on a new branch, **`change-<number>`**, the name `ger review` uses too; `-b NAME` picks another. The patchset and the target branch are fetched from `gerrit.remote` in one `git fetch` (`refs/changes/…` plus `+refs/heads/<target>:refs/remotes/<remote>/<target>`), so the upstream exists and is current. The branch's upstream is set to `<remote>/<target>`: `origin/main` for a change destined for `main`.
+A change with no local version goes on a new branch, **`change-<number>`**, the name `ger review` uses too; `-b NAME` picks another. The patchset and the target branch are fetched from `ger.remote` in one `git fetch` (`refs/changes/…` plus `+refs/heads/<target>:refs/remotes/<remote>/<target>`), so the upstream exists and is current. The branch's upstream is set to `<remote>/<target>`: `origin/main` for a change destined for `main`.
 
 A branch called `NAME` (or `change-<number>`) that already exists but holds no version of the change is not touched: `ger checkout` exits `1` and says to pick another name or pass `--force`, which resets it to the patchset. When that drops commits the patchset does not have, the old tip is printed on stderr.
 
@@ -34,7 +34,7 @@ A branch called `NAME` (or `change-<number>`) that already exists but holds no v
 
 ## The local version
 
-A **local version** of the change is a commit carrying its Change-Id on a local branch, above `gerrit.remote` (`git log --branches --not --remotes=<remote>`). A branch that pushes to another Gerrit branch holds a cherry-pick with the same Change-Id, not a version of this change, and does not count. A branch with no Gerrit destination does count. ger's own bookkeeping branches (`lastPush/<branch>`, the marker `ger push` moves) never count: they are not named in a note, and `ger checkout` never switches onto one (`git_state.is_bookkeeping_branch`).
+A **local version** of the change is a commit carrying its Change-Id on a local branch, above `ger.remote` (`git log --branches --not --remotes=<remote>`). A branch that pushes to another Gerrit branch holds a cherry-pick with the same Change-Id, not a version of this change, and does not count. A branch with no Gerrit destination does count. ger's own bookkeeping branches (`lastPush/<branch>`, the marker `ger push` moves) never count: they are not named in a note, and `ger checkout` never switches onto one (`git_state.is_bookkeeping_branch`).
 
 When the change has a local version, `ger checkout` does not make a second copy. Which branch it goes to, in one line (also in `ger checkout --help`): a branch whose tip is the change wins; else it goes to (or stays on) the branch that holds the change and says how many commits below HEAD it is. So on a stack branch, `ger checkout <a lower change>` switches to that change's own branch when one ends at it, and otherwise stays put with `already on <branch>: … is N commit(s) below HEAD`. The full order is under **Several local versions** below. What it does with the local version depends on how it relates to the patchset:
 
@@ -96,5 +96,5 @@ The first line is one of: `checked out … on <branch>`, `updated <branch> from 
 | `3` | The changeish or patchset resolves to nothing |
 | `4` | The Change-Id names changes on several target branches and narrowing could not pick one |
 | `5` | Gerrit failed |
-| `6` | `gerrit.webUrl` or credentials missing |
-| `7` | A git command failed (fetch, switch). When the remote does not have the patchset's `refs/changes/…` ref, git's message is followed by one line saying what is most likely wrong: for a private change (the change data already says so; no extra call), that Gerrit does not serve a private change's refs to `gerrit.remote` as it signs in (anonymous, or an HTTP URL without `/a/`), so fetch over SSH or an authenticated `/a/` URL; otherwise that the remote does not have the ref and `gerrit.remote` should be checked (`core/gerrit_patchset.py`, shared with `ger review`) |
+| `6` | `ger.webUrl` or credentials missing |
+| `7` | A git command failed (fetch, switch). When the remote does not have the patchset's `refs/changes/…` ref, git's message is followed by one line saying what is most likely wrong: for a private change (the change data already says so; no extra call), that Gerrit does not serve a private change's refs to `ger.remote` as it signs in (anonymous, or an HTTP URL without `/a/`), so fetch over SSH or an authenticated `/a/` URL; otherwise that the remote does not have the ref and `ger.remote` should be checked (`core/gerrit_patchset.py`, shared with `ger review`) |

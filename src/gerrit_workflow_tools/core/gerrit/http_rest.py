@@ -100,7 +100,7 @@ class GerritAuth:
 
 
 def gerrit_auth_from_settings(settings: Settings) -> GerritAuth | None:
-    """Read ``gerrit.user`` plus ``gerrit.token``/``gerrit.password``, or ``None`` when unset."""
+    """Read ``ger.user`` plus ``ger.token``/``ger.password``, or ``None`` when unset."""
     user = settings.gerrit_user
     secret = settings.gerrit_token or settings.gerrit_password
     if not user or secret is None:
@@ -129,7 +129,7 @@ class HttpGerritRest:
     def from_settings(cls, settings: Settings, *, web_base: str | None = None) -> HttpGerritRest:
         """Build a client with credentials taken from *settings*.
 
-        *web_base* defaults to ``gerrit.webUrl`` (:func:`resolve_gerrit_web_base`, which
+        *web_base* defaults to ``ger.webUrl`` (:func:`resolve_gerrit_web_base`, which
         raises :class:`ConfigError` when it is unset).
         """
         base = web_base if web_base is not None else resolve_gerrit_web_base(settings)
@@ -139,7 +139,7 @@ class HttpGerritRest:
         headers: dict[str, str] = {"Accept": "*/*"}
         if self.auth is None:
             raise GerritApiError(
-                "missing Gerrit credentials in git config; set gerrit.user and gerrit.password (or gerrit.token)"
+                "missing Gerrit credentials in git config; set ger.user and ger.password (or ger.token)"
             )
         headers["Authorization"] = self.auth.header()
         return headers
@@ -178,7 +178,7 @@ class HttpGerritRest:
             if e.code == 401:
                 raise GerritUnavailableError(
                     f"Gerrit at {self.host} rejected the credentials (HTTP 401); "
-                    "check gerrit.user and gerrit.token, or run `ger setup`",
+                    "check ger.user and ger.token, or run `ger setup`",
                     status=e.code,
                 ) from e
             reason = gerrit_error_reason(_error_body(e), str(e.reason))

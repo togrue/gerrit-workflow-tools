@@ -31,7 +31,7 @@ DONE, CURRENT, TODO = RebaseStep.DONE, RebaseStep.CURRENT, RebaseStep.TODO
 
 def _store(repo: Path) -> ChangeStore:
     """The stack as it is before the rebase, pushed: each commit is its change's current patch set."""
-    git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
+    git("config", "ger.webUrl", "https://g.example", cwd=repo)
     return ChangeStore(build_details_by_change_id(stack_rows_mb_to_head(repo)))
 
 

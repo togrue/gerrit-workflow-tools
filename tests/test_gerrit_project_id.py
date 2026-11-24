@@ -28,7 +28,7 @@ def test_parse_project_name_from_remote_url(remote_url: str, expected: str | Non
 
 def test_resolve_gerrit_project_name_prefers_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("gerrit_workflow_tools.core.gerrit_project_id.git_out", lambda *a, **k: "unused")
-    settings = Settings.from_map({"gerrit.project": "cfg/proj"})
+    settings = Settings.from_map({"ger.project": "cfg/proj"})
     assert resolve_gerrit_project_name(None, settings=settings) == "cfg/proj"
 
 

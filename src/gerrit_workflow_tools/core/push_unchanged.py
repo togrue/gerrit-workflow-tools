@@ -138,7 +138,7 @@ def unreached_options_warning(
         return None
     return (
         "warning: push options not applied: Gerrit already has these commits, and without Gerrit's "
-        "view of the changes ger cannot set them over REST (check gerrit.user and gerrit.token)"
+        "view of the changes ger cannot set them over REST (check ger.user and ger.token)"
     )
 
 

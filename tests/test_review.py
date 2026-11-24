@@ -27,7 +27,7 @@ def gerrit(stack_repo: Path, tmp_path: Path) -> tuple[ChangeStore, list[str], li
     Returns the store, the changes' triplets and their commits, base first. The stack's
     branch is reset to main, as when you review someone else's work.
     """
-    git("config", "gerrit.webUrl", WEB, cwd=stack_repo)
+    git("config", "ger.webUrl", WEB, cwd=stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
     store = ChangeStore(details, web_base=WEB)
@@ -311,7 +311,7 @@ def test_review_says_what_changed_since_your_last_review(
 ) -> None:
     """Re-reviewing patchset 2 after voting on 1: which files moved, and the diff to run."""
     store, keys, shas = gerrit
-    git("config", "gerrit.user", "me", cwd=stack_repo)
+    git("config", "ger.user", "me", cwd=stack_repo)
     store._accounts[7] = {"_account_id": 7, "username": "me"}  # pylint: disable=protected-access
     store._self_account_id = 7  # pylint: disable=protected-access
     (stack_repo / "late.txt").write_text("added in patchset 2\n", encoding="utf-8")

@@ -2,7 +2,7 @@
 
 Resolution order per domain:
 
-1. **Project-local** — ``<gerrit.scriptsDir>/<domain>/registry.py`` (default ``.ger``), only when
+1. **Project-local** — ``<ger.scriptsDir>/<domain>/registry.py`` (default ``.ger``), only when
    trusted (:mod:`gerrit_workflow_tools.core.registry_trust`); an untrusted one is skipped with a warning
 2. **Global** — ``$XDG_CONFIG_HOME/ger/<host>/<domain>/registry.py`` (default ``~/.config/ger/``)
 3. Caller falls back to built-in behavior when no tier supplies a callable for *project*

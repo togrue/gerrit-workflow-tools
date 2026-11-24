@@ -4,7 +4,7 @@
 |--|--|
 | **Status** | Implemented |
 | **Module** | `src/gerrit_workflow_tools/cli_fetch_api.py` |
-| **Requires** | `gerrit.webUrl`, credentials |
+| **Requires** | `ger.webUrl`, credentials |
 
 Developer utility: **GET** one authenticated Gerrit REST path and print JSON.
 

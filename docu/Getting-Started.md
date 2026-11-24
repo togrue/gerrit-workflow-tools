@@ -54,14 +54,14 @@ ger setup              # writes to global ~/.gitconfig
 ger setup --local
 ```
 
-Prompts for `gerrit.webUrl`, `gerrit.user`, and `gerrit.token` (HTTP access token from Gerrit user settings).
+Prompts for `ger.webUrl`, `ger.user`, and `ger.token` (HTTP access token from Gerrit user settings).
 
 ### Manual
 
 ```bash
-git config --global gerrit.webUrl https://gerrit.example.com
-git config --global gerrit.user YOUR_USERNAME
-git config --global gerrit.token YOUR_HTTP_TOKEN
+git config --global ger.webUrl https://gerrit.example.com
+git config --global ger.user YOUR_USERNAME
+git config --global ger.token YOUR_HTTP_TOKEN
 ```
 
 Use repo-local config instead of `--global` when settings differ per project.
@@ -79,14 +79,14 @@ Run inside your clone:
 git branch --set-upstream-to origin/main
 
 # Optional: override Gerrit destination branch and default reviewers
-git config branch.$(git branch --show-current).gerritTarget main
-git config branch.$(git branch --show-current).gerritReviewers alice,bob
+git config branch.$(git branch --show-current).gerTarget main
+git config branch.$(git branch --show-current).gerReviewers alice,bob
 ```
 
 | Setting | When to set |
 |---------|-------------|
-| `branch.<name>.gerritTarget` | Push target differs from upstream inference (e.g. feature branch tracks `origin/dev` but pushes to `main`) |
-| `branch.<name>.gerritReviewers` | Default reviewers on every `ger push` for this branch |
+| `branch.<name>.gerTarget` | Push target differs from upstream inference (e.g. feature branch tracks `origin/dev` but pushes to `main`) |
+| `branch.<name>.gerReviewers` | Default reviewers on every `ger push` for this branch |
 
 Without an upstream, `ger` asks for one on a terminal (it suggests what the branch was created from). Elsewhere, set it with `git branch --set-upstream-to=<remote>/<branch>`.
 
@@ -97,7 +97,7 @@ Without an upstream, `ger` asks for one on a terminal (it suggests what the bran
 Gerrit requires a `Change-Id:` footer on each commit. Install once per clone:
 
 ```bash
-HOOK_URL="$(git config --get gerrit.webUrl)/tools/hooks/commit-msg"
+HOOK_URL="$(git config --get ger.webUrl)/tools/hooks/commit-msg"
 
 curl -sfL -o .git/hooks/commit-msg "$HOOK_URL" \
   || wget -q -O .git/hooks/commit-msg "$HOOK_URL"
@@ -105,7 +105,7 @@ curl -sfL -o .git/hooks/commit-msg "$HOOK_URL" \
 chmod +x .git/hooks/commit-msg
 ```
 
-If `gerrit.webUrl` is not set yet, run step 2 first.
+If `ger.webUrl` is not set yet, run step 2 first.
 
 After the hook is in place, validate Change-Ids across the current stack (missing and duplicates):
 
@@ -124,7 +124,7 @@ ger push --dry-run       # preview what would be pushed
 
 | Symptom | Fix |
 |---------|-----|
-| `gerrit.webUrl` / auth errors | Run `ger setup` or set keys in [Configuration.md](Configuration.md) |
+| `ger.webUrl` / auth errors | Run `ger setup` or set keys in [Configuration.md](Configuration.md) |
 | No upstream / empty range | `git branch --set-upstream-to=…` |
 | Missing Change-Id on commits | Install hook; amend or recommit |
 | API 401/403 | Check token and username |
@@ -156,8 +156,8 @@ ger review <change>  → check one out in the review worktree, then --vote and -
 
 | Key | Purpose |
 |-----|---------|
-| `gerrit.stopPattern` | Commits whose subject matches this regex start the non-pushable tail (WIP, etc.) |
-| `gerrit.warningPattern` | Highlight suspicious subjects in `ger log` / `ger push` (single regex) |
-| `gerrit.logShowUrl` | Show Gerrit web URLs on each line even without OSC 8 hyperlinks |
+| `ger.stopPattern` | Commits whose subject matches this regex start the non-pushable tail (WIP, etc.) |
+| `ger.warningPattern` | Highlight suspicious subjects in `ger log` / `ger push` (single regex) |
+| `ger.logShowUrl` | Show Gerrit web URLs on each line even without OSC 8 hyperlinks |
 
 See [Configuration.md](Configuration.md) for the full list.

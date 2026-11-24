@@ -28,7 +28,7 @@ CID_MISSING = _cid("0a")
 
 
 def _configure_resolve_repo(stack_repo: Path) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    git("config", "ger.webUrl", "https://g.example", cwd=stack_repo)
 
 
 def _detail(

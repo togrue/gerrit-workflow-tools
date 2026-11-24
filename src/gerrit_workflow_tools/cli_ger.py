@@ -75,7 +75,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
         "gerrit_workflow_tools.cli_serve:main",
     ),
     "setup": (
-        "Interactively configure gerrit.webUrl, user, and token in git config.",
+        "Interactively configure ger.webUrl, user, and token in git config.",
         "gerrit_workflow_tools.cli_setup:main",
     ),
     "vscode": (

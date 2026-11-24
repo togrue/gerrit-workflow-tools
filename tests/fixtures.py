@@ -155,13 +155,13 @@ def make_repo_with_merged_side_branch(path: Path) -> Path:
         env=env,
     )
     configure_gerrit_target(path, "main")
-    git("config", "gerrit.project", "testproj", cwd=path, check=False)
-    git("config", "gerrit.webUrl", "https://g.example", cwd=path, check=False)
+    git("config", "ger.project", "testproj", cwd=path, check=False)
+    git("config", "ger.webUrl", "https://g.example", cwd=path, check=False)
     return path
 
 
 def configure_gerrit_target(path: Path, target: str = "main") -> None:
-    """Set branch upstream on ``gerrit.remote`` for Gerrit push/rebase tests."""
+    """Set branch upstream on ``ger.remote`` for Gerrit push/rebase tests."""
     from gerrit_workflow_tools.core.git_run import git_out
 
     branch = git_out("rev-parse", "--abbrev-ref", "HEAD", cwd=path)

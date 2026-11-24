@@ -22,7 +22,7 @@ WEB = "https://g.example"
 
 def _store(repo: Path) -> tuple[ChangeStore, str]:
     """The stack on Gerrit, each commit its change's current patchset 1; returns HEAD's key."""
-    git("config", "gerrit.webUrl", WEB, cwd=repo)
+    git("config", "ger.webUrl", WEB, cwd=repo)
     details = build_details_by_change_id(stack_rows_mb_to_head(repo))
     return ChangeStore(details, web_base=WEB), list(details)[-1]
 
@@ -148,7 +148,7 @@ def test_a_commit_without_change_id_exits_9(stack_repo: Path, monkeypatch: pytes
 
 
 def test_an_unpushed_commit_gets_a_local_draft(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.webUrl", WEB, cwd=stack_repo)
+    git("config", "ger.webUrl", WEB, cwd=stack_repo)
     store = ChangeStore({}, web_base=WEB)
     code, out, _ = _comment(stack_repo, store, ["d.txt:1", "-m", "fix later"], monkeypatch)
     assert code == ExitCode.OK

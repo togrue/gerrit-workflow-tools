@@ -86,7 +86,7 @@ def _store(comments: dict[str, list[dict[str, Any]]]) -> ChangeStore:
 
 
 def _show(repo: Path, monkeypatch: pytest.MonkeyPatch, *args: str, fix_comment: dict[str, Any] = FIX_COMMENT) -> str:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
+    git("config", "ger.webUrl", "https://g.example", cwd=repo)
     store = _store({"epsilon.txt": [fix_comment], "zeta.py": [BLOCK_COMMENT]})
     code, out, err = run_cli(repo, gshow_main, [*args, "change:42"], monkeypatch, gerrit=store)
     assert code == 0, err

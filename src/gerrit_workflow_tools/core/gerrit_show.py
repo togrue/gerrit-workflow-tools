@@ -304,7 +304,7 @@ def _mark_waiting_on_you(service: GerritService, commits: list[LogCommit]) -> No
     With the built-in query only a change that lists you as a reviewer can match (it asks
     ``reviewer:self``), so the query is asked for those alone, and not at all when none does:
     showing your own stack costs no request. Who you are is asked once per user and host. A custom
-    ``inbox.toReviewQuery`` may select changes any other way: every shown change is asked.
+    ``ger.inboxToReviewQuery`` may select changes any other way: every shown change is asked.
     """
     pushed = [c for c in commits if c.pushed and c.number is not None]
     if to_review_needs_you_as_reviewer(service.settings):

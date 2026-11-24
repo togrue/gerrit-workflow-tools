@@ -4,7 +4,7 @@
 |--|--|
 | **Status** | **Partial** — *to review* and *outgoing* are implemented; watermark and `--watch` are still planned |
 | **Module** | `src/gerrit_workflow_tools/cli_inbox.py` |
-| **Requires** | `gerrit.webUrl`, credentials. **No git repository required.** |
+| **Requires** | `ger.webUrl`, credentials. **No git repository required.** |
 
 What is waiting on you, and where your own chains stand. Groups open Gerrit changes into **review chains** and reports one entry per chain, in two **inbox sections**: *to review* (incoming — others' chains you review) and *outgoing* (your own open chains). There is no separate `ger outbox`: `--to-review` / `--outgoing` pick one section.
 
@@ -20,7 +20,7 @@ Answers: *how long has this chain gone without my review, and when was it last t
 ger inbox [options]
 ```
 
-Takes no positional arguments. Runs from **any directory**, including outside a clone: identity and credentials come from `gerrit.*` git config (normally global, written by `ger setup`).
+Takes no positional arguments. Runs from **any directory**, including outside a clone: identity and credentials come from `ger.*` git config (normally global, written by `ger setup`).
 
 ### Project scope
 
@@ -28,8 +28,8 @@ Takes no positional arguments. Runs from **any directory**, including outside a 
 |-------------|----------------|
 | `--project P` (repeatable) | Exactly those |
 | `--all` | Every project on the host |
-| Inside a clone | The clone's Gerrit project (`gerrit.project`, else the remote URL) |
-| Outside a clone | `inbox.projects`, else every project on the host |
+| Inside a clone | The clone's Gerrit project (`ger.project`, else the remote URL) |
+| Outside a clone | `ger.inboxProjects`, else every project on the host |
 
 Both sections use the same scope, and the text output names it on its first line (`project: myproject`, or `project: all projects`). `--all` and `--project` cannot be combined.
 
@@ -57,7 +57,7 @@ This keeps assembly at a few round trips regardless of chain count: one light re
 
 ### Ready
 
-A change is **ready to review** when it is open, not WIP, not private, and passes the CI gate (`inbox.requireVerified`, default on). Everything else is filtered out unless `--all` is given.
+A change is **ready to review** when it is open, not WIP, not private, and passes the CI gate (`ger.inboxRequireVerified`, default on). Everything else is filtered out unless `--all` is given.
 
 ### Unreviewed age
 
@@ -90,7 +90,7 @@ $XDG_STATE_HOME/ger/<host>/inbox-state.json      (fallback ~/.local/state)
 | **to review** | Open chains where you are a reviewer | `is:open -is:wip -is:private -owner:self reviewer:self` | Implemented |
 | **outgoing** | Your own open chains | `is:open owner:self` | Implemented |
 
-The *to review* section has `label:Verified+1` appended when `inbox.requireVerified` is on. The [project scope](#project-scope) is folded into both queries as `project:A`, or `(project:A OR project:B)`.
+The *to review* section has `label:Verified+1` appended when `ger.inboxRequireVerified` is on. The [project scope](#project-scope) is folded into both queries as `project:A`, or `(project:A OR project:B)`.
 
 A chain appears in **to review** if any member matches; the chain is then fetched whole (via assembly), so members you are not a reviewer on still appear as context.
 
@@ -157,7 +157,7 @@ An *outgoing* line is yours: it has no `unrevi` clock and no owner.
 | `unrevi` | Unreviewed age — how long the chain has waited for you |
 | `act` | Wait age — last activity on any member |
 | owner | Chain-top owner |
-| `# subject` | Chain top's subject, highlighted per `gerrit.warningPattern` |
+| `# subject` | Chain top's subject, highlighted per `ger.warningPattern` |
 | URL | Gerrit page for the **chain top** (default on) |
 
 **Indented member lines** appear for members with attention reasons — CI failure, unresolved comments, negative vote. A healthy chain stays one line plus its URL.
@@ -257,7 +257,7 @@ Shared table ([exit-codes.md](../exit-codes.md)) — no new codes.
 | `0` | Ran fine, whether or not something wants you (a **headline** exists) |
 | `2` | `USAGE` — bad arguments |
 | `5` | `GERRIT` — query failed, auth, unreachable |
-| `6` | `CONFIG` — `gerrit.webUrl` or credentials missing |
+| `6` | `CONFIG` — `ger.webUrl` or credentials missing |
 
 Consistent with `ger log` / `ger show`: a reported *state* is not a failure, so it exits `0`.
 
@@ -267,12 +267,12 @@ Consistent with `ger log` / `ger show`: a reported *state* is not a failure, so 
 
 | Key | Effect | Default |
 |-----|--------|---------|
-| `inbox.requireVerified` | Require `label:Verified+1` for a chain to count as ready | `true` |
-| `inbox.verifiedLabel` | Label name for the CI gate (sites rename it) | `Verified` |
-| `inbox.projects` | Default `--project` list outside a clone, comma-separated | *(all)* |
-| `inbox.toReviewQuery` | Override the *to review* query entirely | *(see table)* |
-| `inbox.limit` | Default `--limit` | *(none)* |
-| `gerrit.warningPattern` | Reused from `ger log` | |
+| `ger.inboxRequireVerified` | Require `label:Verified+1` for a chain to count as ready | `true` |
+| `ger.inboxVerifiedLabel` | Label name for the CI gate (sites rename it) | `Verified` |
+| `ger.inboxProjects` | Default `--project` list outside a clone, comma-separated | *(all)* |
+| `ger.inboxToReviewQuery` | Override the *to review* query entirely | *(see table)* |
+| `ger.inboxLimit` | Default `--limit` | *(none)* |
+| `ger.warningPattern` | Reused from `ger log` | |
 
 Site variation in label names and workflow is real, which is why the query is overridable wholesale as well as tunable in parts.
 
@@ -280,7 +280,7 @@ Site variation in label names and workflow is real, which is why the query is ov
 
 ## Architecture notes
 
-Settled in [adr/0004-inbox-is-host-scoped.md](../../adr/0004-inbox-is-host-scoped.md): **the inbox is scoped to a Gerrit host, not a working directory.** Nothing in `ger inbox` may build a **stack context**. Narrowing to the clone's project reads only `gerrit.project` / the remote URL (`core/inbox.py:project_scope`).
+Settled in [adr/0004-inbox-is-host-scoped.md](../../adr/0004-inbox-is-host-scoped.md): **the inbox is scoped to a Gerrit host, not a working directory.** Nothing in `ger inbox` may build a **stack context**. Narrowing to the clone's project reads only `ger.project` / the remote URL (`core/inbox.py:project_scope`).
 
 Query-driven fetch is a sibling of `GerritService.fetch_gerrit_data`: `GerritService.fetch_review_chains(query)`. Chain assembly is a pure function over ChangeInfo payloads (`core/review_chain.py`), testable against `ChangeStore`.
 

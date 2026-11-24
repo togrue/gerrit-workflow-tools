@@ -2,24 +2,24 @@
 
 Git config drives defaults for Gerrit workflow tools. Values are read from repo `.git/config`, global `~/.gitconfig`, etc. (standard Git precedence).
 
-**Convention:** keys live under the `gerrit` section unless noted. Boolean values accept `true`, `1`, `yes`, or `on` (case-insensitive). Command-line flags override these defaults when present.
+**Convention:** every key ger owns is `ger.<key>`, or `branch.<name>.ger<Key>` for a branch. Git's own keys (`branch.<name>.remote`, `branch.<name>.merge`, `core.editor`) are only read. Boolean values accept `true`, `1`, `yes`, or `on` (case-insensitive). Command-line flags override these defaults when present.
 
 ---
 
-## Global (`[gerrit]`)
+## Global (`[ger]`)
 
 | Key | Purpose |
 |-----|---------|
-| `gerrit.remote` | Remote name for `git push` to Gerrit (default: `origin`). |
-| `gerrit.webUrl` | HTTPS base for Gerrit REST API and web links (required for API commands). Must start with `https://`: every REST call carries the Basic-auth credentials, so a plain `http://` URL is refused with a config error unless `gerrit.allowInsecureHttp` is set. |
-| `gerrit.allowInsecureHttp` | When `true`, accept an `http://` `gerrit.webUrl` (credentials then travel in cleartext). Default off. Only for a local test Gerrit, such as the one in `testenv/` or the integration tests. |
-| `gerrit.user` | Username for HTTP Basic auth to the REST API. |
-| `gerrit.password` / `gerrit.token` | Password or HTTP access token (token preferred). |
-| `gerrit.stopPattern` | Regex matched against **commit subject** (first line only in practice). The first matching commit starts the non-pushable tail unless `ger push --all` applies. If unset, built-in default: `^(?:dropme!|todo\b|test!|wip\b)` (case-insensitive). Override with `git config gerrit.stopPattern '…'`. |
-| `gerrit.warningPattern` | Regex matched against commit subject for warning highlighting in `ger log`, `ger push`, `ger show`, and `ger inbox` when color output is enabled. If unset, built-in default: `(?:^[^\s]+$|(?i:\b(?:wip|todo)\b))`. Stop-pattern highlighting takes precedence when both match the same text span. Override with `git config gerrit.warningPattern '…'`. |
-| `gerrit.wrapWidth` | Max visible width for `ger show` commit-message lines and comment-box text (default `120`). Comment bodies and context lines break on spaces and tabs; a token with no space is sliced. An over-long path header keeps its tail (the filename). The chain URL is not wrapped. Unset, blank, or a value below 1 uses 120. |
-| `gerrit.project` | **Gerrit project name** for change resolution and REST calls (e.g. `mygroup/myrepo`). When unset, parsed from the `gerrit.remote` URL. Set this when the remote URL does not encode the project path Gerrit expects, or when you use a mirror/fork whose URL differs from the server project name. Required input for building **triplets** (`project~branch~Change-Id`) used by `ger log`, `ger show`, `ger push`, `ger fix`, and `ger resolve`. |
-| `gerrit.scriptsDir` | Project-local root for extension registries (default: `.ger`). Relative paths resolve from the repository toplevel; absolute paths are allowed. Domain scripts live at `<scriptsDir>/<domain>/registry.py` (e.g. `ci`, `ready`, `attention`, `reviewers`). When present, a local registry **replaces** the global cache-dir copy for that domain. Setting it in the repository's own config (`git config gerrit.scriptsDir .ger`) also **trusts** the registries there; see [Trusting project registries](#trusting-project-registries). |
+| `ger.remote` | Remote name for `git push` to Gerrit (default: `origin`). |
+| `ger.webUrl` | HTTPS base for Gerrit REST API and web links (required for API commands). Must start with `https://`: every REST call carries the Basic-auth credentials, so a plain `http://` URL is refused with a config error unless `ger.allowInsecureHttp` is set. |
+| `ger.allowInsecureHttp` | When `true`, accept an `http://` `ger.webUrl` (credentials then travel in cleartext). Default off. Only for a local test Gerrit, such as the one in `testenv/` or the integration tests. |
+| `ger.user` | Username for HTTP Basic auth to the REST API. |
+| `ger.password` / `ger.token` | Password or HTTP access token (token preferred). |
+| `ger.stopPattern` | Regex matched against **commit subject** (first line only in practice). The first matching commit starts the non-pushable tail unless `ger push --all` applies. If unset, built-in default: `^(?:dropme!|todo\b|test!|wip\b)` (case-insensitive). Override with `git config ger.stopPattern '…'`. |
+| `ger.warningPattern` | Regex matched against commit subject for warning highlighting in `ger log`, `ger push`, `ger show`, and `ger inbox` when color output is enabled. If unset, built-in default: `(?:^[^\s]+$|(?i:\b(?:wip|todo)\b))`. Stop-pattern highlighting takes precedence when both match the same text span. Override with `git config ger.warningPattern '…'`. |
+| `ger.wrapWidth` | Max visible width for `ger show` commit-message lines and comment-box text (default `120`). Comment bodies and context lines break on spaces and tabs; a token with no space is sliced. An over-long path header keeps its tail (the filename). The chain URL is not wrapped. Unset, blank, or a value below 1 uses 120. |
+| `ger.project` | **Gerrit project name** for change resolution and REST calls (e.g. `mygroup/myrepo`). When unset, parsed from the `ger.remote` URL. Set this when the remote URL does not encode the project path Gerrit expects, or when you use a mirror/fork whose URL differs from the server project name. Required input for building **triplets** (`project~branch~Change-Id`) used by `ger log`, `ger show`, `ger push`, `ger fix`, and `ger resolve`. |
+| `ger.scriptsDir` | Project-local root for extension registries (default: `.ger`). Relative paths resolve from the repository toplevel; absolute paths are allowed. Domain scripts live at `<scriptsDir>/<domain>/registry.py` (e.g. `ci`, `ready`, `attention`, `reviewers`). When present, a local registry **replaces** the global cache-dir copy for that domain. Setting it in the repository's own config (`git config ger.scriptsDir .ger`) also **trusts** the registries there; see [Trusting project registries](#trusting-project-registries). |
 
 ---
 
@@ -43,32 +43,32 @@ Commands that talk to Gerrit resolve each footer **Change-Id** to Gerrit's canon
 
 | Key | Role in triplet |
 |-----|-----------------|
-| `gerrit.project` | **Project** segment — explicit override; otherwise parsed from `gerrit.remote` |
-| `branch.<name>.gerritTarget` | **Branch** segment — Gerrit **destination branch** for the current working branch (same branch used in `refs/for/<branch>` on push) |
+| `ger.project` | **Project** segment — explicit override; otherwise parsed from `ger.remote` |
+| `branch.<name>.gerTarget` | **Branch** segment — Gerrit **destination branch** for the current working branch (same branch used in `refs/for/<branch>` on push) |
 
-Resolution order for the branch segment matches push: `branch.<current>.gerritTarget` wins; otherwise the upstream ref on `gerrit.remote` (default `origin`) is used. If either segment cannot be resolved, commands fail with a clear configuration error rather than picking a change on the wrong branch.
+Resolution order for the branch segment matches push: `branch.<current>.gerTarget` wins; otherwise the upstream ref on `ger.remote` (default `origin`) is used. If either segment cannot be resolved, commands fail with a clear configuration error rather than picking a change on the wrong branch.
 
 A bare Change-Id may match several Gerrit changes (e.g. the same patch pushed to `main` and `dev`). The shared resolver narrows to the change on your configured destination branch and reports alternatives — see [spec/change-and-commit-identifiers.md](spec/change-and-commit-identifiers.md).
 
 ---
 
-## `ger log` — `gerrit.log*`
+## `ger log` — `ger.log*`
 
 | Key | Effect |
 |-----|--------|
-| `gerrit.logShowUrl` | When `true`, include Gerrit URLs in text output even without OSC 8 hyperlinks (same as `--url` / `--show-url`). Compact `Open in gerrit` links are shown by default when hyperlinks are on. |
-| `gerrit.logShowChangeId` | Default on: append Change-Id on each text line (`--show-change-id`). |
+| `ger.logShowUrl` | When `true`, include Gerrit URLs in text output even without OSC 8 hyperlinks (same as `--url` / `--show-url`). Compact `Open in gerrit` links are shown by default when hyperlinks are on. |
+| `ger.logShowChangeId` | Default on: append Change-Id on each text line (`--show-change-id`). |
 
 ---
 
-## `ger push` — `gerrit.push*` and related
+## `ger push` — `ger.push*` and related
 
 | Key | Effect |
 |-----|--------|
-| `gerrit.pushShowAttributes` | When `true`, include Gerrit reviewer / wip / private preview on the push preview (requires `gerrit.webUrl` and credentials). Default off when unset. |
-| `gerrit.pushPublishDrafts` | Default on: when you have drafts on the changes a push updates, the push options line starts with `publish-drafts`, so Enter pushes and publishes them. Set `false` to start it without, so Enter keeps them as drafts; typing `publish-drafts` still publishes. |
-| `gerrit.lastPushedBranch` | Default on: after a **successful** `ger push`, create or move the local branch `lastPush/<current-branch-name>` to the commit that was pushed (the same tip as in the refspec). Set `false` to skip. |
-| `gerrit.push.remotePolicy` | Before push: fetch/check that `HEAD` is linear on the remote Gerrit target tip. Disable per-invocation with `ger push --no-rebase-check`. |
+| `ger.pushShowAttributes` | When `true`, include Gerrit reviewer / wip / private preview on the push preview (requires `ger.webUrl` and credentials). Default off when unset. |
+| `ger.pushPublishDrafts` | Default on: when you have drafts on the changes a push updates, the push options line starts with `publish-drafts`, so Enter pushes and publishes them. Set `false` to start it without, so Enter keeps them as drafts; typing `publish-drafts` still publishes. |
+| `ger.lastPushedBranch` | Default on: after a **successful** `ger push`, create or move the local branch `lastPush/<current-branch-name>` to the commit that was pushed (the same tip as in the refspec). Set `false` to skip. |
+| `ger.pushRemotePolicy` | Before push: fetch/check that `HEAD` is linear on the remote Gerrit target tip. Disable per-invocation with `ger push --no-rebase-check`. |
 
 ---
 
@@ -91,17 +91,17 @@ A bare Change-Id may match several Gerrit changes (e.g. the same patch pushed to
 
 ---
 
-## `ger inbox` — `inbox.*`
+## `ger inbox` — `ger.inbox*`
 
 Host-scoped (no clone required); inside a clone it is narrowed to that clone's project unless `--all` is given. See [spec/commands/inbox.md](spec/commands/inbox.md).
 
 | Key | Effect |
 |-----|--------|
-| `inbox.requireVerified` | When `true` (default), the *to review* query requires `label:<verifiedLabel>+1`. |
-| `inbox.verifiedLabel` | CI label name for that gate (default `Verified`). |
-| `inbox.projects` | Default `--project` list outside a clone, comma-separated. Unset means every project on the host. Inside a clone, the clone's own project is the default instead. |
-| `inbox.toReviewQuery` | Replace the *to review* query entirely (verified gate is then your problem). |
-| `inbox.limit` | Default `--limit` (positive integer). |
+| `ger.inboxRequireVerified` | When `true` (default), the *to review* query requires `label:<verifiedLabel>+1`. |
+| `ger.inboxVerifiedLabel` | CI label name for that gate (default `Verified`). |
+| `ger.inboxProjects` | Default `--project` list outside a clone, comma-separated. Unset means every project on the host. Inside a clone, the clone's own project is the default instead. |
+| `ger.inboxToReviewQuery` | Replace the *to review* query entirely (verified gate is then your problem). |
+| `ger.inboxLimit` | Default `--limit` (positive integer). |
 
 ---
 
@@ -126,9 +126,9 @@ the *Stream Events* capability. Without it everything works as before, by pollin
 | Key | Effect |
 |-----|--------|
 | `ger.eventStream` | `auto` (default): try once at startup, quietly; when it never comes up, poll. `on`: keep retrying and log each failure (still polling meanwhile). `off`: never connect. `true`/`false` read as `on`/`off`. |
-| `ger.eventStreamHost` | ssh host of Gerrit. Default: the host of the `gerrit.remote` URL when it is an ssh URL, else the host of `gerrit.webUrl`. |
+| `ger.eventStreamHost` | ssh host of Gerrit. Default: the host of the `ger.remote` URL when it is an ssh URL, else the host of `ger.webUrl`. |
 | `ger.eventStreamPort` | ssh port. Default: the port in an ssh remote URL (none: ssh's own config decides), else Gerrit's `29418`. |
-| `ger.eventStreamUser` | ssh user. Default: the user in an ssh remote URL, else `gerrit.user`, else ssh's own config. |
+| `ger.eventStreamUser` | ssh user. Default: the user in an ssh remote URL, else `ger.user`, else ssh's own config. |
 
 ssh runs non-interactively (`BatchMode=yes`, no tty, 10-second connect timeout): it never asks
 for a password or to accept a host key. Connect once by hand (`ssh -p 29418 you@host gerrit
@@ -137,12 +137,12 @@ capability (or is an administrator).
 
 ---
 
-## `ger rebase` — `gerrit.rebase*`
+## `ger rebase` — `ger.rebase*`
 
 | Key | Effect |
 |-----|--------|
-| `gerrit.rebaseOntoRemote` | Default for `ger rebase --onto-remote` (rebase onto `refs/remotes/<gerrit.remote>/<target>`). |
-| `gerrit.rebaseDropMergedEquivalent` | Default for `ger rebase --drop-merged-equivalent`. |
+| `ger.rebaseOntoRemote` | Default for `ger rebase --onto-remote` (rebase onto `refs/remotes/<ger.remote>/<target>`). |
+| `ger.rebaseDropMergedEquivalent` | Default for `ger rebase --drop-merged-equivalent`. |
 
 ---
 
@@ -150,11 +150,30 @@ capability (or is an administrator).
 
 | Key | Effect |
 |-----|--------|
-| `branch.<name>.gerritTarget` | **Optional override** for the Gerrit **destination branch** (e.g. `main`, `dev`). When unset, `ger push`, `ger rebase`, and change resolution infer the destination from `@{upstream}` if its remote name matches `gerrit.remote` (default `origin`). When set, it wins for push, merge-base, `ger rebase --onto-remote`, and **triplet building** when resolving a bare Change-Id (see [Change identity](#change-identity-triplet-resolution)). The value must resolve to an existing ref—typically a local branch of that name or `refs/remotes/<remote>/<branch>` after `git fetch` on `gerrit.remote`. If the tool reports that the target is missing locally, fetch from the remote first; do not create a local branch literally named `origin/<branch>`—that is the remote-tracking name space, not a branch you should create by hand. |
-| `branch.<name>.gerritReviewers` | Comma-separated accounts; merged into `ger push` ref options. |
+| `branch.<name>.gerTarget` | **Optional override** for the Gerrit **destination branch** (e.g. `main`, `dev`). When unset, `ger push`, `ger rebase`, and change resolution infer the destination from `@{upstream}` if its remote name matches `ger.remote` (default `origin`). When set, it wins for push, merge-base, `ger rebase --onto-remote`, and **triplet building** when resolving a bare Change-Id (see [Change identity](#change-identity-triplet-resolution)). The value must resolve to an existing ref—typically a local branch of that name or `refs/remotes/<remote>/<branch>` after `git fetch` on `ger.remote`. If the tool reports that the target is missing locally, fetch from the remote first; do not create a local branch literally named `origin/<branch>`—that is the remote-tracking name space, not a branch you should create by hand. |
+| `branch.<name>.gerReviewers` | Comma-separated accounts; merged into `ger push` ref options. |
 | `branch.<name>.gerAttentionCursor` / `…CursorAt` | See [Attention cursor](#attention-cursor-ger-and-branch-local). |
 
 Set via `git config` (or `set_branch_config` / attention-cursor helpers in `core/config_write.py`).
+
+---
+
+## Renamed keys (`gerrit.*`, `inbox.*`, `branch.<name>.gerrit*`)
+
+Older versions read their settings from three prefixes. Each such key now lives under `ger`:
+
+| Old key | New key |
+|---------|---------|
+| `gerrit.<key>` (e.g. `gerrit.webUrl`, `gerrit.token`, `gerrit.scriptsDir`) | `ger.<key>` |
+| `gerrit.push.remotePolicy` | `ger.pushRemotePolicy` |
+| `inbox.<key>` (e.g. `inbox.limit`) | `ger.inbox<Key>` (e.g. `ger.inboxLimit`) |
+| `branch.<name>.gerritReviewers` | `branch.<name>.gerReviewers` |
+| `branch.<name>.gerritTarget` | `branch.<name>.gerTarget` |
+
+The new key is read first. When only the old one is set, it still answers, and the command
+prints one warning line per key naming the `git config` commands that move it (at the scope
+where it is set). `ger setup` and `ger config` write only new keys and remove the old name
+at the scope they write. The one table lives in `core/config.py` (`LEGACY_KEYS`).
 
 ---
 
@@ -167,7 +186,7 @@ Every command that colours takes `--color WHEN` (`always` | `auto` | `never`, de
 ## Examples
 
 ```ini
-[gerrit]
+[ger]
     remote = origin
     webUrl = https://gerrit.example.com
     user = me
@@ -181,37 +200,37 @@ Every command that colours takes `--color WHEN` (`always` | `auto` | `never`, de
 
 ```bash
 # Custom stop pattern for this repo
-git config gerrit.stopPattern '^(?:dropme!|hold:)'
+git config ger.stopPattern '^(?:dropme!|hold:)'
 
 # Show Gerrit URLs by default in ger log
-git config gerrit.logShowUrl true
+git config ger.logShowUrl true
 ```
 
 ---
 
 ## Extension scripts (`.ger` and `~/.config/ger`)
 
-Team- or user-owned Python registries customize CI links, ready boundaries, attention rules, and default reviewers. Each domain uses a `registry.py` that exports `STRATEGIES: dict[str, Callable]` keyed by exact `gerrit.project`. Optional `get_strategy(project) -> Callable | None` supports prefix-style matching when many repos share one implementation.
+Team- or user-owned Python registries customize CI links, ready boundaries, attention rules, and default reviewers. Each domain uses a `registry.py` that exports `STRATEGIES: dict[str, Callable]` keyed by exact `ger.project`. Optional `get_strategy(project) -> Callable | None` supports prefix-style matching when many repos share one implementation.
 
 ### Resolution order
 
-1. **Project-local** — `<gerrit.scriptsDir>/<domain>/registry.py` (default scriptsDir: `.ger`)
+1. **Project-local** — `<ger.scriptsDir>/<domain>/registry.py` (default scriptsDir: `.ger`)
 2. **Global** — `$XDG_CONFIG_HOME/ger/<host>/<domain>/registry.py` (default `~/.config/ger/<host>/`)
 3. **Built-in** — hardcoded defaults (subject stop pattern, attention thresholds, etc.)
 
 The project-local tier runs only when trusted; an untrusted one is skipped, as if absent. See [Trusting project registries](#trusting-project-registries).
 
-Per tier: if `registry.py` exists but fails to import, the command **fails** (no silent fallback). If the file loads but has no entry for `gerrit.project`, the next tier is tried. If a callable **raises at runtime**, the next tier is tried, then built-in.
+Per tier: if `registry.py` exists but fails to import, the command **fails** (no silent fallback). If the file loads but has no entry for `ger.project`, the next tier is tried. If a callable **raises at runtime**, the next tier is tried, then built-in.
 
-Red subject highlighting in `ger log`, `ger push`, and `ger show` uses the same ready-boundary rules as push (not a separate stop-pattern regex). `gerrit.warningPattern` still controls yellow warning highlights.
+Red subject highlighting in `ger log`, `ger push`, and `ger show` uses the same ready-boundary rules as push (not a separate stop-pattern regex). `ger.warningPattern` still controls yellow warning highlights.
 
 `ger cache info` prints the global scripts root (`~/.config/ger/<host>/`) next to the SQLite cache path.
 
 ### Trusting project registries
 
-A `registry.py` is Python that ger imports, so it runs as you and can read everything you can, `gerrit.token` included. A project-local one arrives with the work tree: a change you check out to review, or a repository you clone, can add `.ger/ci/registry.py`. Git does not clone hooks for this reason, and ger does not run a project-local registry just because it is there. It runs when one of these holds:
+A `registry.py` is Python that ger imports, so it runs as you and can read everything you can, `ger.token` included. A project-local one arrives with the work tree: a change you check out to review, or a repository you clone, can add `.ger/ci/registry.py`. Git does not clone hooks for this reason, and ger does not run a project-local registry just because it is there. It runs when one of these holds:
 
-1. **`gerrit.scriptsDir` is set where a checkout cannot write.** In the repository's own config (`git config gerrit.scriptsDir .ger`: `.git/config` is never cloned), a worktree's config, or `git -c`. Set in global or system config, it trusts only a directory outside the work tree (an absolute path to your own scripts); a relative or in-tree path there would trust every repository you open.
+1. **`ger.scriptsDir` is set where a checkout cannot write.** In the repository's own config (`git config ger.scriptsDir .ger`: `.git/config` is never cloned), a worktree's config, or `git -c`. Set in global or system config, it trusts only a directory outside the work tree (an absolute path to your own scripts); a relative or in-tree path there would trust every repository you open.
 2. **You said you trust its contents.** Otherwise, before a command runs, ger shows the path and asks `Trust it and run it?` (default no). A yes records a SHA-256 digest of every `*.py` file in that registry directory (`registry.py` and the helpers it imports, symlinked directories followed under every name that reaches them; a registry of more than 2000 such files is refused) in `$XDG_CONFIG_HOME/ger/trusted-registries.json` (default `~/.config/ger/`). The same contents are then trusted wherever they appear, every worktree of the project included. Any edit changes the digest, so ger asks again before running a changed registry. ger reads those files once, hashes them, and runs exactly those bytes: it never runs bytecode from `__pycache__` or a `.pyc`, nor imports anything from the registry directory that is not part of the digest.
 
 Without a terminal, or with `--json` / `--ai`, ger does not ask: it skips the untrusted registry, falls back to the global tier and built-in behaviour, and prints `warning: not running untrusted <path>` with how to trust it. `GER_ASSUME_YES` does not answer this question: an agent must not trust a checked-out change's code for you. A declined registry is asked about again on the next run. `ger serve` asks, or warns, once when it starts; trust given later takes effect when it restarts.

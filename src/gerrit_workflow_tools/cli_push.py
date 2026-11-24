@@ -78,7 +78,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-rebase-check",
         action="store_true",
-        help="Do not fetch or verify that HEAD is linear on the remote Gerrit target (see gerrit.push.remotePolicy).",
+        help="Do not fetch or verify that HEAD is linear on the remote Gerrit target (see ger.pushRemotePolicy).",
     )
     parser.add_argument(
         "-y",
@@ -110,7 +110,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=[],
         metavar="ACCOUNTS",
         help=(
-            "Comma-separated Gerrit reviewer accounts (repeat for more; overwrites branch gerritReviewers). "
+            "Comma-separated Gerrit reviewer accounts (repeat for more; overwrites branch gerReviewers). "
             "Appended as ref options %%r=…"
         ),
     )
@@ -370,7 +370,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     if mode is None:  # Already asked above, or chose not to (--yes, --dry-run, detached HEAD).
         raise missing_upstream_error(branch, askable=False)
     if args.i and mode == "vanilla":
-        raise UsageError("-i applies only to Gerrit push (upstream on gerrit.remote)")
+        raise UsageError("-i applies only to Gerrit push (upstream on ger.remote)")
     if mode == "vanilla":
         return _handle_vanilla_push(run, args, branch=branch)
     return _push_gerrit(run, args, branch=branch)

@@ -140,17 +140,17 @@ comes from the **stack context** of the current (or `--branch`) branch:
 
 | Field | Source (in precedence order) |
 |-------|------------------------------|
-| `project` | `gerrit.project` → parsed from the `gerrit.remote` URL |
-| `target branch` | `branch.<name>.gerritTarget` → upstream ref when its remote is `gerrit.remote` |
+| `project` | `ger.project` → parsed from the `ger.remote` URL |
+| `target branch` | `branch.<name>.gerTarget` → upstream ref when its remote is `ger.remote` |
 | `push branch` | the branch Gerrit would receive `refs/for/<target>` |
 
 Resolved by `resolve_stack_context()` in `core/gerrit/stack_context.py`
-(including `branch.<name>.gerritTarget` when set). See
+(including `branch.<name>.gerTarget` when set). See
 [Configuration.md](../Configuration.md#change-identity-triplet-resolution).
 
 When the stack context cannot be resolved (no project, or no target branch), a
 command that *needs* it fails with the same actionable error as `ger push`
-("set upstream …" / "configure `gerrit.project`") — never a silent wrong pick.
+("set upstream …" / "configure `ger.project`") — never a silent wrong pick.
 
 ---
 
@@ -329,7 +329,7 @@ Exit codes are shared across every command: see **[exit-codes.md](exit-codes.md)
 | `3` | Not found — the changeish resolved to nothing |
 | `4` | **Ambiguous** — multiple matches survived narrowing; `alternatives` lists them |
 | `5` | Gerrit API error (unreachable, auth, bad response) |
-| `6` | Required git configuration missing (`gerrit.webUrl`, credentials) |
+| `6` | Required git configuration missing (`ger.webUrl`, credentials) |
 | `7` | A git command failed |
 
 `3` no longer covers Gerrit and git failures; those are `5` and `7`.
@@ -367,4 +367,4 @@ Read before "simplifying" the resolution rules.
 - [CONTEXT.md](../../CONTEXT.md) — definitions: changeish, triplet, stack context, resolution note
 - [architecture.md](../architecture.md#5-changeish-resolution) — where resolution lives in the code
 - [spec/commands/](commands/) — per-command detail
-- [Configuration.md](../Configuration.md) — `gerrit.project`, `branch.*.gerritTarget`, `gerrit.remote`
+- [Configuration.md](../Configuration.md) — `ger.project`, `branch.*.gerTarget`, `ger.remote`

@@ -237,6 +237,6 @@ def resolve_push_reviewers(
 
 
 def branch_reviewers(branch: str, *, settings: Settings) -> list[str]:
-    """Reviewers saved in *branch*'s ``gerritReviewers`` config."""
+    """Reviewers saved in *branch*'s ``gerReviewers`` config."""
     cfg = settings.branch_gerrit_reviewers(branch)
     return parse_reviewer_names(cfg) if cfg else []

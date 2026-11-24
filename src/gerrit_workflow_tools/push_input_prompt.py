@@ -285,7 +285,7 @@ def prompt_branch_push_options(
     """Open the highlighted push-options input line for *branch*, history keyed by the stack's project.
 
     With *prefill* the line starts with the reviewers ``--reviewers`` / the registry /
-    ``branch.*.gerritReviewers`` give; without it, the line is empty. A *suffix* (such as
+    ``branch.*.gerReviewers`` give; without it, the line is empty. A *suffix* (such as
     ``publish-drafts``) ends the starting line either way.
     """
     seeds = branch_reviewers(branch, settings=settings) if branch is not None else []

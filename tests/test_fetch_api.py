@@ -15,25 +15,25 @@ from tests.conftest import run_cli
 
 
 def _configure_gerrit_http(repo: Path) -> None:
-    git("config", "gerrit.webUrl", "https://g.example.test", cwd=repo)
-    git("config", "gerrit.user", "testuser", cwd=repo)
-    git("config", "gerrit.token", "secrettok", cwd=repo)
+    git("config", "ger.webUrl", "https://g.example.test", cwd=repo)
+    git("config", "ger.user", "testuser", cwd=repo)
+    git("config", "ger.token", "secrettok", cwd=repo)
 
 
 def test_fetch_api_missing_weburl(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     code, _out, err = run_cli(stack_repo, fetch_api_main, ["changes/"], monkeypatch)
     assert code == ExitCode.CONFIG
-    assert "gerrit.webUrl" in err
+    assert "ger.webUrl" in err
 
 
 def test_fetch_api_refuses_a_plain_http_weburl(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Credentials go with every request, so plain http is a config error that names the opt-in."""
     _configure_gerrit_http(stack_repo)
-    git("config", "gerrit.webUrl", "http://g.example.test", cwd=stack_repo)
+    git("config", "ger.webUrl", "http://g.example.test", cwd=stack_repo)
     code, _out, err = run_cli(stack_repo, fetch_api_main, ["changes/"], monkeypatch)
     assert code == ExitCode.CONFIG
     assert "https://" in err
-    assert "gerrit.allowInsecureHttp" in err
+    assert "ger.allowInsecureHttp" in err
 
 
 @pytest.mark.parametrize(
@@ -48,7 +48,7 @@ def test_fetch_api_refuses_a_plain_http_weburl(stack_repo: Path, monkeypatch: py
     ],
 )
 def test_weburl_scheme_policy(web_url: str, allow: str | None, expected: str | None) -> None:
-    values = {"gerrit.webUrl": web_url} | ({"gerrit.allowInsecureHttp": allow} if allow else {})
+    values = {"ger.webUrl": web_url} | ({"ger.allowInsecureHttp": allow} if allow else {})
     settings = Settings.from_map(values)
     if expected is None:
         with pytest.raises(ConfigError, match="https://"):

@@ -2,7 +2,7 @@
 
 Sits one layer above :mod:`gerrit_workflow_tools.core.config`: everything here runs ``git``
 to ask what the repo looks like right now, and some of it consults settings to interpret the
-answer (e.g. whether the upstream's remote is ``gerrit.remote``). The dependency runs one way
+answer (e.g. whether the upstream's remote is ``ger.remote``). The dependency runs one way
 — ``config`` never asks about repository state.
 """
 
@@ -206,7 +206,7 @@ def resolve_working_branch(cwd: Path | str | None, *, settings: Settings) -> str
 def refs_for_push_branch_name(target: str, *, settings: Settings) -> str:
     """Branch segment for Gerrit ``refs/for/<branch>``.
 
-    When *target* is ``<remote>/<branch>`` and *remote* equals ``gerrit.remote``,
+    When *target* is ``<remote>/<branch>`` and *remote* equals ``ger.remote``,
     returns *branch* only (e.g. ``origin/dev`` → ``dev``). Otherwise returns *target*
     unchanged (e.g. ``main``, ``release/1.0``).
     """
@@ -287,8 +287,8 @@ def effective_gerrit_destination_branch(
 ) -> str | None:
     """Gerrit destination for push/rebase from branch config or upstream.
 
-    Prefers ``branch.<name>.gerritTarget`` when set; otherwise returns upstream ref
-    when its remote matches ``gerrit.remote`` (e.g. ``origin/main``), suitable
+    Prefers ``branch.<name>.gerTarget`` when set; otherwise returns upstream ref
+    when its remote matches ``ger.remote`` (e.g. ``origin/main``), suitable
     for :func:`refs_for_push_branch_name`. Returns ``None`` when neither is available.
     """
     branch_name = resolve_branch_for_branch_config(cwd, branch, settings=settings)
@@ -358,8 +358,8 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
     remote-tracking tip of the configured Gerrit target branch (e.g. ``origin/main``).
 
     Uses the same effective Gerrit destination as :func:`effective_gerrit_destination_branch`
-    (upstream when its remote is ``gerrit.remote``). There is no fallback to
-    ``<gerrit.remote>/main`` when upstream is unavailable.
+    (upstream when its remote is ``ger.remote``). There is no fallback to
+    ``<ger.remote>/main`` when upstream is unavailable.
     """
     b = branch or current_branch(cwd)
     remote_name = settings.gerrit_remote
@@ -367,7 +367,7 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
     if not eff:
         raise GitError(
             f"No Gerrit destination branch for `ger rebase --onto-remote` on branch {b!r}. "
-            f"Set upstream to a branch on `{remote_name}` (gerrit.remote), "
+            f"Set upstream to a branch on `{remote_name}` (ger.remote), "
             f"e.g. `git branch --set-upstream-to={remote_name}/<branch>` after `git fetch`. "
             f"Fetch so `refs/remotes/{remote_name}/<branch>` exists."
         )
@@ -378,7 +378,7 @@ def resolve_rebase_onto_remote_ref(cwd: Path | str | None, branch: str | None = 
         return ref
 
     hint = (
-        f"Fetch from your Gerrit remote (`gerrit.remote`, often `{remote_name}`), e.g. "
+        f"Fetch from your Gerrit remote (`ger.remote`, often `{remote_name}`), e.g. "
         f"`git fetch {remote_name}` so `refs/remotes/{remote_name}/<branch>` exists."
     )
     raise GitError(f"No remote-tracking ref found for `ger rebase --onto-remote` (tried {ref}). {hint}")

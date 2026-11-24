@@ -93,7 +93,7 @@ def load_review_delta(
     *since* names the patchset to compare from instead of asking Gerrit which you reviewed
     (``"current"``: Gerrit's current one). The comparison runs to patchset *upto*, or to
     *local_commit* (the commit of the local stack that carries the change), else to the current
-    patchset. Fetches the patchsets from ``gerrit.remote`` when they are not in the repository.
+    patchset. Fetches the patchsets from ``ger.remote`` when they are not in the repository.
     """
     change = resolve_change(service, cwd, changeish)
     current = change.patchset()

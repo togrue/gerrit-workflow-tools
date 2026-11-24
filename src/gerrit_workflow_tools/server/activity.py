@@ -100,7 +100,7 @@ def follow_events(
     you = [settings.gerrit_user]
     off_reason: str | None = None
     if not web_base:
-        source, off_reason = None, "gerrit.webUrl is not set"
+        source, off_reason = None, "ger.webUrl is not set"
     elif source is None and gerrit is not None:
         off_reason = "no event source for an injected Gerrit"
     elif source is None and mode is not StreamMode.OFF:

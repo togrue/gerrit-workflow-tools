@@ -68,7 +68,7 @@ def test_local_overrides_global(stack_repo: Path, tmp_path: Path, monkeypatch: p
     config_home = tmp_path / "config"
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
     web = "https://g.example"
-    git("config", "gerrit.webUrl", web, cwd=stack_repo)
+    git("config", "ger.webUrl", web, cwd=stack_repo)
     _write_domain_registry(
         _config_root(tmp_path, web),
         "ci",
@@ -110,7 +110,7 @@ def test_local_without_project_key_falls_through_to_global(
     config_home = tmp_path / "config"
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
     web = "https://g.example"
-    git("config", "gerrit.webUrl", web, cwd=stack_repo)
+    git("config", "ger.webUrl", web, cwd=stack_repo)
     _write_domain_registry(
         stack_repo / ".ger",
         "ci",
@@ -157,7 +157,7 @@ def test_runtime_local_failure_falls_back_to_global(
     config_home = tmp_path / "config"
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
     web = "https://g.example"
-    git("config", "gerrit.webUrl", web, cwd=stack_repo)
+    git("config", "ger.webUrl", web, cwd=stack_repo)
     _write_domain_registry(
         stack_repo / ".ger",
         "ready",
@@ -180,7 +180,7 @@ STRATEGIES = {"testproj": _global}
 """,
     )
     clear_ready_strategy_cache()
-    git("config", "gerrit.project", "testproj", cwd=stack_repo)
+    git("config", "ger.project", "testproj", cwd=stack_repo)
     result = compute_ready(
         stack_repo,
         stop_pattern=r"^never$",
@@ -204,7 +204,7 @@ STRATEGIES = {"testproj": _boundary}
     )
     trust_local_registries(stack_repo)
     clear_ready_strategy_cache()
-    git("config", "gerrit.project", "testproj", cwd=stack_repo)
+    git("config", "ger.project", "testproj", cwd=stack_repo)
     _fork, _display, target_tip = merge_base_with_target(stack_repo)
     rows = commits_in_range(stack_repo, f"{target_tip}..HEAD", first_parent=True)
     result = compute_ready(
@@ -231,7 +231,7 @@ STRATEGIES = {"testproj": _boundary}
     )
     trust_local_registries(stack_repo)
     clear_ready_strategy_cache()
-    git("config", "gerrit.project", "testproj", cwd=stack_repo)
+    git("config", "ger.project", "testproj", cwd=stack_repo)
     rows = ready_rows = list(get_stack_snapshot(stack_repo, first_parent=True).commits)
     highlighter = build_summary_highlighter(
         Settings.from_cwd(stack_repo),

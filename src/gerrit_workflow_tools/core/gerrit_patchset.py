@@ -1,4 +1,4 @@
-"""One Gerrit patchset: which one a changeish names, and fetching it from ``gerrit.remote``.
+"""One Gerrit patchset: which one a changeish names, and fetching it from ``ger.remote``.
 
 Every command that brings a change's commit into the repository starts here: ``ger review``
 checks it out to review, ``ger checkout`` to work on it, ``ger serve`` diffs it, the
@@ -136,4 +136,4 @@ def _missing_ref_hint(remote: str, ref: str, patchset: GerritPatchset) -> str:
             f"'{remote}' as it signs in (anonymous, or an HTTP URL without /a/); fetch over SSH or an /a/ URL "
             "with credentials"
         )
-    return f"remote '{remote}' does not have {ref}: check that gerrit.remote names the Gerrit server of the change"
+    return f"remote '{remote}' does not have {ref}: check that ger.remote names the Gerrit server of the change"

@@ -4,7 +4,7 @@
 |--|--|
 | **Status** | Implemented |
 | **Module** | `src/gerrit_workflow_tools/cli_ci.py` |
-| **Requires** | `gerrit.webUrl`, credentials; `ger.ciCredential.<host>` when the CI server needs auth |
+| **Requires** | `ger.webUrl`, credentials; `ger.ciCredential.<host>` when the CI server needs auth |
 | **Design** | [ci-content.md](../ci-content.md) — layering, result shape, caching |
 
 Why CI failed, without opening a console: for each target's failed **CI links**, fetch the **CI content** behind the link and print its **CI findings**, grouped by link label. This is the deliberate, expensive hop; `ger log` and the **Gerrit overlay** never fetch logs.

@@ -49,7 +49,7 @@ class GerritService:
         repo: Repository,
     ) -> None:
         # Both are built on first use when not supplied: a service that is never asked
-        # anything never needs ``gerrit.webUrl``, credentials or the cache file.
+        # anything never needs ``ger.webUrl``, credentials or the cache file.
         self._rest = rest
         self._cache = cache
         # The repository of the run this service belongs to: its settings, its working
@@ -76,7 +76,7 @@ class GerritService:
 
     @property
     def configured(self) -> bool:
-        """Whether this service can reach a Gerrit: a client was supplied, or ``gerrit.webUrl`` is set."""
+        """Whether this service can reach a Gerrit: a client was supplied, or ``ger.webUrl`` is set."""
         return self._rest is not None or bool(self.settings.gerrit_web_url)
 
     @property
@@ -88,7 +88,7 @@ class GerritService:
     def rest(self) -> GerritRest:
         """The Gerrit seam. Built from :attr:`settings` on first use when none was supplied.
 
-        Raises :class:`ConfigError` then when ``gerrit.webUrl`` is unset, so only the work
+        Raises :class:`ConfigError` then when ``ger.webUrl`` is unset, so only the work
         that genuinely asks Gerrit needs it configured.
         """
         if self._rest is None:
@@ -114,7 +114,7 @@ class GerritService:
         Asked once per user and host and then remembered: an account id never changes, and
         every inbox load and review delta needs it.
         """
-        user = self.settings.get("gerrit.user") or ""
+        user = self.settings.get("ger.user") or ""
         known = None if self.refresh else self.cache.account_id(user)
         if known is not None:
             return known
