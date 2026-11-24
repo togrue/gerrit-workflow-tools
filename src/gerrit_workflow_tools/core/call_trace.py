@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import sys
 from dataclasses import dataclass
 from urllib.parse import parse_qs, urlparse
 
@@ -117,12 +116,3 @@ def format_call_trace_summary() -> str:
             count_suffix = f" x{count}" if count > 1 else ""
             lines.append(f"    {seconds * 1000:6.0f}ms{count_suffix}  {label}")
     return "\n".join(lines)
-
-
-def print_call_trace_summary() -> None:
-    """Print the timing report to stderr when tracing collected any calls."""
-
-    summary = format_call_trace_summary()
-    if summary:
-        sys.stdout.flush()
-        print(f"\n{summary}", file=sys.stderr)

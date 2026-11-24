@@ -117,7 +117,7 @@ def test_gshow_stack_prompts_for_missing_upstream_and_aborts(
     git("branch", "--unset-upstream", "feature", cwd=web_stack_repo, check=False)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
-        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
+        "gerrit_workflow_tools.upstream_interactive.prompt_upstream_abbrev_interactive",
         lambda _cwd, _branch, **_kw: None,
     )
     code, out, _err = run_cli(
@@ -139,7 +139,7 @@ def test_gshow_stack_sets_missing_upstream_then_continues(
     git("branch", "--unset-upstream", "feature", cwd=web_stack_repo, check=False)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
-        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
+        "gerrit_workflow_tools.upstream_interactive.prompt_upstream_abbrev_interactive",
         lambda _cwd, _branch, **_kw: "origin/main",
     )
     code, _out, err = run_cli(
@@ -159,7 +159,7 @@ def test_gshow_head_asks_for_missing_upstream_then_shows(web_stack_repo: Path, m
     git("branch", "--unset-upstream", "feature", cwd=web_stack_repo, check=False)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
-        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
+        "gerrit_workflow_tools.upstream_interactive.prompt_upstream_abbrev_interactive",
         lambda _cwd, _branch, **_kw: "origin/main",
     )
     sha = git_out("rev-parse", "HEAD", cwd=web_stack_repo)

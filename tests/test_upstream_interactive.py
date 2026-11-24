@@ -6,12 +6,12 @@ from typing import TextIO, cast
 
 import pytest
 
+from gerrit_workflow_tools.cli_terminal import _is_windows_console
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import is_detached_head
 from gerrit_workflow_tools.core.upstream import branch_has_upstream, read_recent_upstream_abbrevs
-from gerrit_workflow_tools.core.upstream_interactive import (
-    _is_windows_console,
+from gerrit_workflow_tools.upstream_interactive import (
     ensure_branch_upstream_interactive,
     prompt_upstream_abbrev_interactive,
     require_branch_upstream,
@@ -59,9 +59,9 @@ def test_ensure_branch_upstream_interactive_sets_upstream(tmp_path: Path, monkey
     assert not branch_has_upstream(repo, "feature")
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     # On Windows the prompt also needs stdout to be a console, which pytest's capture is not.
-    monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive._is_windows_console", lambda _stream: True)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_terminal._is_windows_console", lambda _stream: True)
     monkeypatch.setattr(
-        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
+        "gerrit_workflow_tools.upstream_interactive.prompt_upstream_abbrev_interactive",
         lambda _cwd, _branch, **_kw: "origin/main",
     )
     assert ensure_branch_upstream_interactive(repo, "feature", settings=Settings.from_cwd(repo))
@@ -77,7 +77,7 @@ def test_ensure_branch_upstream_interactive_detached_skips_prompt(
     assert is_detached_head(repo)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
-        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
+        "gerrit_workflow_tools.upstream_interactive.prompt_upstream_abbrev_interactive",
         lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("prompt must not run on detached HEAD")),
     )
     assert not ensure_branch_upstream_interactive(repo, "feature", settings=Settings.from_cwd(repo))
@@ -120,7 +120,7 @@ def test_missing_upstream_without_a_console_reports_instead_of_prompting(
     repo = _make_repo_with_origin(tmp_path)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(sys, "platform", "win32")
-    monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive._is_windows_console", lambda _stream: False)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_terminal._is_windows_console", lambda _stream: False)
 
     with pytest.raises(ConfigError, match="No upstream configured"):
         require_branch_upstream(repo, "feature", settings=Settings.from_cwd(repo))

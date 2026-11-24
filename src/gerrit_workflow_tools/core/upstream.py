@@ -1,8 +1,8 @@
 """Which upstream a branch has, which it should have, and setting it: no prompting here.
 
 The suggestion is cheap: the branch's reflog says what it was created from, and one
-``for-each-ref`` measures every remote branch's distance (git 2.41). ``upstream_interactive``
-asks at a terminal; ``ger serve`` answers ``GET /stack/upstream``.
+``for-each-ref`` measures every remote branch's distance (git 2.41). ``upstream_interactive.py``
+(the CLI) asks at a terminal; ``ger serve`` answers ``GET /stack/upstream``.
 """
 
 from __future__ import annotations

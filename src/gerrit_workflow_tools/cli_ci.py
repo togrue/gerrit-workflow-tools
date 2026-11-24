@@ -24,7 +24,6 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolution
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_targets
-from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.render.ci_content import (
     ci_content_json,
     format_ci_section_human,
@@ -33,6 +32,7 @@ from gerrit_workflow_tools.render.ci_content import (
 from gerrit_workflow_tools.render.commit_row import show_headline
 from gerrit_workflow_tools.render.download_meter import DownloadMeter
 from gerrit_workflow_tools.render.style import ANSI_DIM, ANSI_RED, color_text
+from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
 
 def _build_parser() -> argparse.ArgumentParser:

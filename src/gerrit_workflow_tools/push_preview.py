@@ -9,6 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import ask_choice, confirm
+from gerrit_workflow_tools.cli_terminal import prompt_toolkit_can_run
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.push import (
@@ -28,7 +29,6 @@ from gerrit_workflow_tools.core.push_result import NOTHING_TO_PUSH
 from gerrit_workflow_tools.core.push_reviewers import PushMark, needs_rest_assignment
 from gerrit_workflow_tools.core.push_unchanged import StateUpdate
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
-from gerrit_workflow_tools.core.upstream_interactive import prompt_toolkit_can_run
 from gerrit_workflow_tools.push_input_line import KW_PUBLISH_DRAFTS, ParseResult, PushLineState
 from gerrit_workflow_tools.render.style import (
     ANSI_BLUE,

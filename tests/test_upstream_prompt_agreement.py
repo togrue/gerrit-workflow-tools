@@ -45,14 +45,14 @@ def _without_upstream(repo: Path, monkeypatch: pytest.MonkeyPatch, answer: str |
     """Unset ``feature``'s upstream, fake a terminal, and answer the upstream prompt with *answer*."""
     git("branch", "--unset-upstream", "feature", cwd=repo)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
-    monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive.prompt_toolkit_can_run", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.upstream_interactive.prompt_toolkit_can_run", lambda: True)
     asked: list[str] = []
 
     def prompt(_cwd: object, branch: str, **_kw: object) -> str | None:
         asked.append(branch)
         return answer
 
-    monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive", prompt)
+    monkeypatch.setattr("gerrit_workflow_tools.upstream_interactive.prompt_upstream_abbrev_interactive", prompt)
     return asked
 
 

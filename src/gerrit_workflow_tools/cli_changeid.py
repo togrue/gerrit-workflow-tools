@@ -32,8 +32,8 @@ from gerrit_workflow_tools.core.stack import (
     read_rewrite_rows,
     rev_spec_stack_base_to_end,
 )
-from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.render.style import color_short_sha
+from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
 
 class ChangeIdError(Exception):

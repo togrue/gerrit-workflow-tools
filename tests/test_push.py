@@ -85,7 +85,7 @@ def test_gpush_prompts_for_missing_upstream_and_aborts(
     git("branch", "--unset-upstream", "feature", cwd=repo, check=False)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
-        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
+        "gerrit_workflow_tools.upstream_interactive.prompt_upstream_abbrev_interactive",
         lambda _cwd, _branch, **_kw: None,
     )
     code, _out, _err = run_cli(repo, gpush_main, [], monkeypatch)
@@ -102,7 +102,7 @@ def test_gpush_sets_missing_upstream_then_continues(
     git("branch", "--unset-upstream", "feature", cwd=repo, check=False)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
-        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
+        "gerrit_workflow_tools.upstream_interactive.prompt_upstream_abbrev_interactive",
         lambda _cwd, _branch, **_kw: "origin/main",
     )
     monkeypatch.setattr("builtins.input", lambda _prompt: "n")
@@ -118,7 +118,7 @@ def test_gpush_dry_run_never_writes_upstream(stack_repo_unconfigured: Path, monk
     git("branch", "--unset-upstream", "feature", cwd=repo, check=False)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
-        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
+        "gerrit_workflow_tools.upstream_interactive.prompt_upstream_abbrev_interactive",
         lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("--dry-run must not prompt for an upstream")),
     )
     code, _out, err = run_cli(repo, gpush_main, ["--dry-run"], monkeypatch)
@@ -180,7 +180,7 @@ def test_gpush_detached_head_does_not_prompt_upstream(stack_repo: Path, monkeypa
     git("checkout", "--detach", "HEAD", cwd=stack_repo)
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
-        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive",
+        "gerrit_workflow_tools.upstream_interactive.prompt_upstream_abbrev_interactive",
         lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("upstream prompt on detached HEAD")),
     )
     code, _out, _err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch)
@@ -207,7 +207,7 @@ def test_gpush_treats_windows_nul_as_non_interactive(stack_repo: Path, monkeypat
     """On Windows ``isatty()`` is true for ``NUL``, which is what ``</dev/null`` opens."""
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(sys, "platform", "win32")
-    monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive._is_windows_console", lambda _stream: False)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_terminal._is_windows_console", lambda _stream: False)
     monkeypatch.setattr("builtins.input", lambda _prompt="": pytest.fail("must not prompt"))
 
     code, _out, err = run_cli(stack_repo, gpush_main, [], monkeypatch)
@@ -219,7 +219,7 @@ def test_gpush_treats_windows_nul_as_non_interactive(stack_repo: Path, monkeypat
 def test_gpush_i_treats_windows_nul_as_non_interactive(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(sys, "platform", "win32")
-    monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive._is_windows_console", lambda _stream: False)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_terminal._is_windows_console", lambda _stream: False)
 
     code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i"], monkeypatch)
 

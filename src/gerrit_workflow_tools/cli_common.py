@@ -21,8 +21,9 @@ from pathlib import Path
 from typing import TypeVar
 
 from gerrit_workflow_tools.cli_logging import configure_logging
+from gerrit_workflow_tools.cli_terminal import stdin_is_terminal
 from gerrit_workflow_tools.core.attention import NoEditAttentionError
-from gerrit_workflow_tools.core.call_trace import print_call_trace_summary
+from gerrit_workflow_tools.core.call_trace import format_call_trace_summary
 from gerrit_workflow_tools.core.changeish import as_change_only
 from gerrit_workflow_tools.core.ci_content import CiContentError
 from gerrit_workflow_tools.core.comment_target import MissingChangeIdError
@@ -32,7 +33,6 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.upstream import NeedsUpstreamError
-from gerrit_workflow_tools.core.upstream_interactive import ask_for_needed_upstream, stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.registry_trust_prompt import settle_registry_trust
 from gerrit_workflow_tools.render.style import (
@@ -41,6 +41,7 @@ from gerrit_workflow_tools.render.style import (
     init_hyperlink_mode,
 )
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
+from gerrit_workflow_tools.upstream_interactive import ask_for_needed_upstream
 
 
 _T = TypeVar("_T")
@@ -152,6 +153,14 @@ def run_cli_command(body: Callable[[], int]) -> int:
     finally:
         _MAY_ASK_FOR_UPSTREAM.reset(scope)
         print_call_trace_summary()
+
+
+def print_call_trace_summary() -> None:
+    """Print the ``--debug-log`` timing report to stderr when tracing collected any calls."""
+    summary = format_call_trace_summary()
+    if summary:
+        sys.stdout.flush()
+        print(f"\n{summary}", file=sys.stderr)
 
 
 def _report_failure(error: Exception) -> int:

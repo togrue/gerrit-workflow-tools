@@ -11,6 +11,7 @@ import os
 import sys
 from pathlib import Path
 
+from gerrit_workflow_tools.cli_terminal import stdin_is_terminal
 from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.rebase_state import (
@@ -20,7 +21,6 @@ from gerrit_workflow_tools.core.rebase_state import (
 )
 from gerrit_workflow_tools.core.rebasing_stack import stopped_rebase
 from gerrit_workflow_tools.core.rewrite_refusal import history_rewrite_refusal
-from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
 
 

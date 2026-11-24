@@ -16,6 +16,7 @@ from gerrit_workflow_tools.cli_common import (
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_notes import print_note, print_resolution_note
+from gerrit_workflow_tools.cli_terminal import stdin_is_terminal
 from gerrit_workflow_tools.core.change_checkout import (
     CheckoutAction,
     CheckoutPlan,
@@ -29,7 +30,6 @@ from gerrit_workflow_tools.core.change_checkout import (
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_patchset import resolve_change
 from gerrit_workflow_tools.core.rebase_state import rebase_refusal
-from gerrit_workflow_tools.core.upstream_interactive import stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
 
 

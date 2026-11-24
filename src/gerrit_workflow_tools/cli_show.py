@@ -30,7 +30,7 @@ from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_contex
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit
 from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, read_commit_meta
-from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream, require_branch_upstream
+from gerrit_workflow_tools.core.upstream import branch_has_upstream
 from gerrit_workflow_tools.render.ci_content import format_ci_section_human
 from gerrit_workflow_tools.render.comments import (
     empty_comments_message,
@@ -43,6 +43,7 @@ from gerrit_workflow_tools.render.show_markdown import commit_markdown
 from gerrit_workflow_tools.render.style import ANSI_DIM, ANSI_YELLOW, color_text, format_link
 from gerrit_workflow_tools.render.wrap import wrap_lines
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
+from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
 
 _COMMIT_SEPARATOR = "═" * 64

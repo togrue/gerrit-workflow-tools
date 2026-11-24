@@ -61,7 +61,7 @@ flowchart TB
   subgraph core [Core domain — core/]
     stack[stack.py · ready_calc.py · change_id.py]
     status[annotated_stack.py · gerrit_change_status.py · attention.py · comment_chains.py]
-    config[config.py · git_state.py · upstream.py · upstream_interactive.py]
+    config[config.py · git_state.py · upstream.py]
     git[git_run.py]
     reviewers[reviewer.py · reviewer_completion.py]
     push_core[push.py · push_reviewers.py · gerrit_show.py]
@@ -194,7 +194,7 @@ flowchart LR
 
 `git_state.py` answers what the repository currently looks like — branch, HEAD, upstream, and the Gerrit push destination; `rebase_state.py`, one step above it, answers whether a rebase is underway and what that means for the next command. It may read settings; `config.py` never queries repository state, so the dependency runs one way.
 
-`upstream.py` knows which upstream a branch should have: what its reflog says it was created from, else the nearest branch of the Gerrit remote (one `for-each-ref` measures them all), plus the upstreams picked before; and it sets one. `upstream_interactive.py` prompts with that suggestion when a branch lacks `@{upstream}`: up front in log, push, edit, rebase, change-id, sha and `show --stack`, and for every command through `run_cli_command`, which asks when a `NeedsUpstreamError` (raised by `missing_upstream_error`, and by `resolve_stack_context` as `NoDestinationBranchError`) reaches it and runs the command again. `ger serve` offers the same suggestion through `GET /stack/upstream`.
+`upstream.py` knows which upstream a branch should have: what its reflog says it was created from, else the nearest branch of the Gerrit remote (one `for-each-ref` measures them all), plus the upstreams picked before; and it sets one. `upstream_interactive.py` (package root, CLI side) prompts with that suggestion when a branch lacks `@{upstream}`: up front in log, push, edit, rebase, change-id, sha and `show --stack`, and for every command through `run_cli_command`, which asks when a `NeedsUpstreamError` (raised by `missing_upstream_error`, and by `resolve_stack_context` as `NoDestinationBranchError`) reaches it and runs the command again. `ger serve` offers the same suggestion through `GET /stack/upstream`.
 
 ---
 
@@ -445,6 +445,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `cli_ger.py` | Dispatcher: the command registry `_COMMANDS`, aliases, global `--refresh` |
 | `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`: `--json` / `--format` / `--ai`, read back by `output_format`), `confirm` |
 | `cli_notes.py` | Transparency notes on stderr, dimmed: `print_note`, `print_resolution_note` (how a changeish resolved) |
+| `cli_terminal.py` | Whether the CLI can ask: `stdin_is_terminal`, `prompt_toolkit_can_run` (Windows `NUL` is no console) |
 | `cli_logging.py` | Diagnostic logging for `--debug-log`: `configure_logging` (package log level, the call trace, Gerrit response bodies) |
 | `cli_log.py` | `ger log` |
 | `cli_inbox.py` | `ger inbox` |
@@ -490,7 +491,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/rebase_state.py` | A rebase underway: whether one is, how far it got and why it stopped (`rebase_progress`, `RebaseProgress`, `RebaseStop`), the refusal it causes (`rebase_refusal`) and the one next step after a conflict (`conflict_next_step`) |
 | `core/rewrite_refusal.py` | Why rewriting the local stack, or a switch, cannot start: the one wording each rewrite shares (`history_rewrite_refusal`), its parts over what the index and work tree hold (`uncommitted_changes_refusal`, `submodule_refusal`), and a target whose change Gerrit already closed (`closed_change_refusal`, for `ger edit` / `reword` / `fix`) |
 | `core/rebasing_stack.py` | The **rebasing stack**: the local stack while a rebase is underway, each commit with its **rebase step** (`load_rebasing_stack`, `RebasingStack`, `RebaseStep`), and where the rebase stopped as `GET /stack` serves it, the stop `ger rebase --continue|--skip` refuses by (`stopped_rebase`) |
-| `core/call_trace.py` | git/Gerrit call timing for `--debug-log` |
+| `core/call_trace.py` | git/Gerrit call timing for `--debug-log`, as text (`format_call_trace_summary`); `cli_common.print_call_trace_summary` prints it |
 | `core/changeish.py` | The changeish grammar: what an input naming a commit or change looks like |
 | `core/change_id.py` | Change-Id footer: `parse_change_id_footer` (raw footer value), `validate_change_id_value`, `extract_valid_change_id`, `change_id_of_rev`, `classify_issues`, generate and fix |
 | `core/stack.py` | Local stack: `Commit` (the one commit-row type), `get_stack_snapshot` (the one stack loader), `read_commit_rows`, `read_commit_meta`, `read_rewrite_rows`, ranges, merge-base |
@@ -554,7 +555,6 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/reviewers_strategy.py` | Loading default-reviewer strategies from `.ger/reviewers/` |
 | `core/upstream.py` | Which upstream a branch has and should have (the suggestion, recent picks), and setting it |
 | `core/upstream_moved.py` | How far the upstream moved on past the local stack (`behind`), the one command that rebases onto it, and where that rebase would stop (simulated on every call); what `--drop-merged-equivalent` drops: `upstream_moved`, `UpstreamMoved`, `merged_with_same_code` |
-| `core/upstream_interactive.py` | Prompting for a missing upstream, and whether a prompt can run at all: `stdin_is_terminal`, `prompt_toolkit_can_run` (core that prompts — see backlog) |
 
 ### Gerrit integration (`core/gerrit/`)
 
@@ -602,6 +602,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `push_outcome.py` | What `ger push` reports once `git push` ran (git's own output, errors, what it assigned, what it set over REST), or why it refused |
 | `push_input_line.py` | Push options line: parsing and formatting |
 | `push_input_prompt.py` | Interactive push UI (prompt-toolkit) |
+| `upstream_interactive.py` | Prompting for a missing upstream with `core/upstream.py`'s suggestion: `require_branch_upstream` up front, `ask_for_needed_upstream` from `run_cli_command` |
 | `registry_trust_prompt.py` | `settle_registry_trust`: before a command runs, asks whether untrusted project registries may run, or warns that they will not |
 | `push_options_history.py` | Push-options history per Gerrit host and project, and Up/Down recall |
 | `reviewer_catalog.py` | Reviewer discovery and soft validation for the push prompt |
@@ -629,8 +630,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 Concepts that still exist more than once, ranked by how far the copies have **drifted** — divergence is the cost, not line count. Each item names the exceptions that track it in [`tests/test_architecture.py`](../tests/test_architecture.py); fixing the item means deleting them. Resolve each drift to *one* stated behaviour, and record a choice that would otherwise be re-suggested as an ADR.
 
 1. **One reviewer normalizer.** Reviewer logic is spread over `core/reviewer.py`, `core/reviewer_completion.py`, `core/push_reviewers.py`, `core/reviewers_strategy.py` and `reviewer_catalog.py`.
-2. **Core that talks to the terminal.** `core/upstream_interactive.py` prompts for an upstream; `core/call_trace.py` prints its summary. The prompt belongs in the CLI; the summary can be returned as data. *Tracked by:* `test_core_has_no_terminal_io`.
-3. **Show resolution vs generic resolution.** `core/gerrit_show.py` wraps `resolve_changeish` but calls `GerritRest.get_change` itself to build a row for remote-only changes, next to what `ger resolve` already exposes. `gerrit_show.resolve_range_endpoint_sha` re-implements `change_resolution.resolve_to_stack_sha`, and `cli_show` hands `service.rest` to it, so show rows skip the cache.
+2. **Show resolution vs generic resolution.** `core/gerrit_show.py` wraps `resolve_changeish` but calls `GerritRest.get_change` itself to build a row for remote-only changes, next to what `ger resolve` already exposes. `gerrit_show.resolve_range_endpoint_sha` re-implements `change_resolution.resolve_to_stack_sha`, and `cli_show` hands `service.rest` to it, so show rows skip the cache.
 
 ---
 

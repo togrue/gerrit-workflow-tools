@@ -24,7 +24,7 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import StackCommit, res
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
+from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
 
 def add_attention_query_args(parser: argparse.ArgumentParser) -> None:

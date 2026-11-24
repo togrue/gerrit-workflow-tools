@@ -191,7 +191,7 @@ def _branches_pointing_at_head(cwd: Path | str | None) -> list[str]:
 
 def _push_context_branch_rank(cwd: Path | str | None, branch: str, *, settings: Settings) -> tuple[int, int, str]:
     """Lower is better when choosing a branch for detached-HEAD push config."""
-    from gerrit_workflow_tools.core.upstream_interactive import branch_has_upstream
+    from gerrit_workflow_tools.core.upstream import branch_has_upstream
 
     mode = ger_push_mode(cwd, branch, settings=settings)
     mode_rank = 0 if mode == "gerrit" else (1 if mode == "vanilla" else 2)

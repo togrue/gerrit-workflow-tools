@@ -17,6 +17,7 @@ from gerrit_workflow_tools.cli_common import (
     init_cli_runtime,
     run_cli_command,
 )
+from gerrit_workflow_tools.cli_terminal import stdin_is_terminal
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
@@ -37,7 +38,6 @@ from gerrit_workflow_tools.core.push_checks import resolve_push_branch
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.upstream import missing_upstream_error
-from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.push_outcome import finish_push, print_refusal
 from gerrit_workflow_tools.push_preview import (
@@ -52,6 +52,7 @@ from gerrit_workflow_tools.push_preview import (
 )
 from gerrit_workflow_tools.render.style import ANSI_DIM_GRAY, color_text
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, branch_summary_highlighter
+from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
 
 logger = logging.getLogger(__name__)

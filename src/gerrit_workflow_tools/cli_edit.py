@@ -45,10 +45,10 @@ from gerrit_workflow_tools.core.rebase_state import (
 from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_base_with_target
-from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.rebase_run import go_on_with_rebase, require_history_rewrite, run_interactive_rebase
 from gerrit_workflow_tools.render.status_fmt import attention_text
+from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
 
 logger = logging.getLogger(__name__)

@@ -301,14 +301,12 @@ def test_log_missing_upstream_never_prompts_for_machine_output(
     """On a terminal, ``--ai`` and ``--json`` report the setup hint rather than open the upstream prompt."""
     git("branch", "--unset-upstream", cwd=web_stack_repo, check=False)
     monkeypatch.setattr("gerrit_workflow_tools.cli_common.stdin_is_terminal", lambda: True)
-    monkeypatch.setattr("gerrit_workflow_tools.core.upstream_interactive.prompt_toolkit_can_run", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.upstream_interactive.prompt_toolkit_can_run", lambda: True)
 
     def _no_prompt(*_args: object, **_kwargs: object) -> str | None:
         raise AssertionError("prompted for an upstream")
 
-    monkeypatch.setattr(
-        "gerrit_workflow_tools.core.upstream_interactive.prompt_upstream_abbrev_interactive", _no_prompt
-    )
+    monkeypatch.setattr("gerrit_workflow_tools.upstream_interactive.prompt_upstream_abbrev_interactive", _no_prompt)
     code, out, err = run_cli(web_stack_repo, log_main, [flag], monkeypatch)
     assert code == ExitCode.CONFIG
     assert out == ""

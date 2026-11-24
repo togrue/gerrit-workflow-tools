@@ -32,7 +32,6 @@ from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment, gerrit_inline_comment_url
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
-from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.core.votes import VOTE_HELP, parse_votes
 from gerrit_workflow_tools.render.comments import (
@@ -42,6 +41,7 @@ from gerrit_workflow_tools.render.comments import (
     first_line,
     format_pending_drafts,
 )
+from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
 
 _COMMENT_URL_RE = re.compile(r"/comment/([^/?#]+)")

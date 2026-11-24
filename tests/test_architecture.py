@@ -291,11 +291,7 @@ def test_core_has_no_terminal_io() -> None:
     _check(
         "core/ prints or prompts",
         found,
-        {
-            # Backlog: "Core that talks to the terminal".
-            "core/call_trace.py": "core that talks to the terminal",
-            "core/upstream_interactive.py": "core that talks to the terminal",
-        },
+        {},
         "core never prints or prompts. Return data or raise; the command decides what to show or ask.",
     )
 
