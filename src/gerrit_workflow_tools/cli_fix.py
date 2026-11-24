@@ -179,7 +179,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         print(git_out("log", "-1", "--format=%h %s", cwd=cwd))
         # The same advice `ger push` and `ger log` give for this commit.
         rebasing = rebase_underway(run.worktree.repository_dir)
-        first = "finish the rebase (`git rebase --continue`), then " if rebasing else ""
+        first = "finish the rebase (`ger rebase --continue`), then " if rebasing else ""
         print(f"next: {first}{UNSQUASHED_FIXUP_ADVICE}", file=sys.stderr)
     return 0
 

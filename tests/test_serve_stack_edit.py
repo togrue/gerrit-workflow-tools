@@ -52,8 +52,8 @@ def test_stack_says_where_a_stopped_rebase_stands(stack_repo: Path) -> None:
         "actions": ["continue", "abort"],
         "refused": {
             "skip": "--skip leaves out a commit the rebase stopped on with a conflict, but it stopped with the "
-            "commit applied (an `edit`, or a conflict's resolution committed by hand): `git rebase --skip` would "
-            "only throw away your uncommitted changes; go on with `git rebase --continue`, or `git rebase --abort`"
+            "commit applied (an `edit`, or a conflict's resolution committed by hand): skipping would "
+            "only throw away your uncommitted changes; go on with `ger rebase --continue`, or `ger rebase --abort`"
         },
     }
 

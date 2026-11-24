@@ -7,8 +7,10 @@ wording. Where the rebase stands is :mod:`gerrit_workflow_tools.core.rebase_stat
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from pathlib import Path
 
+from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.rebase_state import (
     AM_UNDERWAY,
@@ -22,8 +24,14 @@ from gerrit_workflow_tools.core.rebase_state import (
 )
 
 
+CONTINUE = "`ger rebase --continue`"
+SKIP = "`ger rebase --skip`"
+ABORT = "`ger rebase --abort`"
+_BACK = f"{ABORT} goes back to where the rebase started"
+
+
 def _walks_on(walk_on: str | None) -> str:
-    """How *walk_on* differs from ``git rebase --continue``: it also goes on to the next attention stop."""
+    """How *walk_on* differs from ``ger rebase --continue``: it also goes on to the next attention stop."""
     return f"; `{walk_on}` finishes and goes on to the next commit needing attention" if walk_on else ""
 
 
@@ -31,7 +39,7 @@ def conflict_next_step(cwd: Path | str | None, *, walk_on: str | None = None) ->
     """The one next step after a rebase stopped on a conflict, or ``None`` when none is stopped on one.
 
     Every ger command that starts or continues a rebase prints this when it stops on a conflict,
-    and every command that must not run on a conflicted index refuses with it. ``git rebase
+    and every command that must not run on a conflicted index refuses with it. ``ger rebase
     --continue`` finishes; *walk_on* names the command that also walks on, where a walk is underway.
     """
     paths = unmerged_paths(cwd)
@@ -45,9 +53,30 @@ def conflict_next_step(cwd: Path | str | None, *, walk_on: str | None = None) ->
 def _resolve_step(paths: tuple[str, ...] | list[str], walk_on: str | None) -> str:
     """:func:`conflict_next_step` of a rebase stopped with *paths* unmerged."""
     return (
-        f"resolve the conflicts in {', '.join(paths)}, `git add` them, then `git rebase --continue` to finish"
-        f"{_walks_on(walk_on)}; `git rebase --abort` goes back to where the rebase started"
+        f"resolve the conflicts in {', '.join(paths)}, `git add` them, then {CONTINUE} to finish"
+        f"{_walks_on(walk_on)}; {SKIP} leaves this commit out, {_BACK}"
     )
+
+
+def stop_next_step(progress: RebaseProgress, *, walk_on: str | None = None) -> str:
+    """The one next step at the stop *progress* is at, whatever stopped it: what every ger-started rebase ends with.
+
+    *walk_on* names the command that also walks on to the next attention stop, where a walk is underway.
+    """
+    if progress.stop is RebaseStop.CONFLICT:
+        return _resolve_step(progress.unmerged, walk_on)
+    if progress.stop is RebaseStop.EDIT:
+        return edit_stop_next_step(walk_on)
+    step = (
+        {
+            RebaseStop.RESOLVED: f"its conflicts are resolved: {CONTINUE} commits it and goes on",
+            RebaseStop.SPLIT: f"commit what is left of it, then {CONTINUE}",
+            RebaseStop.PAUSED: f"{CONTINUE} once you are done here",
+        }.get(progress.stop)
+        if progress.stop
+        else None
+    )
+    return f"{step or f'{CONTINUE} goes on'}{_walks_on(walk_on)}; {_BACK}"
 
 
 def stop_refusal(progress: RebaseProgress, action: RebaseAction, *, walk_on: str | None = None) -> str | None:
@@ -63,22 +92,21 @@ def stop_refusal(progress: RebaseProgress, action: RebaseAction, *, walk_on: str
             return f"the index has unresolved conflicts; {_resolve_step(progress.unmerged, walk_on)}"
         return (
             "the commit it stopped on was committed by hand, so nothing is left to apply and "
-            "`git rebase --continue` would stop again: `git rebase --skip` goes on from HEAD, "
-            "or `git rebase --abort`"
+            f"continuing would stop again: {SKIP} goes on from HEAD, or {ABORT}"
         )
     if progress.committed_by_hand:
         return (
             "--skip leaves out the commit the rebase stopped on, but it was committed by hand "
-            "(HEAD has moved on from where it stopped): `git rebase --skip` would keep that commit and "
+            "(HEAD has moved on from where it stopped): skipping now would keep that commit and "
             "throw away your uncommitted changes; commit them or `git stash` them first, "
-            "or `git rebase --abort`"
+            f"or {ABORT}"
         )
     why = _SKIP_REFUSALS.get(progress.stop) if progress.stop else None
     return (
         f"--skip leaves out a commit the rebase stopped on with a conflict, but "
         f"{why or 'ger cannot tell where it stopped'}: "
-        "`git rebase --skip` would only throw away your uncommitted changes; "
-        "go on with `git rebase --continue`, or `git rebase --abort`"
+        "skipping would only throw away your uncommitted changes; "
+        f"go on with {CONTINUE}, or {ABORT}"
     )
 
 
@@ -112,16 +140,38 @@ def go_on_refusal(
     walk is underway.
     """
     if progress is None:
-        return f"no rebase is in progress: {AM_UNDERWAY}" if am_in_progress(cwd) else "no rebase is in progress"
+        if am_in_progress(cwd):
+            return f"no rebase is in progress: {AM_UNDERWAY}"
+        return f"no rebase is in progress, nothing to {action.value}: {where_head_is(cwd)}"
     if refusal := stop_refusal(progress, action, walk_on=walk_on):
         return refusal
     if action is RebaseAction.CONTINUE and (paths := _unstaged_paths(cwd)):
         on_conflict = progress.stop in (RebaseStop.CONFLICT, RebaseStop.RESOLVED)
         take = "`git add` them" if on_conflict else "amend them in (`git commit --amend -a`)"
-        return f"you have unstaged changes to {', '.join(paths)}; {take} or `git stash` them, then continue"
+        return f"you have unstaged changes to {', '.join(paths)}; {take} or `git stash` them, then {CONTINUE}"
     return None
 
 
-def edit_stop_next_step(walk_on: str) -> str:
+def edit_stop_next_step(walk_on: str | None) -> str:
     """The next step at a commit an edit stopped on: amend, then finish, or finish and walk on with *walk_on*."""
-    return f"amend it, then `git rebase --continue` to finish{_walks_on(walk_on)}"
+    return f"amend it (`git commit --amend`), then {CONTINUE} to finish{_walks_on(walk_on)}"
+
+
+def attention_stop_hint(reasons: Collection[str]) -> str | None:
+    """How to see why a walk stopped at a commit with edit attention *reasons*, and how to answer; ``None``: none.
+
+    An attention walk stops where comments are unresolved or the build failed (``EDIT_ATTENTION_REASONS``).
+    """
+    hints = []
+    if Attention.UNRESOLVED_COMMENTS in reasons:
+        hints.append("once fixed, answer each comment `ger show` lists: `ger reply PATH:LINE --done` (or `-m TEXT`)")
+    if Attention.CI_FAILED in reasons:
+        hints.append("`ger ci` shows what failed in the build")
+    return "; ".join(hints) or None
+
+
+def where_head_is(cwd: Path | str | None) -> str:
+    """Where the branch is, in words a refusal or an abort ends with: ``s12 is at 8b6681f trig: add sin/cos``."""
+    branch = git("symbolic-ref", "-q", "--short", "HEAD", cwd=cwd, check=False).stdout.strip()
+    head = git("log", "-1", "--format=%h %s", cwd=cwd, check=False).stdout.strip()
+    return f"{branch or 'HEAD (detached)'} is at {head or 'no commit'}"

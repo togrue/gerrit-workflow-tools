@@ -317,7 +317,7 @@ def _stop_on_a_conflict(repo: Path, monkeypatch: pytest.MonkeyPatch) -> str:
 def test_a_conflict_in_an_attention_walk_names_finishing_and_walking_on_apart(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``git rebase --continue`` only finishes; ``ger edit -n`` is named as the way on to the next stop.
+    """``ger rebase --continue`` only finishes; ``ger edit -n`` is named as the way on to the next stop.
 
     ``ger edit -n`` refuses as ``ger rebase --continue`` does, before git says it cannot go on.
     """
@@ -326,9 +326,9 @@ def test_a_conflict_in_an_attention_walk_names_finishing_and_walking_on_apart(
     assert code == ExitCode.USAGE
     assert err.rstrip().endswith(
         "error: the index has unresolved conflicts; resolve the conflicts in grow.txt, `git add` them, "
-        "then `git rebase --continue` to finish; "
+        "then `ger rebase --continue` to finish; "
         "`ger edit -n` finishes and goes on to the next commit needing attention; "
-        "`git rebase --abort` goes back to where the rebase started"
+        "`ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started"
     )
 
 
@@ -338,8 +338,8 @@ def test_a_rebase_stopped_on_a_conflict_says_how_on_and_nothing_commits_or_pushe
     """The next step names resolving and ``git add``; ``ger fix`` and ``ger push`` refuse until then."""
     err = _stop_on_a_conflict(stack_repo, monkeypatch)
     step = (
-        "resolve the conflicts in grow.txt, `git add` them, then `git rebase --continue` to finish; "
-        "`git rebase --abort` goes back to where the rebase started"
+        "resolve the conflicts in grow.txt, `git add` them, then `ger rebase --continue` to finish; "
+        "`ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started"
     )
     assert err.rstrip().endswith(f"next: {step}")
     head = git("rev-parse", "HEAD", cwd=stack_repo).stdout

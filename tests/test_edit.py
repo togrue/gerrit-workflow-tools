@@ -157,7 +157,7 @@ def test_rebase_in_progress_is_refused_before_anything_moves(
     code, _out, err = run_cli(web_stack_repo, main_fn, argv, monkeypatch, gerrit=store)
 
     assert code == ExitCode.USAGE
-    assert "git rebase --continue" in err
+    assert "finish it (`ger rebase --continue`) or `ger rebase --abort` first" in err
     assert git("config", "branch.feature.gerAttentionCursor", cwd=web_stack_repo, check=False).returncode != 0
 
 
@@ -225,26 +225,24 @@ def test_set_cursor_twice_records_one_history_entry(web_stack_repo: Path, monkey
     assert len(out.splitlines()) == 1
 
 
-def test_gedit_says_where_it_stopped_and_what_comes_next(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    rows = stack_rows_mb_to_head(web_stack_repo)
-    real_run = subprocess.run
+def test_gedit_says_where_it_stopped_and_what_comes_next(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A stop names the commit, the ger way on, and at a commit with attention how to see why and answer."""
+    _configure_repo(stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    overrides: list[dict] = [{}] * len(rows)
+    overrides[0] = {"unresolved_comment_count": 1, "verified": -1}
+    store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=overrides))
 
-    def stopping_rebase(cmd, **kwargs):
-        if isinstance(cmd, list) and cmd[:2] == ["git", "rebase"]:
-            write_rebase_head(web_stack_repo, "feature")
-            return subprocess.CompletedProcess(cmd, 0)
-        return real_run(cmd, **kwargs)
+    code, _out, err = run_cli(stack_repo, gedit_main, [rows[0].sha], monkeypatch, gerrit=store)
 
-    monkeypatch.setattr(subprocess, "run", stopping_rebase)
-    store = ChangeStore(build_details_by_change_id(rows))
-    code, _out, err = run_cli(web_stack_repo, gedit_main, [rows[0].sha], monkeypatch, gerrit=store)
-
-    assert code == 0
-    assert f"stopped at {rows[0].short_sha} {rows[0].subject}" in err
-    assert err.rstrip().endswith(
-        "next: amend it, then `git rebase --continue` to finish; "
-        "`ger edit -n` finishes and goes on to the next commit needing attention"
-    )
+    assert code == 0, err
+    assert err.splitlines()[-3:] == [
+        f"stopped at {rows[0].short_sha} {rows[0].subject}",
+        # Named by REV, not walked to: `ger edit -n` is not the way on here.
+        "next: amend it (`git commit --amend`), then `ger rebase --continue` to finish",
+        "once fixed, answer each comment `ger show` lists: `ger reply PATH:LINE --done` (or `-m TEXT`); "
+        "`ger ci` shows what failed in the build",
+    ]
 
 
 def test_gedit_unknown_change_id_exits_not_found(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -353,13 +351,13 @@ def test_gedit_next_continues_a_stopped_rebase_then_stops_at_the_next_commit(
     overrides[1] = {"verified": -1}
     store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=overrides))
 
-    code, _out, err = run_cli(stack_repo, gedit_main, [rows[0].sha], monkeypatch, gerrit=store)
+    code, _out, err = run_cli(stack_repo, gedit_main, ["--first-attention-commit"], monkeypatch, gerrit=store)
     assert code == 0, err
     assert rebase_in_progress(stack_repo)
-    assert err.rstrip().endswith(
-        "next: amend it, then `git rebase --continue` to finish; "
-        "`ger edit -n` finishes and goes on to the next commit needing attention"
-    )
+    assert (
+        "next: amend it (`git commit --amend`), then `ger rebase --continue` to finish; "
+        "`ger edit -n` finishes and goes on to the next commit needing attention\n"
+    ) in err
 
     code, _out, err = run_cli(stack_repo, gedit_main, ["-n"], monkeypatch, gerrit=store)
     assert code == 0, err

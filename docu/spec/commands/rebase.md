@@ -69,8 +69,10 @@ Without a terminal, the two ways ger runs a rebase set `GIT_EDITOR` differently:
 
 `--continue`, `--abort` and `--skip` act on the rebase underway, whoever started it, and take no
 `REV` or other option. They are what the VS Code extension's *Continue*, *Abort* and *Skip* run.
-Without a rebase they refuse (`no rebase is in progress`, naming a `git am` when one is underway
-instead). Each refusal exits `2` and changes nothing:
+Without a rebase they refuse and say where the branch is (`no rebase is in progress, nothing to
+continue: feature is at 98a454b Cleanup after experiment`), naming a `git am` when one is underway
+instead. A finished `--abort` says the same of the branch it put back: `rebase aborted: feature is
+at 6c07cc8 trig: add tan(), as before the rebase`. Each refusal exits `2` and changes nothing:
 
 - `--continue` refuses while the index holds unresolved conflicts, with the shared next step, and
   over unstaged changes to tracked files, which git would refuse with a misleading "You must edit
@@ -96,7 +98,23 @@ message as it is, and so is any later `reword` or `squash` message in the todo. 
 wants to write those sets `GIT_EDITOR`. `ger edit -n` goes on the same way. A stop on the next
 conflict ends with the shared next step, as below.
 
-A rebase that stops on a conflict ends with the shared next step ([edit.md](edit.md#behavior)): resolve the paths, `git add` them, then `git rebase --continue`, or `git rebase --abort`.
+A rebase that stops ends with ger's own lines after git's, the same for every ger-started rebase
+(`rebase_run.print_stop`, words from `rebase_next_step.stop_next_step`): where it stopped, unless git
+just named the commit of a conflict, and one `next:` step that names ger's way on, never raw git:
+
+| Stop | `next:` |
+|--|--|
+| conflict | resolve the conflicts in `<paths>`, `git add` them, then `ger rebase --continue` to finish; `ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started |
+| conflict resolved and added | its conflicts are resolved: `ger rebase --continue` commits it and goes on; … |
+| `edit` | amend it (`git commit --amend`), then `ger rebase --continue` to finish |
+| split | commit what is left of it, then `ger rebase --continue`; … |
+| `exec`, `break` | `ger rebase --continue` once you are done here; … |
+
+`ger rebase --continue` rather than `git rebase --continue`: it refuses over unstaged changes, which
+git misreports, and without a terminal takes a message as it is instead of failing on a missing
+editor. The refusals name the same commands (`ger rebase --skip goes on from HEAD`, …), and so does
+every history-moving command a rebase underway stops (`a rebase is already in progress; finish it
+(`ger rebase --continue`) or `ger rebase --abort` first`).
 
 ---
 

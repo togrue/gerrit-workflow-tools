@@ -268,7 +268,7 @@ def rebase_refusal(cwd: Path | str | None) -> str | None:
     """Why a command that moves branches cannot start during a rebase or a ``git am``, or ``None``."""
     repo_dir = git_dir(cwd)
     if rebase_underway(repo_dir):
-        return "a rebase is already in progress; run `git rebase --continue` or `git rebase --abort` first"
+        return "a rebase is already in progress; finish it (`ger rebase --continue`) or `ger rebase --abort` first"
     if am_underway(repo_dir):
         return f"{AM_UNDERWAY} first"
     return None

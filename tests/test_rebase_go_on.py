@@ -105,12 +105,33 @@ def test_abort_puts_the_branch_back(stack_repo: Path, monkeypatch: pytest.Monkey
     assert not rebase_in_progress(stack_repo)
     assert git_out("rev-parse", "HEAD", cwd=stack_repo) == tip
     assert git_out("symbolic-ref", "--short", "HEAD", cwd=stack_repo) == "feature"
+    # Said, not left to guess: the branch is back where it was.
+    head = git_out("log", "-1", "--format=%h %s", cwd=stack_repo)
+    assert err.strip().endswith(f"rebase aborted: feature is at {head}, as before the rebase")
+
+
+def test_a_stop_ger_rebase_ran_into_names_the_ger_way_on(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An ``edit`` line in the todo: the stop says where it is and to go on with ``ger rebase --continue``."""
+    monkeypatch.setenv("GREBASE_EDITOR", "sed -i -e 1s/^pick/edit/")
+    first = git_out("log", "-1", "--format=%h %s", "HEAD~2", cwd=stack_repo)
+
+    code, err = _rebase(stack_repo, ["HEAD~3"], monkeypatch)
+
+    assert code == 0, err
+    assert rebase_in_progress(stack_repo)
+    assert err.splitlines()[-2:] == [
+        f"stopped at {first}",
+        "next: amend it (`git commit --amend`), then `ger rebase --continue` to finish",
+    ]
 
 
 def test_without_a_rebase_there_is_nothing_to_go_on_with(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     for how in ("--continue", "--abort", "--skip"):
         code, err = _rebase(stack_repo, [how], monkeypatch)
-        assert (code, err.strip()) == (ExitCode.USAGE, "error: no rebase is in progress")
+        head = git_out("log", "-1", "--format=%h %s", cwd=stack_repo)
+        # Nothing to go on with, and where the branch is: what the user is left with.
+        want = f"error: no rebase is in progress, nothing to {how[2:]}: feature is at {head}"
+        assert (code, err.strip()) == (ExitCode.USAGE, want)
 
 
 def test_a_git_am_underway_is_named_not_continued(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -192,7 +213,7 @@ def test_continue_over_unstaged_changes_says_to_amend_or_stash_them(
     assert code == ExitCode.USAGE
     assert (
         "error: you have unstaged changes to c.txt; amend them in (`git commit --amend -a`) "
-        "or `git stash` them, then continue"
+        "or `git stash` them, then `ger rebase --continue`"
     ) in err
     assert rebase_in_progress(stack_repo) and git_out("rev-parse", "HEAD", cwd=stack_repo) == head
 
@@ -207,7 +228,7 @@ def test_continue_over_unstaged_changes_at_a_resolved_conflict_says_to_add_them(
     code, err = _rebase(stack_repo, ["--continue"], monkeypatch)
 
     assert code == ExitCode.USAGE
-    assert "you have unstaged changes to c.txt; `git add` them or `git stash` them, then continue" in err
+    assert "you have unstaged changes to c.txt; `git add` them or `git stash` them, then `ger rebase --continue`" in err
 
 
 def test_continue_at_an_edit_stop_amends_staged_changes_in(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -415,7 +436,7 @@ def test_under_the_apply_backend_a_resolution_committed_by_hand_goes_on_by_skip(
 
     code, err = _rebase(stack_repo, ["--continue"], monkeypatch)
     assert code == ExitCode.USAGE
-    assert "committed by hand, so nothing is left to apply" in err and "`git rebase --skip` goes on from HEAD" in err
+    assert "committed by hand, so nothing is left to apply" in err and "`ger rebase --skip` goes on from HEAD" in err
     assert git_out("rev-parse", "HEAD", cwd=stack_repo) == head
 
     code, err = _rebase(stack_repo, ["--skip"], monkeypatch)

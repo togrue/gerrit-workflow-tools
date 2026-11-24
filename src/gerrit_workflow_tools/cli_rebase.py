@@ -35,9 +35,10 @@ def _build_parser() -> argparse.ArgumentParser:
             "Each pick line is enriched with the commit's patchset status, Verified and Code-Review\n"
             "labels, unresolved comment count, and an actionable attention note.\n\n"
             "Without a terminal (scripts, agents) no editor opens: the todo runs as annotated, so\n"
-            "`ger rebase --autosquash` folds `ger fix` commits and `--onto-remote --drop-merged-equivalent`\n"
-            "drops commits Gerrit has merged, unattended.\n\n"
-            "--continue, --abort and --skip go on with the rebase underway, as git's own options do."
+            "`ger rebase --autosquash` squashes the fixups `ger fix` made and `--onto-remote\n"
+            "--drop-merged-equivalent` drops commits Gerrit has merged, unattended.\n\n"
+            "--continue, --skip and --abort go on with the rebase underway, as git's own options do,\n"
+            "and say what they did: the commits rewritten, a commit dropped and how to get it back."
         ),
     )
     p.add_argument(
@@ -74,7 +75,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--autosquash",
         action="store_true",
         help=(
-            "Fold fixup!/squash! commits (from `ger fix`) into their targets in the todo. "
+            "Squash the fixups `ger fix` made (fixup!/squash! commits) into the commits they fix. "
             "Without it, git's rebase.autosquash decides, as for `git rebase -i`."
         ),
     )
@@ -84,14 +85,17 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="go_on",
         action="store_const",
         const="continue",
-        help="Go on with the rebase underway once the stopped commit is amended or its conflicts are added.",
+        help=(
+            "Finish the rebase underway, or go on to its next stop, once the commit it stopped at is "
+            "amended (`git commit --amend`) or its conflicts are resolved and added (`git add`)."
+        ),
     )
     underway.add_argument(
         "--abort",
         dest="go_on",
         action="store_const",
         const="abort",
-        help="Stop the rebase underway: the branch goes back to where it was before it.",
+        help="Undo the rebase underway: the branch goes back to where it was before it started.",
     )
     underway.add_argument(
         "--skip",
@@ -99,7 +103,8 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_const",
         const="skip",
         help=(
-            "Leave out the commit the rebase underway stopped on with a conflict, and go on without it. "
+            "Leave out the commit the rebase underway stopped on with a conflict, and go on without it; "
+            "it says which commit it dropped and how to get it back. "
             "Refused at any other stop, where git would only throw away uncommitted changes."
         ),
     )
