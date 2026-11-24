@@ -52,7 +52,7 @@ Targets resolve exactly as in [`ger show`](show.md): each `CHANGEISH` is a chang
   "gerrit_url": "…", "ci_failures": ["…"],
   "ci_content": [
     {
-      "label": "jenkins", "url": "https://ci/…/55/console", "build_url": "https://ci/…/55/", "source": "message",
+      "label": "jenkins", "url": "https://ci/…/55/console", "build_url": "https://ci/…/55/", "source": "message", "verdict": "failed",
       "provenance": {
         "url": "…", "provider": "jenkins", "build": "Widget #55", "fetched_at": "2026-11-09T10:00:00Z",
         "truncated": false, "cache_verdict": "body", "cached": false, "error": null

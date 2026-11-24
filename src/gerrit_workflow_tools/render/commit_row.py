@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from gerrit_workflow_tools.core.attention import Attention
-from gerrit_workflow_tools.core.ci_links import CiPipeline
+from gerrit_workflow_tools.core.ci_links import CiPipeline, CiVerdict
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.render.status_fmt import (
     MERGED,
@@ -150,9 +150,11 @@ def primary_line(
     return f"{primary_line_prefix(commit)}{summ}"
 
 
-def _ci_state_color(state: str, *, outdated: bool = False) -> str:
+def _ci_state_color(state: str, *, outdated: bool = False, verdict: CiVerdict | None = None) -> str:
     if outdated:
         return ANSI_DIM_GRAY
+    if verdict is CiVerdict.UNSTABLE:
+        return ANSI_YELLOW
     if state == "FAILED":
         return ANSI_RED
     if state == "SUCCESSFUL":
@@ -161,19 +163,23 @@ def _ci_state_color(state: str, *, outdated: bool = False) -> str:
 
 
 def _format_ci_pipeline_item(pipeline: CiPipeline) -> str:
-    color = _ci_state_color(pipeline.state, outdated=pipeline.outdated)
+    color = _ci_state_color(pipeline.state, outdated=pipeline.outdated, verdict=pipeline.verdict)
+    # An unstable build says so in words: colour alone is lost in a pipe.
+    label = f"{pipeline.label} (unstable)" if pipeline.verdict is CiVerdict.UNSTABLE else pipeline.label
     if pipeline.url and is_hyperlink_enabled():
-        return color_text(format_link(pipeline.url, label=pipeline.label), color)
+        return color_text(format_link(pipeline.url, label=label), color)
     if pipeline.url:
-        return color_text(f"{pipeline.label} {pipeline.url}", color)
-    return color_text(pipeline.label, color)
+        return color_text(f"{label} {pipeline.url}", color)
+    return color_text(label, color)
 
 
 def _pipelines_for_display(commit: LogCommit, *, verbose_level: int = 1) -> list[CiPipeline]:
     if commit.ci_pipelines:
         pipelines = commit.ci_pipelines
     elif commit.ci_links:
-        pipelines = [CiPipeline(label=link.label, state="FAILED", url=link.url) for link in commit.ci_links]
+        pipelines = [
+            CiPipeline(label=link.label, state="FAILED", url=link.url, verdict=link.verdict) for link in commit.ci_links
+        ]
     else:
         pipelines = [CiPipeline(label=name, state="FAILED", url=None) for name in commit.ci_failures]
 

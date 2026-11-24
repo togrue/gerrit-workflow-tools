@@ -60,3 +60,19 @@ def test_ger_ci_fetches_and_parses_an_unstable_build_log(stack_repo: Path, monke
     assert content["build_url"] == JENKINS
     assert f"{JENKINS}/consoleText" in http.urls()
     assert [f["tool"] for f in content["findings"]][:1] == ["pytest"]
+
+
+def test_every_shell_says_unstable(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The verdict reaches ``ger ci --json``, ``ger log --json`` and the text view, in words (not colour alone)."""
+    from gerrit_workflow_tools.cli_log import main as log_main
+
+    http = FakeCiHttp(jenkins_build(log=UNSTABLE_LOG))
+    _code, out, _err = run_cli(stack_repo, ci_main, ["--json"], monkeypatch, gerrit=_store(stack_repo), ci_http=http)
+    assert json.loads(out)["commits"][0]["ci_content"][0]["verdict"] == "unstable"
+
+    _code, out, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=_store(stack_repo))
+    head = json.loads(out)["commits"][-1]
+    assert [link["verdict"] for link in head["ci_links"]] == ["unstable"]
+
+    _code, out, _err = run_cli(stack_repo, log_main, ["-v"], monkeypatch, gerrit=_store(stack_repo))
+    assert "(unstable)" in out

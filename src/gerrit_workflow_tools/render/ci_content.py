@@ -20,6 +20,7 @@ def ci_content_json(content: CiContent, *, include_body: bool = False) -> dict[s
         "url": content.link.url,
         "build_url": content.link.build_url,
         "source": content.link.source,
+        "verdict": content.link.verdict.value,
         "provenance": content.provenance.to_dict(),
         "findings": [f.to_dict() for f in content.findings],
         "collapse_warnings": content.collapse_warnings,

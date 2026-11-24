@@ -125,6 +125,8 @@ export interface CiLink {
   label: string;
   url: string;
   source: string;
+  /** What the build reported: an unstable build is fetched and parsed like a failed one. */
+  verdict?: "failed" | "unstable";
 }
 
 /** Someone Gerrit lists on a change: a reviewer, or (`cc`) only copied. */
