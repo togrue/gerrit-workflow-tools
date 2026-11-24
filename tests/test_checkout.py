@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 from gerrit_workflow_tools.cli_checkout import main as checkout_main
 from gerrit_workflow_tools.cli_common import ExitCode
+from gerrit_workflow_tools.cli_log import main as log_main
+from gerrit_workflow_tools.cli_push import main as push_main
 from gerrit_workflow_tools.core.gerrit_patchset import changes_ref
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
@@ -461,6 +466,87 @@ def test_update_refuses_a_merge_that_conflicts_and_changes_nothing(
     assert code == ExitCode.REFUSED
     assert "change the same lines (same.txt); nothing was changed" in err
     assert git_out("rev-parse", "mine", cwd=stack_repo) == mine
+
+
+def _log_reasons(repo: Path, g: Gerrit, monkeypatch: pytest.MonkeyPatch, change_id: str) -> list[str]:
+    code, out, err = run_cli(repo, log_main, ["--json"], monkeypatch, gerrit=g.store)
+    assert code == ExitCode.OK, err
+    return next(c["attention_reasons"] for c in json.loads(out)["commits"] if c["change_id"] == change_id)
+
+
+def _push_refusal(repo: Path, g: Gerrit, monkeypatch: pytest.MonkeyPatch) -> tuple[int, str]:
+    sent = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", sent)
+    code, _out, err = run_cli(repo, push_main, ["-y"], monkeypatch, gerrit=g.store)
+    assert sent.called == (code == ExitCode.OK)
+    return code, err
+
+
+def test_a_refused_update_leaves_the_change_diverged_in_log(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The refused merge fetched patchset 2, but fetching it is not building on it (ADR-0015)."""
+    ps2, mine = _diverged(stack_repo, gerrit, theirs="same.txt=bob", mine="same.txt=me")
+    assert "diverged" in _log_reasons(stack_repo, gerrit, monkeypatch, gerrit.change_ids[2])
+    code, _, err = _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)
+    assert code == ExitCode.REFUSED and "nothing was changed" in err
+    assert git_out("cat-file", "-t", ps2, cwd=stack_repo) == "commit", "the refused update fetched it"
+    assert git_out("rev-parse", "mine", cwd=stack_repo) == mine
+    assert "diverged" in _log_reasons(stack_repo, gerrit, monkeypatch, gerrit.change_ids[2])
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="core/push_checks.py (not this step's to edit) still asks whether the patchset's object exists; "
+    "its diverged test must call gerrit_change_status.is_diverged over overlay_code_facts",
+)
+def test_a_refused_update_leaves_the_push_refused(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _diverged(stack_repo, gerrit, theirs="same.txt=bob", mine="same.txt=me")
+    assert _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)[0] == ExitCode.REFUSED
+    code, err = _push_refusal(stack_repo, gerrit, monkeypatch)
+    assert code == ExitCode.REFUSED and "would replace patchset 2 of change 102" in err
+
+
+def test_a_fetched_patchset_is_not_one_you_built_on(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`git fetch refs/changes/…`, or `ger review` putting it on a branch of its own: still diverged."""
+    _diverged(stack_repo, gerrit, theirs="theirs.txt=bob", mine="mine.txt=me")
+    git("fetch", "-q", "origin", changes_ref(102, 2), cwd=stack_repo)
+    git("branch", "-q", "change-102", "FETCH_HEAD", cwd=stack_repo)
+    assert "diverged" in _log_reasons(stack_repo, gerrit, monkeypatch, gerrit.change_ids[2])
+
+
+def test_a_merged_patchset_counts_as_built_on_and_is_no_longer_diverged(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The merge sits where the patchset sits, not on it: ger records that it took it over."""
+    ps2, _mine = _diverged(stack_repo, gerrit, theirs="theirs.txt=bob", mine="mine.txt=me")
+    code, _, err = _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)
+    assert code == ExitCode.OK, err
+    head = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    assert git_out("rev-parse", f"refs/ger/taken/{ps2}", cwd=stack_repo) == head
+    reasons = _log_reasons(stack_repo, gerrit, monkeypatch, gerrit.change_ids[2])
+    assert "ahead-of-gerrit" in reasons and "diverged" not in reasons
+    # Amended again since: still built on it, the amended commit's history holds the merge.
+    git("commit", "-q", "--amend", "-m", f"my take, again\n\nChange-Id: {gerrit.change_ids[2]}", cwd=stack_repo)
+    assert "diverged" not in _log_reasons(stack_repo, gerrit, monkeypatch, gerrit.change_ids[2])
+    assert _push_refusal(stack_repo, gerrit, monkeypatch)[0] == ExitCode.OK
+
+
+def test_a_conflicting_merge_says_how_to_merge_by_hand(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ps2, mine = _diverged(stack_repo, gerrit, theirs="same.txt=bob", mine="same.txt=me")
+    _code, _, err = _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)
+    ps1 = gerrit.shas[2]
+    assert f"patchset 2 of change 102 ({ps2[:12]})" in err
+    assert f"see where: git diff {mine[:7]} {ps2[:12]} -- same.txt" in err
+    assert "ger checkout change:102 --force" in err
+    assert f"git diff {ps1[:12]} {mine[:7]} | git apply -3" in err
+    assert "ger push --force" in err
 
 
 def test_yes_answers_the_update_question(stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch) -> None:

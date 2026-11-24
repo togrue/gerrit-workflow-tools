@@ -498,8 +498,9 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/ready_calc.py` | Ready boundary and push range |
 | `core/ready_strategy.py` | Loading ready-boundary strategies from `.ger/ready/` |
 | `core/annotated_stack.py` | Annotated stack: local stack + Gerrit overlay + attention; the stack overview `ger log` and `GET /stack` answer from (`load_stack_overview`) |
-| `core/gerrit_change_status.py` | `LogCommit`, patchset status |
+| `core/gerrit_change_status.py` | `LogCommit`, patchset status, whether a `newer` commit has **diverged** (`is_diverged`) |
 | `core/code_facts.py` | What the repository knows about the code an overlay compares (`CodeFacts`, `read_code_facts`: one git batch) and merged equivalence (`merged_equivalent`) |
+| `core/patchset_history.py` | Whether Gerrit's patchset is in a local commit's history (`built_on`: branch, reflog, `lastPush/<branch>`), and ger's record of a patchset it took over (`refs/ger/taken/`, `record_taken`); ADR-0015 |
 | `core/attention.py` | Attention: reason names, `determine_attention()`, `ci_failed()`, chain-blocking, edit attention |
 | `core/attention_cursor.py` | Attention cursor: Change-Id walk position, TTL, lazy adopt, history |
 | `core/edit_attention_walk.py` | Edit-attention walk: load stack, resume/next/first target, cursor status |

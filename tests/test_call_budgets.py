@@ -147,7 +147,8 @@ def test_log_ahead_of_gerrit_does_not_scale_with_stack_size(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Every commit rebased past its patch set: whether its code is the same is asked in one batch."""
+    """Every commit rebased past its patch set: whether its code is the same is asked in one batch
+    (three calls), and whether Gerrit's patch set is in its history in another (three: ADR-0015)."""
     counts: list[int] = []
     for n in (5, 20):
         monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / f"cache{n}"))
@@ -159,7 +160,7 @@ def test_log_ahead_of_gerrit_does_not_scale_with_stack_size(
         assert code in (0, 1), err
         assert "commit 1" in out
         counts.append(run.call_count)
-    assert counts[1] == counts[0] <= _LOG_GIT_BUDGET + 3, counts
+    assert counts[1] == counts[0] <= _LOG_GIT_BUDGET + 6, counts
 
 
 def test_log_during_a_rebase_does_not_scale_with_stack_size(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

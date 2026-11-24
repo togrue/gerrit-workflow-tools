@@ -23,6 +23,7 @@ from gerrit_workflow_tools.core.git_state import (
     refs_for_push_branch_name,
     resolve_upstream_abbrev_ref,
 )
+from gerrit_workflow_tools.core.patchset_history import record_taken
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict
 from gerrit_workflow_tools.core.review_checkout import BRANCH_PREFIX, refuse_own_edits
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_commits, read_commit_rows
@@ -279,6 +280,22 @@ def _refuse_merge_above(cwd: Path | str, plan: CheckoutPlan) -> None:
     )
 
 
+def _merge_conflict(plan: CheckoutPlan, files: list[str]) -> CheckoutRefusal:
+    """Why the merge is refused, and how to do it by hand: the force path puts the patchset in your history."""
+    local, patchset, edit_base = plan.local, plan.patchset, plan.edit_base
+    assert local is not None and edit_base is not None
+    mine, theirs, ps, change = local.commit.short_sha, patchset.commit[:12], patchset.patch_set, patchset.number
+    paths = f" -- {' '.join(files)}" if files else ""
+    return CheckoutRefusal(
+        f"your edits ({mine}) and patchset {ps} of change {change} ({theirs}) change the same lines "
+        f"({', '.join(files) or 'files'}); nothing was changed.\n"
+        f"  see where: git diff {mine} {theirs}{paths}\n"
+        f"  merge them by hand: ger checkout change:{change} --force (takes patchset {ps}, prints your old tip), "
+        f"then git diff {edit_base[1][:12]} {mine} | git apply -3, resolve, git commit -a --amend --no-edit\n"
+        f"  or keep yours and replace patchset {ps}: ger push --force"
+    )
+
+
 def _merged_commit(cwd: Path | str, plan: CheckoutPlan) -> str:
     """One commit: the patchset with your edits of the local version merged in (base: :attr:`CheckoutPlan.edit_base`).
 
@@ -301,12 +318,7 @@ def _merged_commit(cwd: Path | str, plan: CheckoutPlan) -> str:
     lines = merged.stdout.splitlines()
     if merged.returncode != 0 or not lines:
         conflicted = lines[1 : lines.index("")] if "" in lines else lines[1:]
-        files = ", ".join(conflicted) or "files"
-        raise CheckoutRefusal(
-            f"your edits ({local.commit.short_sha}) and patchset {patchset.patch_set} of change {patchset.number} "
-            f"change the same lines ({files}); nothing was changed. Merge them yourself, or keep one side: "
-            f"--no-update keeps yours, --force takes patchset {patchset.patch_set}"
-        )
+        raise _merge_conflict(plan, conflicted)
     fields = git_out("log", "-1", "--format=%an%x00%ae%x00%ad%x00%B", local.commit.sha, cwd=cwd).split("\x00", 3)
     name, email, date, message = fields
     parents = git_out("rev-list", "--parents", "-n", "1", patchset.commit, cwd=cwd).split()[1:2]
@@ -372,7 +384,10 @@ def apply_checkout(
             moved_from = (local.above[-1] if local.above else local.commit).sha
         rebased = _update(cwd, plan)
     elif action is CheckoutAction.MERGE:
-        rebased = _update(cwd, plan, _merged_commit(cwd, plan))
+        merged = _merged_commit(cwd, plan)
+        rebased = _update(cwd, plan, merged)
+        why = f"ger checkout: change {patchset.number} patchset {patchset.patch_set} merged into {merged[:12]}"
+        record_taken(cwd, patchset.commit, merged, why=why)  # built on it, though not its child: ADR-0015
         merged_from = plan.edit_base[0] if plan.edit_base else None
     if action is CheckoutAction.CREATE or _gerrit_branch(cwd, branch, settings) is None:
         track_remote_branch(cwd, branch, remote, patchset.target_branch)

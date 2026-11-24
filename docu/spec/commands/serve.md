@@ -238,9 +238,10 @@ the commits still come back with `patchset_status: "unknown"`, and `gerrit_unava
 
 For a view that draws the stack, each commit also says:
 
-- `diverged` — its patchset status is `newer` *and* Gerrit's current patch set is a commit this
-  repository never had: somebody else, or another checkout, uploaded it. Told from the object
-  database alone, so a patch set you fetched without building on it does not count.
+- `diverged` — its patchset status is `newer` *and* Gerrit's current patch set is not in its
+  history: somebody else, or another checkout, uploaded it. Told from git alone (the branch, its
+  reflog, `lastPush/<branch>`, `refs/ger/taken/`; ADR-0015), so a patch set you fetched without
+  building on it still counts as diverged.
 - `merge` — it is a merge commit. The stack is first-parent, as Gerrit relates changes: the
   merge is a stack commit, what it merged is not, and is never walked.
 - `pinned` — it is the newest merge or below it (`pinned_count`). It cannot be moved, folded
