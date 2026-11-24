@@ -2,34 +2,23 @@
 
 from __future__ import annotations
 
-import argparse
 import re
 import sys
 from collections.abc import Callable
-from pathlib import Path
 
-from gerrit_workflow_tools.cli_common import ask_choice, confirm
-from gerrit_workflow_tools.cli_terminal import prompt_toolkit_can_run
-from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.push import (
     PushPlan,
-    change_ref_of,
-    publish_drafts_with,
     push_argvs,
-    revise,
     sent_commits,
     state_updates,
     unsent_short_shas,
     wip_commits,
 )
 from gerrit_workflow_tools.core.push_checks import PushBoundary
-from gerrit_workflow_tools.core.push_options import PushOptions
 from gerrit_workflow_tools.core.push_result import NOTHING_TO_PUSH
 from gerrit_workflow_tools.core.push_reviewers import PushMark, needs_rest_assignment
 from gerrit_workflow_tools.core.push_unchanged import StateUpdate
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
-from gerrit_workflow_tools.push_input_line import KW_PUBLISH_DRAFTS, ParseResult, PushLineState
 from gerrit_workflow_tools.render.style import (
     ANSI_BLUE,
     ANSI_BOLD,
@@ -210,38 +199,6 @@ def print_plan_status(plan: PushPlan) -> None:
         print(color_text(f"drafts on {', '.join(stuck)} stay drafts: Gerrit gets no new patchset there", ANSI_DIM))
 
 
-def ask_push_action(drafts: int, *, sends: bool = True) -> str:
-    """Ask the push confirmation: ``push``, ``cancel`` or ``reviewers``, plus ``push-only`` with *drafts*.
-
-    With drafts, the question offers them: ``push`` publishes them with the push, ``push-only`` keeps them.
-    A push that *sends* no commit only sets options over REST, and the question says so.
-    """
-    answers = {
-        "": "push",
-        "y": "push",
-        "yes": "push",
-        "n": "cancel",
-        "no": "cancel",
-        "r": "reviewers",
-        "reviewer": "reviewers",
-        "reviewers": "reviewers",
-    }
-    if drafts:
-        return ask_choice(
-            f"Push and publish {drafts} draft(s)? [Y/n/p/r]: ",
-            {**answers, "p": "push-only"},
-            hint="  (Enter or y: push and publish, p: push and keep the drafts, n: cancel, r: set reviewers)",
-            on_eof="cancel",
-        )
-    question, verb = ("Do you want to push these commits?", "push") if sends else ("Set these on Gerrit?", "set them")
-    return ask_choice(
-        f"{question} [Y/n/r]: ",
-        answers,
-        hint=f"  (Enter or y: {verb}, n: cancel, r: set reviewers and strategy)",
-        on_eof="cancel",
-    )
-
-
 def print_dry_run(plan: PushPlan) -> None:
     """Status line and the ``git push`` that would run; what would happen after it on stderr."""
     print()
@@ -258,142 +215,3 @@ def print_dry_run(plan: PushPlan) -> None:
             file=sys.stderr,
         )
     print("[dry-run] not executing push", file=sys.stderr)
-
-
-def prompt_save_reviewers() -> bool:
-    return confirm("Save reviewers to branch config?", default=False)
-
-
-def prompt_reviewers_line(
-    cwd: Path | None = None,
-    branch: str | None = None,
-    *,
-    settings: Settings,
-    change_ref: str | None = None,
-    reviewer_flag_segments: list[str] | None = None,
-    session_strategy: ReviewerStrategy | None = None,
-    message: str = "Push options: ",
-    prefill: bool = True,
-    suffix: str = "",
-) -> ParseResult:
-    """Open the highlighted push-options input line, prefilled from flags/registry unless *prefill* is off."""
-    from gerrit_workflow_tools.push_input_prompt import prompt_branch_push_options
-
-    return prompt_branch_push_options(
-        cwd,
-        branch,
-        settings=settings,
-        change_ref=change_ref,
-        reviewer_flag_segments=reviewer_flag_segments,
-        session_strategy=session_strategy,
-        message=message,
-        prefill=prefill,
-        suffix=suffix,
-    )
-
-
-def _line_sets_options(state: PushLineState) -> bool:
-    return bool(
-        state.reviewers or state.topic or state.wip or state.private or state.strategy != ReviewerStrategy.PUSH.value
-    )
-
-
-def _options_from_line(state: PushLineState) -> PushOptions:
-    return PushOptions(
-        reviewers=tuple(state.reviewers),
-        strategy=ReviewerStrategy(state.strategy),
-        topic=state.topic,
-        wip=state.wip,
-        private=state.private,
-    )
-
-
-def _session_strategy(args: argparse.Namespace) -> ReviewerStrategy | None:
-    return ReviewerStrategy(args.reviewer_strategy) if args.reviewer_strategy else None
-
-
-def apply_interactive_line(
-    cwd: Path,
-    plan: PushPlan,
-    args: argparse.Namespace,
-    *,
-    settings: Settings,
-    save: bool,
-) -> PushPlan | None:
-    """Revise *plan* from a push-options line. ``None`` means the line was not applied."""
-    res = prompt_reviewers_line(
-        cwd,
-        plan.branch,
-        settings=settings,
-        change_ref=change_ref_of(cwd, plan, plan.tip_sha, settings=settings),
-        reviewer_flag_segments=list(args.reviewers),
-        session_strategy=_session_strategy(args),
-    )
-    if not res.valid_for_apply:
-        print("Invalid push options; nothing changed.", file=sys.stderr)
-        return None
-    if not _line_sets_options(res.state):
-        print("No push options entered; nothing changed.")
-        return None
-    revised = revise(plan, _options_from_line(res.state), settings=settings)
-    if save and prompt_save_reviewers():
-        set_branch_config(cwd, plan.branch, gerrit_reviewers=",".join(revised.options.reviewers))
-    return revised
-
-
-def options_line_available() -> bool:
-    """True when the confirmation can be the options input line (it needs a terminal on both ends)."""
-    return prompt_toolkit_can_run() and sys.stdout.isatty()
-
-
-_CONFIRM_LINE_MESSAGE = "Push options (Enter {}, Up: history, Ctrl-C cancels): "
-
-
-def confirm_with_options_line(
-    cwd: Path, plan: PushPlan, args: argparse.Namespace, *, settings: Settings, drafts: int = 0
-) -> PushPlan | None:
-    """The one-line push confirmation: Enter pushes, a typed line sets options first. ``None`` cancels.
-
-    An empty line keeps the options *plan* already has, as the status line shows them. When the
-    push sends no commit, Enter sets them on Gerrit, and the line says that instead. With *drafts*, the
-    line starts with ``publish-drafts`` when *plan* publishes them, and the keyword decides whether it does.
-    """
-    try:
-        res = prompt_reviewers_line(
-            cwd,
-            plan.branch,
-            settings=settings,
-            change_ref=change_ref_of(cwd, plan, plan.tip_sha, settings=settings),
-            reviewer_flag_segments=list(args.reviewers),
-            session_strategy=_session_strategy(args),
-            message=_CONFIRM_LINE_MESSAGE.format("pushes" if sent_commits(plan) else "sets them on Gerrit"),
-            prefill=False,
-            suffix=KW_PUBLISH_DRAFTS if drafts and plan.options.publish_comments else "",
-        )
-    except (EOFError, KeyboardInterrupt):
-        return None
-    if _line_sets_options(res.state):
-        plan = revise(plan, _options_from_line(res.state), settings=settings)
-    return publish_drafts_with(plan, res.state.publish_drafts) if drafts else plan
-
-
-def prompt_initial_options(
-    cwd: Path,
-    plan: PushPlan,
-    args: argparse.Namespace,
-    *,
-    settings: Settings,
-) -> PushPlan:
-    res = prompt_reviewers_line(
-        cwd,
-        plan.branch,
-        settings=settings,
-        change_ref=change_ref_of(cwd, plan, plan.branch, settings=settings),
-        reviewer_flag_segments=list(args.reviewers),
-        session_strategy=_session_strategy(args),
-    )
-    if _line_sets_options(res.state):
-        plan = revise(plan, _options_from_line(res.state), settings=settings)
-    if prompt_save_reviewers():
-        set_branch_config(cwd, plan.branch, gerrit_reviewers=",".join(plan.options.reviewers))
-    return plan

@@ -154,7 +154,7 @@ def test_drafts_on_an_outdated_change_are_named(stack_repo: Path, monkeypatch: p
 def _line_answers(monkeypatch: pytest.MonkeyPatch, answer: str | None) -> list[dict[str, object]]:
     """Make the confirmation the push options line; *answer* is what is typed, ``None`` takes the starting line."""
     monkeypatch.setattr(sys, "stdin", _Tty())
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push.options_line_available", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.push_confirm.options_line_available", lambda: True)
     monkeypatch.setattr("builtins.input", lambda *_a: pytest.fail("drafts use the push options line too"))
     calls: list[dict[str, object]] = []
 
@@ -162,7 +162,7 @@ def _line_answers(monkeypatch: pytest.MonkeyPatch, answer: str | None) -> list[d
         calls.append(kw)
         return parse_push_options_line(str(kw["suffix"]) if answer is None else answer)
 
-    monkeypatch.setattr("gerrit_workflow_tools.push_preview.prompt_reviewers_line", _prompt)
+    monkeypatch.setattr("gerrit_workflow_tools.push_confirm.prompt_reviewers_line", _prompt)
     return calls
 
 

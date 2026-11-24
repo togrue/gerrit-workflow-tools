@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from pathlib import Path
 
 from gerrit_workflow_tools.cli_attention import resolve_in_stack
 from gerrit_workflow_tools.cli_common import (
@@ -18,40 +17,19 @@ from gerrit_workflow_tools.cli_common import (
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_terminal import stdin_is_terminal
-from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name, ger_push_mode
-from gerrit_workflow_tools.core.push import (
-    PushPlan,
-    PushRefusal,
-    changes_nothing,
-    execute,
-    prepare,
-    prepare_vanilla,
-    publish_drafts_with,
-    publishable_drafts,
-    push_argv,
-    sent_commits,
-)
+from gerrit_workflow_tools.core.push import PushRefusal, changes_nothing, execute, prepare, prepare_vanilla
 from gerrit_workflow_tools.core.push_checks import resolve_push_branch
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.upstream import missing_upstream_error
 from gerrit_workflow_tools.core.usage import UsageError
+from gerrit_workflow_tools.push_confirm import confirm_gerrit_push, prompt_initial_options, require_confirmable
 from gerrit_workflow_tools.push_outcome import finish_push, print_refusal
-from gerrit_workflow_tools.push_preview import (
-    apply_interactive_line,
-    ask_push_action,
-    confirm_with_options_line,
-    options_line_available,
-    print_dry_run,
-    print_gpush_preview,
-    print_plan_status,
-    prompt_initial_options,
-)
 from gerrit_workflow_tools.render.style import ANSI_DIM_GRAY, color_text
-from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, branch_summary_highlighter
+from gerrit_workflow_tools.summary_highlight import branch_summary_highlighter
 from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
 
@@ -175,11 +153,6 @@ def _gerrit_flags_set(args: argparse.Namespace) -> bool:
     )
 
 
-def _require_confirmable(args: argparse.Namespace) -> None:
-    if not (stdin_is_terminal() or args.yes):
-        raise UsageError("non-interactive stdin: use --yes (-y) to push without a confirmation prompt")
-
-
 def _handle_vanilla_push(run: RunContext, args: argparse.Namespace, *, branch: str) -> int:
     """Handle the vanilla (non-Gerrit) ``git push`` flow and return an exit code."""
     cwd, settings = run.cwd, run.settings
@@ -205,7 +178,7 @@ def _handle_vanilla_push(run: RunContext, args: argparse.Namespace, *, branch: s
         print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
         print("[dry-run] not executing push", file=sys.stderr)
         return 0
-    _require_confirmable(args)
+    require_confirmable(yes=args.yes)
     if not args.yes:
         print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
         print()
@@ -214,71 +187,6 @@ def _handle_vanilla_push(run: RunContext, args: argparse.Namespace, *, branch: s
             return 1
     logger.debug("ger push vanilla executing: %s (cwd=%s)", " ".join(cmd), cwd)
     return finish_push(execute(run, cmd), None)
-
-
-def _confirm_gerrit_push(
-    cwd: Path,
-    plan: PushPlan,
-    args: argparse.Namespace,
-    *,
-    settings: Settings,
-    summary_highlighter: SummaryHighlighter,
-) -> PushPlan | int:
-    """Return the plan to execute, or an exit code when the command should stop."""
-    stack_printed = False
-    drafts_defaulted = False
-    while True:
-        argv = push_argv(plan)
-        logger.debug(
-            "ger push resolved: remote=%r push_branch=%r reviewers=%s strategy=%s refspec=%r",
-            plan.remote,
-            plan.push_branch,
-            plan.options.reviewers,
-            plan.options.strategy,
-            argv[-1],
-        )
-        if not stack_printed:
-            print_gpush_preview(plan, summary_highlighter=summary_highlighter)
-            stack_printed = True
-        if args.dry_run:
-            print_dry_run(plan)
-            return 0
-        _require_confirmable(args)
-        if args.yes:
-            if plan.credential_error:
-                print(plan.credential_error, file=sys.stderr)
-                return 1
-            return plan
-        line = options_line_available()
-        drafts = publishable_drafts(plan)
-        if line and drafts and not drafts_defaulted:  # the line starts with publish-drafts unless config says no
-            drafts_defaulted = True
-            if settings.push_defaults["publish_drafts"]:
-                plan = publish_drafts_with(plan, True)
-        print()
-        print_plan_status(plan)
-        print()
-        if line:
-            revised = confirm_with_options_line(cwd, plan, args, settings=settings, drafts=drafts)
-            act = "push" if revised else "cancel"
-            plan = revised or plan
-        else:
-            asked = drafts if plan.options.publish_comments is False else 0
-            act = ask_push_action(asked, sends=bool(sent_commits(plan)))
-            if act == "push" and asked:
-                plan = publish_drafts_with(plan, True)
-        if act == "cancel":
-            print("Push cancelled.", file=sys.stderr)
-            return 0
-        if act == "reviewers":
-            revised = apply_interactive_line(cwd, plan, args, settings=settings, save=False)
-            if revised is not None:
-                plan = revised
-            continue
-        if plan.credential_error:
-            print(plan.credential_error, file=sys.stderr)
-            continue
-        return plan
 
 
 def _push_gerrit(run: RunContext, args: argparse.Namespace, *, branch: str) -> int:
@@ -317,7 +225,7 @@ def _push_gerrit(run: RunContext, args: argparse.Namespace, *, branch: str) -> i
     if changes_nothing(plan) and not args.dry_run:  # nothing to confirm, so -y is not needed either
         return finish_push(execute(run, plan), plan)
     highlighter = branch_summary_highlighter(cwd, plan.branch, first_parent=first_parent, settings=settings)
-    confirmed = _confirm_gerrit_push(cwd, plan, args, settings=settings, summary_highlighter=highlighter)
+    confirmed = confirm_gerrit_push(cwd, plan, args, settings=settings, summary_highlighter=highlighter)
     if isinstance(confirmed, int):
         return confirmed
     code = finish_push(execute(run, confirmed), confirmed)

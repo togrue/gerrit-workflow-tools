@@ -877,10 +877,10 @@ def test_gpush_show_attributes_wip_no_arrow_when_reviewers_match(
 def test_gpush_interactive_reviewers_refspec(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
-        "gerrit_workflow_tools.push_preview.prompt_reviewers_line",
+        "gerrit_workflow_tools.push_confirm.prompt_reviewers_line",
         lambda *_a, **_k: parse_push_options_line("bob"),
     )
-    monkeypatch.setattr("gerrit_workflow_tools.push_preview.prompt_save_reviewers", lambda: False)
+    monkeypatch.setattr("gerrit_workflow_tools.push_confirm.prompt_save_reviewers", lambda: False)
     code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i"], monkeypatch)
     assert code == 0
     assert "%r=bob" in out
@@ -889,10 +889,10 @@ def test_gpush_interactive_reviewers_refspec(stack_repo: Path, monkeypatch: pyte
 def test_gpush_interactive_reviewers_lazy_omits_percent_r(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
-        "gerrit_workflow_tools.push_preview.prompt_reviewers_line",
+        "gerrit_workflow_tools.push_confirm.prompt_reviewers_line",
         lambda *_a, **_k: parse_push_options_line("bob lazy"),
     )
-    monkeypatch.setattr("gerrit_workflow_tools.push_preview.prompt_save_reviewers", lambda: False)
+    monkeypatch.setattr("gerrit_workflow_tools.push_confirm.prompt_save_reviewers", lambda: False)
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i"], monkeypatch)
     assert code == 0
     assert "lazy" in err
@@ -912,7 +912,7 @@ def test_gpush_confirm_reviewers_then_push_includes_percent_r(
 
     monkeypatch.setattr("builtins.input", _input)
     monkeypatch.setattr(
-        "gerrit_workflow_tools.push_preview.prompt_reviewers_line",
+        "gerrit_workflow_tools.push_confirm.prompt_reviewers_line",
         lambda *_a, **_k: parse_push_options_line("alice"),
     )
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
@@ -933,7 +933,7 @@ def test_gpush_saves_typed_options_only_after_a_push(
     answers = iter(["r", confirm_answer])
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
     monkeypatch.setattr(
-        "gerrit_workflow_tools.push_preview.prompt_reviewers_line",
+        "gerrit_workflow_tools.push_confirm.prompt_reviewers_line",
         lambda *_a, **_k: parse_push_options_line("alice"),
     )
     mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
@@ -950,7 +950,7 @@ def _confirm_line_session(
 ) -> tuple[MagicMock, list[dict[str, object]]]:
     """Make the confirmation the options input line, answering *line* (or raising it); mock ``git push``."""
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push.options_line_available", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.push_confirm.options_line_available", lambda: True)
     monkeypatch.setattr("builtins.input", lambda *_a: pytest.fail("the options line replaces the [Y/n/r] question"))
     calls: list[dict[str, object]] = []
 
@@ -960,7 +960,7 @@ def _confirm_line_session(
             return parse_push_options_line(line)
         raise line
 
-    monkeypatch.setattr("gerrit_workflow_tools.push_preview.prompt_reviewers_line", _prompt)
+    monkeypatch.setattr("gerrit_workflow_tools.push_confirm.prompt_reviewers_line", _prompt)
     mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
     monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     return mock_run, calls
@@ -1009,10 +1009,10 @@ def test_gpush_interactive_reviewers_overwrites_branch_and_cli(
     set_branch_config(stack_repo, branch, gerrit_reviewers="carol")
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
-        "gerrit_workflow_tools.push_preview.prompt_reviewers_line",
+        "gerrit_workflow_tools.push_confirm.prompt_reviewers_line",
         lambda *_a, **_k: parse_push_options_line("bob"),
     )
-    monkeypatch.setattr("gerrit_workflow_tools.push_preview.prompt_save_reviewers", lambda: False)
+    monkeypatch.setattr("gerrit_workflow_tools.push_confirm.prompt_save_reviewers", lambda: False)
     code, out, _err = run_cli(
         stack_repo,
         gpush_main,

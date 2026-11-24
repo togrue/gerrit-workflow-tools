@@ -54,7 +54,7 @@ flowchart TB
   subgraph presentation [Presentation — render/ + package root]
     render[render/commit_row.py · render/status_fmt.py · render/comments.py]
     highlight[summary_highlight.py]
-    push_ui[push_input_line.py · push_input_prompt.py · push_options_history.py]
+    push_ui[push_confirm.py · push_input_line.py · push_input_prompt.py · push_options_history.py]
     rebase_hook[rebase_enricher.py · rebase_sequence_editor.py]
   end
 
@@ -336,7 +336,7 @@ sequenceDiagram
   end
 ```
 
-`core/push.py` returns a push plan or a push refusal and accepts a revised plan when reviewer options change. `execute` is the only call that runs `git push`. The confirm loop stays in the command ([ADR-0008](adr/0008-push-confirm-loop-stays-in-the-command.md)); the prompts it calls (`-i`, the options line, the save-reviewers question) live in `push_preview.py`. Push-specific UI lives in `push_input_line.py` (line editor state) and `push_input_prompt.py` (prompt-toolkit). Reviewer catalog/completion: `reviewer_catalog.py`, `core/reviewer_completion.py`. The refspec segments those lines edit are `refspec_option_segments` in `core/push_options.py`.
+`core/push.py` returns a push plan or a push refusal and accepts a revised plan when reviewer options change. `execute` is the only call that runs `git push`. The confirm loop stays in the command ([ADR-0008](adr/0008-push-confirm-loop-stays-in-the-command.md)): it and the prompts it calls (`-i`, the options line, the Y/n/r question, the save-reviewers question) live in `push_confirm.py`, and what they show (commit list, boundary notice, status line) in `push_preview.py`. Push-specific UI lives in `push_input_line.py` (line editor state) and `push_input_prompt.py` (prompt-toolkit). Reviewer catalog/completion: `reviewer_catalog.py`, `core/reviewer_completion.py`. The refspec segments those lines edit are `refspec_option_segments` in `core/push_options.py`.
 
 ---
 
@@ -598,7 +598,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/style.py` | ANSI color and hyperlink helpers, the run's color and hyperlink mode, UTF-8 stdio |
 | `render/download_meter.py` | The stderr meter for bytes still arriving (`DownloadMeter`) |
 | `summary_highlight.py` | Subject highlighting from stop/warning patterns: the run's highlighter (`run_summary_highlighter`) and the one for a branch's stack |
-| `push_preview.py` | What `ger push` shows and asks: commit list, boundary notice, status line, the confirmation question |
+| `push_preview.py` | What `ger push` shows before it pushes: commit list, boundary notice, status line, the dry run |
+| `push_confirm.py` | What `ger push` asks: the confirm loop (ADR-0008), the push-options line, the Y/n/r question, `-i`, saving reviewers |
 | `push_outcome.py` | What `ger push` reports once `git push` ran (git's own output, errors, what it assigned, what it set over REST), or why it refused |
 | `push_input_line.py` | Push options line: parsing and formatting |
 | `push_input_prompt.py` | Interactive push UI (prompt-toolkit) |

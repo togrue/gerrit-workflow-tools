@@ -626,9 +626,9 @@ def test_push_prompt_completes_reviewers_on_the_push_branch_change(
         return parse_push_options_line("")
 
     monkeypatch.setattr(sys, "stdin", _TtyStdin())
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push.options_line_available", lambda: True)
-    monkeypatch.setattr("gerrit_workflow_tools.push_preview.prompt_reviewers_line", _prompt)
-    monkeypatch.setattr("gerrit_workflow_tools.push_preview.prompt_save_reviewers", lambda: False)
+    monkeypatch.setattr("gerrit_workflow_tools.push_confirm.options_line_available", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.push_confirm.prompt_reviewers_line", _prompt)
+    monkeypatch.setattr("gerrit_workflow_tools.push_confirm.prompt_save_reviewers", lambda: False)
     monkeypatch.setattr("builtins.input", lambda *_a: pytest.fail("the options line replaces the [Y/n/r] question"))
     pushed = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
     monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", pushed)
