@@ -49,6 +49,17 @@ class PatchsetStatus(str, Enum):
     """Gerrit could not be asked (unreachable, credentials rejected): nothing is known, not even absence."""
 
 
+class ChainTurn(str, Enum):
+    """Whose turn a comment chain is: what :func:`core.comment_chains.chain_turn` decides."""
+
+    YOURS = "yours"
+    """Somebody else spoke last: it waits on you."""
+    DRAFT = "draft"
+    """Somebody else spoke last and your answer is a draft: it waits on you to publish it."""
+    THEIRS = "theirs"
+    """Your published comment is the last word: it waits on the other side."""
+
+
 @dataclass(frozen=True)
 class ContextLine:
     """One source line from Gerrit ``CommentInfo.context_lines``."""
@@ -66,6 +77,8 @@ class InlineComment:
     message: str
     comment_id: str | None = None
     author: str | None = None
+    author_account_id: int | None = None
+    """Who wrote it (Gerrit's ``author._account_id``): what tells your comments from others'."""
     context_lines: tuple[ContextLine, ...] = ()
     patch_set: int | None = None
     unresolved: bool = False
@@ -103,6 +116,9 @@ class CommentChain:
     """The chain sits on the parent side of the diff (Gerrit ``side: PARENT``)."""
     anchor: AnchorPlacement | None = None
     """A local comment's anchor, and where it lands on the file version shown."""
+    turn: ChainTurn | None = None
+    """Whose turn it is (:func:`core.comment_chains.chain_turn`); ``None`` for a local chain, or
+    when who you are is not known."""
 
     @property
     def anchor_moved(self) -> bool:
@@ -160,6 +176,7 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     verified: int | None  # -1, 0, +1; None = no vote
     code_review: int | None  # -2, -1, 0, +1, +2; None = no vote
     comments_unresolved: int
+    """Unresolved comment chains, whoever's turn: Gerrit's count."""
     ci_failures: list[str] = field(default_factory=list)
     ci_links: list[CiLink] = field(default_factory=list)
     ci_pipelines: list[CiPipeline] = field(default_factory=list)
@@ -198,6 +215,9 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     is then ``None``): what lets attention call the footer invalid rather than missing."""
     owner_account_id: int | None = None
     """The change owner's account id (:meth:`ChangeView.owned_by`); ``None`` before the first push."""
+    comments_awaiting_reply: int = 0
+    """Of :attr:`comments_unresolved`, the chains whose last published comment is yours
+    (:attr:`ChainTurn.THEIRS`): they wait on the other side, not on you."""
     blocks_chain: bool = False
     """The first commit that holds the changes above it back (they carry ``chain-blocked``):
     attention's verdict, and :func:`core.attention.blocking_reason` says why."""

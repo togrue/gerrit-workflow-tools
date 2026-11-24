@@ -5,8 +5,9 @@ from __future__ import annotations
 from gerrit_workflow_tools.core.comment_chains import (
     build_comment_chains,
     collect_comment_chains,
-    count_unresolved_in_file_map,
+    unresolved_chain_counts,
 )
+from gerrit_workflow_tools.core.gerrit_change_status import ChainTurn
 from gerrit_workflow_tools.render.comments import chain_location
 
 
@@ -64,7 +65,7 @@ def test_collect_unresolved_skips_resolved_chain_tail() -> None:
         ]
     }
     assert collect_comment_chains(file_map, comments="unresolved") == []
-    assert count_unresolved_in_file_map(file_map) == 0
+    assert unresolved_chain_counts(file_map, None) == (0, 0)
 
 
 def test_collect_unresolved_includes_open_chain() -> None:
@@ -83,7 +84,7 @@ def test_collect_unresolved_includes_open_chain() -> None:
     chains = collect_comment_chains(file_map, comments="unresolved")
     assert len(chains) == 1
     assert chains[0].resolved is False
-    assert count_unresolved_in_file_map(file_map) == 1
+    assert unresolved_chain_counts(file_map, None) == (1, 0)
 
 
 def test_multiple_independent_chains() -> None:
@@ -97,7 +98,7 @@ def test_multiple_independent_chains() -> None:
     file_map["a.py"][1]["line"] = 5
     chains = build_comment_chains(file_map)
     assert len(chains) == 2
-    assert count_unresolved_in_file_map(file_map) == 1
+    assert unresolved_chain_counts(file_map, None) == (1, 0)
 
 
 def test_orphan_reply_becomes_own_chain() -> None:
@@ -193,3 +194,43 @@ def test_draft_only_chain_is_your_own_unpublished_comment() -> None:
     assert chain.root_id == "new"
     assert chain.comments[0].draft is True
     assert chain.resolved is False and chain.resolved_after_publish is False
+
+
+ME, REVIEWER = 1000, 2000
+
+
+def _by(cid: str, author: int, **kwargs) -> dict:
+    out = _comment(cid, **kwargs)
+    out["author"] = {"_account_id": author}
+    return out
+
+
+def test_turn_follows_the_last_published_comment() -> None:
+    file_map = {
+        "a.py": [
+            _by("asked", REVIEWER, updated="2024-01-01 10:00:00"),
+            _by("answered", ME, in_reply_to="asked", updated="2024-01-01 11:00:00"),
+            _by("open", REVIEWER, updated="2024-01-01 10:00:00"),
+        ]
+    }
+    turns = {chain.root_id: chain.turn for chain in build_comment_chains(file_map, me=ME)}
+    assert turns == {"asked": ChainTurn.THEIRS, "open": ChainTurn.YOURS}
+    assert unresolved_chain_counts(file_map, ME) == (2, 1)
+
+
+def test_a_draft_answer_is_still_your_turn_to_publish() -> None:
+    published = {"a.py": [_by("asked", REVIEWER)]}
+    drafts = {"a.py": [_draft("mine", in_reply_to="asked", unresolved=True)]}
+    (chain,) = build_comment_chains(published, drafts, me=ME)
+    assert chain.turn is ChainTurn.DRAFT
+    # Your own last word stays theirs, a further draft of yours or not.
+    (chain,) = build_comment_chains(
+        {"a.py": [_by("said", ME)]}, {"a.py": [_draft("more", in_reply_to="said", unresolved=True)]}, me=ME
+    )
+    assert chain.turn is ChainTurn.THEIRS
+
+
+def test_without_knowing_who_you_are_no_chain_has_a_turn() -> None:
+    file_map = {"a.py": [_by("said", ME)]}
+    assert [chain.turn for chain in build_comment_chains(file_map)] == [None]
+    assert unresolved_chain_counts(file_map, None) == (1, 0)

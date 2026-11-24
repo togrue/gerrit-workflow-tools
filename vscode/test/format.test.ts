@@ -117,12 +117,12 @@ test("the status bar says where a rebase stopped, by the change number or else t
 
   // What to do next, with the conflicted files.
   const rebase = (unmerged: string[]): Rebase => ({ branch: "feature", onto: null, orig_head: null, stop: "conflict", applied: false, current: null, unmerged, as_before: false, actions: ["abort", "skip"], refused: { continue: "the index has unresolved conflicts" } });
-  assert.match(rebaseItem(at("edit", 101)).next, /amend .*git rebase --continue/);
+  assert.match(rebaseItem(at("edit", 101)).next, /amend .*Continue in Local stack/);
   assert.match(rebaseItem(at("conflict", 103), rebase(["d.txt"])).next, /^Resolve the conflicts in d\.txt and git add/);
-  assert.match(rebaseItem(at("conflict", 103), rebase(["d.txt", "e.txt"])).next, /conflicts in 2 files .*git rebase --abort/);
-  assert.match(rebaseItem(at("resolved", 103)).next, /resolved: git rebase --continue/);
+  assert.match(rebaseItem(at("conflict", 103), rebase(["d.txt", "e.txt"])).next, /conflicts in 2 files .*Abort/);
+  assert.match(rebaseItem(at("resolved", 103)).next, /resolved: Continue in Local stack/);
   for (const stop of ["edit", "split", "conflict", "resolved", "paused", null] as const) {
-    assert.match(rebaseItem(at(stop, 101)).next, /git rebase --continue/, String(stop));
+    assert.match(rebaseItem(at(stop, 101)).next, /Continue in Local stack/, String(stop));
   }
   // A resolution committed by hand under the apply backend: core serves no stop, refuses Continue
   // and offers Skip; the status bar says what core says, not "git rebase --continue".
@@ -136,7 +136,7 @@ test("the status bar says where a rebase stopped, by the change number or else t
     "The commit it stopped on was committed by hand, so nothing is left to apply and `git rebase --continue` would stop again: `git rebase --skip` goes on from HEAD, or `git rebase --abort`.",
   );
   // Where core allows Continue, its refusals of other ways on change nothing.
-  assert.match(rebaseItem(at(null, 101), { ...byHand, actions: ["continue", "abort"], refused: { skip: "no" } }).next, /^Finish it with git rebase --continue/);
+  assert.match(rebaseItem(at(null, 101), { ...byHand, actions: ["continue", "abort"], refused: { skip: "no" } }).next, /^Finish it with Continue in Local stack/);
 });
 
 test("votes and ages read like ger's own output", () => {

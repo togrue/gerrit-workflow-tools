@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from gerrit_workflow_tools.core.attention import (
+    Attention,
     NoEditAttentionError,
     commit_needs_edit_attention,
     find_commit_by_change_id,
@@ -36,9 +37,26 @@ __all__ = [
 ]
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.run_context import RunContext
+from gerrit_workflow_tools.core.words import counted
 
 
 _NO_EDIT_ATTENTION = "no commit needs edit attention (unresolved comments or build failed)"
+
+
+def _nothing_to_edit(commits: list[LogCommit]) -> NoEditAttentionError:
+    """The walk's end, naming what it passed over: a negative vote with nothing to answer is not
+    edit attention (the reviewer may say why only in a message, or keep the vote until a new
+    patchset), and neither is a comment waiting on the other side; ``ger log`` shows both."""
+    lines = [_NO_EDIT_ATTENTION]
+    for reason, what in (
+        (Attention.REVIEW_ISSUES, "{} a negative vote"),
+        (Attention.AWAITING_REPLY, "{} comments waiting on a reply"),
+    ):
+        passed = [c for c in commits if reason in c.attention_reasons and not commit_needs_edit_attention(c)]
+        if passed:
+            have = f"{counted(len(passed), 'commit')} {'has' if len(passed) == 1 else 'have'}"
+            lines.append(f"{what.format(have)}: ger show {passed[0].short_sha}")
+    return NoEditAttentionError("\n".join(lines))
 
 
 def load_edit_attention_stack(run: RunContext):
@@ -63,7 +81,7 @@ def resolve_first_edit_attention_sha(run: RunContext) -> str:
     stack_view = load_edit_attention_stack(run)
     target = first_commit_needing_edit_attention(stack_view.commits)
     if target is None:
-        raise NoEditAttentionError(_NO_EDIT_ATTENTION)
+        raise _nothing_to_edit(stack_view.commits)
     return target.sha
 
 
@@ -98,7 +116,7 @@ def resolve_edit_attention_commit(
         after_change_id=after_change_id,
     )
     if target is None:
-        raise NoEditAttentionError(_NO_EDIT_ATTENTION)
+        raise _nothing_to_edit(stack_view.commits)
 
     if update_cursor and target.change_id and branch is not None:
         write_branch_cursor(run.cwd, branch, target.change_id, action=mode, sha=target.sha)

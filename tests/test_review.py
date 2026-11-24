@@ -245,7 +245,7 @@ def test_vote_publishes_your_drafts_with_the_votes(
     worktree = _worktree(stack_repo)
     run_cli(worktree, comment_main, ["c.txt:1", "-m", "nit"], monkeypatch, gerrit=store)
     code, out, _ = _review(worktree, store, ["--vote", "CR+1", "--vote", "V=-1", "-y", "-m", "lgtm"], monkeypatch)
-    assert code == ExitCode.OK and "published 1 draft(s) and Code-Review+1, Verified-1 on 102" in out
+    assert code == ExitCode.OK and "published 1 draft and Code-Review+1, Verified-1 on 102" in out
     [call] = store.calls_to("publish_drafts")
     assert call.kwargs == {"message": "lgtm", "labels": {"Code-Review": 1, "Verified": -1}, "draft_ids": None}
     assert store.list_drafts(keys[2]) == {}
@@ -417,7 +417,7 @@ def test_a_bare_plus_one_is_a_code_review_vote(
     _review(stack_repo, store, ["102"], monkeypatch)
     code, out, err = _review(stack_repo, store, ["--vote", "+1", "-y"], monkeypatch)
     assert code == ExitCode.OK, err
-    assert "published 0 draft(s) and Code-Review+1 on 102" in out
+    assert "published 0 drafts and Code-Review+1 on 102" in out
     code, _out, err = run_cli(
         stack_repo, reply_main, ["--publish", "101", "--vote", "-1", "-y"], monkeypatch, gerrit=store
     )
@@ -447,7 +447,7 @@ def test_vote_on_the_chain_lists_each_change_with_its_drafts_and_votes_on_each(
     code, out, err = _review(stack_repo, store, ["--vote", "+1", "--chain", "-y", "-m", "lgtm"], monkeypatch)
     assert code == ExitCode.OK, err
     assert [call.args[0] for call in store.calls_to("publish_drafts")] == keys
-    assert "published 1 draft(s) and Code-Review+1 on 103" in out
+    assert "published 1 draft and Code-Review+1 on 103" in out
 
 
 def test_vote_on_several_named_changes_votes_on_each(
@@ -522,15 +522,10 @@ def test_review_says_how_to_get_there_and_what_to_run_next(
 ) -> None:
     store, _keys, _shas = gerrit
     _, out, _ = _review(stack_repo, store, ["102"], monkeypatch)
-    assert out.splitlines()[-1] == (
-        "next: cd ../stack-review · ger show · ger comment PATH:LINE -m … · ger reply ID -m … · "
-        "ger review --next · ger review --vote +1"
-    )
+    # Below the top: comment and walk on; only the steps that fit where you are.
+    assert out.splitlines()[-1] == "next: cd ../stack-review · ger comment PATH:LINE -m … · ger review --next"
     _, out, _ = _review(_worktree(stack_repo), store, ["--next"], monkeypatch)  # the top: vote, then done
-    assert out.splitlines()[-1] == (
-        "next: ger show · ger comment PATH:LINE -m … · ger reply ID -m … · ger review --vote +1 --chain · "
-        "ger review --done"
-    )
+    assert out.splitlines()[-1] == "next: ger review --vote +1 --chain · ger review --done"
 
 
 def test_done_warns_about_drafts_left_unpublished_and_still_finishes(
@@ -576,4 +571,32 @@ def test_a_single_change_review_offers_no_walk(
     store, keys, _shas = gerrit
     store.set_related(keys[1], [])  # no relation chain: a change of its own
     _, out, _ = _review(stack_repo, store, ["101"], monkeypatch)
-    assert out.splitlines()[-1].endswith("ger reply ID -m … · ger review --vote +1 · ger review --done")
+    assert out.splitlines()[-1].endswith(" · ger review --vote +1 · ger review --done")
+
+
+def test_a_staged_review_refuses_what_would_rewrite_or_push_the_reviewed_change(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Staged, the working branch is the review's change-<n>: fix, edit, reword, rebase and push would take it."""
+    from gerrit_workflow_tools import cli_edit, cli_fix, cli_push, cli_rebase
+
+    store, _keys, shas = gerrit
+    _review(stack_repo, store, ["102"], monkeypatch)
+    worktree = _worktree(stack_repo)
+    message = (
+        "error: a staged review of c102 is underway here: `ger review --unstage` to work on it, or `ger review --done`"
+    )
+    for main, argv in (
+        (cli_fix.main, ["HEAD"]),
+        (cli_edit.main, ["HEAD"]),
+        (cli_edit.main_reword, ["HEAD", "-m", "mine now"]),
+        (cli_rebase.main, []),
+        (cli_push.main, ["--dry-run"]),
+    ):
+        code, _out, err = run_cli(worktree, main, argv, monkeypatch, gerrit=store, catch_sys_exit=True)
+        assert (code, err.strip()) == (ExitCode.USAGE, message), main
+    assert git_out("rev-parse", "change-102", cwd=worktree) == shas[2], "nothing moved"
+    # Unstaged, the change is checked out on its branch: working on it is what you asked for.
+    _review(worktree, store, ["--unstage"], monkeypatch)
+    code, _out, err = run_cli(worktree, cli_push.main, ["--dry-run"], monkeypatch, gerrit=store, catch_sys_exit=True)
+    assert "staged review" not in err

@@ -22,6 +22,7 @@ from gerrit_workflow_tools.core.stack import Commit
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
+from tests.helpers import plain_git
 from tests.test_gerrit_unavailable import _DownGerrit
 
 
@@ -44,8 +45,8 @@ def rebases(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     real_run = subprocess.run
 
     def recording(cmd, **kwargs):  # type: ignore[no-untyped-def]
-        if isinstance(cmd, list) and cmd[:2] == ["git", "rebase"]:
-            started.append(cmd)
+        if plain_git(cmd)[:2] == ["git", "rebase"]:
+            started.append(plain_git(cmd))
             return subprocess.CompletedProcess(cmd, 0)
         return real_run(cmd, **kwargs)
 

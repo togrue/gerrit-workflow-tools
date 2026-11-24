@@ -10,6 +10,7 @@ from gerrit_workflow_tools.render.comments import (
     anchor_suffix,
     chain_context_lines,
     chain_location,
+    chain_state,
     chain_url,
     comment_meta,
     draft_label,
@@ -31,9 +32,7 @@ def format_comment_chain_markdown(
     """Return Markdown lines for one comment chain (full bodies, no ANSI)."""
     loc = chain_location(chain)
     # A file is code-spanned; Gerrit's special paths read as words.
-    heading = f"{loc if chain.path in SPECIAL_PATHS else f'`{loc}`'}{anchor_suffix(chain)}"
-    if chain.resolved:
-        heading = f"{heading} (resolved)"
+    heading = f"{loc if chain.path in SPECIAL_PATHS else f'`{loc}`'}{anchor_suffix(chain)}{chain_state(chain)}"
     lines: list[str] = [f"{'#' * level} {heading}"]
     if chain.root_id:
         lines.append(f"Reply with `ger reply {chain.root_id}`")

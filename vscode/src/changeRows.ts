@@ -111,6 +111,8 @@ export interface ThreadRow extends Icon {
   reply: boolean;
   /** It is still open: "Done" resolves it, and it can be kept from the agent. */
   open: boolean;
+  /** Open, and your published comment is its last word: it waits on the other side, not on you. */
+  waiting: boolean;
   held: boolean;
   resolved: boolean;
   /** Where it stands once your drafts are published: Gerrit's Resolved checkbox starts there. */
@@ -326,8 +328,10 @@ function thread(chain: CommentChain): ThreadRow {
   const mine = isYours(chain) ? YOURS[first?.state ?? ""] : undefined;
   const answered = !chain.resolved && chain.resolved_after_publish;
   const held = chain.held && !chain.resolved;
+  // Your published comment is its last word (core's turn): open, but waiting on the other side.
+  const waiting = !mine && !chain.resolved && chain.turn === "theirs";
   const own = ownComment(chain);
-  const notes = [mine ?? "", held ? "kept for you" : "", answered ? "your draft resolves it" : "", where, mine ? "" : (first?.author ?? "")];
+  const notes = [mine ?? "", held ? "kept for you" : "", answered ? "your draft resolves it" : "", waiting ? "waits on a reply" : "", where, mine ? "" : (first?.author ?? "")];
   const icon: Icon = mine
     ? { icon: first?.state === "note" ? "note" : "edit" }
     : chain.resolved
@@ -336,7 +340,9 @@ function thread(chain: CommentChain): ThreadRow {
         ? { icon: "edit", tone: "good" }
         : held
           ? { icon: "person", tone: "warn" }
-          : { icon: "comment-unresolved", tone: "warn" };
+          : waiting
+            ? { icon: "comment", tone: "dim" }
+            : { icon: "comment-unresolved", tone: "warn" };
   return {
     ...icon,
     id: chain.root_id,
@@ -349,6 +355,7 @@ function thread(chain: CommentChain): ThreadRow {
     // Your own unpublished chain: nobody to reply to, nothing for the agent to keep from.
     reply: !mine,
     open: !mine && !chain.resolved,
+    waiting,
     held: Boolean(chain.held),
     resolved: chain.resolved,
     resolving: chain.resolved_after_publish,

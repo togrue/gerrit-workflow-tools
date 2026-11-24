@@ -505,7 +505,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/code_facts.py` | What the repository knows about the code an overlay compares (`CodeFacts`, `read_code_facts`: one git batch) and merged equivalence (`merged_equivalent`) |
 | `core/patchset_history.py` | Whether Gerrit's patchset is in a local commit's history (`built_on`: branch, reflog, `lastPush/<branch>`), and ger's record of a patchset it took over (`refs/ger/taken/`, `record_taken`); ADR-0015 |
 | `core/annotated_targets.py` | Commits named on the command line (`ger show`, `ger ci`) judged as the local stack sees them: within the whole stack, and merged when the upstream contains them (`annotate_targets`, `local_stack_or_none`) |
-| `core/attention.py` | Attention: reason names, `determine_attention()`, `ci_failed()`, chain-blocking (the commit that blocks, `LogCommit.blocks_chain`, and why: `blocking_reason()`), edit attention |
+| `core/attention.py` | Attention: reason names, `determine_attention()`, `ci_failed()`, `comment_reason()` (unresolved comments or awaiting a reply, by whose turn), chain-blocking (the commit that blocks, `LogCommit.blocks_chain`, and why: `blocking_reason()`), edit attention |
 | `core/attention_cursor.py` | Attention cursor: Change-Id walk position, TTL, lazy adopt, history |
 | `core/edit_attention_walk.py` | Edit-attention walk: load stack, resume/next/first target, cursor status |
 | `core/attention_strategy.py` | Loading attention strategies from `.ger/attention/` |
@@ -517,7 +517,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/change_checkout.py` | Checking a change out to work on it: the **local version** (`find_local_versions`), what to do with it (`plan_checkout`, `choose_action`), which commits above it take Gerrit's patchset (`gerrit_above`) |
 | `core/change_checkout_apply.py` | Doing what `ger checkout` decided (`apply_checkout`): moving the local version onto the patchset, taking the commits above as Gerrit has them or rebasing them, merging your edits into it; every outdated commit of the local stack (`update_stack`) |
 | `core/review_checkout.py` | Review checkout: the review worktree, `change-<number>` branches, staging, review state, walking a chain |
-| `core/comment_chains.py` | Inline comment threads, resolved and unresolved; how a chain is named (`ChainRef`: id, id prefix, `PATH:LINE`, URL) |
+| `core/comment_chains.py` | Inline comment threads, resolved and unresolved; whose **turn** each is (`chain_turn`, `unresolved_chain_counts`); how a chain is named (`ChainRef`: id, id prefix, `PATH:LINE`, URL) |
 | `core/suggested_edits.py` | A comment's suggested edits: Gerrit fix suggestions and ```` ```suggestion ```` blocks of its text, in one shape |
 | `core/comment_anchor.py` | Where a new comment sits: the LOCATION grammar, its check against a commit, the anchored text |
 | `core/anchor_mapping.py` | Re-anchoring: where a local comment's anchor lands on another version of its file, moved or outdated (ADR-0011) |
@@ -599,7 +599,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/comments.py` | Inline comment chains in the terminal (boxes), and the words both views share (`chain_location`, `draft_label`, `chain_url`, `drafts_elsewhere`) |
 | `render/comments_markdown.py` | Inline comment chains as Markdown: `ger show --ai` and the agent runbook (`format_comment_chain_markdown`, `format_unresolved_section_markdown`) |
 | `render/suggested_fixes.py` | Gerrit fix suggestions written out below a comment, one shape for the terminal and Markdown (`shown_fixes`, `fix_rows`, `fixes_markdown`), and a comment's whole text with them (`comment_text`, what `ger serve` sends) |
-| `render/wrap.py` | Word wrap for `ger show` prose: comment boxes and the commit message |
+| `render/wrap.py` | Word wrap for terminal prose: `ger show`'s comment boxes and commit message, and every `next:` or closing line (`note_lines`; `say` prints one, wrapped on a terminal, one line when piped) |
 | `render/checkout_text.py` | What `ger checkout` says once it checked a change out (`checkout_lines`) |
 | `render/show_text.py` | `ger show`'s human text for one commit (`commit_lines`), the brief one of a multi-commit view (`brief_commit_lines`) and the line between them (`commit_separator`) |
 | `render/show_markdown.py` | `ger show`'s Markdown (`--ai`) for one commit: `commit_markdown` |
@@ -624,7 +624,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `reviewer_catalog.py` | Reviewer discovery and soft validation for the push prompt |
 | `rebase_enricher.py` | `GIT_SEQUENCE_EDITOR`: annotate the rebase todo with Gerrit status |
 | `rebase_sequence_editor.py` | `GIT_SEQUENCE_EDITOR`: patch one `pick` line for `ger edit` |
-| `rebase_run.py` | Running `git rebase` from a command: `require_history_rewrite` before, `run_interactive_rebase` / `go_on_with_rebase` (refused first by `rebase_next_step.go_on_refusal`, of the stop `rebasing_stack.stopped_rebase` reads) and the conflict next step after |
+| `rebase_run.py` | Running `git rebase` from a command: `require_history_rewrite` before, `run_interactive_rebase` / `go_on_with_rebase` (refused first by `rebase_next_step.go_on_refusal`, of the stop `rebasing_stack.stopped_rebase` reads) and the conflict next step after; git's own advice kept off its stderr (`_git_rebase`, the one way a command runs a rebase the user sees) |
 | `reword_run.py` | Rewording a commit from a command (`ger reword`, `ger edit --reword`), with no rebase: the message from the user's editor (`message_from_editor`), the reword itself through `core/reword.py`, and what it says once done (`reword`) |
 | `bash_completion_generator.py` | Bash completion generated from live argparse definitions |
 

@@ -200,15 +200,8 @@ def test_argument_groups_come_from_cli_args() -> None:
     _check(
         "argument group imported from cli_common.py",
         found,
-        {
-            # cli_review.py was off-limits in the pass that moved them; cli_common re-exports them until then.
-            "cli_review.py -> add_change_option": "backlog 4",
-            "cli_review.py -> add_color_args": "backlog 4",
-            "cli_review.py -> add_output_format_args": "backlog 4",
-            "cli_review.py -> add_verbose_and_debug_log_args": "backlog 4",
-            "cli_review.py -> changeish_help": "backlog 4",
-        },
-        "Import argument groups from cli_args.py. When this list is empty, delete the re-export in cli_common.py.",
+        {},
+        "Import argument groups from cli_args.py.",
     )
 
 
@@ -282,7 +275,6 @@ CONCEPTS = [
         pattern=r"(?<![\w.])[a-z]+\(s\)[ ?{,]",  # `draft(s) `, not a call such as `parse(s)`
         owners={"core/words.py": "counted says a count with its noun, agreeing"},
         debt={
-            "review_vote.py": "off-limits in the pass that fixed the others",
             # A substrate module: it may not import core/words.py. Its --debug-log summary only.
             "core/call_trace.py": "substrate",
         },
@@ -541,13 +533,6 @@ def test_a_flag_means_one_thing() -> None:
         "--format": "one helper (add_output_format_args); the help names the command's ai view",
         "checkout --branch": "the branch to put the change on, not the branch whose stack is read",
         "review --next": "the next change in the review chain, not the next edit-attention commit",
-        # Debt: one concept, several definitions.
-        "review --debug-log": "backlog 4",
-        "review --dry-run": "backlog 4",
-        "review --message": "backlog 4",
-        "review --patchset": "backlog 4",
-        "--vote": "backlog 4",
-        "review --yes": "backlog 4",
     }
     found: set[str] = set()
     for flag, by_command in _flag_uses().items():

@@ -82,7 +82,8 @@ class CommentApi:
         context_padding: int | None = None,
         comments: CommentSelection = "unresolved",
     ) -> list[CommentChain]:
-        """Comment chains of *change_id* selected by *comments*, with your drafts in their chains."""
+        """Comment chains of *change_id* selected by *comments*, with your drafts in their chains and
+        whose turn each is (:attr:`CommentChain.turn`)."""
         return self._chains(
             self._key(change_id), change_updated=change_updated, context_padding=context_padding, comments=comments
         )
@@ -102,7 +103,9 @@ class CommentApi:
                 partial(self._drafts, key),
             ]
         )
-        return collect_comment_chains(file_map, comments=comments, drafts=drafts)
+        # Who you are says whose turn each chain is: remembered once asked, so no request when known.
+        me = self._service.self_account_id() if any(file_map.values()) else None
+        return collect_comment_chains(file_map, comments=comments, drafts=drafts, me=me)
 
     def drafted_changes(self, numbers: Sequence[int] | None = None, *, n: int = 25) -> list[ChangeView]:
         """The changes holding drafts of yours: one light ``has:draft`` query, among *numbers* when given.

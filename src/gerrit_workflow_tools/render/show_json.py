@@ -60,6 +60,7 @@ def comment_json_payload(
                 "outdated": chain.outdated,
                 **_anchored_fields(chain),
                 "resolved_after_publish": chain.resolved_after_publish,
+                "turn": chain.turn.value if chain.turn else None,
                 "comments": chain_comments,
             }
         )
@@ -88,6 +89,7 @@ def log_commit_json(commit: LogCommit) -> dict[str, object]:
         "verified": commit.verified,
         "code_review": commit.code_review,
         "comments_unresolved": commit.comments_unresolved,
+        "comments_awaiting_reply": commit.comments_awaiting_reply,
         "ci_failures": commit.ci_failures,
         "ci_links": [
             {

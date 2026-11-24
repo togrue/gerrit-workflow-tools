@@ -222,7 +222,7 @@ status bar message: $(check) Copied SHA <sha>…
 
 ```
 terminal "ger": runs `ger edit <sha>`
-status bar message: $(terminal) ger edit runs in the ger terminal: once the rebase stops at "103: Cleanup after experiment", amend it, then git rebase --continue
+status bar message: $(terminal) ger edit runs in the ger terminal: once the rebase stops at "103: Cleanup after experiment", amend it, then ger rebase --continue
 --- on screen:
 (no change)
 ```
@@ -864,7 +864,7 @@ status bar message: $(check) Draft saved on Gerrit, visible only to you: your ne
 
 ```
 terminal "ger": runs `ger edit <sha>`
-status bar message: $(terminal) ger edit runs in the ger terminal: once the rebase stops at "Extract command routing", amend it, then git rebase --continue
+status bar message: $(terminal) ger edit runs in the ger terminal: once the rebase stops at "Extract command routing", amend it, then ger rebase --continue
 --- on screen:
 (no change)
 ```

@@ -40,12 +40,14 @@ from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.rebase_next_step import attention_stop_hint, rebase_refusal
 from gerrit_workflow_tools.core.rebase_state import RebaseAction, rebase_in_progress, unmerged_paths
+from gerrit_workflow_tools.core.review_checkout import staged_review_refusal
 from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import merge_base_with_target
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.rebase_run import go_on_with_rebase, require_history_rewrite, run_interactive_rebase
 from gerrit_workflow_tools.render.status_fmt import attention_text
+from gerrit_workflow_tools.render.wrap import say
 from gerrit_workflow_tools.reword_run import message_from_editor, reword
 from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
@@ -210,7 +212,7 @@ def _resolve_target(
         print(note, file=sys.stderr)
     # Said before the editor opens: the walk chose this commit, not the user.
     why = attention_text(target) or "needs edit attention"
-    print(f"{_VERBS[action]} {target.short_sha} {target.summary} ({_WALK[mode]}: {why})", file=sys.stderr)
+    say(f"{_VERBS[action]} {target.short_sha} {target.summary} ({_WALK[mode]}: {why})")
     return target.sha, target.change_id, mode, target
 
 
@@ -254,6 +256,8 @@ def _run_interactive_stack_rebase(
     run = init_cli_runtime(args, gerrit=gerrit)
     cwd, settings = run.cwd, run.settings
     _validate_targeting_args(p, args)
+    if refusal := staged_review_refusal(run.worktree.repository_dir, cwd):
+        raise UsageError(refusal)
 
     branch = run.repo.working_branch
 
@@ -329,7 +333,7 @@ def _run_interactive_stack_rebase(
     if cursor_change_id and branch is not None and (returncode == 0 or rebase_in_progress(cwd)):
         write_branch_cursor(cwd, branch, cursor_change_id, action=cursor_action, sha=full)
     if returncode == 0 and rebase_in_progress(cwd) and row and (hint := attention_stop_hint(row.attention_reasons)):
-        print(hint, file=sys.stderr)
+        say(hint)
     walked = args.next_attention or args.first_attention_commit
     moved = default_action == "edit" and walked and returncode == 0
     if moved and settings.show_after_edit:

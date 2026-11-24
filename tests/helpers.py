@@ -60,3 +60,21 @@ def in_branch_history(repo: Path, sha: str, branch: str | None = None) -> None:
     tip = git_out("rev-parse", ref, cwd=repo)
     git("update-ref", "-m", "test: pushed from here", ref, sha, cwd=repo)
     git("update-ref", "-m", "test: amended since", ref, tip, cwd=repo)
+
+
+def plain_git(cmd: object) -> list[str]:
+    """A git command line without its ``-c key=value`` options, as a test asks what ger ran
+    (``git rebase -i base``); empty for anything that is not a list of strings."""
+    if not isinstance(cmd, (list, tuple)):
+        return []
+    args = [str(arg) for arg in cmd]
+    out: list[str] = []
+    skip = False
+    for arg in args:
+        if skip:
+            skip = False
+        elif arg == "-c" and out == ["git"]:
+            skip = True
+        else:
+            out.append(arg)
+    return out

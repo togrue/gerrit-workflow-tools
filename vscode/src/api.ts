@@ -58,6 +58,8 @@ export interface Member {
   verified: number | null;
   code_review: number | null;
   comments_unresolved: number;
+  /** Of `comments_unresolved`, the chains whose last published comment is yours: they wait on the other side. */
+  comments_awaiting_reply?: number;
   attention_reasons: string[];
   severity: Severity;
   url: string | null;
@@ -82,6 +84,7 @@ export interface Chain {
   verified: number | null;
   code_review: number | null;
   comments_unresolved: number;
+  comments_awaiting_reply?: number;
   attention_reasons: string[];
   severity: Severity;
   partial_chain: boolean;
@@ -158,6 +161,8 @@ export interface CommitStatus {
   verified: number | null;
   code_review: number | null;
   comments_unresolved: number;
+  /** Of `comments_unresolved`, the chains whose last published comment is yours: they wait on the other side. */
+  comments_awaiting_reply?: number;
   ci_failures: string[];
   ci_links: CiLink[];
   gerrit_url: string | null;
@@ -343,6 +348,8 @@ export interface Comment {
   url: string | null;
 }
 
+export type ChainTurn = "yours" | "draft" | "theirs";
+
 export interface CommentChain {
   root_id: string;
   path: string;
@@ -351,6 +358,8 @@ export interface CommentChain {
   url: string | null;
   resolved: boolean;
   resolved_after_publish: boolean;
+  /** Whose turn it is, core's verdict: somebody else spoke last (`yours`), and your answer is a draft (`draft`); your published comment is the last word (`theirs`). Null for a local chain. */
+  turn?: ChainTurn | null;
   outdated: boolean;
   /** On hold: you keep this chain for yourself, the agent runbook leaves it alone. */
   held: boolean;

@@ -31,7 +31,7 @@ from gerrit_workflow_tools.render.style import (
     color_text,
     visible_len,
 )
-from gerrit_workflow_tools.render.wrap import wrap_hanging
+from gerrit_workflow_tools.render.wrap import note_lines
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 
@@ -66,7 +66,7 @@ def summary_line(overview: StackOverview, *, width: int | None = None) -> str:
     commits = overview.view.commits
     merged = sum(1 for c in commits if c.patchset_status in _MERGED)
     abandoned = sum(1 for c in commits if c.abandoned)
-    commented = sum(1 for c in commits if c.comments_unresolved > 0)
+    commented = sum(1 for c in commits if Attention.UNRESOLVED_COMMENTS in c.attention_reasons)
     counts = (
         (
             sum(1 for c in commits if c.pushed and not c.abandoned and c.patchset_status not in _MERGED),
@@ -79,6 +79,7 @@ def summary_line(overview: StackOverview, *, width: int | None = None) -> str:
         (abandoned, "abandoned", ANSI_RED),
         (sum(1 for c in commits if c.pushed and Attention.CI_FAILED in c.attention_reasons), "failed CI", ANSI_RED),
         (commented, f"{plural(commented, 'commit')} with comments", ANSI_YELLOW),
+        (sum(1 for c in commits if Attention.AWAITING_REPLY in c.attention_reasons), "awaiting reply", ANSI_DIM),
         (sum(1 for c in commits if Attention.WIP in c.attention_reasons), "WIP", ANSI_YELLOW),
     )
     stats = [_stat(count, label, color) for count, label, color in counts if count]
@@ -102,7 +103,7 @@ def footer_lines(lines: list[str], *, width: int | None) -> list[str]:
     """The ``next:`` and other closing lines, dim; wrapped at word boundaries to fit *width*."""
     out: list[str] = []
     for line in lines:
-        parts = wrap_hanging(line, width, indent=6 if line.startswith("next: ") else 2) if width else [line]
+        parts = note_lines(line, width)
         out.extend(color_text(part, ANSI_DIM) for part in parts)
     return out
 
@@ -124,6 +125,9 @@ def _step_text(step: NextStep, moved: UpstreamMoved | None) -> str:
         case NextStepKind.DIVERGED:
             how = f"merge Gerrit's patchset into yours with `ger checkout change:{n} --update`"
             return f"next: {sha} diverged from Gerrit: {how}"
+        case NextStepKind.OUTDATED if step.whole_stack:
+            what, them = (f"{sha} has", "it") if count == 1 else (f"{count} commits have", "them")
+            return f"next: {what} a newer patchset on Gerrit: take {them} with `ger checkout --update`"
         case NextStepKind.OUTDATED:
             return f"next: {sha} has a newer patchset on Gerrit: take it with `ger checkout change:{n} --update`"
         case NextStepKind.UPLOAD:

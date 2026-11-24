@@ -6,13 +6,15 @@ ages and names. On a terminal the subject is cut to fit the width; piped, nothin
 
 from __future__ import annotations
 
+import sys
+
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.changeish import change_label
 from gerrit_workflow_tools.core.inbox import OUTGOING, TO_REVIEW, InboxSection, needs_author, section_summary
 from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain, format_age
 from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.commit_row import fmt_code_review, fmt_comments, fmt_verified
-from gerrit_workflow_tools.render.status_fmt import SECTION_HEADINGS, member_hints
+from gerrit_workflow_tools.render.status_fmt import AUTHOR, REVIEWER, SECTION_HEADINGS, member_hints
 from gerrit_workflow_tools.render.style import (
     ANSI_BOLD,
     ANSI_CYAN,
@@ -24,9 +26,11 @@ from gerrit_workflow_tools.render.style import (
     color_stat,
     color_text,
     format_link,
+    is_hyperlink_enabled,
     terminal_columns,
     visible_len,
 )
+from gerrit_workflow_tools.render.wrap import say
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 
@@ -36,19 +40,24 @@ _MIN_SUBJECT = 12
 """Narrower than this, a cut subject says too little: the row wraps instead."""
 
 
-def _fmt_change_number(number: int) -> str:
-    """Identity of a chain or member, as every changeish argument takes it back; ``ger log``'s SHA cyan."""
-    return color_short_sha(change_label(number))
+def _fmt_change_number(number: int, url: str | None) -> str:
+    """Identity of a chain or member, as every changeish argument takes it back; ``ger log``'s SHA cyan.
+
+    With terminal hyperlinks on, the label opens the change: no URL line is needed below the row.
+    """
+    label = color_short_sha(change_label(number))
+    return format_link(url, label=label) if url and is_hyperlink_enabled() else label
 
 
-def _fmt_votes(verified: int | None, code_review: int | None, comments: int) -> str:
+def _fmt_votes(item: ReviewChain | ChainMember) -> str:
     """Verified / Code-Review / comments tokens — same palette as ``ger log``."""
-    return f"{fmt_verified(verified)} {fmt_code_review(code_review)} {fmt_comments(comments)}"
+    comments = fmt_comments(item.comments_unresolved, item.comments_awaiting_reply)
+    return f"{fmt_verified(item.verified)} {fmt_code_review(item.code_review)} {comments}"
 
 
 def _fmt_chain_votes(chain: ReviewChain) -> str:
     """The chain's votes; over several changes, the worst of each, said so (not the top's own)."""
-    votes = _fmt_votes(chain.verified, chain.code_review, chain.comments_unresolved)
+    votes = _fmt_votes(chain)
     return f"{color_text('worst', ANSI_DIM)} {votes}" if chain.depth > 1 else votes
 
 
@@ -68,9 +77,9 @@ def _fmt_owner(name: str) -> str:
 _MEMBER_HINT_COLOR = {Attention.CI_FAILED: ANSI_RED}
 
 
-def _attention_note(member: ChainMember) -> str:
+def _attention_note(member: ChainMember, *, outgoing: bool) -> str:
     """The most urgent of :func:`member_hints`, coloured as ``ger log``'s trailing hints."""
-    hints = member_hints(member.attention_reasons, member.comments_unresolved)
+    hints = member_hints(member, side=REVIEWER if outgoing else AUTHOR)
     return color_text(hints[0][1], _MEMBER_HINT_COLOR.get(hints[0][0], ANSI_YELLOW)) if hints else ""
 
 
@@ -118,7 +127,7 @@ def _subject(text: str, *, used: int, columns: int | None, highlighter: SummaryH
 
 def _chain_cells(chain: ReviewChain, *, outgoing: bool) -> list[str]:
     """The aligned part of a chain's row. An outgoing chain is yours: no waiting clock and no owner."""
-    cells = [_fmt_change_number(chain.top.number), _fmt_size(chain.depth), _fmt_chain_votes(chain)]
+    cells = [_fmt_change_number(chain.top.number, chain.url), _fmt_size(chain.depth), _fmt_chain_votes(chain)]
     if outgoing:
         return [*cells, _fmt_age("active", chain.wait_age_seconds, ANSI_DIM)]
     waiting = _fmt_age("waiting", chain.unreviewed_age_seconds, ANSI_YELLOW)
@@ -129,7 +138,7 @@ def _chain_cells(chain: ReviewChain, *, outgoing: bool) -> list[str]:
 
 
 def _member_lines(
-    chain: ReviewChain, *, verbose: bool, columns: int | None, highlighter: SummaryHighlighter
+    chain: ReviewChain, *, verbose: bool, outgoing: bool, columns: int | None, highlighter: SummaryHighlighter
 ) -> list[str]:
     """The members below a chain's row: those with attention, every one with *verbose*."""
     lines: list[str] = []
@@ -137,11 +146,8 @@ def _member_lines(
         # A single change's own row says it all; a chain's row says the worst, so the member says which.
         if chain.depth == 1 or not (verbose or member.attention_reasons):
             continue
-        head = (
-            f"{color_text('  └ ', ANSI_DIM)}{_fmt_change_number(member.number)}  "
-            f"{_fmt_votes(member.verified, member.code_review, member.comments_unresolved)}  "
-        )
-        note = _attention_note(member)
+        head = f"{color_text('  └ ', ANSI_DIM)}{_fmt_change_number(member.number, member.url)}  {_fmt_votes(member)}  "
+        note = _attention_note(member, outgoing=outgoing)
         if note:
             lines.append(f"{head}{color_text('# ', ANSI_DIM)}{note}")
             continue
@@ -213,9 +219,9 @@ def _render_section(
         )
         used = visible_len(head) + visible_len(marks)
         print(head + _subject(chain.top.subject, used=used, columns=columns, highlighter=highlighter) + marks)
-        if show_url and chain.url:
-            print(f"{_INDENT}{color_text(format_link(chain.url), ANSI_DIM)}")
-        for line in _member_lines(chain, verbose=verbose, columns=columns, highlighter=highlighter):
+        if show_url and chain.url and not is_hyperlink_enabled():  # else the row's cN opens it
+            print(f"{_INDENT}{color_text(chain.url, ANSI_DIM)}")
+        for line in _member_lines(chain, verbose=verbose, outgoing=outgoing, columns=columns, highlighter=highlighter):
             print(line)
     if folded := len(chains) - len(shown):
         lead = "+ " if shown else ""
@@ -224,7 +230,7 @@ def _render_section(
     print()
     print(_summary(chains, outgoing=outgoing))
     if not outgoing:
-        print(color_text(_review_hint(chains[0]), ANSI_DIM))
+        say(_review_hint(chains[0]), file=sys.stdout, dim=True)
 
 
 def _review_hint(chain: ReviewChain) -> str:

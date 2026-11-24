@@ -13,16 +13,20 @@ from gerrit_workflow_tools.cli_logging import configure_logging
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_editor import resolve_git_editor, run_git_editor
 from gerrit_workflow_tools.core.git_run import GitError
+from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit, read_commit_rows
 from gerrit_workflow_tools.core.upstream_moved import merged_with_same_code
+from gerrit_workflow_tools.render.stack_log import READY_BOUNDARY_MARKER
 from gerrit_workflow_tools.render.status_fmt import (
-    attention_text as _attention_text,
     code_review_token as _fmt_cr,
     comments_token as _fmt_comments,
+    hints_text,
+    legend_line,
     patchset_token as _fmt_patchset,
     verified_token as _fmt_verified,
 )
@@ -64,7 +68,7 @@ def _enriched_subject(commit: LogCommit) -> str:
         cr = "    "
         comments = "   "
 
-    attention = _attention_text(commit)
+    attention = hints_text(commit)  # the hints of the commit's `ger log` row
     attention_suffix = f"  # {attention}" if attention else ""
 
     return f"# {subj}  {ps} {verified} {cr} {comments}{attention_suffix}"
@@ -158,6 +162,7 @@ def _enrich_todo(text: str, run: RunContext) -> str:  # pylint: disable=too-many
         "yes",
     )
 
+    held_back = _held_back(run, commit_inputs)
     # Rewrite lines.
     out: list[str] = []
     for line in lines:
@@ -177,11 +182,39 @@ def _enrich_todo(text: str, run: RunContext) -> str:  # pylint: disable=too-many
                         action = "drop"
                     elif action == "p":
                         action = "d"
+                if log_commit.sha in held_back and not any(READY_BOUNDARY_MARKER in done for done in out):
+                    out.append(f"# {READY_BOUNDARY_MARKER}\n")
                 out.append(f"{action} {short_sha} {_enriched_subject(log_commit)}{newline}")
                 continue
         out.append(line)
 
-    return "".join(out)
+    return _with_legend(out, commits)
+
+
+def _held_back(run: RunContext, rows: list[Commit]) -> frozenset[str]:
+    """The commits at and above the ready boundary, as ``ger log`` and ``ger push`` find it."""
+    settings = run.settings
+    try:
+        project = run.repo.shown_stack.project
+    except ChangeResolutionError:  # no stack context: no boundary to mark
+        return frozenset()
+    return blocked_shas_for_stack(
+        run.repo.root,
+        project=project,
+        commits=rows,
+        stop_pattern=settings.stop_pattern,
+        settings=settings,
+        web_base=settings.gerrit_web_url,
+    )
+
+
+def _with_legend(lines: list[str], commits: list[LogCommit]) -> str:
+    """*lines* with one commented line saying what the status tokens mean, right below the commands."""
+    last = max((i for i, line in enumerate(lines) if line.strip() and not line.lstrip().startswith("#")), default=-1)
+    legend = f"# {legend_line(commits)}\n"
+    if last >= 0 and not lines[last].endswith("\n"):
+        lines[last] += "\n"
+    return "".join([*lines[: last + 1], legend, *lines[last + 1 :]])
 
 
 # ---------------------------------------------------------------------------

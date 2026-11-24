@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import io
 import os
 import shutil
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -119,10 +121,38 @@ def test_a_stop_ger_rebase_ran_into_names_the_ger_way_on(stack_repo: Path, monke
 
     assert code == 0, err
     assert rebase_in_progress(stack_repo)
-    assert err.splitlines()[-2:] == [
+    # git's own instructions ("You can amend the commit now, …", "Stopped at …") are not shown beside ger's.
+    assert err.splitlines() == [
         f"stopped at {first}",
         "next: amend it (`git commit --amend`), then `ger rebase --continue` to finish",
     ]
+
+
+def test_a_conflict_says_ger_s_way_on_and_none_of_git_s_advice(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """git's hints (`git rebase --continue`, …), its "could not apply" and its progress go: ger says it once."""
+    _move_upstream_over_c_txt(stack_repo)
+    monkeypatch.setenv("GREBASE_EDITOR", "true")
+    stopped = git_out("log", "-1", "--format=%h %s", "HEAD~1", cwd=stack_repo)
+
+    code, err = _rebase(stack_repo, ["--onto-remote"], monkeypatch)
+
+    assert code != 0 and rebase_in_progress(stack_repo), err
+    # Only ger's lines: git's merge says what conflicts on stdout, which stays as it is.
+    assert err.splitlines() == [
+        f"stopped at {stopped} (conflict)",
+        "next: resolve the conflicts in c.txt, `git add` them, then `ger rebase --continue` to finish; "
+        "`ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started",
+    ]
+
+    # Going on from a stop says the same, with git's progress gone.
+    (stack_repo / "c.txt").write_text("resolved\n", encoding="utf-8")
+    git("add", "c.txt", cwd=stack_repo)
+    code, err = _rebase(stack_repo, ["--continue"], monkeypatch)
+    assert code == 0, err
+    assert "Rebasing (" not in err and "Successfully rebased" not in err
+    assert err.splitlines()[0].startswith("rebase finished: ")
 
 
 def test_without_a_rebase_there_is_nothing_to_go_on_with(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -517,3 +547,26 @@ def test_ger_rebase_refuses_exactly_what_ger_serve_leaves_out_and_says_why_alike
     assert isinstance(actions, list)
     assert sorted(refused) == sorted(a.value for a in RebaseAction if a.value not in actions)
     assert refused == served["refused"]
+
+
+class _Terminal(io.StringIO):
+    """stderr as a terminal: ``say`` takes its width from ``COLUMNS``."""
+
+    def isatty(self) -> bool:
+        return True
+
+
+def test_on_a_terminal_the_next_step_wraps_between_words(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """At 60 columns no line is longer, none breaks inside a word, and piped it is one line (above)."""
+    _move_upstream_over_c_txt(stack_repo)
+    monkeypatch.setenv("GREBASE_EDITOR", "true")
+    monkeypatch.setenv("COLUMNS", "60")
+    monkeypatch.chdir(stack_repo)
+    terminal = _Terminal()
+    monkeypatch.setattr(sys, "stderr", terminal)
+    rebase_main(["--onto-remote"], gerrit=ChangeStore({}))
+    lines = terminal.getvalue().splitlines()
+    assert lines and all(len(line) <= 60 for line in lines), lines
+    said = " ".join(line.strip() for line in lines)
+    assert "`ger rebase --continue` to finish" in said and "`ger rebase --abort` goes back" in said
+    assert [line[:6] for line in lines[2:]] == ["      "] * len(lines[2:]), "the rest indented under next:'s text"

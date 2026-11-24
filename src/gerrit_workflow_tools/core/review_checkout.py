@@ -11,6 +11,7 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
 
+from gerrit_workflow_tools.core.changeish import change_label
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_patchset import GerritPatchset, fetch_patchset
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none, git, git_out
@@ -122,6 +123,21 @@ def staged_review_branch(repo_dir: Path | None, cwd: Path | str | None) -> str |
     p = git("rev-parse", "HEAD", f"{state.commit}^", f"refs/heads/{state.branch}", cwd=cwd, check=False)
     shas = p.stdout.split() if p.returncode == 0 else []
     return state.branch if len(shas) == 3 and shas[0] == shas[1] and shas[2] == state.commit else None
+
+
+def staged_review_refusal(repo_dir: Path | None, cwd: Path | str | None) -> str | None:
+    """Why a command that rewrites or pushes the working branch must not run here, or ``None``.
+
+    While a review is staged, the working branch is the review's ``change-<number>``
+    (:func:`staged_review_branch`): somebody else's change. ``ger fix``, ``ger edit``, ``ger reword``,
+    ``ger rebase`` and ``ger push`` refuse with this one wording. Costs no git call when nothing is
+    being reviewed.
+    """
+    if staged_review_branch(repo_dir, cwd) is None:
+        return None
+    state = _read_state(repo_dir.joinpath(*_STATE_FILE) if repo_dir is not None else None)
+    number = change_label(state.number) if state else "a change"
+    return f"a staged review of {number} is underway here: `ger review --unstage` to work on it, or `ger review --done`"
 
 
 def save_state(state: ReviewState) -> None:

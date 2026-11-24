@@ -16,7 +16,7 @@ from tests.cli_gerrit_mocks import (
     build_details_by_change_id,
     stack_rows_mb_to_head,
 )
-from tests.helpers import write_rebase_head
+from tests.helpers import plain_git, write_rebase_head
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +241,27 @@ def test_enrich_todo_annotates_with_gerrit_status(stack_repo: Path):
     assert "# Rebase a1b2c3" in result
 
 
+def test_the_todo_says_what_ger_log_says_with_a_legend_and_the_ready_boundary(stack_repo: Path, monkeypatch) -> None:
+    """Each line's hints are its `ger log` row's; one comment line says what the tokens mean."""
+    from gerrit_workflow_tools.cli_log import main as log_main
+    from gerrit_workflow_tools.rebase_enricher import _enrich_todo
+    from tests.conftest import run_cli
+
+    git("config", "ger.webUrl", "https://g.example", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    store = _store(build_details_by_change_id(rows, per_index_overrides=[{}, {"cr": -2, "submittable": False}]))
+    result = _enrich_todo(_make_todo(rows), RunContext.open(stack_repo, gerrit=store))
+    _code, log_out, _err = run_cli(stack_repo, log_main, ["--color", "never"], monkeypatch, gerrit=store)
+    in_log = {line.split()[0]: line.rsplit("  # ", 1)[1] for line in log_out.splitlines() if "  # " in line}
+    in_todo = {line.split()[1]: line.rsplit("  # ", 1)[1] for line in result.splitlines() if line.startswith("pick ")}
+    assert in_todo == in_log and "review issues" in in_todo[rows[1].short_sha]
+    lines = result.splitlines()
+    # `test! temporary experiment` is the ready boundary, as in `ger log`.
+    assert lines[2] == "# ---- ready boundary: `ger push` sends the commits above ----"
+    assert lines[3].startswith(f"pick {rows[2].short_sha} ")
+    assert lines[len(rows) + 1] == "# p pushed · v/cr Verified/Code-Review vote (? none yet) · com unresolved comments"
+
+
 def test_enrich_todo_unresolved_comments_shown(stack_repo: Path):
     from gerrit_workflow_tools.rebase_enricher import _enrich_todo
 
@@ -441,8 +462,8 @@ def _make_rebase_interceptor(captured: dict):
     """Return a fake subprocess.run that intercepts only ``git rebase -i …``."""
 
     def fake_run(cmd, **kwargs):
-        if isinstance(cmd, (list, tuple)) and list(cmd[:3]) == ["git", "rebase", "-i"]:
-            captured["cmd"] = list(cmd)
+        if plain_git(cmd)[:3] == ["git", "rebase", "-i"]:
+            captured["cmd"] = plain_git(cmd)
             captured["env"] = kwargs.get("env", {})
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
         return _real_subprocess_run(cmd, **kwargs)

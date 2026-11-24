@@ -9,6 +9,7 @@ from gerrit_workflow_tools.core.changeish import change_label
 from gerrit_workflow_tools.core.comment_chains import CommentSelection
 from gerrit_workflow_tools.core.gerrit.rest import printable_path
 from gerrit_workflow_tools.core.gerrit_change_status import (
+    ChainTurn,
     CommentChain,
     ContextLine,
     InlineComment,
@@ -108,12 +109,20 @@ def anchor_suffix(chain: CommentChain) -> str:
     return f" (moved from {was})"
 
 
-def chain_heading(chain: CommentChain) -> str:
-    """Location, plus where a local comment's anchor moved from, and ``(resolved)`` for a closed chain."""
-    loc = chain_location(chain) + anchor_suffix(chain)
+TURN_WORDS = {ChainTurn.YOURS: "your turn", ChainTurn.DRAFT: "draft to publish", ChainTurn.THEIRS: "their turn"}
+"""Whose turn an unresolved chain is (:attr:`CommentChain.turn`), in words."""
+
+
+def chain_state(chain: CommentChain) -> str:
+    """`` (resolved)`` for a closed chain; whose turn an open one is (`` (their turn)``); else nothing."""
     if chain.resolved:
-        return f"{loc} (resolved)"
-    return loc
+        return " (resolved)"
+    return f" ({TURN_WORDS[chain.turn]})" if chain.turn else ""
+
+
+def chain_heading(chain: CommentChain) -> str:
+    """Location, plus where a local comment's anchor moved from, and its state (:func:`chain_state`)."""
+    return chain_location(chain) + anchor_suffix(chain) + chain_state(chain)
 
 
 def chain_url(chain: CommentChain, gerrit_url: str | None) -> str | None:

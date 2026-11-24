@@ -9,6 +9,7 @@ const WORDS: Record<string, string> = {
   "unsquashed-fixup": "unsquashed fixup commit",
   "gerrit-unknown": "Gerrit state unknown",
   "unresolved-comments": "unresolved comments",
+  "awaiting-reply": "comments wait on a reply",
   "review-issues": "negative vote",
   "not-pushed": "not pushed",
   "ahead-of-gerrit": "local changes not pushed",
@@ -59,13 +60,13 @@ const REBASE_ITEM: Record<RebaseStop, (what: string) => string> = {
   paused: (what) => `Rebase paused at ${what}`,
 };
 
-/** What to do next, by why it stopped; `unmerged` names the conflicted files. */
+/** What to do next, by why it stopped; `unmerged` names the conflicted files. The ways on are Local stack's buttons (`REBASE_ACTIONS`), never raw git. */
 const REBASE_NEXT: Record<RebaseStop, (unmerged: string) => string> = {
-  edit: () => "Change the commit and amend it (git commit --amend), then git rebase --continue.",
-  split: () => "Commit what is left of the commit you split, then git rebase --continue.",
-  conflict: (unmerged) => `Resolve the conflicts${unmerged} and git add the files, then git rebase --continue. Or go back with git rebase --abort.`,
-  resolved: () => "The conflicts are resolved: git rebase --continue commits the commit and goes on.",
-  paused: () => "When you are done here, git rebase --continue.",
+  edit: () => "Change the commit and amend it (git commit --amend), then Continue in Local stack.",
+  split: () => "Commit what is left of the commit you split, then Continue in Local stack.",
+  conflict: (unmerged) => `Resolve the conflicts${unmerged} and git add the files, then Continue in Local stack. Or go back with Abort.`,
+  resolved: () => "The conflicts are resolved: Continue in Local stack commits the commit and goes on.",
+  paused: () => "When you are done here, Continue in Local stack.",
 };
 
 /** A subject cut short enough for the status bar. */
@@ -92,7 +93,7 @@ export function rebaseItem(headline: RebaseHeadline, rebase?: Rebase | null): { 
     ? `${sentence(refused)}.`
     : stop
       ? REBASE_NEXT[stop](where)
-      : "Finish it with git rebase --continue, or go back with git rebase --abort.";
+      : "Finish it with Continue in Local stack, or go back with Abort.";
   return { text, next };
 }
 

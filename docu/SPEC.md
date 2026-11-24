@@ -47,6 +47,13 @@ Every command that prints something worth parsing takes one shared group, `cli_a
 
 Under `--ai` colour and hyperlinks are off on stderr too (notes, the CI download meter), Markdown view or not. Neither `--json` nor `--ai` output ever prompts, terminal or not (`cli_common.may_prompt`): a question takes its non-interactive answer, the same as without a terminal (`ger review` checks out in a worktree, `ger fix` stages nothing, `ger reply --publish` and `ger review --vote` need `-y`, `ger log` reports a missing upstream instead of asking for one).
 
+**Closing lines wrap between words.** Every `next:` line, note and closing line a command prints
+(`next: …`, `stopped at …`, `rebase finished: …`, `ger checkout`'s result line, `ger inbox`'s and
+`ger review`'s `next:`) goes through one helper, `render/wrap.say`: on a terminal it breaks between
+words to the width of the terminal it writes to, never inside a `` `command` `` nor inside one step
+of a `` · ``-separated list, and indents the rest under the text after `next: ` (two spaces for any
+other line). Piped or redirected, each stays one line.
+
 ### A missing upstream
 
 Every command that needs the working branch's upstream asks for it on a terminal, rather than failing, whichever path led there: the **local stack** (`ger log`, `show --stack`), or the stack's **target branch** for a changeish such as `HEAD` (`ger show`, `ci`, `comment`, `fix`, `reply`). It asks once per branch, offering what the branch was created from (else the nearest branch of the Gerrit remote), sets the answer with `git branch --set-upstream-to`, and runs the command again from the start. `cli_common.run_cli_command` does this for every command, on a `core.upstream.NeedsUpstreamError`. Declining exits `1` (`REFUSED`). It never asks under `--json` or `--ai`, under `--dry-run` (which writes nothing), under `ger push -y`, or without a terminal: then the command reports the missing upstream and exits as before (`6`, or `3` when the target branch could not be found), naming the command that sets what the prompt would have offered: `git branch --set-upstream-to=origin/main feature  # the branch was created from it` (`upstream_interactive.with_suggested_upstream`; with nothing to suggest, a `<remote>/<branch>` example). The prompt itself has the guess prefilled and says so: `Enter accepts origin/main (the branch was created from it), Ctrl-C aborts; TAB completes other remote branches.` A command that can do without the upstream (`ger show 12345`) never asks.

@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 import { CommentChain, Rebase, RebaseAction, StackCommit } from "../src/api";
 import { ChangeState, READ_ONLY, changeHeading, changeLines, changeVm } from "../src/changeRows";
-import { attentionIcon } from "../src/format";
+import { attentionIcon, reasonWords } from "../src/format";
 import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, rebaseNotNowFresh, reviewerWords, skipQuestion, stackLines, stoppedAt, sync, stackVm, stackWhere } from "../src/stackRows";
 import { waitingFor } from "../src/state";
 import { attended, chain, comment, commit, content, diff, finding, never, patchsets, shown, stack, state } from "./fixtures";
@@ -503,6 +503,12 @@ test("a change wears the comment icon exactly when the Change view lists an open
     ["open comment and a negative vote", { code_review: -1, comments_unresolved: 1, attention_reasons: ["review-issues", "unresolved-comments"] }, [published(3)]],
     // A patchset-level comment is listed as "whole change", and it is open all the same.
     ["open patchset-level comment", { comments_unresolved: 1, attention_reasons: ["awaiting-review", "unresolved-comments"] }, [published(3, { path: "/PATCHSET_LEVEL", line: null })]],
+    // Your published reply is the last word: open, but it waits on the reviewer, not on you.
+    [
+      "your reply is the last word",
+      { comments_unresolved: 1, comments_awaiting_reply: 1, attention_reasons: ["awaiting-review", "awaiting-reply"] },
+      [published(3, { turn: "theirs", comments: [comment("Rename this.", { patch_set: 3 }), comment("Why?", { patch_set: 3, author: "you" })] })],
+    ],
     // Your unpublished draft is yours to finish, not a comment waiting on you; Gerrit does not count it.
     [
       "only your draft",
@@ -512,10 +518,22 @@ test("a change wears the comment icon exactly when the Change view lists an open
   ];
   for (const [name, extra, chains] of cases) {
     const vm = changeVm(state({ shown: shown(extra), chains }));
-    const listsOpen = (vm.comments?.threads ?? []).some((row) => row.open);
+    const listsOpen = (vm.comments?.threads ?? []).some((row) => row.open && !row.waiting);
     assert.equal(vm.head?.icon === "comment-unresolved", listsOpen, `${name}: Change view head`);
     // Review chains draws a change and its chain from the same attention reasons.
     assert.equal(attentionIcon(attended(extra.attention_reasons ?? [])).icon === "comment-unresolved", listsOpen, `${name}: Review chains row`);
     assert.equal(attentionIcon(attended(extra.attention_reasons ?? [])).icon, vm.head?.icon, `${name}: both views draw the same icon`);
   }
+});
+
+test("a comment chain whose last published word is yours waits on a reply: a plain bubble, not a call to act", () => {
+  const theirs = chain("asked", [comment("Rename this."), comment("Why?", { author: "you" })], { turn: "theirs" });
+  const [row] = changeVm(state({ chains: [theirs] })).comments?.threads ?? [];
+  assert.deepEqual([row.icon, row.tone, row.open, row.waiting, row.notes[0]], ["comment", "dim", true, true, "waits on a reply"]);
+  const [mine] = changeVm(state({ chains: [{ ...theirs, turn: "yours" }] })).comments?.threads ?? [];
+  assert.deepEqual([mine.icon, mine.waiting], ["comment-unresolved", false]);
+  const badge = (extra: Partial<StackCommit>) => badges(shown(extra))[0];
+  assert.deepEqual([badge({ comments_unresolved: 2, comments_awaiting_reply: 2 })?.icon, badge({ comments_unresolved: 2, comments_awaiting_reply: 2 })?.title], ["comment", "2 comments wait on a reply"]);
+  assert.deepEqual([badge({ comments_unresolved: 2, comments_awaiting_reply: 1 })?.icon, badge({ comments_unresolved: 2, comments_awaiting_reply: 1 })?.title], ["comment-unresolved", "1 of 2 comments to answer"]);
+  assert.equal(reasonWords(["awaiting-reply"]), "comments wait on a reply");
 });

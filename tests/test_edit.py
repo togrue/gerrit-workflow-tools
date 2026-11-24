@@ -22,7 +22,7 @@ from gerrit_workflow_tools.core.run_context import RunContext
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
-from tests.helpers import write_rebase_head
+from tests.helpers import plain_git, write_rebase_head
 
 
 def _configure_repo(repo: Path) -> None:
@@ -77,7 +77,7 @@ def _fake_rebase_capture(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     real_run = subprocess.run
 
     def fake_run(cmd, **kwargs):
-        if isinstance(cmd, list) and len(cmd) >= 2 and cmd[0] == "git" and cmd[1] == "rebase":
+        if plain_git(cmd)[:2] == ["git", "rebase"]:
             captured["short_sha"] = kwargs["env"]["GER_EDIT_SHORT_SHA"]
             return subprocess.CompletedProcess(cmd, 0)
         return real_run(cmd, **kwargs)
@@ -168,7 +168,7 @@ def test_cursor_stays_put_when_the_rebase_never_starts(web_stack_repo: Path, mon
     real_run = subprocess.run
 
     def failing_rebase(cmd, **kwargs):
-        if isinstance(cmd, list) and cmd[:2] == ["git", "rebase"]:
+        if plain_git(cmd)[:2] == ["git", "rebase"]:
             return subprocess.CompletedProcess(cmd, 128)
         return real_run(cmd, **kwargs)
 
@@ -381,10 +381,10 @@ def test_edit_next_does_not_walk_when_continue_fails(stack_repo: Path, monkeypat
     started: list[list[str]] = []
 
     def fake_run(cmd, **kwargs):
-        if isinstance(cmd, list) and cmd[:3] == ["git", "rebase", "--continue"]:
+        if plain_git(cmd)[:3] == ["git", "rebase", "--continue"]:
             return subprocess.CompletedProcess(cmd, 1)
-        if isinstance(cmd, list) and cmd[:2] == ["git", "rebase"]:
-            started.append(list(cmd))
+        if plain_git(cmd)[:2] == ["git", "rebase"]:
+            started.append(plain_git(cmd))
             return subprocess.CompletedProcess(cmd, 0)
         return real_run(cmd, **kwargs)
 
@@ -418,10 +418,10 @@ def test_edit_next_stops_when_continue_leaves_the_rebase_running(
     started: list[list[str]] = []
 
     def fake_run(cmd, **kwargs):
-        if isinstance(cmd, list) and cmd[:3] == ["git", "rebase", "--continue"]:
+        if plain_git(cmd)[:3] == ["git", "rebase", "--continue"]:
             return subprocess.CompletedProcess(cmd, 0)
-        if isinstance(cmd, list) and cmd[:2] == ["git", "rebase"]:
-            started.append(list(cmd))
+        if plain_git(cmd)[:2] == ["git", "rebase"]:
+            started.append(plain_git(cmd))
             return subprocess.CompletedProcess(cmd, 0)
         return real_run(cmd, **kwargs)
 

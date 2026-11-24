@@ -28,6 +28,7 @@ from gerrit_workflow_tools.core.gerrit_setup import (
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import Refusal, UsageError
+from gerrit_workflow_tools.render.wrap import say
 
 
 _WHAT = {
@@ -215,7 +216,7 @@ def _run_setup(args: argparse.Namespace, run: RunContext, gerrit: GerritRest | N
         break
     print(_save(values, global_config=global_config, cwd=cwd), file=sys.stderr)
     _hook(checked, skip=args.no_hook)
-    print("next: `ger log` shows your stack and its reviews; `ger inbox` the changes waiting for you", file=sys.stderr)
+    say("next: `ger log` shows your stack and its reviews; `ger inbox` the changes waiting for you")
     return int(ExitCode.OK)
 
 

@@ -8,17 +8,19 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
+from gerrit_workflow_tools.cli_args import (
     add_change_option,
     add_color_args,
+    add_dry_run_arg,
+    add_message_args,
     add_output_format_args,
+    add_patchset_arg,
     add_verbose_and_debug_log_args,
+    add_vote_arg,
+    add_yes_arg,
     changeish_help,
-    init_cli_runtime,
-    may_prompt,
-    run_cli_command,
 )
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, may_prompt, run_cli_command
 from gerrit_workflow_tools.cli_terminal import ask_choice
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.config_write import ConfigWrite, apply_config_write
@@ -41,10 +43,10 @@ from gerrit_workflow_tools.core.review_checkout import (
 from gerrit_workflow_tools.core.review_delta import ReviewDelta, load_review_delta
 from gerrit_workflow_tools.core.review_target import related_chain_numbers
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.core.votes import VOTE_HELP
 from gerrit_workflow_tools.render.comments import drafts_elsewhere
 from gerrit_workflow_tools.render.review_json import review_state_json
 from gerrit_workflow_tools.render.style import shown_path
+from gerrit_workflow_tools.render.wrap import say
 from gerrit_workflow_tools.review_vote import vote
 
 
@@ -57,7 +59,8 @@ def _build_parser() -> argparse.ArgumentParser:
             "[--force]\n"
             "       ger review (--next | --prev) [--stage | --no-stage] [--force]\n"
             "       ger review (--stage | --unstage | --status | --done)\n"
-            "       ger review --vote [LABEL]+N ... [--chain | --change CHANGEISH ...] [-m MSG] [--dry-run] [-y]"
+            "       ger review --vote [LABEL]+N ... [--chain | --change CHANGEISH ...] [-m MSG | -F FILE] [--dry-run] "
+            "[-y]"
         ),
         description=(
             "Check a change out to review it, with its diff staged so every git tool shows what it changed. "
@@ -67,7 +70,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "changeish", nargs="?", metavar="CHANGEISH", help=changeish_help("The change to review", change_only=True)
     )
-    p.add_argument("--patchset", type=int, default=None, metavar="N", help="Review patchset N (default: current).")
+    add_patchset_arg(p)
     p.add_argument(
         "--bottom",
         action="store_true",
@@ -85,36 +88,33 @@ def _build_parser() -> argparse.ArgumentParser:
     where.add_argument("--in-worktree", dest="mode", action="store_const", const="worktree", help="Review worktree.")
     where.add_argument("--in-place", dest="mode", action="store_const", const="branch", help="This checkout.")
     p.add_argument("--force", action="store_true", help="Move a change-<n> branch that has commits of yours.")
-    vote = p.add_argument_group("voting")
-    vote.add_argument(
-        "--vote",
-        action="append",
-        default=None,
-        metavar="VOTE",
-        help=f"{VOTE_HELP} Publishes all your drafts on the change; to publish only some, or to post a "
-        "message without a vote: ger reply --publish.",
+    vote = p.add_argument_group(
+        "voting",
+        "--vote publishes all your drafts on the change with the vote, and -m (or -F) as its message; to publish "
+        "only some, or to post a message without a vote: ger reply --publish.",
     )
+    add_vote_arg(vote)
     add_change_option(vote, "With --vote: vote on this change; repeat for more.", repeatable=True)
     vote.add_argument(
         "--chain",
         action="store_true",
         help="With --vote: vote on every open change of the chain under review, or of the one --change.",
     )
-    vote.add_argument("-m", "--message", action="append", default=None, help="With --vote: a change message.")
-    vote.add_argument("--dry-run", action="store_true", help="With --vote: list what would be sent.")
-    vote.add_argument(
-        "-y", "--yes", action="store_true", help="With --vote: skip the confirmation (GER_ASSUME_YES=1 too)."
-    )
+    add_dry_run_arg(vote, scope="--vote")
+    add_yes_arg(vote, scope="--vote")
+    add_message_args(p)
     add_output_format_args(p)
     add_color_args(p)
-    add_verbose_and_debug_log_args(p, debug_log_help="Log git and Gerrit calls to stderr.")
+    add_verbose_and_debug_log_args(p)
     return p
 
 
 def _check_args(p: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     opens = args.changeish is not None or args.next or args.prev
-    if args.vote is None and (args.change or args.chain or args.message or args.dry_run or args.yes):
-        p.error("--change, --chain, -m, --dry-run and -y belong to --vote")
+    if args.vote is None and (args.change or args.chain or args.message or args.file or args.dry_run or args.yes):
+        p.error("--change, --chain, -m, -F, --dry-run and -y belong to --vote")
+    if args.message is not None and args.file is not None:
+        p.error("give the message with one of -m or -F")
     if args.chain and args.change and len(args.change) > 1:
         p.error("--chain votes on the chain under review, or on the chain of one --change: not of several")
     if args.vote is not None and (opens or args.status or args.done or args.stage is not None):
@@ -170,17 +170,17 @@ def _delta_lines(delta: ReviewDelta) -> list[str]:
 
 
 def next_steps(state: ReviewState, chain: list[int] | None, cwd: Path) -> str:
-    """The commands of the review loop from here: get to the worktree, read, comment, answer, walk, vote."""
+    """The steps of the review loop that fit where you are, two or three: get to the worktree; below
+    the top of a chain, comment and walk on; at the top (or a single change), vote and finish."""
     worktree = Path(state.worktree)
     here = cwd.resolve()
     steps = (
         [] if here == worktree.resolve() or worktree.resolve() in here.parents else [f"cd {shown_path(worktree, cwd)}"]
     )
-    steps += ["ger show", "ger comment PATH:LINE -m …", "ger reply ID -m …"]
     if chain is not None and chain[-1:] in ([state.number], []):  # the top, or no chain: nowhere to walk
         steps += ["ger review --vote +1" + (" --chain" if len(chain) > 1 else ""), "ger review --done"]
     else:
-        steps += ["ger review --next", "ger review --vote +1"]
+        steps += ["ger comment PATH:LINE -m …", "ger review --next"]
     return "next: " + " · ".join(steps)
 
 
@@ -214,7 +214,7 @@ def _emit_state(
     for line in _delta_lines(delta) if delta else ():
         print(line)
     if hint:
-        print(hint)
+        say(hint, file=sys.stdout)
 
 
 def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: ReviewState | None) -> int:

@@ -359,7 +359,7 @@ def test_inbox_colorizes_attention_notes_like_log(
     assert "\x1b[" not in strip_ansi(out)
 
 
-def test_inbox_hyperlinks_always_shows_open_in_gerrit(
+def test_inbox_hyperlinks_make_the_change_label_the_link(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -379,9 +379,12 @@ def test_inbox_hyperlinks_always_shows_open_in_gerrit(
         gerrit=_store(top),
     )
     assert code == int(ExitCode.OK), err
-    assert "\x1b]8;;https://gerrit.example.com/c/myproject/+/4321" in out
+    # The row's c4321 opens the change: no URL line below it, half the height.
+    assert "\x1b]8;;https://gerrit.example.com/c/myproject/+/4321\x1b\\c4321\x1b]8;;" in out
     visible = strip_ansi(out)
-    assert GERRIT_LINK_LABEL in visible
+    assert GERRIT_LINK_LABEL not in visible and "/c/myproject/+/4321" not in visible
+    assert visible.splitlines()[3].startswith("c4321")
+    assert visible.splitlines()[4:6] == ["", "summary: 1 chains · 1 changes · longest wait 100d"]
     assert "https://gerrit.example.com" not in visible
 
 
