@@ -35,10 +35,8 @@ OPTIONS
         The same line as without it (with --short / --subject too), colour off: text for a model to read.
 
 DEFAULT RANGE
-    If --range is omitted, ger sha searches the current Gerrit stack using:
-      1. configured Gerrit base range, if available
-      2. branch upstream..HEAD, if available
-      3. configured default target branch merge-base..HEAD
+    If --range is omitted, ger sha searches the local stack: upstream..HEAD of the
+    working branch, first parents only (core.stack.get_stack_snapshot, as ger log).
 
 EXIT STATUS
     The codes every ger command shares (cli_common.ExitCode, docu/spec/exit-codes.md):
@@ -51,16 +49,18 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_args import add_color_args, add_output_format_args, add_verbose_and_debug_log_args
 from gerrit_workflow_tools.cli_attention import add_attention_query_args, resolve_attention_query_or_exit
 from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
-from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE
+from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE, DuplicateChangeIdError
 from gerrit_workflow_tools.core.changeish import no_commit_with_change_id_message
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.git_state import current_branch
-from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_base_with_target, read_commit_rows
+from gerrit_workflow_tools.core.run_context import RunContext
+from gerrit_workflow_tools.core.stack import Commit, commits_in_range, get_stack_snapshot, read_commit_rows
+from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.render.style import color_short_sha
 from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
@@ -114,17 +114,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry for ``ger sha``: resolve a Change-Id to a commit SHA in the chosen revision range."""
-    return run_cli_command(lambda: _run(argv))
-
-
-def _run(argv: list[str] | None) -> int:  # pylint: disable=too-many-branches,too-many-locals
-    ap = _build_parser()
-    args = ap.parse_args(argv)
-    run = init_cli_runtime(args)
-    cwd, settings = run.cwd, run.settings
-
+def _check_args(ap: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     if args.json_ and (args.short or args.subject):
         ap.error("--short and --subject pick a text line; they do not combine with --json")
     if (args.first_attention or args.next_attention) and (args.rev_range or args.all_commits):
@@ -133,6 +123,48 @@ def _run(argv: list[str] | None) -> int:  # pylint: disable=too-many-branches,to
         ap.error("cannot use CHANGE_ID with --first-attention")
     if not args.first_attention and not args.next_attention and not args.change_id:
         ap.error("CHANGE_ID is required (or use --first-attention / --next-attention)")
+
+
+def _commits_carrying(run: RunContext, args: argparse.Namespace) -> list[Commit] | int:
+    """The commits of the searched range whose footer is ``args.change_id``; ``REFUSED`` on an upstream declined."""
+    cwd, settings = run.cwd, run.settings
+    if not CHANGE_ID_VALUE_RE.match(args.change_id):
+        raise UsageError(
+            f"invalid Change-Id: {args.change_id!r}; ger sha takes a full Change-Id (I + 40 hex). "
+            "For a commit, change number or other changeish: ger resolve"
+        )
+    if args.all_commits:
+        logger.debug("searching all commits")
+        commits = _commits_all(cwd)
+    elif args.rev_range:
+        logger.debug("searching range: %s", args.rev_range)
+        commits = commits_in_range(cwd, args.rev_range)
+    else:
+        branch = current_branch(cwd)
+        if branch != "HEAD" and not require_branch_upstream(cwd, branch, settings=settings):
+            return int(ExitCode.REFUSED)
+        commits = list(get_stack_snapshot(cwd, settings=settings).commits)
+    want = args.change_id.lower()
+    matches = [c for c in commits if c.change_id and c.change_id.lower() == want]
+    if not matches:
+        raise ChangeResolutionError(no_commit_with_change_id_message(args.change_id))
+    if len(matches) > 1 and not args.all_commits:
+        shorts = ", ".join(color_short_sha(c.short_sha) for c in matches)
+        raise DuplicateChangeIdError(f"multiple commits with Change-Id {args.change_id}: {shorts}", [])
+    return matches
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry for ``ger sha``: resolve a Change-Id to a commit SHA in the chosen revision range."""
+    return run_cli_command(lambda: _run(argv))
+
+
+def _run(argv: list[str] | None) -> int:
+    ap = _build_parser()
+    args = ap.parse_args(argv)
+    run = init_cli_runtime(args)
+    cwd, settings = run.cwd, run.settings
+    _check_args(ap, args)
 
     matches: list[tuple[str, str, str]] = []
     printed_change_id = args.change_id or ""
@@ -153,47 +185,10 @@ def _run(argv: list[str] | None) -> int:  # pylint: disable=too-many-branches,to
         matches = [(resolved.sha, resolved.short_sha, resolved.summary)]
     else:
         assert args.change_id is not None
-        if not CHANGE_ID_VALUE_RE.match(args.change_id):
-            print(
-                f"error: invalid Change-Id: {args.change_id!r}; ger sha takes a full Change-Id (I + 40 hex). "
-                "For a commit, change number or other changeish: ger resolve",
-                file=sys.stderr,
-            )
-            return int(ExitCode.USAGE)
-
-        want = args.change_id.lower()
-
-        if args.all_commits:
-            logger.debug("searching all commits")
-            commits = _commits_all(cwd)
-        elif args.rev_range:
-            logger.debug("searching range: %s", args.rev_range)
-            commits = commits_in_range(cwd, args.rev_range)
-        else:
-            branch = current_branch(cwd)
-            if branch != "HEAD" and not require_branch_upstream(cwd, branch, settings=settings):
-                return 1
-            _fork, display, target_tip = merge_base_with_target(cwd)
-            rev_range = f"{target_tip}..HEAD"
-            logger.debug("default range: %s (base: %s)", rev_range[:20], display)
-            commits = commits_in_range(cwd, rev_range)
-
-        for c in commits:
-            cid = c.change_id
-            if cid and cid.lower() == want:
-                matches.append((c.sha, c.short_sha, c.subject))
-
-        if not matches:
-            print(f"error: {no_commit_with_change_id_message(args.change_id)}", file=sys.stderr)
-            return int(ExitCode.NOT_FOUND)
-
-        if len(matches) > 1 and not args.all_commits:
-            shorts = ", ".join(color_short_sha(m[1]) for m in matches)
-            print(
-                f"error: multiple commits with Change-Id {args.change_id}: {shorts}",
-                file=sys.stderr,
-            )
-            return int(ExitCode.DUPLICATE_CHANGE_ID)
+        found = _commits_carrying(run, args)
+        if isinstance(found, int):
+            return found
+        matches = [(c.sha, c.short_sha, c.subject) for c in found]
 
     for sha, short_sha, subject in matches:
         if args.json_:

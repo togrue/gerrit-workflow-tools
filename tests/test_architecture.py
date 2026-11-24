@@ -381,7 +381,6 @@ def test_module_size_ratchet() -> None:
 # Counts per file may only go down.
 TOO_MANY_BASELINE = {
     "cli_log.py": 1,
-    "cli_sha.py": 2,
     "cli_show.py": 3,
     "core/gerrit/change_view.py": 1,
     "core/gerrit/service.py": 1,
@@ -462,7 +461,6 @@ def test_commands_exit_with_exit_code_members() -> None:
             "cli_fix.py": "backlog 3",
             "cli_push.py": "backlog 3",
             "cli_setup.py": "backlog 3",
-            "cli_sha.py": "backlog 3",
         },
         "Raise the failure (core.usage.UsageError, Refusal, …) for run_cli_command to map, "
         "or return int(ExitCode.<REASON>). Codes: docu/spec/exit-codes.md.",
