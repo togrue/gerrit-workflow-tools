@@ -10,7 +10,15 @@ export interface Hello {
 }
 
 /** `GET /health`: who answers. `api` is the serve API version, `MAJOR.MINOR.PATCH` (a bare number from an older ger). */
-export type Health = { name: string; version: string; api: string | number; repo: string | null; branch: string | null } & Activity;
+export type Health = {
+  name: string;
+  version: string;
+  api: string | number;
+  repo: string | null;
+  branch: string | null;
+  /** What ger warns about in this repository's configuration (old key names), and the ger command that fixes it (`ger` left out). */
+  warnings?: { message: string; argv: string[] | null }[];
+} & Activity;
 
 export interface ApiError {
   code: string;

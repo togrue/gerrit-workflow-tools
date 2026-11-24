@@ -4,7 +4,7 @@
 import * as vscode from "vscode";
 
 import { handToAgent, runAgent } from "./agent";
-import { CommentChain, Diff, FileChange } from "./api";
+import { CommentChain, Diff, FileChange, Health } from "./api";
 import { ChangeView, Location, ThreadArg } from "./changeView";
 import { DiffTabs, FILE_SCHEME } from "./diffTabs";
 import { CommentThreads, ThreadComment, closeComment, leaveCommentBox } from "./comments";
@@ -12,7 +12,7 @@ import { setting } from "./config";
 import { EventFollower } from "./events";
 import { ShownCommitFollower } from "./follow";
 import { plural } from "./format";
-import { gerProgram, installGer, runInTerminal, versionSkewWarner } from "./launch";
+import { configWarner, gerProgram, installGer, runInTerminal, versionSkewWarner } from "./launch";
 import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
 import { Poller } from "./poller";
@@ -103,7 +103,12 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   void vscode.commands.executeCommand("setContext", "ger.state", "starting");
   const logLine = (line: string) => log.appendLine(line);
   const skew = versionSkewWarner(repo, context.extension.packageJSON, context.globalState, logLine);
-  const model = new Model(new GerProcess(repo, gerProgram, logLine, skew), context.workspaceState, repo);
+  const warnings = configWarner(repo, logLine);
+  const served = (health: Health) => {
+    skew(health);
+    warnings(health);
+  };
+  const model = new Model(new GerProcess(repo, gerProgram, logLine, served), context.workspaceState, repo);
   const overviewView = new OverviewView(model, context.workspaceState);
   const stackView = new StackView(context.extensionUri, model);
   const changeView = new ChangeView(context.extensionUri, model);

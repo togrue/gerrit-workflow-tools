@@ -185,7 +185,10 @@ All under `/api/v1`.
 
 `name`, `version` (ger's package version), `api` (the [API version](#api-version)), `repo`,
 `branch`, `host`; `activity` (the activity sequence) and `events`: the event stream's `state`,
-`reason` and `source` (`ssh://user@host:port`, or `null`).
+`reason` and `source` (`ssh://user@host:port`, or `null`). `warnings`: what ger warns about in
+this repository's configuration, each with `message` (the line every command logs once: old
+key names it still answers from, [config](config.md)) and `argv`, the ger command that fixes it
+(`["config", "--migrate"]`, `ger` left out), or `null` when only `git -c` names are at fault.
 
 ### `GET /activity`
 

@@ -19,6 +19,7 @@ from gerrit_workflow_tools.core.attention import Attention, commit_needs_edit_at
 from gerrit_workflow_tools.core.ci_content import introduced_fingerprints
 from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS
 from gerrit_workflow_tools.core.comment_write import new_comment_state
+from gerrit_workflow_tools.core.config_keys import legacy_keys_notice
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.change_view import parse_gerrit_time
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
@@ -79,8 +80,10 @@ def error_json(error: BaseException) -> dict[str, str]:
 
 
 def health(ctx: Context, _req: Request) -> dict[str, Any]:
-    """Who is answering, for which repository, and whether Gerrit's event stream is followed."""
+    """Who is answering, for which repository, whether Gerrit's event stream is followed, and what
+    in this repository's configuration ger warns about (old key names), with the command that fixes it."""
     top = ctx.run.repo.root
+    legacy = legacy_keys_notice(ctx.settings.values, ctx.settings.scopes)
     return {
         "name": "ger",
         "version": __version__,
@@ -88,6 +91,7 @@ def health(ctx: Context, _req: Request) -> dict[str, Any]:
         "repo": str(top) if top else None,
         "branch": ctx.run.worktree.branch,
         "host": host_from_web_base(ctx.service.web_base),
+        "warnings": [{"message": legacy.message, "argv": list(legacy.argv) if legacy.argv else None}] if legacy else [],
         **ctx.activity.json(),
     }
 

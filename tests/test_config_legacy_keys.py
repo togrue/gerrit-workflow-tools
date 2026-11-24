@@ -157,3 +157,27 @@ def test_the_notice_prints_as_one_plain_line_and_diagnostics_keep_their_prefix()
     plain = logging.LogRecord("gerrit_workflow_tools.core.git_run", logging.WARNING, "", 0, "odd", None, None)
     assert handler.format(notice) == "warning: old key"
     assert handler.format(plain) == "WARNING: gerrit_workflow_tools.core.git_run: odd"
+
+
+def test_ger_serve_says_which_old_keys_stand_in_and_serves_the_command_that_moves_them(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What every command logs once, the editor shows once: the same line, and ``ger config --migrate`` to run."""
+    from gerrit_workflow_tools.cli_config import main as config_main
+    from gerrit_workflow_tools.server.api import GerApi
+    from tests.change_store import ChangeStore
+    from tests.conftest import run_cli
+
+    store = ChangeStore({}, web_base="https://g.example")
+    git("config", "ger.webUrl", "https://g.example", cwd=stack_repo)
+    assert GerApi(stack_repo, gerrit=store).handle("GET", "/api/v1/health")["warnings"] == []
+    git("config", "--unset", "ger.project", cwd=stack_repo)
+    git("config", "gerrit.project", "testproj", cwd=stack_repo)
+    [warning] = GerApi(stack_repo, gerrit=store).handle("GET", "/api/v1/health")["warnings"]
+    message = "old git config key gerrit.project: run ger config --migrate"
+    assert warning == {"message": message, "argv": ["config", "--migrate"]}
+    command, *args = warning["argv"]
+    assert command == "config"
+    code, _out, err = run_cli(stack_repo, config_main, args, monkeypatch)
+    assert code == 0, err
+    assert GerApi(stack_repo, gerrit=store).handle("GET", "/api/v1/health")["warnings"] == []
