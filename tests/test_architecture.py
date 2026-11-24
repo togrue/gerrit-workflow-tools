@@ -10,11 +10,13 @@ Adding an entry is a design decision for a human, not a way to get a change thro
 
 from __future__ import annotations
 
+import argparse
 import ast
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from gerrit_workflow_tools.bash_completion_generator import _parser_builders
 from gerrit_workflow_tools.cli_ger import _COMMANDS
 
 
@@ -379,3 +381,213 @@ def test_too_many_disables_ratchet() -> None:
             target = "delete its entry" if n == 0 else f"lower its pin to {n}"
             problems.append(f"{rel}: down to {n} `too-many-*` disables — {target} in TOO_MANY_BASELINE.")
     assert not problems, "\n".join(problems)
+
+
+# --- Exit codes are ExitCode members -----------------------------------------------
+
+
+def _int_literals(node: ast.expr | None) -> list[ast.Constant]:
+    """The integer literals *node* evaluates to, through ``a if c else b`` and ``a or b``."""
+    if isinstance(node, ast.Constant) and type(node.value) is int:
+        return [node]
+    if isinstance(node, ast.IfExp):
+        return _int_literals(node.body) + _int_literals(node.orelse)
+    if isinstance(node, ast.BoolOp):
+        return [c for value in node.values for c in _int_literals(value)]
+    return []
+
+
+def _is_exit_call(call: ast.Call) -> bool:
+    func = call.func
+    name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else ""
+    return name in ("exit", "SystemExit", "_exit")
+
+
+def test_commands_exit_with_exit_code_members() -> None:
+    """A CLI module's exit code names its reason (``ExitCode.REFUSED``), never a bare number.
+
+    ``cli_common.ExitCode`` is the one table of reasons and codes; a literal ``return 1`` or
+    ``sys.exit(2)`` is a code nobody can find from the reason. Raise the failure and let
+    ``run_cli_command`` map it, or return the member.
+    """
+    found: set[str] = set()
+    for rel in sorted(m for m in SOURCES if m.startswith("cli_")):
+        for node in ast.walk(ast.parse(SOURCES[rel])):
+            if isinstance(node, ast.Return):
+                literals = _int_literals(node.value)
+            elif isinstance(node, ast.Call) and _is_exit_call(node):
+                literals = [c for arg in node.args for c in _int_literals(arg)]
+            else:
+                continue
+            if literals:
+                found.add(rel)
+    _check(
+        "command exits with a raw integer",
+        found,
+        {
+            # By design: runs from shell startup files and must not load cli_common (or core/).
+            "cli_bash_completion.py": "import-light",
+            # By design: the dispatcher exits 2 on an unknown command and 130 on Ctrl-C without loading cli_common.
+            "cli_ger.py": "import-light",
+            "cli_attention.py": "backlog 3",
+            "cli_cache.py": "backlog 3",
+            "cli_changeid.py": "backlog 3",
+            "cli_fetch_api.py": "backlog 3",
+            "cli_fix.py": "backlog 3",
+            "cli_push.py": "backlog 3",
+            "cli_setup.py": "backlog 3",
+            "cli_sha.py": "backlog 3",
+        },
+        "Raise the failure (core.usage.UsageError, Refusal, …) for run_cli_command to map, "
+        "or return int(ExitCode.<REASON>). Codes: docu/spec/exit-codes.md.",
+    )
+
+
+# --- One flag, one definition ------------------------------------------------------
+
+
+def _command_parsers() -> dict[str, argparse.ArgumentParser]:
+    """Every parser ``ger`` builds, by command (``cache clear`` for a subcommand's)."""
+    found: dict[str, argparse.ArgumentParser] = {}
+
+    def walk(name: str, parser: argparse.ArgumentParser) -> None:
+        found[name] = parser
+        for action in parser._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                for sub, child in action.choices.items():
+                    walk(f"{name} {sub}", child)
+
+    for name, build in sorted(_parser_builders().items()):
+        walk(name, build())
+    return found
+
+
+PARSERS = _command_parsers()
+
+# "With --publish: skip the confirmation." scopes a shared flag to one mode of its command.
+_SCOPED_HELP = re.compile(r"^With --[\w-]+: ")
+
+
+def _flag_definition(action: argparse.Action) -> tuple[object, ...]:
+    text = _SCOPED_HELP.sub("", action.help or "")
+    return (
+        tuple(action.option_strings),
+        type(action).__name__,
+        action.metavar,
+        tuple(action.choices) if action.choices else None,
+        text[:1].upper() + text[1:],
+    )
+
+
+def _flag_uses() -> dict[str, dict[str, argparse.Action]]:
+    """Long flag → command → its action, for every flag more than one command takes."""
+    uses: dict[str, dict[str, argparse.Action]] = {}
+    for command, parser in PARSERS.items():
+        for action in parser._actions:
+            longs = [o for o in action.option_strings if o.startswith("--")]
+            if longs and action.dest != "help":
+                uses.setdefault(longs[0], {})[command] = action
+    return {flag: by_command for flag, by_command in uses.items() if len(by_command) > 1}
+
+
+def test_a_flag_means_one_thing() -> None:
+    """A flag two commands take is one definition: short option, action, metavar and help.
+
+    ``ger show --branch`` and ``ger ci --branch`` are the same question, so they get the same
+    answer from one helper in ``cli_args.py``. A leading ``With --x:`` only scopes the help to a
+    mode of the command. An exception is either a flag that deliberately means something else
+    per command (``--flag``) or one command's own, different flag of that name (``command --flag``).
+    """
+    exceptions = {
+        # Deliberate: the same word, a different thing in each command. Not renamed in this pass.
+        "--all": "push: past the ready boundary; inbox: every project; sha: every ref; fix -a: git commit -a",
+        "--force": "checkout: replace a local version; push: over a diverged patchset; review: move change-<n>",
+        "--discard": "comment: a comment by id; reply: your draft in the chain",
+        "--done": "reply: reply 'Done'; review: leave the review",
+        "--edit": "comment: a comment by id; reword: stop to amend",
+        "--local": "comment: a local draft; setup: this repository's config",
+        "--url": "log, inbox: print URLs (--show-url); setup: the Gerrit URL to use",
+        "--verbose": "each command's own richer output; hidden where it does nothing",
+        "--change": "one helper (add_change_option); the help says what the command does with the change",
+        "--format": "one helper (add_output_format_args); the help names the command's ai view",
+        "checkout --branch": "the branch to put the change on, not the branch whose stack is read",
+        "review --next": "the next change in the review chain, not the next edit-attention commit",
+        # Debt: one concept, several definitions.
+        "--branch": "backlog 4",
+        "--debug-log": "backlog 4",
+        "--dry-run": "backlog 4",
+        "--message": "backlog 4",
+        "--patchset": "backlog 4",
+        "--vote": "backlog 4",
+        "--yes": "backlog 4",
+    }
+    found: set[str] = set()
+    for flag, by_command in _flag_uses().items():
+        rest = {}
+        for command, action in by_command.items():
+            if f"{command} {flag}" in exceptions:
+                found.add(f"{command} {flag}")
+            else:
+                rest[command] = _flag_definition(action)
+        if len(set(rest.values())) > 1:
+            found.add(flag)
+    _check(
+        "one flag, several definitions",
+        found,
+        exceptions,
+        "Register the flag through its shared helper in cli_args.py (add one there if the flag has none), "
+        "so every command defines it the same way.",
+    )
+
+
+# --- Help text style ---------------------------------------------------------------
+
+
+def _help_texts() -> dict[str, str]:
+    """``command flag`` → help text, for every advertised argument and subcommand of every parser."""
+    texts: dict[str, str] = {}
+    for command, parser in PARSERS.items():
+        for action in parser._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                for choice in action._choices_actions:
+                    if choice.help:
+                        texts[f"{command} {choice.dest}"] = choice.help
+            elif action.help and action.help != argparse.SUPPRESS and action.dest != "help":
+                texts[f"{command} {(action.option_strings or [action.dest])[-1]}"] = action.help
+    return texts
+
+
+def _style_problems(text: str) -> list[str]:
+    text = text.strip()
+    problems = []
+    if text[:1].isalpha() and not text[:1].isupper():
+        problems.append("starts lower case")
+    if not text.endswith("."):
+        problems.append("no final period")
+    if "``" in text or "**" in text:
+        problems.append("RST markup (``code`` or **bold**)")
+    return problems
+
+
+def test_help_text_style() -> None:
+    """The style in the cli_common.py docstring: sentence case, a final period, plain text.
+
+    ``--help`` is printed as is, so RST markup shows up as literal backticks and asterisks.
+    """
+    found = {
+        f"{key}: {', '.join(problems)}"
+        for key, text in _help_texts().items()
+        if (problems := _style_problems(text % {"prog": "ger"} if "%(" in text else text.replace("%%", "%")))
+    }
+    _check(
+        "help text off the house style",
+        found,
+        {
+            "log --show-change-id: RST markup (``code`` or **bold**)": "backlog 4",
+            "log --show-url: RST markup (``code`` or **bold**)": "backlog 4",
+            "log --verbose: RST markup (``code`` or **bold**)": "backlog 4",
+            "push --reviewers: no final period": "backlog 4",
+            "vscode action: starts lower case": "backlog 4",
+        },
+        "Sentence case, end with a period, `single backticks` at most (cli_common.py docstring).",
+    )
