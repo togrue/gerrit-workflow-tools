@@ -61,6 +61,9 @@ class AnnotatedStack:
     """Why Gerrit could not be asked, when it could not. Every commit then carries
     :attr:`PatchsetStatus.UNKNOWN` rather than a guess; the caller shows the local state and
     reports this, once."""
+    blocker: LogCommit | None = None
+    """The commit that holds the chain back (:attr:`LogCommit.blocks_chain`), which may be one
+    below :attr:`commits` when they were judged in the local stack (``core/annotated_targets.py``)."""
 
     def __bool__(self) -> bool:
         return bool(self.commits)
@@ -147,7 +150,9 @@ def annotate(
         settings=service.settings,
         web_base=service.web_base,
     )
-    return AnnotatedStack(commits=commits, rows=list(rows), gerrit_unavailable=unavailable)
+    return AnnotatedStack(
+        commits=commits, rows=list(rows), gerrit_unavailable=unavailable, blocker=chain_blocker(commits)
+    )
 
 
 def _commits_on_target(run: RunContext, rows: list[Commit], rev_range: str) -> frozenset[str]:

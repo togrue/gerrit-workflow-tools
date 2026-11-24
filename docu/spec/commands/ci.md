@@ -17,7 +17,7 @@ Why CI failed, without opening a console: for each target's failed **CI links**,
 ger ci [options] [CHANGEISH …]
 ```
 
-Targets resolve exactly as in [`ger show`](show.md): each `CHANGEISH` is a changeish or an `A..B` / `A...B` range; `--stack` adds the local stack; with neither, `HEAD`. Links come from the same **CI strategy** as `ger log` (`ci_links`), so only changes whose Verified is −1 have any.
+Targets resolve exactly as in [`ger show`](show.md): each `CHANGEISH` is a changeish or an `A..B` / `A...B` range; `--stack` adds the local stack; with neither, `HEAD`. Each commit's header carries the same hints as `ger log` and `ger show`: a stack commit is judged within the whole stack. Links come from the same **CI strategy** as `ger log` (`ci_links`), so only changes whose Verified is −1 have any.
 
 ---
 

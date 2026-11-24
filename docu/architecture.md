@@ -500,6 +500,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/annotated_stack.py` | Annotated stack: local stack + Gerrit overlay + attention; the stack overview `ger log` and `GET /stack` answer from (`load_stack_overview`), with what `ger push` would upload (`StackOverview.to_upload`) and the stack's next steps (`StackOverview.next_steps`: `NextStep`, `NextStepKind`) |
 | `core/gerrit_change_status.py` | `LogCommit`, patchset status |
 | `core/code_facts.py` | What the repository knows about the code an overlay compares (`CodeFacts`, `read_code_facts`: one git batch) and merged equivalence (`merged_equivalent`) |
+| `core/annotated_targets.py` | Commits named on the command line (`ger show`, `ger ci`) judged as the local stack sees them: within the whole stack, and merged when the upstream contains them (`annotate_targets`, `local_stack_or_none`) |
 | `core/attention.py` | Attention: reason names, `determine_attention()`, `ci_failed()`, chain-blocking (the commit that blocks, `LogCommit.blocks_chain`, and why: `blocking_reason()`), edit attention |
 | `core/attention_cursor.py` | Attention cursor: Change-Id walk position, TTL, lazy adopt, history |
 | `core/edit_attention_walk.py` | Edit-attention walk: load stack, resume/next/first target, cursor status |

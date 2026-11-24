@@ -20,17 +20,16 @@ from gerrit_workflow_tools.cli_common import (
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_notes import print_resolution_note
-from gerrit_workflow_tools.core.ci_content import CiContent
+from gerrit_workflow_tools.core.annotated_targets import local_stack_or_none
 from gerrit_workflow_tools.core.ci_content_service import CiContentService
 from gerrit_workflow_tools.core.ci_http import CiHttp
 from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS, CommentSelection
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit
-from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
-from gerrit_workflow_tools.core.stack import get_stack_snapshot, read_commit_meta
-from gerrit_workflow_tools.core.upstream import branch_has_upstream
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
+from gerrit_workflow_tools.core.gerrit_show import ShownCommit, load_shown_commits, resolve_show_targets
+from gerrit_workflow_tools.core.stack import read_commit_meta
 from gerrit_workflow_tools.render.ci_content import format_ci_section_human
 from gerrit_workflow_tools.render.comments import (
     empty_comments_message,
@@ -40,6 +39,7 @@ from gerrit_workflow_tools.render.commit_row import attention_summary, continuat
 from gerrit_workflow_tools.render.download_meter import DownloadMeter
 from gerrit_workflow_tools.render.show_json import commit_json_payload
 from gerrit_workflow_tools.render.show_markdown import commit_markdown
+from gerrit_workflow_tools.render.status_fmt import chain_blocked_text
 from gerrit_workflow_tools.render.style import ANSI_DIM, ANSI_YELLOW, color_text, format_link
 from gerrit_workflow_tools.render.wrap import wrap_lines
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, run_summary_highlighter
@@ -159,17 +159,18 @@ def _print_wrapped_body(
 
 def _emit_human_commit(
     cwd: Path | str | None,
-    commit: LogCommit,
+    item: ShownCommit,
     *,
-    is_local: bool,
-    chains: list[CommentChain],
-    ci_contents: list[CiContent] | None,
     summary_highlighter: SummaryHighlighter,
     wrap_width: int,
 ) -> None:
+    commit, chains, ci_contents = item.commit, item.chains, item.ci_contents
+    is_local = item.target.is_local_commit
     print(show_headline(commit))
     if commit.attention_reasons:
         print(color_text(attention_summary(commit), ANSI_DIM))
+    if item.blocked_by is not None:
+        print(color_text(chain_blocked_text(item.blocked_by), ANSI_DIM))
 
     body = ""
     if is_local and commit.sha:
@@ -274,6 +275,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
         ci = CiContentService.from_settings(
             cwd, settings, web_base=service.web_base, http=ci_http, refresh=service.refresh, progress=meter
         )
+    snap = local_stack_or_none(cwd, branch, settings=settings) if any(t.is_local_commit for t in targets) else None
     try:
         shown = load_shown_commits(
             targets,
@@ -282,17 +284,17 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
             context_padding=_requested_context_padding(args),
             fetch_ci_pipelines=verbose_level >= 1,
             ci=ci,
+            stack=snap,
         )
     finally:
         meter.close()
 
-    if any(t.is_local_commit for t in targets) and branch is not None and branch_has_upstream(cwd, branch):
+    if snap is not None and branch is not None:
         try:
             stack = resolve_stack_context(cwd, branch, settings=settings)
         except ChangeResolutionError:
             pass
         else:
-            snap = get_stack_snapshot(cwd, branch, first_parent=True, settings=settings)
             summary_highlighter = run_summary_highlighter(run, commits=list(snap.commits), project=stack.project)
 
     json_payloads: list[dict[str, object]] = []
@@ -321,15 +323,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
             if multi and not chains and not ci_contents:
                 _emit_brief_commit(commit, comments=args.comments)
                 continue
-            _emit_human_commit(
-                cwd,
-                commit,
-                is_local=resolved.is_local_commit,
-                chains=chains,
-                ci_contents=ci_contents,
-                summary_highlighter=summary_highlighter,
-                wrap_width=settings.wrap_width,
-            )
+            _emit_human_commit(cwd, item, summary_highlighter=summary_highlighter, wrap_width=settings.wrap_width)
 
     if out_fmt == "json":
         if len(json_payloads) == 1:

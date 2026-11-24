@@ -443,9 +443,11 @@ def test_show_asks_who_carries_the_change_id_once_and_needs_no_probe(
     queries(log_main, ["--color=never"])
 
     clock["t"] = 1020
-    (lookup,) = queries(show_main, ["HEAD", "--color=never"])
+    # HEAD is judged within its stack, as ger log judges it: one light probe for the rest of the stack.
+    lookup, stack = queries(show_main, ["HEAD", "--color=never"])
     assert lookup.args[0].startswith("change:I"), lookup.args[0]
     assert lookup.kwargs["options"] == list(LIGHT_QUERY_OPTIONS)  # the cached change is what it is held against
+    assert stack.kwargs["options"] == list(LIGHT_QUERY_OPTIONS)
 
     clock["t"] = 1025
     assert queries(show_main, ["HEAD", "--color=never"]) == []
@@ -458,16 +460,19 @@ def test_show_asks_who_carries_the_change_id_once_and_needs_no_probe(
 def test_show_on_a_cold_cache_asks_for_the_change_once_in_full(
     web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """With nothing cached for the Change-Id, the lookup asks for the details too: no second query for the stack.
+    """With nothing cached for the Change-Id, the lookup asks for the details too: no second query for that change.
 
-    A light answer is only worth asking for when there is a cached row to hold it against.
+    A light answer is only worth asking for when there is a cached row to hold it against. The rest
+    of the stack, which HEAD is judged within (as ``ger log`` judges it), is one more query.
     """
     store = ChangeStore(build_details_by_change_id(stack_rows_mb_to_head(web_stack_repo)))
 
     code, _out, err = run_cli(web_stack_repo, show_main, ["HEAD", "--color=never"], monkeypatch, gerrit=store)
 
     assert code == 0, err
-    (lookup,) = store.calls_to("query_changes")
+    lookup, stack = store.calls_to("query_changes")
     assert lookup.args[0].startswith("change:I"), lookup.args[0]
     assert lookup.kwargs["options"] == list(LOG_QUERY_OPTIONS)
+    head = stack_rows_mb_to_head(web_stack_repo)[-1].change_id
+    assert head and head not in stack.args[0], "HEAD's change is not asked for twice"
     assert store.calls_to("get_change") == []

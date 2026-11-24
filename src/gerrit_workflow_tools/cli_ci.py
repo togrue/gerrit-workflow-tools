@@ -16,7 +16,7 @@ from gerrit_workflow_tools.cli_common import (
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_notes import print_resolution_note
-from gerrit_workflow_tools.core.annotated_stack import annotate
+from gerrit_workflow_tools.core.annotated_targets import annotate_targets, local_stack_or_none
 from gerrit_workflow_tools.core.ci_content import BodyMode, CiContent, CiContentError
 from gerrit_workflow_tools.core.ci_content_service import CiContentService
 from gerrit_workflow_tools.core.ci_http import CiHttp
@@ -160,7 +160,14 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp |
         raise ChangeResolutionError("no commits to inspect")
     for resolved in targets:
         print_resolution_note(resolved.resolution)
-    commits = annotate([t.row for t in targets], service=service, cwd=cwd).require_gerrit()
+    snap = local_stack_or_none(cwd, branch, settings=settings)
+    commits = annotate_targets(
+        [t.row for t in targets],
+        service=service,
+        stack=snap,
+        local=[t.is_local_commit for t in targets],
+        triplets=[t.shown_triplet for t in targets],
+    ).require_gerrit()
 
     meter = DownloadMeter(sys.stderr, label="Fetching CI logs")
     ci = CiContentService.from_settings(

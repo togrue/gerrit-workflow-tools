@@ -6,8 +6,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from gerrit_workflow_tools.core.annotated_stack import annotate
-from gerrit_workflow_tools.core.attention import as_your_review
+from gerrit_workflow_tools.core.annotated_targets import annotate_targets
+from gerrit_workflow_tools.core.attention import Attention, as_your_review
 from gerrit_workflow_tools.core.changeish import unresolved_change_message, unresolved_rev_message
 from gerrit_workflow_tools.core.ci_content import CiContent
 from gerrit_workflow_tools.core.ci_content_service import CiContentService
@@ -28,6 +28,7 @@ from gerrit_workflow_tools.core.inbox import to_review_needs_you_as_reviewer, wa
 from gerrit_workflow_tools.core.local_comments import local_chains_of
 from gerrit_workflow_tools.core.stack import (
     Commit,
+    StackSnapshot,
     abbreviated_sha,
     commits_in_range,
     get_stack_snapshot,
@@ -282,6 +283,8 @@ class ShownCommit:
     """**CI content** per failed **CI link**; ``None`` when it was not asked for."""
     gerrit_unavailable: GerritUnavailableError | None = None
     """Why Gerrit could not be asked; :attr:`commit` then holds local state only."""
+    blocked_by: LogCommit | None = None
+    """The commit of the local stack that keeps this one from being submitted, when one does."""
 
     @property
     def ci_verdict_contents(self) -> list[CiContent] | None:
@@ -331,21 +334,24 @@ def load_shown_commits(
     context_padding: int | None = None,
     fetch_ci_pipelines: bool = False,
     ci: CiContentService | None = None,
+    stack: StackSnapshot | None = None,
 ) -> list[ShownCommit]:
     """Overlay, attention, comment chains and (with *ci*) **CI content** for *targets*, in order.
 
     A target that waits on your review (the *to review* query matches it, in any project and with
     no limit) leads with that.
 
-    *targets* must be in stack order for chain-blocking attention. A CI link that cannot be
-    fetched stays on its result; nothing here raises for it.
+    A target in the local *stack* is judged within it, as ``ger log`` judges it
+    (:func:`annotate_targets`). A CI link that cannot be fetched stays on its result; nothing
+    here raises for it.
     """
-    annotated = annotate(
+    annotated = annotate_targets(
         [t.row for t in targets],
         service=service,
-        cwd=service.cwd,
-        fetch_ci_pipelines=fetch_ci_pipelines,
+        stack=stack,
+        local=[t.is_local_commit for t in targets],
         triplets=[t.shown_triplet for t in targets],
+        fetch_ci_pipelines=fetch_ci_pipelines,
     )
     commits = annotated.commits
     if len(commits) != len(targets):
@@ -365,5 +371,6 @@ def load_shown_commits(
             )
         if rest_key:
             chains = merge_chains(chains, local_chains_of(service, rest_key, commit.sha or None, comments=comments))
-        shown.append(ShownCommit(target, commit, chains, ci_contents, annotated.gerrit_unavailable))
+        blocked_by = annotated.blocker if Attention.CHAIN_BLOCKED in commit.attention_reasons else None
+        shown.append(ShownCommit(target, commit, chains, ci_contents, annotated.gerrit_unavailable, blocked_by))
     return shown

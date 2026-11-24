@@ -70,5 +70,9 @@ moves or `--refresh` is used.
 A cold start costs one request more than before for a listing (light, then in full). After
 that, the cost of polling follows what changed, not how much you have open.
 
+Since then `ger show` and `ger ci` judge a stack commit within its whole stack, as `ger log`
+does, so the three agree on chain-blocking: past the trust window that is one light query more
+for the rest of the stack (cold: one more in full).
+
 The numbers above are pinned by `tests/test_call_budgets.py` and `tests/test_inbox.py`.
 [Server-load.md](../Server-load.md) says how to read them off a server again.
