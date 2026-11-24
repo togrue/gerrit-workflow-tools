@@ -488,7 +488,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/editor_extension.py` | The VS Code extension that goes with ger: the one a release bundles (`bundled_extension`), a checkout's sources (`source_extension`) and packaging them (`build_extension`), the editor's CLI (`find_editor_cli`), and installing it |
 | `core/git_state.py` | Repository state: branch, HEAD, upstream, Gerrit push destination, and the branch a stopped rebase belongs to |
 | `core/tracked_changes.py` | What the index and work tree hold of yours, by what `git stash` saves of it (`tracked_changes`, `TrackedChanges`): changes to tracked files, submodules staged at another commit, submodules a file replaced. A submodule's own state is none of them |
-| `core/rebase_state.py` | A rebase underway: whether one is, how far it got and why it stopped (`rebase_progress`, `RebaseProgress`, `RebaseStop`), the refusal it causes (`rebase_refusal`) and the one next step after a conflict (`conflict_next_step`) |
+| `core/rebase_state.py` | A rebase underway: whether one is, how far it got and why it stopped (`rebase_progress`, `RebaseProgress`, `RebaseStop`), the refusal it causes (`rebase_refusal`) |
+| `core/rebase_next_step.py` | What to do at a rebase underway: the one next step after a conflict (`conflict_next_step`) or at an edit stop (`edit_stop_next_step`), and why a way on is refused (`stop_refusal` from the stop alone, `go_on_refusal` before every ger "go on") |
 | `core/rewrite_refusal.py` | Why rewriting the local stack, or a switch, cannot start: the one wording each rewrite shares (`history_rewrite_refusal`), its parts over what the index and work tree hold (`uncommitted_changes_refusal`, `submodule_refusal`), and a target whose change Gerrit already closed (`closed_change_refusal`, for `ger edit` / `reword` / `fix`) |
 | `core/rebasing_stack.py` | The **rebasing stack**: the local stack while a rebase is underway, each commit with its **rebase step** (`load_rebasing_stack`, `RebasingStack`, `RebaseStep`), and where the rebase stopped as `GET /stack` serves it, the stop `ger rebase --continue|--skip` refuses by (`stopped_rebase`) |
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log`, as text (`format_call_trace_summary`); `cli_common.print_call_trace_summary` prints it |
@@ -611,7 +612,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `reviewer_catalog.py` | Reviewer discovery and soft validation for the push prompt |
 | `rebase_enricher.py` | `GIT_SEQUENCE_EDITOR`: annotate the rebase todo with Gerrit status |
 | `rebase_sequence_editor.py` | `GIT_SEQUENCE_EDITOR`: patch one `pick` line for `ger edit` |
-| `rebase_run.py` | Running `git rebase` from a command: `require_history_rewrite` before, `run_interactive_rebase` / `go_on_with_rebase` (refused first by `rebase_state.go_on_refusal`, of the stop `rebasing_stack.stopped_rebase` reads) and the conflict next step after |
+| `rebase_run.py` | Running `git rebase` from a command: `require_history_rewrite` before, `run_interactive_rebase` / `go_on_with_rebase` (refused first by `rebase_next_step.go_on_refusal`, of the stop `rebasing_stack.stopped_rebase` reads) and the conflict next step after |
 | `bash_completion_generator.py` | Bash completion generated from live argparse definitions |
 
 ### Local service (`server/`)

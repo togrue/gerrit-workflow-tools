@@ -14,13 +14,8 @@ from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_edit import main as edit_main
 from gerrit_workflow_tools.cli_rebase import main as rebase_main
 from gerrit_workflow_tools.core.git_run import git, git_out
-from gerrit_workflow_tools.core.rebase_state import (
-    RebaseAction,
-    RebaseStop,
-    go_on_refusal,
-    rebase_in_progress,
-    rebase_progress,
-)
+from gerrit_workflow_tools.core.rebase_next_step import go_on_refusal
+from gerrit_workflow_tools.core.rebase_state import RebaseAction, RebaseStop, rebase_in_progress, rebase_progress
 from gerrit_workflow_tools.core.rebasing_stack import stopped_rebase
 from gerrit_workflow_tools.server.api import GerApi
 from tests.change_store import ChangeStore

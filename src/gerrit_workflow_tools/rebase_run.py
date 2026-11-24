@@ -2,7 +2,7 @@
 
 Shared by ``ger edit`` / ``ger reword`` and ``ger rebase``, so every ger-started rebase refuses
 and stops the same way. The rebase talks to the terminal itself; this module only adds the
-one ``next:`` line from :func:`~gerrit_workflow_tools.core.rebase_state.conflict_next_step`.
+one ``next:`` line from :func:`~gerrit_workflow_tools.core.rebase_next_step.conflict_next_step`.
 """
 
 from __future__ import annotations
@@ -14,11 +14,8 @@ from pathlib import Path
 from gerrit_workflow_tools.cli_terminal import stdin_is_terminal
 from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import git
-from gerrit_workflow_tools.core.rebase_state import (
-    RebaseAction,
-    conflict_next_step,
-    go_on_refusal,
-)
+from gerrit_workflow_tools.core.rebase_next_step import conflict_next_step, go_on_refusal
+from gerrit_workflow_tools.core.rebase_state import RebaseAction
 from gerrit_workflow_tools.core.rebasing_stack import stopped_rebase
 from gerrit_workflow_tools.core.rewrite_refusal import history_rewrite_refusal
 from gerrit_workflow_tools.core.usage import UsageError

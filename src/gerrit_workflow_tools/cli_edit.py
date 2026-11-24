@@ -36,12 +36,8 @@ from gerrit_workflow_tools.core.edit_attention_walk import (
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, git_out
-from gerrit_workflow_tools.core.rebase_state import (
-    RebaseAction,
-    edit_stop_next_step,
-    rebase_in_progress,
-    unmerged_paths,
-)
+from gerrit_workflow_tools.core.rebase_next_step import edit_stop_next_step
+from gerrit_workflow_tools.core.rebase_state import RebaseAction, rebase_in_progress, unmerged_paths
 from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_base_with_target

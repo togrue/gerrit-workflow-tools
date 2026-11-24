@@ -22,7 +22,8 @@ from gerrit_workflow_tools.cli_notes import print_stack_commit_notes
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git, git_out
-from gerrit_workflow_tools.core.rebase_state import conflict_next_step, rebase_underway
+from gerrit_workflow_tools.core.rebase_next_step import conflict_next_step
+from gerrit_workflow_tools.core.rebase_state import rebase_underway
 from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal
 from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE, fixup_target_sha, get_stack_snapshot
 from gerrit_workflow_tools.core.usage import UsageError
