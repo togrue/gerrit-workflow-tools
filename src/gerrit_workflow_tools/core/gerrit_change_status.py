@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -77,6 +78,8 @@ class InlineComment:
     """Set for a note or local draft: it is in the local comment store, not on Gerrit."""
     suggested_edits: tuple[SuggestedEdit, ...] = ()
     """Edits the comment suggests: Gerrit fix suggestions and ``suggestion`` blocks of its text."""
+    updated: datetime | None = None
+    """When it was written or last edited (Gerrit's ``updated``, UTC); ``None`` for a local comment."""
 
     @property
     def state(self) -> CommentState:

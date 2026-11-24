@@ -32,6 +32,7 @@ from gerrit_workflow_tools.core.gerrit_show import ShownCommit, load_shown_commi
 from gerrit_workflow_tools.core.stack import read_commit_meta
 from gerrit_workflow_tools.render.ci_content import format_ci_section_human
 from gerrit_workflow_tools.render.comments import (
+    box_width,
     empty_comments_message,
     format_unresolved_section_human,
 )
@@ -40,7 +41,7 @@ from gerrit_workflow_tools.render.download_meter import DownloadMeter
 from gerrit_workflow_tools.render.show_json import commit_json_payload
 from gerrit_workflow_tools.render.show_markdown import commit_markdown
 from gerrit_workflow_tools.render.status_fmt import chain_blocked_text
-from gerrit_workflow_tools.render.style import ANSI_DIM, ANSI_YELLOW, color_text, format_link
+from gerrit_workflow_tools.render.style import ANSI_DIM, ANSI_YELLOW, color_text, format_link, terminal_width
 from gerrit_workflow_tools.render.wrap import wrap_lines
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, run_summary_highlighter
 from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
@@ -207,7 +208,7 @@ def _emit_human_commit(
         chains,
         commit.gerrit_url,
         pushed=commit.pushed,
-        width=wrap_width,
+        width=box_width(wrap_width, terminal_width()),
     )
     if comment_lines:
         print()

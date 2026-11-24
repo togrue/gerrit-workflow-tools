@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -157,3 +158,54 @@ def test_log_help_explains_every_status_token_it_can_print(stack_repo: Path, mon
     shown |= {verified_token(v).strip() for v in (1, -1, None)} | {code_review_token(None).strip(), "com"}
     assert shown <= explained, shown - explained
     assert "examples:" in out and "ger log origin/main..HEAD" in out
+
+
+def _commented_head(repo: Path) -> tuple[ChangeStore, str]:
+    """The stack on Gerrit; HEAD's change has a patchset-level comment from an hour ago and an inline one."""
+    git("config", "ger.stopPattern", "^nothing-matches$", cwd=repo)
+    rows = stack_rows_mb_to_head(repo)
+    store = _store(repo, [{}, {}, {}, {"unresolved_comment_count": 2, "submittable": False}])
+    triplet = f"testproj~main~{rows[-1].change_id}"
+    hour_ago = (datetime.now(timezone.utc) - timedelta(minutes=61)).strftime("%Y-%m-%d %H:%M:%S.000000000")
+    alice = {"username": "alice", "name": "Alice"}
+    common = {"unresolved": True, "updated": hour_ago, "author": alice, "patch_set": 1}
+    store.set_comments(
+        triplet,
+        {
+            "/PATCHSET_LEVEL": [{"id": "ps0level_0001", "message": "Overall fine, but please add tests.", **common}],
+            "calc.py": [{"id": "inline_0002", "line": 3, "message": "Could this be lazy? " * 6, **common}],
+        },
+    )
+    return store, triplet
+
+
+def test_show_comment_boxes_name_the_reply_id_patchset_and_age_and_fit_the_terminal(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from gerrit_workflow_tools.cli_show import main as show_main
+
+    store, _triplet = _commented_head(stack_repo)
+    _on_terminal(monkeypatch, 80)
+    args = ["HEAD", "--color", "never", "--hyperlinks", "never"]
+    code, out, err = run_cli(stack_repo, show_main, args, monkeypatch, gerrit=store)
+    assert code == 0, err
+    box = [line for line in out.splitlines() if line.lstrip().startswith(("╭", "│", "╰"))]
+    assert all(len(line) <= 80 for line in box), "\n".join(box)
+    assert len({len(line) for line in box}) == 1, "every box of a commit is as wide as the others"
+    tops = [line for line in box if "╭" in line]
+    assert "─ Patchset-level comment ─" in tops[0] and tops[0].rstrip("╮─ ").endswith("ps0level_0001")
+    assert tops[1].rstrip("╮─ ").endswith("inline_0002")
+    assert "/PATCHSET_LEVEL" not in out
+    assert "│ alice · PS1 · 1h ago" in out
+    assert all(line.endswith(" │") or "╭" in line or "╰" in line for line in box), "text never touches the border"
+
+
+def test_show_ai_says_how_to_reply_to_each_comment(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from gerrit_workflow_tools.cli_show import main as show_main
+
+    store, _triplet = _commented_head(stack_repo)
+    code, out, err = run_cli(stack_repo, show_main, ["HEAD", "--ai"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert "Reply with `ger reply ps0level_0001`" in out
+    assert "Reply with `ger reply inline_0002`" in out
+    assert "**alice** · PS1 · 1h ago" in out

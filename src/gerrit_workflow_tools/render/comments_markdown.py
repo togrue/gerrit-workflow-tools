@@ -10,6 +10,7 @@ from gerrit_workflow_tools.render.comments import (
     chain_context_lines,
     chain_location,
     chain_url,
+    comment_meta,
     draft_label,
     empty_comments_message,
     format_context_line,
@@ -23,13 +24,17 @@ _LOCAL_LABELS_MARKDOWN = {"note": "Note (private)", "local-draft": "Local draft 
 def format_comment_chain_markdown(
     chain: CommentChain,
     gerrit_url: str | None,
+    *,
+    level: int = 3,
 ) -> list[str]:
     """Return Markdown lines for one comment chain (full bodies, no ANSI)."""
     loc = chain_location(chain)
-    heading = f"### `{loc}`{anchor_suffix(chain)}"
+    heading = f"`{loc}`{anchor_suffix(chain)}"
     if chain.resolved:
         heading = f"{heading} (resolved)"
-    lines: list[str] = [heading]
+    lines: list[str] = [f"{'#' * level} {heading}"]
+    if chain.root_id:
+        lines.append(f"Reply with `ger reply {chain.root_id}`")
     url = chain_url(chain, gerrit_url)
     if url:
         lines.append(url)
@@ -44,12 +49,14 @@ def format_comment_chain_markdown(
         lines.append("")
 
     for row_item in chain.comments:
+        meta = comment_meta(row_item)
+        meta = f" · {meta}" if meta else ""
         if row_item.local is not None:
             lines.append(f"**{_LOCAL_LABELS_MARKDOWN[row_item.local]}**")
         elif row_item.draft:
-            lines.append(f"**{draft_label(chain, row_item, label='Draft reply (unpublished)')}**")
+            lines.append(f"**{draft_label(chain, row_item, label='Draft reply (unpublished)')}**{meta}")
         else:
-            lines.append(f"**{row_item.author or 'anonymous'}**")
+            lines.append(f"**{row_item.author or 'anonymous'}**{meta}")
         body = row_item.message.rstrip("\n")
         if body:
             for ln in body.splitlines() or [""]:
