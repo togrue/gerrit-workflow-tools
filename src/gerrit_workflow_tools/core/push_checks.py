@@ -274,7 +274,7 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
         built_on_outdated=tuple(built_on_outdated),
         reviewers=frozenset(account.slug for view in views.values() for account in view.reviewers or ()),
         abandoned=tuple(abandoned),
-        next_patchsets=next_patchsets(run.cwd, commits, views, user=run.settings.get("ger.user")),
+        next_patchsets=next_patchsets(commits, views, facts, user=run.settings.get("ger.user")),
     )
 
 

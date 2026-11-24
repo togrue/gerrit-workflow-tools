@@ -8,13 +8,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 
-from gerrit_workflow_tools.core.code_facts import CodeChange, code_change
+from gerrit_workflow_tools.core.code_facts import CodeChange, CodeFacts, code_change
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, build_triplet
-from gerrit_workflow_tools.core.gerrit_change_status import PatchsetStatus, overlay_code_facts, patchset_status
+from gerrit_workflow_tools.core.gerrit_change_status import PatchsetStatus, patchset_status
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit
 
@@ -47,19 +46,19 @@ NEW_CHANGE = "new change"
 
 
 def next_patchsets(
-    cwd: Path | str | None, commits: Iterable[Commit], views: Mapping[str, ChangeView], *, user: str | None
+    commits: Iterable[Commit], views: Mapping[str, ChangeView], facts: CodeFacts, *, user: str | None
 ) -> dict[str, NextPatchset]:
     """By SHA, the commits in *commits* that are new patch sets of a change in *views* (by SHA); *user* is you.
 
-    A commit missing here becomes a new change. Whether the code changed is read with three git calls
-    for all of them (``overlay_code_facts``), and is unknown when Gerrit's patch set is not in this repository.
+    A commit missing here becomes a new change. Whether the code changed comes from *facts*, the
+    ``overlay_code_facts`` the push read once over every commit, and is unknown when Gerrit's patch set
+    is not in this repository.
     """
     newer = [
         (c, views[c.sha])
         for c in commits
         if c.sha in views and patchset_status(c.sha, views[c.sha]) == PatchsetStatus.NEWER
     ]
-    facts = overlay_code_facts(cwd, newer)
     you = {user.casefold()} if user else set()
     out: dict[str, NextPatchset] = {}
     for commit, view in newer:
