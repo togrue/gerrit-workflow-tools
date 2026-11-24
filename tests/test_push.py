@@ -275,7 +275,7 @@ def test_gpush_cancel_at_prompt(stack_repo: Path, monkeypatch: pytest.MonkeyPatc
     assert "git push" not in out
     i_push = out.index("About to push commits:")
     i_stop = out.index("Stopped at commit")
-    i_remain = out.index("2 not-ready commit(s) remain unpushed")
+    i_remain = out.index("2 commits from ")
     i_status = out.index("Branch", i_remain)
     assert i_push < i_stop < i_remain < i_status
     assert "Target" in out[i_status:]
@@ -405,12 +405,38 @@ def test_gpush_rejected_by_gerrit_keeps_gits_output_and_adds_gerrits_reason(
     assert not ref_exists(stack_repo, "refs/heads/lastPush/feature")
 
 
-def test_gpush_warns_about_a_commit_on_an_abandoned_change(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gpush_does_not_list_a_commit_of_an_abandoned_change_as_sent(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Before: a warning, the commit under "About to push commits", then "nothing to push"."""
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    details = build_details_by_change_id(rows[:1], per_index_overrides=[{"status": "ABANDONED"}])
+    details |= at_older_patchsets(build_details_by_change_id(rows[1:2]), stack_repo)
+    mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    code, out, err = run_cli(stack_repo, gpush_main, ["-y", rows[1].sha], monkeypatch, gerrit=ChangeStore(details))
+    assert code == 0
+    sent = [line for line in out.split("About to push commits:")[1].splitlines() if line.startswith("    ")]
+    assert [line.split()[0] for line in sent] == [rows[1].short_sha]
+    assert (
+        f"{rows[0].short_sha} not sent: change 100 is abandoned "
+        f"(restore it in the web UI, or `ger edit --drop {rows[0].short_sha}`)" in out
+    )
+    assert "warning" not in err and "commits Gerrit already has" not in out
+    mock_run.assert_called_once()
+
+
+def test_gpush_warns_before_a_new_patchset_for_an_abandoned_change(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A commit Gerrit does not have yet goes up, and Gerrit refuses it: the warning says so first."""
     rows = commits_in_range(stack_repo, "main..feature")
     details = build_details_by_change_id(rows, per_index_overrides=[{"status": "ABANDONED"}])
-    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch, gerrit=ChangeStore(details))
+    code, _out, err = run_cli(
+        stack_repo, gpush_main, ["--dry-run"], monkeypatch, gerrit=ChangeStore(at_older_patchsets(details, stack_repo))
+    )
     assert code == 0
-    assert f"warning: {rows[0].short_sha} targets abandoned change 100" in err
+    assert f"warning: {rows[0].short_sha} would be a new patch set of abandoned change 100, which Gerrit refuses" in err
 
 
 def test_gpush_names_a_fixup_commit_as_the_boundary(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -493,7 +519,11 @@ def test_gpush_with_nothing_to_send_or_set_says_so_without_asking(
         stack_repo, gpush_main, [*argv, rows[1].sha], monkeypatch, gerrit=ChangeStore(build_details_by_change_id(rows))
     )
 
-    assert (code, out.strip(), err) == (ExitCode.OK, "nothing to push: Gerrit already has these commits", "")
+    assert (code, err) == (ExitCode.OK, "")
+    assert out.strip().endswith(
+        "held back by the ready boundary; `ger push --all` sends them as work-in-progress\n"
+        "nothing to push: Gerrit already has these commits"
+    )
     mock_run.assert_not_called()
 
 
@@ -544,7 +574,10 @@ def test_gpush_an_unknown_reviewer_is_said_once_with_gerrits_reason(
 
     rows = commits_in_range(stack_repo, "main..feature")[:2]
     _rejected_as_unchanged(monkeypatch)
-    store = _UnknownReviewer(build_details_by_change_id(rows, per_index_overrides=[{"reviewers": []}] * 2))
+    store = _UnknownReviewer(
+        build_details_by_change_id(rows, per_index_overrides=[{"reviewers": []}] * 2),
+        accounts={7: {"_account_id": 7, "username": "nosuchuser"}},  # an account it has, yet refuses to add
+    )
     code, _out, err = run_cli(
         stack_repo, gpush_main, ["-y", "--reviewers", "nosuchuser", rows[1].sha], monkeypatch, gerrit=store
     )
@@ -832,7 +865,9 @@ def test_gpush_show_attributes_shows_arrow_when_reviewers_differ(
         gpush_main,
         ["--dry-run", "--reviewers", "alice", "--reviewers", "bob"],
         monkeypatch,
-        gerrit=ChangeStore(at_older_patchsets(details, stack_repo)),
+        gerrit=ChangeStore(
+            at_older_patchsets(details, stack_repo), accounts={7: {"_account_id": 7, "username": "bob"}}
+        ),
     )
     assert code == 0
     assert "->" in out
@@ -877,10 +912,10 @@ def test_gpush_show_attributes_wip_no_arrow_when_reviewers_match(
 def test_gpush_interactive_reviewers_refspec(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
-        "gerrit_workflow_tools.push_preview.prompt_reviewers_line",
+        "gerrit_workflow_tools.push_confirm.prompt_reviewers_line",
         lambda *_a, **_k: parse_push_options_line("bob"),
     )
-    monkeypatch.setattr("gerrit_workflow_tools.push_preview.prompt_save_reviewers", lambda: False)
+    monkeypatch.setattr("gerrit_workflow_tools.push_confirm.prompt_save_reviewers", lambda: False)
     code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i"], monkeypatch)
     assert code == 0
     assert "%r=bob" in out
@@ -889,10 +924,10 @@ def test_gpush_interactive_reviewers_refspec(stack_repo: Path, monkeypatch: pyte
 def test_gpush_interactive_reviewers_lazy_omits_percent_r(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
-        "gerrit_workflow_tools.push_preview.prompt_reviewers_line",
+        "gerrit_workflow_tools.push_confirm.prompt_reviewers_line",
         lambda *_a, **_k: parse_push_options_line("bob lazy"),
     )
-    monkeypatch.setattr("gerrit_workflow_tools.push_preview.prompt_save_reviewers", lambda: False)
+    monkeypatch.setattr("gerrit_workflow_tools.push_confirm.prompt_save_reviewers", lambda: False)
     code, out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "-i"], monkeypatch)
     assert code == 0
     assert "lazy" in err
@@ -912,7 +947,7 @@ def test_gpush_confirm_reviewers_then_push_includes_percent_r(
 
     monkeypatch.setattr("builtins.input", _input)
     monkeypatch.setattr(
-        "gerrit_workflow_tools.push_preview.prompt_reviewers_line",
+        "gerrit_workflow_tools.push_confirm.prompt_reviewers_line",
         lambda *_a, **_k: parse_push_options_line("alice"),
     )
     mock_run = MagicMock(return_value=MagicMock(returncode=0))
@@ -933,7 +968,7 @@ def test_gpush_saves_typed_options_only_after_a_push(
     answers = iter(["r", confirm_answer])
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
     monkeypatch.setattr(
-        "gerrit_workflow_tools.push_preview.prompt_reviewers_line",
+        "gerrit_workflow_tools.push_confirm.prompt_reviewers_line",
         lambda *_a, **_k: parse_push_options_line("alice"),
     )
     mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
@@ -950,7 +985,7 @@ def _confirm_line_session(
 ) -> tuple[MagicMock, list[dict[str, object]]]:
     """Make the confirmation the options input line, answering *line* (or raising it); mock ``git push``."""
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push.options_line_available", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.push_confirm.options_line_available", lambda: True)
     monkeypatch.setattr("builtins.input", lambda *_a: pytest.fail("the options line replaces the [Y/n/r] question"))
     calls: list[dict[str, object]] = []
 
@@ -960,7 +995,7 @@ def _confirm_line_session(
             return parse_push_options_line(line)
         raise line
 
-    monkeypatch.setattr("gerrit_workflow_tools.push_preview.prompt_reviewers_line", _prompt)
+    monkeypatch.setattr("gerrit_workflow_tools.push_confirm.prompt_reviewers_line", _prompt)
     mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
     monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     return mock_run, calls
@@ -1009,10 +1044,10 @@ def test_gpush_interactive_reviewers_overwrites_branch_and_cli(
     set_branch_config(stack_repo, branch, gerrit_reviewers="carol")
     monkeypatch.setattr(sys, "stdin", _StdinTTY())
     monkeypatch.setattr(
-        "gerrit_workflow_tools.push_preview.prompt_reviewers_line",
+        "gerrit_workflow_tools.push_confirm.prompt_reviewers_line",
         lambda *_a, **_k: parse_push_options_line("bob"),
     )
-    monkeypatch.setattr("gerrit_workflow_tools.push_preview.prompt_save_reviewers", lambda: False)
+    monkeypatch.setattr("gerrit_workflow_tools.push_confirm.prompt_save_reviewers", lambda: False)
     code, out, _err = run_cli(
         stack_repo,
         gpush_main,
@@ -1217,7 +1252,8 @@ def test_a_verbose_flag_that_does_nothing_is_accepted_but_not_advertised(
 
 
 def test_gpush_forgets_only_the_changes_it_sent(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """After a push the next read asks in full for the changes that got a patchset, not for the whole stack."""
+    """After a push the changes that got a patchset are asked for in full once (by the push's closing lines,
+    which leaves the cache current for the next read), not the whole stack."""
     from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS
 
     kept, sent = commits_in_range(stack_repo, "main..feature")[:2]
@@ -1231,15 +1267,15 @@ def test_gpush_forgets_only_the_changes_it_sent(stack_repo: Path, monkeypatch: p
 
     mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
     monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    before = len(store.calls)
     code, out, err = run_cli(stack_repo, gpush_main, ["-y"], monkeypatch, gerrit=store)
     assert code == 0, err
     assert "1 commit Gerrit already has is not sent again" in out
 
-    before = len(store.calls)
     run_cli(stack_repo, log_main, [], monkeypatch, gerrit=store)
-    full = [c for c in store.calls[before:] if c.kwargs.get("options") == list(LOG_QUERY_OPTIONS)]
-    assert len(full) == 1
-    assert sent.change_id in full[0].args[0] and kept.change_id not in full[0].args[0]
+    full = [str(c.args[0]) for c in store.calls[before:] if c.kwargs.get("options") == list(LOG_QUERY_OPTIONS)]
+    assert sum(str(sent.change_id) in query for query in full) == 1
+    assert not any(str(kept.change_id) in query for query in full)
 
 
 def test_gpush_refuses_to_replace_a_patchset_it_never_had(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1349,7 +1385,7 @@ def test_gpush_sends_nothing_where_glog_says_outdated(stack_repo: Path, monkeypa
     assert code == 0
     assert "nothing to push: Gerrit already has these commits" in dry
     assert all(_outdated_line(row, number) in dry for number, row in enumerate(rows, start=100))
-    assert "[dry-run] no git push: Gerrit already has these commits" in err
+    assert "[dry-run] no git push" not in err  # "nothing to push" said it already
     mock_run.assert_not_called()
 
 
@@ -1420,3 +1456,147 @@ def test_gpush_options_on_outdated_changes_name_the_newer_patchsets(
     assert "`ger checkout change:100 --update`" in err and "ger.token" not in err
     writes = ("set_wip", "set_topic", "set_private", "set_reviewers_batch", "delete_reviewer")
     assert not any(store.calls_to(method) for method in writes)
+
+
+@pytest.mark.parametrize("argv", [["-y"], ["--dry-run"], []])
+def test_gpush_names_the_ready_boundary_on_every_path(
+    argv: list[str], stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Before, a real push with nothing new said only "nothing to push"; --dry-run named the boundary."""
+    rows = commits_in_range(stack_repo, "main..feature")
+    mock_run = _rejected_as_unchanged(monkeypatch)
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    code, out, _err = run_cli(
+        stack_repo, gpush_main, argv, monkeypatch, gerrit=ChangeStore(build_details_by_change_id(rows[:2]))
+    )
+    assert code == ExitCode.OK
+    boundary = rows[2]
+    lines = out.splitlines()
+    assert lines[:3] == [
+        f'Stopped at commit "{boundary.short_sha}  # {boundary.subject}", because it matches the stop pattern '
+        "`^(?:dropme!|todo\\b|test!|wip\\b)`.",
+        f"... 2 commits from {boundary.short_sha} up held back by the ready boundary; "
+        "`ger push --all` sends them as work-in-progress",
+        "nothing to push: Gerrit already has these commits",
+    ]
+    mock_run.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("footer", "fix"),
+    [
+        ("", "`git commit --amend` adds one, with Gerrit's commit-msg hook installed"),
+        (
+            "\n\nChange-Id: Inot-a-valid-id",
+            "`ger reword {short}` and delete its Change-Id line; Gerrit's commit-msg hook adds a new one",
+        ),
+    ],
+)
+def test_gpush_a_change_id_boundary_names_the_fix(
+    footer: str, fix: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--all does not pass a Change-Id error, so the notice names what does."""
+    git("commit", "--allow-empty", "-m", f"no good footer{footer}", cwd=stack_repo)
+    short = git("rev-parse", "--short", "HEAD", cwd=stack_repo).stdout.strip()
+    code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "--all"], monkeypatch)
+    assert code == 0
+    assert f"... 1 commit held back by the ready boundary; {fix.format(short=short)}" in out
+
+
+def test_gpush_wip_from_above_the_ready_boundary_names_it_and_all(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "--wip-from", "HEAD"], monkeypatch)
+    boundary = commits_in_range(stack_repo, "main..feature")[2]
+    assert code == ExitCode.USAGE
+    assert f"is not among the commits this push sends: it is above the ready boundary ({boundary.short_sha}: " in err
+    assert err.rstrip().endswith("; add --all to push past it")
+
+
+@pytest.mark.parametrize("topic", ["", "  "])
+def test_gpush_empty_topic_is_refused_naming_the_way(
+    topic: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Before, `--topic ""` said "nothing to push" and the topic stayed as it was."""
+    mock_run = MagicMock()
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    code, _out, err = run_cli(stack_repo, gpush_main, ["-y", "--topic", topic], monkeypatch)
+    assert code == ExitCode.USAGE
+    assert "--topic needs a name: a push cannot clear a change's topic (do that in the web UI)" in err
+    mock_run.assert_not_called()
+
+
+def test_gpush_usage_brackets_the_exclusive_wip_flags(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        gpush_main(["--help"])
+    usage = " ".join(capsys.readouterr().out.split("positional arguments")[0].split())
+    assert "[--wip | --ready | --wip-from REV] [--private | --no-private]" in usage
+
+
+def test_gpush_dry_run_says_what_it_shows_before_what_it_would_not_do(stack_repo: Path) -> None:
+    """Both streams into one pipe: the [dry-run] lines on stderr used to come before the preview on stdout."""
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; from gerrit_workflow_tools.cli_push import main; sys.exit(main())",
+            "--dry-run",
+        ],
+        cwd=stack_repo,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stdout
+    out = proc.stdout
+    assert (
+        out.index("About to push commits:") < out.index("git push origin") < out.index("[dry-run] not executing push")
+    )
+
+
+def test_gpush_preview_says_what_each_commit_becomes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Before: only `<sha> # <subject>`, and `Reviewers (none)` although the changes had reviewers."""
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    git("config", "ger.user", "me", cwd=stack_repo)
+    bob = [{"account": {"_account_id": 8, "username": "pg-bob"}, "state": "REVIEWER"}]
+    details = at_older_patchsets(
+        build_details_by_change_id(rows[:1], per_index_overrides=[{"reviewers": bob}]), stack_repo
+    )
+    for detail in details.values():
+        detail["owner"] = {"_account_id": 7, "name": "Alice", "username": "alice"}
+    code, out, _err = run_cli(
+        stack_repo, gpush_main, ["--dry-run", rows[1].sha], monkeypatch, gerrit=ChangeStore(details)
+    )
+    assert code == 0
+    lines = [line for line in out.splitlines() if line.startswith("    ")]
+    assert lines[0].endswith(f"# {rows[0].subject}  change 100, patchset 2 (owner Alice)")  # main: no patch-id
+    assert lines[1].endswith(f"# {rows[1].subject}  new change")
+    assert "Reviewers none added, on Gerrit: pg-bob  |" in out
+
+
+@pytest.mark.parametrize(("edited", "says"), [(False, "rebase only"), (True, "code changed")])
+def test_gpush_preview_says_rebase_only_or_code_changed(
+    edited: bool, says: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gerrit's patch set on another parent: the same code is only rebased, as the overlay says too."""
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    git("checkout", "-q", "-b", "elsewhere", "main", cwd=stack_repo)
+    (stack_repo / "side.txt").write_text("side\n", encoding="utf-8")
+    git("add", "side.txt", cwd=stack_repo)
+    git("commit", "-q", "-m", "side", cwd=stack_repo)
+    git("cherry-pick", rows[0].sha, cwd=stack_repo)
+    if edited:  # Gerrit's patch set has code the local commit does not
+        (stack_repo / "side.txt").write_text("side, edited\n", encoding="utf-8")
+        git("commit", "-q", "-a", "--amend", "--no-edit", cwd=stack_repo)
+    rebased = git("rev-parse", "HEAD", cwd=stack_repo).stdout.strip()
+    git("checkout", "-q", "feature", cwd=stack_repo)
+    details = build_details_by_change_id(rows[:1])
+    for detail in details.values():
+        detail["current_revision"] = rebased
+        detail["revisions"] = {rebased: {"_number": 4}}
+    code, out, _err = run_cli(
+        stack_repo, gpush_main, ["--dry-run", rows[0].sha], monkeypatch, gerrit=ChangeStore(details)
+    )
+    assert code == 0
+    assert f"# {rows[0].subject}  change 100, patchset 5 ({says})" in out

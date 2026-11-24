@@ -29,10 +29,10 @@ from gerrit_workflow_tools.core.reviewer_completion import (
     is_reviewer_login_token,
     slug_from_suggest_or_account_row,
 )
-from gerrit_workflow_tools.push_input_line import PushLineState
+from gerrit_workflow_tools.push_input_line import KEYWORDS_HINT, PushLineState
 
 
-_DEFAULT_STATUS_HINT = "keywords: r= topic= wip private push lazy overwrite publish-drafts"
+_DEFAULT_STATUS_HINT = KEYWORDS_HINT
 _REQUEST_INTERVAL_SECONDS = 0.5
 
 _JobKind = Literal["warmup_plugin", "warmup_suggest", "complete", "validate"]

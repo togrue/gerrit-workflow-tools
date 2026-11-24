@@ -37,6 +37,9 @@ class ReadyResult:
     target_tip: str
     push_tip_sha: str | None
     push_range: str | None  # "upstream_tip..tip" (target_tip field holds upstream tip SHA)
+    all_lifts_boundary: bool = False
+    """The stop pattern or a ready strategy set the boundary, so ``--all`` pushes past it (a Change-Id error
+    holds even then)."""
 
 
 def change_id_boundary_for_commits(commits: list[Commit]) -> BoundaryResult:
@@ -106,6 +109,7 @@ def _ready_result_from_block(
             target_tip=target_tip,
             push_tip_sha=None,
             push_range=None,
+            all_lifts_boundary=all_lifts_boundary,
         )
 
     tip_idx = pushable_count - 1
@@ -129,6 +133,7 @@ def _ready_result_from_block(
         target_tip=target_tip,
         push_tip_sha=tip,
         push_range=f"{target_tip}..{tip}",
+        all_lifts_boundary=all_lifts_boundary,
     )
 
 

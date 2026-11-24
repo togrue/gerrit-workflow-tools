@@ -8,19 +8,23 @@ classified spans for highlighting, and renders the canonical form back out.
 Grammar (best effort, case-insensitive keywords)::
 
     line     := element (WS+ element)*
-    element  := removal | rclause | topic | flag | strategy | reviewer
+    element  := removal | rclause | topic | flag | strategy | answer | reviewer
     removal  := '-' (keyword | reviewer)
     rclause  := ('r' '=' list) | ('r' WS+ list)        # list = name (',' name)*
     topic    := ('topic' '=' value) | ('topic' WS+ value)
     flag     := 'wip' | 'private' | 'publish-drafts'
     strategy := 'push' | 'lazy' | 'overwrite'
+    answer   := 'y' | 'yes' | 'n' | 'no' | 'q' | 'quit' | '?' | 'help'
     reviewer := bare-word that is not a reserved keyword
 
-Quoted strings (``"..."`` / ``'...'``) are accepted as topic values.
+Quoted strings (``"..."`` / ``'...'``) are accepted as topic values. An *answer* answers
+the prompt the line stands in (push, cancel, show this grammar); a reviewer with such a
+name is written ``r=y``.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -36,6 +40,16 @@ KW_LAZY = "lazy"
 KW_OVERWRITE = "overwrite"
 KW_PUBLISH_DRAFTS = "publish-drafts"
 
+LineAnswer = Literal["push", "cancel", "help"]
+ANSWERS: dict[str, LineAnswer] = {
+    **dict.fromkeys(("y", "yes"), "push"),
+    **dict.fromkeys(("n", "no", "q", "quit"), "cancel"),
+    **dict.fromkeys(("?", "help"), "help"),
+}
+"""Words that answer the prompt instead of naming a reviewer."""
+KEYWORDS_HINT = "keywords: r= topic= wip private push lazy overwrite publish-drafts  ·  y n ? (help)"
+"""The prompt's toolbar when it has nothing else to say."""
+
 SpanKind = Literal[
     "whitespace",
     "minus",
@@ -47,6 +61,7 @@ SpanKind = Literal[
     "keyword_lazy",
     "keyword_overwrite",
     "keyword_publish_drafts",
+    "keyword_answer",
     "equals",
     "comma",
     "reviewer",
@@ -97,6 +112,8 @@ class PushLineState:
     strategy: ReviewerStrategy = "push"
     publish_drafts: bool = False
     """Publish your drafts on the updated changes with the push (``publish-drafts``)."""
+    answer: LineAnswer | None = None
+    """What the line answers besides its options: push, cancel, or show the grammar (:data:`ANSWERS`)."""
 
     def add_reviewer(self, name: str) -> None:
         """Append ``name`` if non-empty and not already present."""
@@ -133,38 +150,20 @@ def tokenize(buf: str) -> tuple[list[Token], list[Diagnostic]]:
     """
     tokens: list[Token] = []
     diags: list[Diagnostic] = []
-    i = 0
-    n = len(buf)
-    while i < n:
-        ch = buf[i]
-        if ch.isspace():
-            i += 1
+    for match in _SEGMENT.finditer(buf):
+        text, start, end = match.group(), match.start(), match.end()
+        if text[0] not in ('"', "'"):
+            tokens.append(Token(text, start, end))
             continue
-        if ch in ('"', "'"):
-            quote = ch
-            start = i
-            i += 1
-            text_chars: list[str] = []
-            closed = False
-            while i < n:
-                if buf[i] == quote:
-                    closed = True
-                    i += 1
-                    break
-                text_chars.append(buf[i])
-                i += 1
-            end = i
-            tokens.append(Token("".join(text_chars), start, end, quoted=True))
-            if not closed:
-                diags.append(Diagnostic("error", f"Unclosed {quote} quote", start, end))
-            continue
-        start = i
-        text_chars = []
-        while i < n and not buf[i].isspace() and buf[i] not in ('"', "'"):
-            text_chars.append(buf[i])
-            i += 1
-        tokens.append(Token("".join(text_chars), start, i, quoted=False))
+        closed = len(text) > 1 and text[-1] == text[0]
+        tokens.append(Token(text[1 : -1 if closed else None], start, end, quoted=True))
+        if not closed:
+            diags.append(Diagnostic("error", f"Unclosed {text[0]} quote", start, end))
     return tokens, diags
+
+
+_SEGMENT = re.compile(r""""[^"]*"?|'[^']*'?|[^\s"']+""")
+"""A quoted run up to its closing quote (or the end of the line), or a run of anything but space and quotes."""
 
 
 def _split_reviewers(raw: str, base_offset: int, spans: list[Span]) -> list[str]:
@@ -196,6 +195,7 @@ _KEYWORD_KINDS: dict[str, SpanKind] = {
     KW_LAZY: "keyword_lazy",
     KW_OVERWRITE: "keyword_overwrite",
     KW_PUBLISH_DRAFTS: "keyword_publish_drafts",
+    **dict.fromkeys(ANSWERS, "keyword_answer"),
 }
 _FLAG_FIELDS: dict[SpanKind, str] = {
     "keyword_wip": "wip",
@@ -214,136 +214,113 @@ def _classify_keyword(word: str) -> SpanKind | None:
     return _KEYWORD_KINDS.get(word.lower())
 
 
-def parse(buf: str) -> ParseResult:  # pylint: disable=too-many-branches,too-many-statements,too-many-locals
+def _add_reviewers(state: PushLineState, raw: str, offset: int, spans: list[Span]) -> None:
+    for name in _split_reviewers(raw, offset, spans):
+        state.add_reviewer(name)
+
+
+def _set_topic(state: PushLineState, value: str, start: int, end: int, diags: list[Diagnostic]) -> None:
+    if state.topic not in (None, value):
+        diags.append(Diagnostic("warning", "Topic redefined; using last value", start, end))
+    state.topic = value
+
+
+def _removal(state: PushLineState, tok: Token, spans: list[Span]) -> None:
+    """``-word``: switch a keyword off, or drop a reviewer."""
+    inner, inner_start = tok.text[1:], tok.start + 1
+    kind = None if inner.lower() in ANSWERS else _classify_keyword(inner)
+    spans += [Span("minus", tok.start, inner_start), Span(kind or "reviewer", inner_start, tok.end)]
+    if kind == "keyword_r":
+        state.reviewers.clear()
+    elif kind in _FLAG_FIELDS:
+        setattr(state, _FLAG_FIELDS[kind], False)
+    elif kind == "keyword_topic":
+        state.topic = None
+    elif kind in _STRATEGIES:
+        state.strategy = "push"
+    else:
+        state.remove_reviewer(inner)
+
+
+def _assignment(state: PushLineState, tok: Token, spans: list[Span], diags: list[Diagnostic]) -> None:
+    """``r=alice,bob`` / ``topic=x``."""
+    key, _eq, value = tok.text.partition("=")
+    kind = _classify_keyword(key)
+    if kind not in ("keyword_r", "keyword_topic"):
+        spans.append(Span("error", tok.start, tok.end))
+        diags.append(Diagnostic("error", f"Unknown key `{key}=`", tok.start, tok.end))
+        return
+    eq = tok.start + len(key)
+    spans += [Span(kind, tok.start, eq), Span("equals", eq, eq + 1)]
+    if not value:
+        what = "`r=` reviewer list" if kind == "keyword_r" else "`topic=` value"
+        diags.append(Diagnostic("error", f"Empty {what}", tok.start, tok.end))
+    elif kind == "keyword_r":
+        _add_reviewers(state, value, eq + 1, spans)
+    else:
+        spans.append(Span("topic_value", eq + 1, tok.end))
+        _set_topic(state, value, tok.start, tok.end, diags)
+
+
+def _keyword_value(
+    state: PushLineState, kind: SpanKind, tok: Token, nxt: Token | None, spans: list[Span], diags: list[Diagnostic]
+) -> int:
+    """``r alice,bob`` / ``topic x``: the keyword takes the next token. How many tokens it used."""
+    spans.append(Span(kind, tok.start, tok.end))
+    is_word = nxt is not None and (nxt.text.startswith("-") or _classify_keyword(nxt.text) is not None)
+    if nxt is None or (is_word and not (kind == "keyword_topic" and nxt.quoted)):
+        what = "`r` requires a comma-separated reviewer list" if kind == "keyword_r" else "`topic` requires a value"
+        diags.append(Diagnostic("error", what, tok.start, tok.end))
+        return 1
+    if kind == "keyword_r":
+        _add_reviewers(state, nxt.text, nxt.start, spans)
+    else:
+        spans.append(Span("quoted" if nxt.quoted else "topic_value", nxt.start, nxt.end))
+        _set_topic(state, nxt.text, tok.start, nxt.end, diags)
+    return 2
+
+
+def _answer(state: PushLineState, tok: Token, spans: list[Span], diags: list[Diagnostic]) -> None:
+    answer = ANSWERS[tok.text.lower()]
+    spans.append(Span("keyword_answer", tok.start, tok.end))
+    if state.answer not in (None, answer):
+        diags.append(Diagnostic("error", f"`{tok.text}` contradicts the answer before it", tok.start, tok.end))
+    state.answer = answer
+
+
+def parse(buf: str) -> ParseResult:
     """Parse ``buf`` into a :class:`PushLineState` plus diagnostics and spans."""
     state = PushLineState()
     tokens, diags = tokenize(buf)
     spans: list[Span] = []
-    topic_seen_at: tuple[int, int] | None = None
-
     i = 0
-    n = len(tokens)
-    while i < n:
-        tok = tokens[i]
-        text = tok.text
-        if not text and not tok.quoted:
-            i += 1
-            continue
-
+    while i < len(tokens):
+        tok, nxt = tokens[i], tokens[i + 1] if i + 1 < len(tokens) else None
+        i += 1
+        kind = None if tok.quoted else _classify_keyword(tok.text)
         if tok.quoted:
             spans.append(Span("error", tok.start, tok.end))
-            diags.append(
-                Diagnostic("error", "Unexpected quoted value (only `topic` accepts a quoted value)", tok.start, tok.end)
-            )
-            i += 1
+            message = "Unexpected quoted value (only `topic` accepts a quoted value)"
+            diags.append(Diagnostic("error", message, tok.start, tok.end))
+        elif not tok.text:
             continue
-
-        if text.startswith("-") and len(text) > 1:
-            inner = text[1:]
-            spans.append(Span("minus", tok.start, tok.start + 1))
-            inner_start = tok.start + 1
-            inner_end = tok.end
-            kw = _classify_keyword(inner)
-            if kw == "keyword_r":
-                spans.append(Span("keyword_r", inner_start, inner_end))
-                state.reviewers.clear()
-            elif kw in _FLAG_FIELDS:
-                spans.append(Span(kw, inner_start, inner_end))
-                setattr(state, _FLAG_FIELDS[kw], False)
-            elif kw == "keyword_topic":
-                spans.append(Span("keyword_topic", inner_start, inner_end))
-                state.topic = None
-                topic_seen_at = None
-            elif kw in _STRATEGIES:
-                spans.append(Span(kw, inner_start, inner_end))
-                state.strategy = "push"
-            else:
-                spans.append(Span("reviewer", inner_start, inner_end))
-                state.remove_reviewer(inner)
-            i += 1
-            continue
-
-        if "=" in text:
-            key, _eq, value = text.partition("=")
-            key_low = key.lower()
-            key_start = tok.start
-            key_end = tok.start + len(key)
-            eq_start = key_end
-            eq_end = eq_start + 1
-            value_start = eq_end
-            value_end = tok.end
-            if key_low == KW_R:
-                spans.append(Span("keyword_r", key_start, key_end))
-                spans.append(Span("equals", eq_start, eq_end))
-                if not value:
-                    diags.append(Diagnostic("error", "Empty `r=` reviewer list", tok.start, tok.end))
-                else:
-                    for name in _split_reviewers(value, value_start, spans):
-                        state.add_reviewer(name)
-                i += 1
-                continue
-            if key_low == KW_TOPIC:
-                spans.append(Span("keyword_topic", key_start, key_end))
-                spans.append(Span("equals", eq_start, eq_end))
-                if not value:
-                    diags.append(Diagnostic("error", "Empty `topic=` value", tok.start, tok.end))
-                else:
-                    spans.append(Span("topic_value", value_start, value_end))
-                    if topic_seen_at is not None and state.topic not in (None, value):
-                        diags.append(Diagnostic("warning", "Topic redefined; using last value", tok.start, tok.end))
-                    state.topic = value
-                    topic_seen_at = (tok.start, tok.end)
-                i += 1
-                continue
-            spans.append(Span("error", tok.start, tok.end))
-            diags.append(Diagnostic("error", f"Unknown key `{key}=`", tok.start, tok.end))
-            i += 1
-            continue
-
-        kw = _classify_keyword(text)
-        if kw == "keyword_r":
-            spans.append(Span("keyword_r", tok.start, tok.end))
-            nxt = tokens[i + 1] if i + 1 < n else None
-            if nxt is None or nxt.text.startswith("-") or _classify_keyword(nxt.text) is not None:
-                diags.append(Diagnostic("error", "`r` requires a comma-separated reviewer list", tok.start, tok.end))
-                i += 1
-                continue
-            for name in _split_reviewers(nxt.text, nxt.start, spans):
-                state.add_reviewer(name)
-            i += 2
-            continue
-        if kw == "keyword_topic":
-            spans.append(Span("keyword_topic", tok.start, tok.end))
-            nxt = tokens[i + 1] if i + 1 < n else None
-            if nxt is None:
-                diags.append(Diagnostic("error", "`topic` requires a value", tok.start, tok.end))
-                i += 1
-                continue
-            if not nxt.quoted and (nxt.text.startswith("-") or _classify_keyword(nxt.text) is not None):
-                diags.append(Diagnostic("error", "`topic` requires a value", tok.start, tok.end))
-                i += 1
-                continue
-            value = nxt.text
-            spans.append(Span("topic_value" if not nxt.quoted else "quoted", nxt.start, nxt.end))
-            if topic_seen_at is not None and state.topic not in (None, value):
-                diags.append(Diagnostic("warning", "Topic redefined; using last value", tok.start, nxt.end))
-            state.topic = value
-            topic_seen_at = (tok.start, nxt.end)
-            i += 2
-            continue
-        if kw in _FLAG_FIELDS or kw in _STRATEGIES:
-            spans.append(Span(kw, tok.start, tok.end))
-            if kw in _FLAG_FIELDS:
-                setattr(state, _FLAG_FIELDS[kw], True)
-            else:
-                state.strategy = _STRATEGIES[kw]
-            i += 1
-            continue
-
-        spans.append(Span("reviewer", tok.start, tok.end))
-        state.add_reviewer(text)
-        i += 1
-
+        elif tok.text.startswith("-") and len(tok.text) > 1:
+            _removal(state, tok, spans)
+        elif "=" in tok.text:
+            _assignment(state, tok, spans, diags)
+        elif kind in ("keyword_r", "keyword_topic"):
+            i += _keyword_value(state, kind, tok, nxt, spans, diags) - 1
+        elif kind in _FLAG_FIELDS:
+            spans.append(Span(kind, tok.start, tok.end))
+            setattr(state, _FLAG_FIELDS[kind], True)
+        elif kind in _STRATEGIES:
+            spans.append(Span(kind, tok.start, tok.end))
+            state.strategy = _STRATEGIES[kind]
+        elif kind == "keyword_answer":
+            _answer(state, tok, spans, diags)
+        else:
+            spans.append(Span("reviewer", tok.start, tok.end))
+            state.add_reviewer(tok.text)
     diags.extend(_validate(state))
     spans.sort(key=lambda s: (s.start, s.end))
     return ParseResult(state=state, diagnostics=diags, spans=spans)

@@ -70,6 +70,20 @@ class OutdatedChange:
 
 
 @dataclass(frozen=True)
+class AbandonedChange:
+    """A commit about to be pushed that is a patch set of an abandoned change: it is not sent, nothing is set."""
+
+    commit: Commit
+    number: int | None
+
+    def describe(self) -> str:
+        return (
+            f"{self.commit.short_sha} not sent: change {self.number} is abandoned "
+            f"(restore it in the web UI, or `ger edit --drop {self.commit.short_sha}`)"
+        )
+
+
+@dataclass(frozen=True)
 class StateUpdate:
     """What a push sets over REST on one unchanged change. ``None`` / empty leaves that part alone."""
 

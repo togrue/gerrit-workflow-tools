@@ -144,3 +144,28 @@ def test_should_navigate_true_when_complete_state_empty() -> None:
     buffer.complete_state = MagicMock(completions=[])
     buffer.document.is_cursor_at_the_end = True
     assert pip.should_navigate_push_options_history(buffer) is True
+
+
+def test_a_starting_line_ends_in_a_space_so_typing_starts_a_new_word(
+    history_cache: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pre-filled `publish-drafts` and a typed `y` became the reviewer `publish-draftsy`."""
+    seen: list[str] = []
+
+    class _Session:
+        def __init__(self, **_kw: object) -> None:
+            self.default_buffer = MagicMock(text="")
+
+        def prompt(self, *, default: str) -> str:
+            seen.append(default)
+            return default + "y"
+
+    monkeypatch.setattr(pip, "PromptSession", _Session)
+    from gerrit_workflow_tools.core.config import Settings
+
+    res = pip.prompt_push_options_line(default="publish-drafts", settings=Settings.from_map({}))
+    empty = pip.prompt_push_options_line(default="", settings=Settings.from_map({}))
+
+    assert seen == ["publish-drafts ", ""]
+    assert res.state.publish_drafts and res.state.answer == "push" and not res.state.reviewers
+    assert empty.state.answer == "push"

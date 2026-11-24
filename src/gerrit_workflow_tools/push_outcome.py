@@ -8,12 +8,17 @@ from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.push import PushPlan, PushRefusal
+from gerrit_workflow_tools.core.push import PushPlan, PushRefusal, changes_nothing, unsent_short_shas
 from gerrit_workflow_tools.core.push_result import NOTHING_TO_PUSH, PushResult
 from gerrit_workflow_tools.core.push_reviewers import ReviewerApplyChangeOutcome
 from gerrit_workflow_tools.core.push_unchanged import StateUpdateFailure
-from gerrit_workflow_tools.push_preview import print_outdated, print_ready_boundary_notice, update_line
-from gerrit_workflow_tools.render.style import color_short_sha
+from gerrit_workflow_tools.push_preview import (
+    print_not_sent,
+    print_ready_boundary_notice,
+    update_line,
+    update_line_head,
+)
+from gerrit_workflow_tools.render.style import ANSI_BOLD, ANSI_CYAN, color_short_sha, color_text
 from gerrit_workflow_tools.summary_highlight import branch_summary_highlighter
 
 
@@ -70,10 +75,10 @@ def print_push_outcome(result: PushResult, plan: PushPlan | None) -> None:
 
     Gerrit refusing an option on a change it already had fails the command, so it is an error.
     """
-    if result.set_nothing:
+    if result.set_nothing and not (plan is not None and changes_nothing(plan)):  # else said before it ran
         print(NOTHING_TO_PUSH)
         if plan is not None:
-            print_outdated(plan)
+            print_not_sent(plan)
     if result.error_message:
         print(result.error_message, file=sys.stderr)
     if result.reviewers is not None and plan is not None:
@@ -87,6 +92,32 @@ def print_push_outcome(result: PushResult, plan: PushPlan | None) -> None:
         print(f"error: could not set {line}", file=sys.stderr)
     if result.warning:
         print(result.warning, file=sys.stderr)
+    if plan is not None and result.pushed:
+        print_pushed(result, plan)
+
+
+def print_pushed(result: PushResult, plan: PushPlan) -> None:
+    """ger's own closing lines: each change the push updated, its patch set page, and your drafts on them.
+
+    The URLs come from ``ger.webUrl``; git's remote output names whatever host the server thinks it is.
+    """
+    print()
+    print(color_text(f"Pushed to refs/for/{plan.push_branch}:", f"{ANSI_BOLD}{ANSI_CYAN}"))
+    for change in result.pushed:
+        where = f"  {change.url}" if change.url else ""
+        print(f"    {update_line_head(change.commit)}  change {change.number}, patchset {change.patch_set}{where}")
+    unsent = unsent_short_shas(plan)
+    drafts = sum(count for sha, count in plan.drafts.items() if sha not in unsent)
+    if drafts:
+        print(drafts_line(drafts, published=bool(plan.options.publish_comments)))
+
+
+def drafts_line(count: int, *, published: bool) -> str:
+    """What became of your drafts on the changes a push updated."""
+    if published:
+        return f"published {count} draft{'s' if count != 1 else ''} with the push"
+    stay = "1 draft stays a draft" if count == 1 else f"{count} drafts stay drafts"
+    return f"{stay}; publish with `ger reply --publish`, or push with --publish-comments"
 
 
 def _emit_push_output(result: PushResult) -> None:

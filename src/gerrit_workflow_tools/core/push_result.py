@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from gerrit_workflow_tools.core.push_reviewers import ReviewerApplyResult
+from gerrit_workflow_tools.core.push_targets import PushedChange
 from gerrit_workflow_tools.core.push_unchanged import StateUpdate, StateUpdateFailure
 
 
@@ -24,6 +25,8 @@ class PushResult:
     updated: tuple[StateUpdate, ...] = ()
     """What was set over REST on changes Gerrit already had at that commit."""
     update_failures: tuple[StateUpdateFailure, ...] = ()
+    pushed: tuple[PushedChange, ...] = ()
+    """The changes Gerrit got a new patch set for, as it has them now (empty when it was not asked)."""
     nothing_sent: bool = False
     """Gerrit took no new patch set: every commit was already on it, or it answered ``no new changes``."""
 

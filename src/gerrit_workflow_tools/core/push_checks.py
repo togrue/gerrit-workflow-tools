@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import NamedTuple
 
+from gerrit_workflow_tools.core.change_id import parse_change_id_footer, validate_change_id_value
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import (
@@ -24,11 +25,12 @@ from gerrit_workflow_tools.core.gerrit.stack_context import (
 from gerrit_workflow_tools.core.gerrit_change_status import PatchsetStatus, patchset_status
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, commit_sha_or_none, git, git_out
 from gerrit_workflow_tools.core.git_state import head_is_linear_on_remote_gerrit_target
-from gerrit_workflow_tools.core.push_unchanged import OutdatedChange, UnchangedChange
+from gerrit_workflow_tools.core.push_targets import NextPatchset, next_patchsets
+from gerrit_workflow_tools.core.push_unchanged import AbandonedChange, OutdatedChange, UnchangedChange
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
 from gerrit_workflow_tools.core.rebase_state import AM_UNDERWAY, am_underway, rebase_underway
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.core.stack import Commit
+from gerrit_workflow_tools.core.stack import Commit, is_unsquashed_fixup
 
 
 class PushBlocker(Enum):
@@ -180,6 +182,13 @@ class ExistingChanges(NamedTuple):
     """Commits Gerrit already has as an older patchset of their change: a push sends them nowhere."""
     built_on_outdated: tuple[BuiltOnOutdated, ...] = ()
     """The lowest sent commit above each outdated one: its patch set would not sit on Gerrit's current one."""
+    reviewers: frozenset[str] = frozenset()
+    """Who already reviews one of these changes: accounts Gerrit has, known without asking."""
+    abandoned: tuple[AbandonedChange, ...] = ()
+    """Commits Gerrit has as a patch set of an abandoned change: a push sends them nowhere."""
+    next_patchsets: Mapping[str, NextPatchset] | None = None
+    """By SHA, the commits that become new patch sets of a change Gerrit has; the rest become new changes.
+    ``None``: Gerrit was not asked, so nobody knows."""
 
     def refusal(self) -> str | None:
         """Why a push without ``--force`` must not run: it would replace a newer patchset, or build on an old one."""
@@ -219,6 +228,7 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
     unchanged: list[UnchangedChange] = []
     diverged: list[DivergedChange] = []
     outdated: list[OutdatedChange] = []
+    abandoned: list[AbandonedChange] = []
     built_on_outdated: list[BuiltOnOutdated] = []
     views = {sha: ChangeView.from_payload(p) for sha, p in ((s, payloads.get(t)) for s, t in triplets.items()) if p}
     drafts = _draft_counts(service, commits, triplets, views)
@@ -227,9 +237,12 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
         view = views.get(commit.sha)
         status = patchset_status(commit.sha, view) if view is not None else None
         if view is not None and (view.status or "").upper() == "ABANDONED":
+            if status != PatchsetStatus.NEWER:  # Gerrit has it already: one of the change's patch sets
+                abandoned.append(AbandonedChange(commit, view.number))
+                continue
             warnings.append(
-                f"warning: {commit.short_sha} targets abandoned change {view.number}; "
-                "restore it on Gerrit or drop the commit"
+                f"warning: {commit.short_sha} would be a new patch set of abandoned change {view.number}, which "
+                f"Gerrit refuses (restore it in the web UI, or `ger edit --drop {commit.short_sha}`)"
             )
         elif view is not None and status == PatchsetStatus.ACTIVE:
             unchanged.append(UnchangedChange.of(commit, triplets[commit.sha], view))
@@ -255,6 +268,9 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
         diverged=tuple(diverged),
         outdated=tuple(outdated),
         built_on_outdated=tuple(built_on_outdated),
+        reviewers=frozenset(account.slug for view in views.values() for account in view.reviewers or ()),
+        abandoned=tuple(abandoned),
+        next_patchsets=next_patchsets(run.cwd, commits, views, user=run.settings.get("ger.user")),
     )
 
 
@@ -280,11 +296,27 @@ def _draft_counts(
 
 @dataclass(frozen=True)
 class PushBoundary:
+    """Where the ready boundary stops a push, why, and what gets past it."""
+
     sha: str | None
     reason: str
     short_sha: str | None
     subject: str | None
-    remaining_unpushed: int
+    held_back: int
+    """The commits from the boundary up, which this push leaves as they are (Gerrit may have them already)."""
+    fix: str | None = None
+    """What gets them past it: ``--all`` for the stop pattern or a ready strategy, else a Change-Id fix."""
+    all_lifts: bool = False
+    """``--all`` pushes past it (:attr:`ReadyResult.all_lifts_boundary`)."""
+
+    def beyond(self, until: str | None) -> str:
+        """``: it is above …``: why a commit of the local stack is not among those a push sends."""
+        if until:
+            return f": it is above {until}, where this push stops"
+        if not self.sha:
+            return ""
+        way = "; add --all to push past it" if self.all_lifts else ""
+        return f": it is above the ready boundary ({self.short_sha}: {self.reason}){way}"
 
 
 def push_ready(
@@ -322,6 +354,22 @@ def push_boundary(cwd: Path, ready: ReadyResult, *, head: str) -> PushBoundary:
     short_sha = git_or_none(cwd, "rev-parse", "--short", sha) if sha else None
     subject = git_or_none(cwd, "show", "-s", "--format=%s", sha) if sha else None
     count = git_or_none(cwd, "rev-list", "--count", f"{sha}..{head}") if sha else None
-    # The boundary commit itself stays unpushed, and `sha..head` leaves it out.
-    remaining = int(count) + 1 if count and count.isdigit() else 0
-    return PushBoundary(sha, ready.boundary_reason, short_sha, subject, remaining)
+    # The boundary commit itself is held back too, and `sha..head` leaves it out.
+    held = int(count) + 1 if count and count.isdigit() else 0
+    fix = _boundary_fix(cwd, sha, short_sha or sha[:7], subject or "", ready, at_tip=held == 1) if sha else None
+    return PushBoundary(sha, ready.boundary_reason, short_sha, subject, held, fix, ready.all_lifts_boundary)
+
+
+def _boundary_fix(cwd: Path, sha: str, short_sha: str, subject: str, ready: ReadyResult, *, at_tip: bool) -> str | None:
+    """How the commits *ready* holds back get past its boundary at *sha*."""
+    if ready.all_lifts_boundary:
+        return "`ger push --all` sends them as work-in-progress"
+    if is_unsquashed_fixup(subject):  # its reason says what to do already
+        return None
+    found, malformed = validate_change_id_value(
+        parse_change_id_footer(git_or_none(cwd, "show", "-s", "--format=%B", sha) or "")
+    )
+    if not found and not malformed:
+        how = "`git commit --amend`" if at_tip else f"`ger reword {short_sha}`"
+        return f"{how} adds one, with Gerrit's commit-msg hook installed"
+    return f"`ger reword {short_sha}` and delete its Change-Id line; Gerrit's commit-msg hook adds a new one"

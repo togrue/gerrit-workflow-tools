@@ -30,7 +30,7 @@ def _pushed(stack_repo: Path, *, updated: bool = True) -> tuple[ChangeStore, lis
     details = build_details_by_change_id(rows)
     if updated:
         at_older_patchsets(details, stack_repo)
-    return ChangeStore(details), rows, list(details)
+    return ChangeStore(details, accounts={7: {"_account_id": 7, "username": "alice"}}), rows, list(details)
 
 
 def _with_draft(store: ChangeStore, key: str) -> None:
@@ -154,7 +154,7 @@ def test_drafts_on_an_outdated_change_are_named(stack_repo: Path, monkeypatch: p
 def _line_answers(monkeypatch: pytest.MonkeyPatch, answer: str | None) -> list[dict[str, object]]:
     """Make the confirmation the push options line; *answer* is what is typed, ``None`` takes the starting line."""
     monkeypatch.setattr(sys, "stdin", _Tty())
-    monkeypatch.setattr("gerrit_workflow_tools.cli_push.options_line_available", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.push_confirm.options_line_available", lambda: True)
     monkeypatch.setattr("builtins.input", lambda *_a: pytest.fail("drafts use the push options line too"))
     calls: list[dict[str, object]] = []
 
@@ -162,7 +162,7 @@ def _line_answers(monkeypatch: pytest.MonkeyPatch, answer: str | None) -> list[d
         calls.append(kw)
         return parse_push_options_line(str(kw["suffix"]) if answer is None else answer)
 
-    monkeypatch.setattr("gerrit_workflow_tools.push_preview.prompt_reviewers_line", _prompt)
+    monkeypatch.setattr("gerrit_workflow_tools.push_confirm.prompt_reviewers_line", _prompt)
     return calls
 
 
@@ -256,3 +256,43 @@ def test_guard_starts_the_line_without_publish_drafts(stack_repo: Path, monkeypa
     assert code == ExitCode.OK
     assert calls[0]["suffix"] == ""
     assert "no-publish-comments" in _options(refspec)
+
+
+def _pushing_to(store: ChangeStore, keys: list[str], rows: list[Commit], monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    """``git push`` that Gerrit takes: each change gets the local commit as patchset 2."""
+
+    def _push(*_a: object, **_k: object) -> subprocess.CompletedProcess[str]:
+        for key, row in zip(keys, rows, strict=True):
+            store.upload_patchset(key, row.sha, 2)
+        return subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr="remote: http://elsewhere/c/x/+/1\n"
+        )
+
+    mock_run = MagicMock(side_effect=_push)
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    return mock_run
+
+
+@pytest.mark.parametrize(
+    ("argv", "says"),
+    [
+        (["-y"], "1 draft stays a draft; publish with `ger reply --publish`, or push with --publish-comments"),
+        (["-y", "--publish-comments"], "published 1 draft with the push"),
+    ],
+)
+def test_yes_says_what_became_of_the_drafts_and_where_the_changes_are(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str], says: str
+) -> None:
+    """Before: -y kept the drafts with no word about them, and only git's remote output followed."""
+    store, rows, keys = _pushed(stack_repo)
+    _with_draft(store, keys[0])
+    _pushing_to(store, keys, rows, monkeypatch)
+    code, out, _err = run_cli(stack_repo, push_main, argv, monkeypatch, gerrit=store)
+    assert code == ExitCode.OK
+    assert ("Drafts publish 1" if "--publish-comments" in argv else "Drafts keep 1") in out  # the status line
+    closing = out.split("\nPushed to refs/for/main:\n")[1].splitlines()
+    assert closing == [
+        f"    {rows[0].short_sha}  # {rows[0].subject}  change 100, patchset 2  https://gerrit.example/c/testproj/+/100/2",
+        f"    {rows[1].short_sha}  # {rows[1].subject}  change 101, patchset 2  https://gerrit.example/c/testproj/+/101/2",
+        says,
+    ]

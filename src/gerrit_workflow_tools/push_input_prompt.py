@@ -26,6 +26,7 @@ from prompt_toolkit.validation import ValidationError, Validator
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, branch_reviewers, resolve_push_reviewers
 from gerrit_workflow_tools.push_input_line import (
+    KEYWORDS_HINT,
     KW_LAZY,
     KW_OVERWRITE,
     KW_PRIVATE,
@@ -48,6 +49,21 @@ from gerrit_workflow_tools.render.style import is_color_enabled
 from gerrit_workflow_tools.reviewer_catalog import ReviewerCatalog
 
 
+LINE_HELP = """\
+The push options line: words separated by spaces; Enter runs the line.
+  Enter, y, yes        push with the options the status line shows
+  n, no, q, quit       cancel (as do Ctrl-C and Ctrl-D)
+  ?, help              show this
+  alice  r=alice,bob   add reviewers (r=y for a reviewer named like an answer)
+  -alice  -r           drop a reviewer, or all of them
+  topic=NAME  -topic   set or drop the topic
+  wip  private         mark the changes (-wip, -private: don't)
+  publish-drafts       publish your drafts with the push (-publish-drafts: keep them)
+  push lazy overwrite  how reviewers are added (see ger push --help)
+Up and Down recall earlier lines; Tab completes keywords and reviewer names."""
+"""What ``?`` / ``help`` on the push options line prints: the grammar of :mod:`push_input_line`."""
+
+
 _STYLE_BY_KIND: dict[SpanKind, str] = {
     "minus": "fg:ansiyellow",
     "keyword_r": "fg:ansigreen bold",
@@ -58,6 +74,7 @@ _STYLE_BY_KIND: dict[SpanKind, str] = {
     "keyword_lazy": "fg:#4a7ebb bold",
     "keyword_overwrite": "fg:#4a7ebb bold",
     "keyword_publish_drafts": "fg:ansiblue bold",
+    "keyword_answer": "fg:ansimagenta bold",
     "equals": "fg:ansiwhite",
     "comma": "fg:ansiwhite",
     "reviewer": "fg:ansibrightgreen",
@@ -208,10 +225,7 @@ def _bottom_toolbar(text: str, catalog: ReviewerCatalog | None = None) -> Format
         msg = warnings[0].message
         extra = f" (+{len(warnings) - 1} more)" if len(warnings) > 1 else ""
         return FormattedText([("fg:ansiyellow", f"warning: {msg}{extra}")])
-    if catalog is not None:
-        hint = catalog.default_toolbar_hint()
-    else:
-        hint = "keywords: r= topic= wip private push lazy overwrite publish-drafts"
+    hint = catalog.default_toolbar_hint() if catalog is not None else KEYWORDS_HINT
     return FormattedText([("fg:#808080", hint)])
 
 
@@ -239,6 +253,7 @@ def prompt_push_options_line(
     stored = load_push_options_history(web_base=web_base, project=project)
     display_history = [apply_session_strategy(entry, session_strategy) for entry in stored]
     initial = apply_session_strategy(default or "", session_strategy)
+    initial += " " if initial else ""  # what is typed next starts a word of its own
     seed_list = [s for s in reviewer_seeds if s]
 
     def _invalidate_prompt() -> None:
@@ -281,12 +296,14 @@ def prompt_branch_push_options(
     message: str = "Push options: ",
     prefill: bool = True,
     suffix: str = "",
+    text: str | None = None,
 ) -> ParseResult:
     """Open the highlighted push-options input line for *branch*, history keyed by the stack's project.
 
     With *prefill* the line starts with the reviewers ``--reviewers`` / the registry /
     ``branch.*.gerReviewers`` give; without it, the line is empty. A *suffix* (such as
-    ``publish-drafts``) ends the starting line either way.
+    ``publish-drafts``) ends the starting line either way. A *text* is the starting line
+    instead: the line a user typed, when the prompt opens again.
     """
     seeds = branch_reviewers(branch, settings=settings) if branch is not None else []
     web_base, project = push_options_history_identity(cwd, settings=settings)
@@ -294,7 +311,7 @@ def prompt_branch_push_options(
     if prefill and cwd is not None and branch is not None:
         reviewers = resolve_push_reviewers(cwd, branch, reviewer_flag_segments or [], settings=settings)
         default = f"r={','.join(reviewers)}" if reviewers else ""
-    default = " ".join(part for part in (default, suffix) if part)
+    default = " ".join(part for part in (default, suffix) if part) if text is None else text
     return prompt_push_options_line(
         reviewer_seeds=seeds,
         message=message,

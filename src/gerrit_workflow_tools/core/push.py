@@ -4,17 +4,15 @@ from __future__ import annotations
 
 import contextlib
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from gerrit_workflow_tools.core.change_id import change_id_of_rev
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.comments import publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
-from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, build_triplet
-from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.git_state import (
     LAST_PUSH_PREFIX,
@@ -40,8 +38,11 @@ from gerrit_workflow_tools.core.push_reviewers import (
     credential_error,
     needs_rest_assignment,
     push_marks,
+    unknown_reviewers,
 )
+from gerrit_workflow_tools.core.push_targets import NextPatchset, pushed_changes
 from gerrit_workflow_tools.core.push_unchanged import (
+    AbandonedChange,
     OutdatedChange,
     StateUpdate,
     UnchangedChange,
@@ -72,11 +73,17 @@ class PushPlan:
     """Commits Gerrit already has as current patchsets: push options reach them over REST."""
     outdated: tuple[OutdatedChange, ...] = ()
     """Commits Gerrit already has as older patchsets: not sent, so Gerrit keeps its newer one."""
+    abandoned: tuple[AbandonedChange, ...] = ()
+    """Commits Gerrit has as patch sets of abandoned changes: not sent, and nothing is set on them."""
+    next_patchsets: Mapping[str, NextPatchset] | None = None
+    """What each sent commit becomes, by SHA (see :attr:`ExistingChanges.next_patchsets`)."""
     drafts: dict[str, int] = field(default_factory=dict)
     """Your unpublished drafts per pushed commit (short SHA -> count)."""
     wip_from: str | None = None
     """The first commit pushed as work-in-progress; those below it go up ready. ``None``: the options
     decide for every commit."""
+    known_reviewers: frozenset[str] = frozenset()
+    """Who already reviews one of the pushed changes: names Gerrit has an account for, known without asking."""
 
 
 @dataclass(frozen=True)
@@ -84,17 +91,6 @@ class PushRefusal:
     message: str
     boundary: PushBoundary | None = None
     warnings: tuple[str, ...] = ()
-
-
-def change_ref_of(cwd: Path, plan: PushPlan, rev: str, *, settings: Settings) -> str | None:
-    """The push branch's triplet for the change *rev* carries; ``None`` without a Change-Id or project.
-
-    What the push prompt's reviewer completion asks Gerrit about: never the bare Change-Id,
-    which Gerrit answers with 404 ("Multiple changes found") once it is on a second branch.
-    """
-    change_id = change_id_of_rev(cwd, rev)
-    project = resolve_gerrit_project_name(cwd, settings=settings) if change_id else None
-    return build_triplet(project, plan.push_branch, change_id) if change_id and project else None
 
 
 def push_argv(plan: PushPlan) -> list[str]:
@@ -149,6 +145,12 @@ def revise(plan: PushPlan, options: PushOptions, *, settings: Settings) -> PushP
     )
 
 
+def unknown_plan_reviewers(run: RunContext, plan: PushPlan) -> tuple[str, ...]:
+    """The reviewers *plan* asks for that Gerrit has no account for (:func:`unknown_reviewers`)."""
+    options = plan.options
+    return unknown_reviewers(run.gerrit, options.strategy, options.reviewers, present=plan.known_reviewers)
+
+
 def changes_nothing(plan: PushPlan) -> bool:
     """Nothing to send and nothing to set over REST: the push would leave Gerrit as it is."""
     reviewers = needs_rest_assignment(plan.options.strategy, plan.options.reviewers) and _reviewed_commits(plan)
@@ -158,6 +160,7 @@ def changes_nothing(plan: PushPlan) -> bool:
 def sent_commits(plan: PushPlan) -> tuple[Commit, ...]:
     """The commits *plan* gives Gerrit as new patch sets: all but those already one of their change's patch sets."""
     known = {change.commit.sha for change in plan.unchanged} | {change.commit.sha for change in plan.outdated}
+    known |= {change.commit.sha for change in plan.abandoned}
     return tuple(commit for commit in plan.commits if commit.sha not in known)
 
 
@@ -236,6 +239,8 @@ def prepare(
     cwd, settings = run.cwd, run.settings
     if topic and "," in topic:
         raise UsageError(f"invalid topic {topic!r}: a comma separates push options")
+    if topic is not None and not topic.strip():
+        raise UsageError("--topic needs a name: a push cannot clear a change's topic (do that in the web UI)")
     if blocked := push_blocked(run.worktree.repository_dir, branch):
         raise UsageError(blocked.message)
     destination = effective_gerrit_destination_branch(cwd, branch, settings=settings)
@@ -287,7 +292,9 @@ def prepare(
         return PushRefusal(f"error: {exc}", warnings=warnings)
     if wip_from is not None and wip_from not in {commit.sha for commit in commits}:
         if not all_commits:
-            raise UsageError(f"--wip-from {wip_from[:8]} is not among the commits this push sends")
+            raise UsageError(
+                f"--wip-from {wip_from[:8]} is not among the commits this push sends{boundary.beyond(until)}"
+            )
         wip_from = None
     if not force and (refusal := existing.refusal()):
         return PushRefusal(refusal, boundary=boundary, warnings=warnings)
@@ -305,8 +312,11 @@ def prepare(
         update_last_pushed=update_last_pushed,
         unchanged=existing.unchanged,
         outdated=existing.outdated,
+        abandoned=existing.abandoned,
+        next_patchsets=existing.next_patchsets,
         drafts=dict(existing.drafts),
         wip_from=wip_from,
+        known_reviewers=existing.reviewers,
     )
     return publish_drafts_with(plan, publish_comments)
 
@@ -327,6 +337,7 @@ def execute(run: RunContext, plan: PushPlan | Sequence[str]) -> PushResult:
     if rejected:
         captured = PushResult(returncode=0, nothing_sent=True)
     _forget_pushed_changes(run, plan)
+    pushed = () if rejected else pushed_changes(run, sent_commits(plan))
     reviewers, error = _apply_reviewers(run, plan)
     updates = state_updates(plan)
     failures = apply_updates(run.gerrit, updates) if updates else []
@@ -342,6 +353,7 @@ def execute(run: RunContext, plan: PushPlan | Sequence[str]) -> PushResult:
         warning=note or None,
         updated=tuple(update for update in updates if update not in failed_updates),
         update_failures=tuple(failures),
+        pushed=pushed,
     )
 
 

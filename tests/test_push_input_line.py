@@ -230,3 +230,37 @@ def test_diagnostic_dataclass_is_hashable_via_fields() -> None:
     d = Diagnostic("error", "x", 0, 1)
     assert d.severity == "error"
     assert (d.start, d.end) == (0, 1)
+
+
+@pytest.mark.parametrize(
+    ("line", "answer"),
+    [
+        ("y", "push"),
+        ("YES", "push"),
+        ("n", "cancel"),
+        ("no", "cancel"),
+        ("q", "cancel"),
+        ("quit", "cancel"),
+        ("?", "help"),
+        ("help", "help"),
+        ("publish-drafts y", "push"),
+        ("r=alice n", "cancel"),
+    ],
+)
+def test_answer_words_answer_the_prompt_and_name_no_reviewer(line: str, answer: str) -> None:
+    """Typed at the push prompt, y/n/? are answers: before, `y` pushed with %r=y and `?` broke the refspec."""
+    res = parse(line)
+    assert res.state.answer == answer
+    assert "y" not in res.state.reviewers and "n" not in res.state.reviewers
+    assert format_canonical(res.state) == format_canonical(parse(line.rpartition(" ")[0]).state)
+
+
+def test_a_reviewer_named_like_an_answer_is_written_with_r() -> None:
+    res = parse("r=y,n -n")
+    assert res.state.reviewers == ["y"]
+    assert res.state.answer is None
+
+
+def test_contradicting_answers_are_an_error() -> None:
+    res = parse("y n")
+    assert not res.valid_for_apply

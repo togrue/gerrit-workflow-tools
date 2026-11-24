@@ -39,3 +39,7 @@ live prefix discovery for names not in seeds.
   the prompt exits.
 - The architecture note that threading the catalog through prompt-toolkit was
   “not worth it” is superseded by this ADR.
+- Soft validation still never blocks Enter. Once a line is accepted and the prompt has
+  closed, `ger push` looks each new reviewer up once (`unknown_reviewers` in
+  `core/push_reviewers.py`) and opens the line again on a name Gerrit has no account for.
+  No prompt is on screen while that runs, so nothing waits on it to redraw.
