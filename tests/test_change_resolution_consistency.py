@@ -248,8 +248,8 @@ def test_log_on_main_target_uses_main_triplet_not_dev(web_stack_repo: Path, monk
     assert row["code_review"] == 2
     assert "/+/120100" in (row.get("gerrit_url") or "")
     assert "resolution_note" in row
-    assert "120100" in row["resolution_note"]
-    assert "119900" in row["resolution_note"]
+    # The commit's own footer: narrowed to the push target as expected, so the note only says where else.
+    assert row["resolution_note"] == "note: also on dev as c119900 (same Change-Id)"
 
 
 def test_log_resolution_notes_do_not_requery_per_change_id(
@@ -678,3 +678,19 @@ def test_an_ambiguous_query_exits_4_and_lists_each_candidate(
     store.stub_query("topic:none", [])
     code, _out, err = run_cli(web_stack_repo, main_fn, ["q:topic:none"], monkeypatch, gerrit=store)
     assert (code, err.strip()) == (ExitCode.NOT_FOUND, "error: cannot resolve 'q:topic:none': no Gerrit change matches")
+
+
+def test_a_typed_change_id_gets_the_full_note_and_a_stack_commit_the_short_one(
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Change-Id from the commit's own footer goes to the push target as expected: only where else it is."""
+    cid = _cid("2")  # HEAD~2's own footer
+    sha = git_out("rev-parse", "HEAD~2", cwd=web_stack_repo)
+    store = ChangeStore(_mock_dual_branch_details(change_id=cid, sha=sha))
+    _code, _out, typed = run_cli(web_stack_repo, resolve_main, [cid], monkeypatch, gerrit=store)
+    _code, _out, footer = run_cli(web_stack_repo, gshow_main, ["HEAD~2"], monkeypatch, gerrit=store)
+    assert typed.splitlines()[0] == (
+        f"note: Change-Id {cid} matches 2 changes (branches: main c120100, dev c119900); "
+        "using c120100 on 'main' (your push target). Name another by its number (c119900) or triplet."
+    )
+    assert footer.splitlines()[0] == "note: also on dev as c119900 (same Change-Id)"

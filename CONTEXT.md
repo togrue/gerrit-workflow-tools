@@ -69,7 +69,7 @@ Any input that might name a commit or a Gerrit change: a git rev, **Change-Id**,
 _Avoid_: ref, target, identifier
 
 **Resolution note**:
-The one-line stderr message explaining that a bare **Change-Id** matched changes on more than one branch and which one was used. Derived from the local cache, never from a per-Change-Id re-query.
+The one-line stderr message explaining that a bare **Change-Id** matched changes on more than one branch and which one was used. Read from a commit's own footer, it only says where else the Change-Id is (`also on dev as c2051`). Derived from the local cache, never from a per-Change-Id re-query.
 _Avoid_: warning, disambiguation message
 
 ### The Gerrit side

@@ -157,25 +157,47 @@ def format_local_sibling_note(resolution: Resolution) -> str | None:
     return local_sibling_note(sibling, branch=selected.branch, number=selected.number)
 
 
+def _changes(count: int) -> str:
+    return f"{count} change{'' if count == 1 else 's'}"
+
+
+def _elsewhere(changes: list[SelectedChange]) -> str:
+    """``dev as c2051, main as c2049 (abandoned)``."""
+    return ", ".join(
+        f"{alt.branch} as {change_label(alt.number)}" + (f" ({alt.status.lower()})" if alt.status != "NEW" else "")
+        for alt in changes
+    )
+
+
 def format_resolution_note(resolution: Resolution) -> str | None:
-    """Return a one-line stderr transparency note when narrowing occurred."""
+    """Return a one-line stderr transparency note when narrowing occurred.
+
+    A Change-Id read from a commit's own footer (a git rev, a stack commit in ``ger log``) is
+    narrowed to the push target as expected, so its note only says where else it is. A Change-Id
+    typed bare gets the full note: which change was picked, why, and how to name another.
+    """
     if resolution.shadowed_change and resolution.local_sha is not None:
         return shadowed_change_note(resolution.input, resolution.local_sha)
-    if not resolution.ambiguous or resolution.selected is None:
-        if resolution.selected is None and resolution.alternatives:
-            alts = resolution.alternatives
-            branches = ", ".join(f"{alt.branch} {change_label(alt.number)}" for alt in alts)
+    footer = resolution.kind == "git-rev"
+    selected, alternatives = resolution.selected, resolution.alternatives
+    if not resolution.ambiguous or selected is None:
+        if selected is None and alternatives:
+            if footer:
+                return f"note: not on your push target yet; same Change-Id on {_elsewhere(alternatives)}"
             return (
-                f"note: Change-Id matches {len(alts)} change(s) on other branch(es) "
-                f"({branches}); absent on your push target."
+                f"note: Change-Id matches {_changes(len(alternatives))} on "
+                f"{'another branch' if len({alt.branch for alt in alternatives}) == 1 else 'other branches'} "
+                f"({_elsewhere(alternatives)}); none on your push target."
             )
         return None
 
-    selected = resolution.selected
-    all_matches = [selected, *resolution.alternatives]
-    total = len(all_matches)
-    branches = ", ".join(f"{alt.branch} {change_label(alt.number)}" for alt in all_matches)
     reason = resolution.selected_reason
+    if footer:
+        if reason == "branch-mismatch":
+            return f"note: not on your push target yet; showing {selected.branch} as {change_label(selected.number)}"
+        return f"note: also on {_elsewhere(alternatives)} (same Change-Id)"
+    all_matches = [selected, *alternatives]
+    branches = ", ".join(f"{alt.branch} {change_label(alt.number)}" for alt in all_matches)
     if reason == "target-branch":
         detail = f"using {change_label(selected.number)} on {selected.branch!r} (your push target)"
     elif reason == "prefer-open":
@@ -184,8 +206,9 @@ def format_resolution_note(resolution: Resolution) -> str | None:
         detail = f"using {change_label(selected.number)} on {selected.branch!r} (not your push target)"
     else:
         detail = f"using {change_label(selected.number)} on {selected.branch!r}"
-
+    other = next((alt for alt in alternatives if alt.number != selected.number), None)
+    override = f"Name another by its number{f' ({change_label(other.number)})' if other else ''} or triplet."
     return (
-        f"note: Change-Id {selected.change_id} matches {total} change(s) (branches: {branches}); "
-        f"{detail}. Override with a triplet or change: number."
+        f"note: Change-Id {selected.change_id} matches {_changes(len(all_matches))} (branches: {branches}); "
+        f"{detail}. {override}"
     )

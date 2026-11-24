@@ -188,7 +188,17 @@ matches **more than one** open Gerrit change:
 2. **Announce the guess.** Print a one-line, dimmed transparency note to stderr
    (and include it structured in `--json`), e.g.:
 
-   > `note: Change-Id I8f3c… matches 2 changes (branches: main c120045, release-2.1 c119870); using c120045 on 'main' (your push target). Override with a triplet or change: number.`
+   > `note: Change-Id I8f3c… matches 2 changes (branches: main c120045, release-2.1 c119870); using c120045 on 'main' (your push target). Name another by its number (c119870) or triplet.`
+
+   That is the note for a Change-Id the user typed. A Change-Id read from a commit's own
+   footer (`ger log`, `ger show HEAD`, `ger resolve HEAD`) goes to the push target as
+   anyone expects, so its note only says where else it is:
+
+   > `note: also on release-2.1 as c119870 (same Change-Id)`
+
+   and, when the push target has none yet, `note: not on your push target yet; same
+   Change-Id on release-2.1 as c119870` (`resolution.format_resolution_note`, keyed on the
+   resolution's kind: `git-rev` for a footer, `change-id` for a typed one).
 
 3. **Still ambiguous?** If more than one match remains *on the target branch*
    (rare — e.g. an abandoned change plus a new one), prefer **open/active** over

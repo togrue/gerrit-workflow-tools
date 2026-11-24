@@ -213,7 +213,9 @@ def test_change_id_only_on_other_branch_is_absent(stack_repo: Path) -> None:
     assert len(resolution.alternatives) == 1
     note = format_resolution_note(resolution)
     assert note is not None
-    assert "absent on your push target" in note
+    assert note == (
+        "note: Change-Id matches 1 change on another branch (release-2.1 as c119870); none on your push target."
+    )
 
 
 def test_change_id_case_sensitive_queries(stack_repo: Path) -> None:

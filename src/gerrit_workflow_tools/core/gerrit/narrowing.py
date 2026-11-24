@@ -76,7 +76,10 @@ def resolution_from_change_rows(
     push_branch: str,
     explicit_target: bool = False,
 ) -> Resolution:
-    """Build a :class:`Resolution` from already-fetched/cached ChangeInfo rows."""
+    """Build a :class:`Resolution` from already-fetched/cached ChangeInfo rows of a stack commit's footer.
+
+    Its kind is ``git-rev``: the Change-Id was read from the commit, as for a revision, not typed.
+    """
     return narrow_matches(
-        Resolution(input=change_id, kind="change-id"), rows, push_branch=push_branch, explicit_target=explicit_target
+        Resolution(input=change_id, kind="git-rev"), rows, push_branch=push_branch, explicit_target=explicit_target
     )
