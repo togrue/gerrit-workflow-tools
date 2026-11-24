@@ -120,8 +120,8 @@ def test_show_change_number_with_rejected_credentials_is_not_not_found(
         ),
         (
             HTTPError("https://g.example:8081/a/changes/", 401, "Unauthorized", {}, None),  # type: ignore[arg-type]
-            "Gerrit at g.example:8081 rejected the credentials (HTTP 401); check ger.user and ger.token, "
-            "or run `ger setup`",
+            "Gerrit at g.example:8081 rejected the credentials (HTTP 401); check ger.https://g.example:8081.user "
+            "and ger.https://g.example:8081.token, or run `ger setup`",
         ),
     ],
 )

@@ -20,6 +20,7 @@ from typing import Protocol
 from urllib.parse import urlsplit
 
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit.credentials import gerrit_user_for
 
 
 logger = logging.getLogger(__name__)
@@ -148,7 +149,9 @@ def discover_ssh_target(settings: Settings) -> SshTarget:
     else:
         port = remote.port if from_remote and remote else DEFAULT_SSH_PORT
     user = (
-        settings.event_stream_ssh("User") or (remote.user if from_remote and remote else None) or settings.gerrit_user
+        settings.event_stream_ssh("User")
+        or (remote.user if from_remote and remote else None)
+        or gerrit_user_for(settings, settings.gerrit_web_url)
     )
     return SshTarget(host, port, user)
 

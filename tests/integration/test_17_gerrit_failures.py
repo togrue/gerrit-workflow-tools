@@ -1,6 +1,6 @@
 """Integration: a Gerrit that refuses the credentials, or is not there at all.
 
-Against the real server a wrong ``ger.token`` is an HTTP 401, and a dead host a refused
+Against the real server a wrong ``ger.<url>.token`` is an HTTP 401, and a dead host a refused
 connection. Either way every command says so in one line and never guesses (exit-codes.md,
 ``GERRIT``): ``ger log`` and ``ger show`` still show the local commit with its Gerrit state
 unknown and exit 5, ``ger edit`` refuses to walk on unknown state, and the ``ger push``
@@ -21,6 +21,7 @@ from gerrit_workflow_tools.cli_edit import main as ger_edit_main
 from gerrit_workflow_tools.cli_log import main as ger_log_main
 from gerrit_workflow_tools.cli_push import main as ger_push_main
 from gerrit_workflow_tools.cli_show import main as ger_show_main
+from gerrit_workflow_tools.core.config_keys import gerrit_host_key
 from gerrit_workflow_tools.core.git_run import git
 from tests.integration.conftest import GerritIntegrationContext
 from tests.integration.integration_helpers import ger_push, prepare_topic_repo, run_ger
@@ -47,18 +48,25 @@ def broken_gerrit(
 ) -> Iterator[str]:
     """Break *pushed_repo*'s Gerrit configuration one way; yield the message ger must print."""
     ctx = gerrit_integration_context
+    token_key = gerrit_host_key(ctx.http_base, "token")
     if request.param == "wrong-token":
-        key, value = "ger.token", "not-the-token"
+        changes = {token_key: "not-the-token"}
         message = f"Gerrit at {urlparse(ctx.http_base).netloc} rejected the credentials (HTTP 401)"
     else:
-        key, value = "ger.webUrl", UNREACHABLE_WEB_URL
+        # The token is tied to its host (#111): the dead host needs one of its own to be asked at all.
+        changes = {"ger.webUrl": UNREACHABLE_WEB_URL, gerrit_host_key(UNREACHABLE_WEB_URL, "token"): "t"}
         message = f"Gerrit unreachable at {urlparse(UNREACHABLE_WEB_URL).netloc} (connection refused)"
-    original = {"ger.token": ctx.dev_password, "ger.webUrl": ctx.http_base}[key]
-    git("config", key, value, cwd=pushed_repo)
+    original = {"ger.webUrl": ctx.http_base, token_key: ctx.dev_password}
+    for key, value in changes.items():
+        git("config", key, value, cwd=pushed_repo)
     try:
         yield message
     finally:
-        git("config", key, original, cwd=pushed_repo)
+        for key in changes:
+            if key in original:
+                git("config", key, original[key], cwd=pushed_repo)
+            else:
+                git("config", "--unset", key, cwd=pushed_repo)
 
 
 @pytest.mark.parametrize(

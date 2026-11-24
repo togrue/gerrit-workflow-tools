@@ -14,7 +14,7 @@ from gerrit_workflow_tools.core.gerrit.cache import DEFAULT_CHANGE_TRUST_WINDOW_
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.changes import ChangeApi
 from gerrit_workflow_tools.core.gerrit.comments import CommentApi
-from gerrit_workflow_tools.core.gerrit.credentials import gerrit_auth_from_settings
+from gerrit_workflow_tools.core.gerrit.credentials import gerrit_auth_from_settings, gerrit_user_for
 from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
@@ -115,7 +115,7 @@ class GerritService:
         Asked once per user and host and then remembered: an account id never changes, and
         every inbox load and review delta needs it.
         """
-        user = self.settings.get("ger.user") or ""
+        user = gerrit_user_for(self.settings, self.web_base) or ""
         known = None if self.refresh else self.cache.account_id(user)
         if known is not None:
             return known

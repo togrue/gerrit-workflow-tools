@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
+from gerrit_workflow_tools.core.config_keys import gerrit_host_key
 from gerrit_workflow_tools.core.git_run import git, git_out
 from tests.integration.gerrit_http import GerritHttpSession, quote_change_id
 
@@ -267,7 +268,7 @@ def configure_ger_git_repo(
     if web_base.startswith("http://"):
         # The test Gerrit container serves plain http; ger refuses that without the opt-in.
         git("config", "ger.allowInsecureHttp", "true", cwd=repo)
-    git("config", "ger.user", gerrit_user, cwd=repo)
-    git("config", "ger.token", gerrit_secret, cwd=repo)
+    git("config", gerrit_host_key(web_base, "user"), gerrit_user, cwd=repo)
+    git("config", gerrit_host_key(web_base, "token"), gerrit_secret, cwd=repo)
     git("config", "ger.remote", gerrit_remote, cwd=repo)
     git("branch", "--set-upstream-to", f"{gerrit_remote}/{branch}", branch, cwd=repo)

@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import logging
-from collections.abc import Iterator
+from collections.abc import Callable
 from pathlib import Path
-
-import pytest
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_form import resolve_config_form
@@ -16,46 +13,27 @@ from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.upstream import append_recent_upstream_abbrev, read_recent_upstream_abbrevs
 
 
-@pytest.fixture(autouse=True)
-def _capture_config_warnings(caplog: pytest.LogCaptureFixture) -> Iterator[None]:
-    """Hook the config logger directly, and only directly: whether the package logger propagates
-    to the root (where caplog also listens) depends on which test configured logging first."""
-    log = logging.getLogger("gerrit_workflow_tools.core.config")
-    propagate = log.propagate
-    log.propagate = False
-    log.addHandler(caplog.handler)
-    try:
-        yield
-    finally:
-        log.removeHandler(caplog.handler)
-        log.propagate = propagate
-
-
-def _warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
-    return [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
-
-
-def test_an_old_key_answers_and_warns_once_with_the_command_that_moves_it(caplog: pytest.LogCaptureFixture) -> None:
+def test_an_old_key_answers_and_warns_once_with_the_command_that_moves_it(
+    config_warnings: Callable[[], list[str]],
+) -> None:
     settings = Settings.from_map({"gerrit.webUrl": "https://g.example"}, scopes={"gerrit.webUrl": ConfigScope.GLOBAL})
-    with caplog.at_level(logging.WARNING, logger="gerrit_workflow_tools.core.config"):
-        assert settings.gerrit_web_url == "https://g.example"
-        assert settings.scope("ger.webUrl") is ConfigScope.GLOBAL
-        assert settings.get("ger.webUrl") == "https://g.example"
-    assert _warnings(caplog) == [
+    assert settings.gerrit_web_url == "https://g.example"
+    assert settings.scope("ger.webUrl") is ConfigScope.GLOBAL
+    assert settings.get("ger.webUrl") == "https://g.example"
+    assert config_warnings() == [
         "git config key gerrit.webUrl is deprecated; move it with: "
         'git config --global ger.webUrl "$(git config --global gerrit.webUrl)" '
         "&& git config --global --unset gerrit.webUrl"
     ]
 
 
-def test_the_new_key_wins_and_silences_the_old_one(caplog: pytest.LogCaptureFixture) -> None:
+def test_the_new_key_wins_and_silences_the_old_one(config_warnings: Callable[[], list[str]]) -> None:
     settings = Settings.from_map({"ger.remote": "gerrit", "gerrit.remote": "origin"})
-    with caplog.at_level(logging.WARNING, logger="gerrit_workflow_tools.core.config"):
-        assert settings.gerrit_remote == "gerrit"
-    assert _warnings(caplog) == []
+    assert settings.gerrit_remote == "gerrit"
+    assert config_warnings() == []
 
 
-def test_every_renamed_family_falls_back(caplog: pytest.LogCaptureFixture) -> None:
+def test_every_renamed_family_falls_back(config_warnings: Callable[[], list[str]]) -> None:
     settings = Settings.from_map(
         {
             "gerrit.push.remotePolicy": "warn-not-rebased",
@@ -65,13 +43,12 @@ def test_every_renamed_family_falls_back(caplog: pytest.LogCaptureFixture) -> No
         },
         scopes={"inbox.limit": ConfigScope.COMMAND},
     )
-    with caplog.at_level(logging.WARNING, logger="gerrit_workflow_tools.core.config"):
-        assert settings.push_remote_policy == "warn-not-rebased"
-        assert settings.inbox_limit == 7
-        assert settings.branch_gerrit_target("Feature") == "dev"
-        assert settings.branch_gerrit_reviewers("Feature") == "alice"
-    assert len(_warnings(caplog)) == 4
-    assert "git config key inbox.limit is deprecated; use ger.inboxLimit" in _warnings(caplog)
+    assert settings.push_remote_policy == "warn-not-rebased"
+    assert settings.inbox_limit == 7
+    assert settings.branch_gerrit_target("Feature") == "dev"
+    assert settings.branch_gerrit_reviewers("Feature") == "alice"
+    assert len(config_warnings()) == 4
+    assert "git config key inbox.limit is deprecated; use ger.inboxLimit" in config_warnings()
 
 
 def test_legacy_names_are_the_documented_ones() -> None:
