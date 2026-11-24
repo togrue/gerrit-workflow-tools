@@ -61,7 +61,7 @@ Below the summary, dim **next lines** (`StackOverview.next_steps` in core, put i
 
 **Chain blocked.** A commit that Gerrit will not submit holds back every change above it. That commit, the first one, carries why on its own row (`# awaiting review`, `# build failed`, `# review issues`, `# 2 unresolved comments`, `# WIP`, `# no reviewers`; `# not submittable` when none of its reasons says), the rows above it do not repeat it, and the last line names it. JSON keeps `chain-blocked` in each blocked commit's `attention_reasons`, and marks the blocker `blocks_chain: true`.
 
-**Terminal width.** When stdout is a terminal, each row is fitted to its width: the subject is cut with `…` so the row, its hints (and URL) included, fits; hints and URLs keep their aligned columns, and a subject keeps at least 20 characters even if the row then wraps. The summary breaks between its parts and the closing lines wrap at word boundaries (a `` `command` `` is never broken). Piped output and `--ai` are never cut.
+**Terminal width.** When stdout is a terminal, each row is fitted to its width, one column spare (a row ending in the last column wraps in some terminals): the subject is cut with `…` so the row, its hints (and URL) included, fits; hints and URLs keep their aligned columns, and a subject keeps at least 20 characters even if the row then wraps. The summary breaks between its parts and the closing lines wrap at word boundaries (a `` `command` `` is never broken). Piped output and `--ai` are never cut.
 
 Subject highlighting uses `ger.stopPattern` / `ger.warningPattern` when color is on.
 

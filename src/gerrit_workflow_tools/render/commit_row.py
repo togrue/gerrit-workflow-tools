@@ -311,10 +311,14 @@ def oneline_body(
     return base
 
 
-def attention_summary(commit: LogCommit) -> str:
-    """One line on what *commit* needs: its attention reasons, else whether Gerrit has it."""
+def attention_summary(commit: LogCommit, *, leave_out: frozenset[str] = frozenset()) -> str:
+    """One line on what *commit* needs: its attention reasons (but *leave_out*), else whether Gerrit has it.
+
+    Empty when every reason is left out (a line of its own says it).
+    """
     if commit.attention_reasons:
-        return "attention: " + ", ".join(commit.attention_reasons)
+        reasons = [reason for reason in commit.attention_reasons if reason not in leave_out]
+        return "attention: " + ", ".join(reasons) if reasons else ""
     if not commit.pushed:
         return "not on Gerrit"
     return "ok"

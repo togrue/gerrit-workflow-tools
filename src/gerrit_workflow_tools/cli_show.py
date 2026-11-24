@@ -22,6 +22,7 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.cli_notes import print_resolution_note
 from gerrit_workflow_tools.core.annotated_targets import local_stack_or_none
+from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.ci_content_service import CiContentService
 from gerrit_workflow_tools.core.ci_http import CiHttp
 from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS, CommentSelection
@@ -170,8 +171,10 @@ def _emit_human_commit(
     commit, chains, ci_contents = item.commit, item.chains, item.ci_contents
     is_local = item.target.is_local_commit
     print(show_headline(commit))
-    if commit.attention_reasons:
-        print(color_text(attention_summary(commit), ANSI_DIM))
+    # A blocked commit names its blocker on a line of its own, so the reasons need not say chain-blocked too.
+    said = frozenset({Attention.CHAIN_BLOCKED}) if item.blocked_by is not None else frozenset()
+    if commit.attention_reasons and (summary := attention_summary(commit, leave_out=said)):
+        print(color_text(summary, ANSI_DIM))
     if item.blocked_by is not None:
         print(color_text(chain_blocked_text(item.blocked_by), ANSI_DIM))
 

@@ -169,7 +169,8 @@ def row_lines(
 ) -> list[str]:
     """The rows of ``ger log``, with a plain-text line where the ready boundary falls."""
     if options.width:
-        visible = fit_subjects(visible, options.width, show_url=options.show_url)
+        # One column spare: a row that ends in the last column wraps in some terminals.
+        visible = fit_subjects(visible, options.width - 1, show_url=options.show_url)
     attn_col = attention_column(visible, summary_highlighter=summary_highlighter)
     url_start = (
         _url_start_visible(visible, summary_highlighter=summary_highlighter, attn_col=attn_col)

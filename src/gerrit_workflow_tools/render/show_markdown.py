@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.ci_content import CiContent
 from gerrit_workflow_tools.core.comment_chains import CommentSelection
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit
@@ -25,7 +26,9 @@ def commit_markdown(
     WIP and private, votes and reviewers.
     """
     short = commit.short_sha or (commit.sha[:8] if commit.sha else "????????")
-    lines = [f"## {short} — {commit.summary or ''}", f"- {attention_summary(commit)}"]
+    said = frozenset({Attention.CHAIN_BLOCKED}) if blocked_by is not None else frozenset()
+    summary = attention_summary(commit, leave_out=said)
+    lines = [f"## {short} — {commit.summary or ''}", *([f"- {summary}"] if summary else [])]
     if blocked_by is not None:
         blocked = chain_blocked_text(blocked_by)
         lines.append(f"- {blocked[0].upper()}{blocked[1:]}")

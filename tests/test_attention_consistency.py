@@ -61,7 +61,9 @@ def test_show_names_the_blocker_and_its_json_agrees_with_log(
     repo, store = blocked_stack
     rows = stack_rows_mb_to_head(repo)
     _code, out, _err = run_cli(repo, show_main, ["HEAD", "--color", "never"], monkeypatch, gerrit=store)
-    assert f"chain blocked by {rows[0].short_sha} (awaiting review)" in out.splitlines()
+    lines = out.splitlines()
+    assert f"chain blocked by {rows[0].short_sha} (awaiting review)" in lines
+    assert not any(line.startswith("attention:") and "chain-blocked" in line for line in lines), "said once"
     _code, show_json, _err = run_cli(repo, show_main, ["HEAD", "--json"], monkeypatch, gerrit=store)
     _code, log_json, _err = run_cli(repo, log_main, ["--json"], monkeypatch, gerrit=store)
     head = json_stdout(log_json)["commits"][-1]
