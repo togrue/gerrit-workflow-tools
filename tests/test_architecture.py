@@ -392,7 +392,6 @@ def test_module_size_ratchet() -> None:
 # Counts per file may only go down.
 TOO_MANY_BASELINE = {
     "cli_log.py": 1,
-    "cli_show.py": 3,
     "core/gerrit/change_view.py": 1,
     "core/gerrit/service.py": 1,
     "core/gerrit_change_status.py": 1,
