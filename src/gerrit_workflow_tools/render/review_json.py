@@ -7,10 +7,13 @@ from dataclasses import asdict
 from datetime import datetime
 
 from gerrit_workflow_tools.core.attention import Attention, attention_severity
+from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
 from gerrit_workflow_tools.core.inbox import Headline, InboxSection, RebaseHeadline, section_summary
 from gerrit_workflow_tools.core.rebase_state import RebaseStop
 from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain, format_age
 from gerrit_workflow_tools.core.review_checkout import ReviewState
+from gerrit_workflow_tools.core.review_target import VoteOption, VotePlan
+from gerrit_workflow_tools.render.comments import chain_location, draft_transition, drafts_in, first_line
 
 
 def iso_utc(moment: datetime | None) -> str | None:
@@ -148,3 +151,59 @@ def headline_json(headline: Headline | RebaseHeadline | None) -> dict[str, objec
         "url": headline.member.url,
         "text": _headline_text(headline),
     }
+
+
+def _draft_json(chain: CommentChain, draft: InlineComment) -> dict[str, object]:
+    """One draft a vote publishes: where (``path:line``), its first line, whether it resolves or reopens its chain."""
+    transition = draft_transition(chain, draft.unresolved).removeprefix(" -> ") if draft is chain.draft else ""
+    return {
+        "path": chain.path,
+        "line": chain.line,
+        "location": chain_location(chain),
+        "text": first_line(draft.message),
+        "transition": transition or None,
+    }
+
+
+def vote_plan_json(plan: VotePlan, options: list[VoteOption], *, web_base: str) -> dict[str, object]:
+    """``GET /vote``: per change what goes out (its drafts) and what you may vote there; the votes on offer."""
+    changes = [
+        {
+            "number": target.number,
+            "change": target.change.key,
+            "subject": target.change.subject,
+            "patch_set": target.change.current_revision_number,
+            "url": target.change.url(web_base),
+            "owner": target.change.owner_name,
+            "own": target.own,
+            "permitted": {label: list(values) for label, values in target.change.permitted_votes.items()},
+            "ruled_out": list(target.ruled_out),
+            "drafts": [_draft_json(chain, draft) for chain, draft in drafts_in(list(target.drafts))],
+        }
+        for target in plan.targets
+    ]
+    return {
+        "changes": changes,
+        "votes": dict(plan.votes),
+        "drafts": plan.draft_count,
+        "options": [{**asdict(option), "takes": list(option.takes)} for option in options],
+    }
+
+
+def sent_vote_json(plan: VotePlan, status: str) -> dict[str, list[dict[str, object]]]:
+    """``ger review --vote --json`` and ``POST /vote``: each change the vote went to (*status*), each it skipped."""
+    rows: list[dict[str, object]] = [
+        {
+            "change": target.change.key,
+            "number": target.number,
+            "drafts": target.draft_count,
+            "labels": dict(plan.votes),
+            "message": plan.message,
+            "status": status,
+        }
+        for target in plan.takes
+    ]
+    skipped: list[dict[str, object]] = [
+        {"change": t.change.key, "number": t.number, "ruled_out": list(t.ruled_out)} for t in plan.skipped
+    ]
+    return {"changes": rows, "skipped": skipped}

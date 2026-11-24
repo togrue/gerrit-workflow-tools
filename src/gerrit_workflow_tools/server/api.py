@@ -14,7 +14,7 @@ from typing import Any
 from gerrit_workflow_tools.core.ci_http import CiHttp
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.server import actions, diff_views, views
+from gerrit_workflow_tools.server import actions, diff_views, views, vote
 from gerrit_workflow_tools.server.activity import Activity
 from gerrit_workflow_tools.server.request import Context, NoRoute, Request
 
@@ -36,8 +36,10 @@ ROUTES: tuple[tuple[str, str, Endpoint], ...] = (
     ("GET", "/file", diff_views.file),
     ("GET", "/review", views.review),
     ("GET", "/agent/runbook", views.agent_runbook),
+    ("GET", "/vote", vote.vote_plan),
     ("POST", "/review/open", actions.review_open),
     ("POST", "/review/done", actions.review_done),
+    ("POST", "/vote", vote.vote),
     ("POST", "/comments/reply", actions.reply),
     ("POST", "/comments/new", actions.new_comment),
     ("POST", "/comments/edit", actions.edit_own_comment),

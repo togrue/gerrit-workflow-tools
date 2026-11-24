@@ -417,7 +417,7 @@ flowchart LR
   client[VS Code extension · vscode/]
   httpd[server/httpd.py · token, loopback, errors]
   api[server/api.py · routes, per-request context]
-  ends[server/views.py · server/actions.py]
+  ends[server/views.py · server/actions.py · server/vote.py]
   core[core/ · inbox, annotated stack, show, review checkout, reorder]
   json[render/ JSON builders]
 
@@ -629,6 +629,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `server/views.py` | Read endpoints: health, overview, stack (with rebase progress and how far the upstream moved), stack moves (conflict preview), chain, show, review, agent runbook; `error_json` |
 | `server/diff_views.py` | Read endpoints about what a change changed: diff (a commit, a patchset, the **review delta**, Gerrit against local), patchsets, file |
 | `server/actions.py` | Endpoints that change something: review checkout, draft reply, hold, stack rewrite, reword and their undo |
+| `server/vote.py` | The vote: what it would send (`GET /vote`, with the votes on offer) and sending it (`POST /vote`), through core's `plan_vote` and `send_vote` |
 | `server/httpd.py` | HTTP transport: loopback, bearer token, JSON bodies, `failure_response` (failure to status) |
 | `server/activity.py` | The **activity sequence** (`Activity`: raised, long-polled by `GET /activity`) and `follow_events`: the **event stream** wired to it, applied under the request lock |
 
@@ -684,8 +685,8 @@ contract between engine and shell is worth keeping clean.
    service. Parity is about what can be done, not about command names: reorder, squash and drop
    are `ger rebase` on the command line and a drag in the editor. A capability offered by only
    one shell is a written exception with a reason, agreed by the maintainer, in a guardrail of
-   `tests/test_architecture.py`. Known gaps today: push, vote and publish are not served; undo
-   and the conflict preview have no command.
+   `tests/test_architecture.py`. Known gaps today: push is not served; undo and the conflict
+   preview have no command.
 6. **State lives in git and the Gerrit cache, never in the process**
    ([ADR-0014](adr/0014-memos-live-on-the-run.md)). The service gets faster through memos keyed
    by object id, reads off the request lock and pushed events

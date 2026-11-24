@@ -16,6 +16,7 @@ from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.review_target import VoteTarget, plan_vote, review_moved, send_vote, vote_changes
 from gerrit_workflow_tools.core.votes import format_votes, parse_votes
 from gerrit_workflow_tools.render.comments import format_pending_drafts
+from gerrit_workflow_tools.render.review_json import sent_vote_json
 
 
 def _heading(target: VoteTarget, voted: str) -> str:
@@ -31,16 +32,6 @@ def _print_plan(takes: list[VoteTarget], skipped: list[VoteTarget], voted: str, 
         print("\n".join([label + lines[0], *(" " * len(label) + line for line in lines[1:])]))
     for target in skipped:
         print(f'skipped change {target.number} "{target.change.subject}": {", ".join(target.ruled_out)}')
-
-
-def _row(target: VoteTarget, votes: dict[str, int], message: str | None, status: str) -> dict[str, object]:
-    return {
-        "change": target.change.key,
-        "drafts": target.draft_count,
-        "labels": votes,
-        "message": message,
-        "status": status,
-    }
 
 
 def vote(args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritService, cwd: Path) -> int:
@@ -68,10 +59,9 @@ def vote(args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritSe
 
     if not args.dry_run:
         send_vote(service, plan, sent=sent)
-    rows = [_row(t, votes, message, "dry-run" if args.dry_run else "published") for t in takes]
     if args.json_:
-        skips = [{"change": t.change.key, "ruled_out": list(t.ruled_out)} for t in skipped]
-        print(json.dumps(rows[0] if len(plan.targets) == 1 else {"changes": rows, "skipped": skips}, indent=2))
+        answer = sent_vote_json(plan, "dry-run" if args.dry_run else "published")
+        print(json.dumps(answer["changes"][0] if len(plan.targets) == 1 else answer, indent=2))
     elif state is not None and not args.dry_run:
         print("next: ger review --done" if args.chain else "next: ger review --next · ger review --done")
     return int(ExitCode.OK)

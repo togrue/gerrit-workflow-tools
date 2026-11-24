@@ -36,7 +36,7 @@ Status words: **ships**, **partial** (see the linked spec), **gap** (nothing doe
 | Read a reviewer's suggested edit (Gerrit fix suggestion or ```` ```suggestion ```` block) | `ger show` (`suggested_edits` in `--json`) | in the comment, editor thread and *Change* view | `tests/test_suggested_edits.py`, `tests/test_serve.py` | partial: shown, not applied |
 | Comment on a line or range | `ger comment PATH:LINE -m MSG` | "+" in the editor gutter, *Save Draft* | `tests/test_comment.py` | ships |
 | Reply to a chain | `ger reply CHAIN -m MSG`, `--done` | *Reply as Draft…*, *Reply Done and Resolve as Draft* | `tests/test_reply.py` | ships |
-| Send comments and vote | `ger review --vote +1 -m MSG`; the whole chain: `ger review --vote +1 --chain` | runs in the terminal | `tests/test_review.py` | ships |
+| Send comments and vote | `ger review --vote +1 -m MSG`; the whole chain: `ger review --vote +1 --chain`; drafts without a vote: `ger reply --publish CHANGEISH` | runs in the terminal; served as `GET /vote`, `POST /vote` | `tests/test_review.py`, `tests/test_serve_vote.py` | ships |
 | Leave the review | `ger review --done` | *Leave Review Checkout* | `tests/test_review.py` | ships |
 | An agent reviews: at most Code-Review+1, and says what it would really give | `GER_NO_PUBLISH=1` stops publishing altogether | — | — | **gap**: no agent vote policy in core |
 
