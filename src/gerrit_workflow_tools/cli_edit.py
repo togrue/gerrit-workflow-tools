@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
-from pathlib import Path
 from typing import Literal
 
 from gerrit_workflow_tools.cli_attention import (
@@ -17,11 +17,14 @@ from gerrit_workflow_tools.cli_attention import (
 )
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
+    add_message_args,
     add_verbose_and_debug_log_args,
     changeish_help,
     init_cli_runtime,
+    read_message,
     run_cli_command,
 )
+from gerrit_workflow_tools.cli_terminal import stdin_is_terminal
 from gerrit_workflow_tools.core.attention_cursor import (
     CursorAction,
     EditAttentionMode,
@@ -38,13 +41,14 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.rebase_next_step import attention_stop_hint
-from gerrit_workflow_tools.core.rebase_state import RebaseAction, rebase_in_progress, unmerged_paths
+from gerrit_workflow_tools.core.rebase_state import RebaseAction, rebase_in_progress, rebase_refusal, unmerged_paths
 from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_base_with_target
+from gerrit_workflow_tools.core.stack import merge_base_with_target
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.rebase_run import go_on_with_rebase, require_history_rewrite, run_interactive_rebase
 from gerrit_workflow_tools.render.status_fmt import attention_text
+from gerrit_workflow_tools.reword_run import message_from_editor, reword
 from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
 
@@ -56,10 +60,6 @@ __all__ = [
     "main_reword",
     "resolve_first_edit_attention_sha",
 ]
-
-
-def _stack_change_ids(cwd: Path, branch: str | None) -> set[str]:
-    return {commit.change_id for commit in get_stack_snapshot(cwd, branch).commits if commit.change_id}
 
 
 def _has_upstreams(run: RunContext, branch: str | None) -> bool:
@@ -127,11 +127,20 @@ def _build_parser(*, prog: str, description: str, default_action: Literal["edit"
             help="Stop at commit to amend (interactive rebase edit).",
         )
         g.add_argument("--drop", dest="action_override", action="store_const", const="drop", help="Drop commit.")
+    add_message_args(
+        p
+    ).description = "The new message for a reword, without an editor; a message without a Change-Id keeps the commit's."
     add_verbose_and_debug_log_args(
         p,
         debug_log_help="Log git commands and rebase sequence editor steps to stderr.",
     )
     return p
+
+
+_REWORD_DESCRIPTION = (
+    "Reword a commit in the current stack: only messages change, no rebase, so uncommitted changes stay "
+    "and nothing can conflict. The message comes from -m / -F, else your editor (or use --edit / --drop)."
+)
 
 
 def _build_parser_edit() -> argparse.ArgumentParser:
@@ -147,7 +156,7 @@ def _build_parser_reword() -> argparse.ArgumentParser:
     """Build parser for ``ger reword`` (bash completion and tests)."""
     return _build_parser(
         prog="ger reword",
-        description="Start an interactive rebase to reword a commit in the current stack (or use --edit / --drop).",
+        description=_REWORD_DESCRIPTION,
         default_action="reword",
     )
 
@@ -263,6 +272,11 @@ def _run_interactive_stack_rebase(
         return set_cursor_from_changeish(run, args.set_cursor, branch=branch)
 
     action = args.action_override or default_action
+    given = args.message is not None or args.file is not None
+    if given and action != "reword":
+        p.error("-m and -F give a reword its message: use them with ger reword, or ger edit --reword")
+    if args.message is not None and args.file is not None:
+        p.error("give the message with one of -m or -F")
     logger.debug(
         "ger edit cwd=%s rev_arg=%r first=%s next=%s action=%s",
         cwd,
@@ -276,7 +290,10 @@ def _run_interactive_stack_rebase(
         continued = _continue_stopped_rebase(run)
         if continued != 0:
             return continued
-    require_history_rewrite(cwd)
+    if action != "reword":  # a reword touches no tree: uncommitted changes are no obstacle
+        require_history_rewrite(cwd)
+    elif refusal := rebase_refusal(cwd):
+        raise UsageError(refusal)
     full, cursor_change_id, cursor_action, row = _resolve_target(run, args, branch=branch, action=action)
     short = git_out("rev-parse", "--short", full, cwd=cwd)
     # Dropping a change Gerrit closed is just what to do with it; editing or rewording it is not.
@@ -286,9 +303,19 @@ def _run_interactive_stack_rebase(
         )
     ):
         raise UsageError(refusal)
+    if action == "reword":
+        if not given and not (stdin_is_terminal() or os.environ.get("GIT_EDITOR")):
+            raise UsageError(
+                "no terminal to edit the message in: give it with -m MSG or -F FILE ('-': stdin), "
+                "or set GIT_EDITOR to an editor that runs without one"
+            )
+        message = read_message(args.message, args.file) if given else message_from_editor(run, full)
+        code = reword(run, full, message)
+        if code == 0 and cursor_change_id and branch is not None:
+            write_branch_cursor(cwd, branch, cursor_change_id, action=cursor_action, sha=full)
+        return code
     rebase_fork, _, _ = merge_base_with_target(cwd, branch)
 
-    change_ids_before = _stack_change_ids(cwd, branch) if action == "reword" else set()
     env = {"GEDIT_FULL_SHA": full, "GEDIT_SHORT_SHA": short, "GEDIT_ACTION": action}
     if args.debug_log:
         env["GEDIT_DEBUG_LOG"] = "1"
@@ -304,17 +331,8 @@ def _run_interactive_stack_rebase(
     # A non-zero exit with a rebase underway is a conflict: the walk did reach this commit.
     if cursor_change_id and branch is not None and (returncode == 0 or rebase_in_progress(cwd)):
         write_branch_cursor(cwd, branch, cursor_change_id, action=cursor_action, sha=full)
-    if returncode == 0 and rebase_in_progress(cwd):
-        if row and (hint := attention_stop_hint(row.attention_reasons)):
-            print(hint, file=sys.stderr)
-    elif returncode == 0:
-        for lost in sorted(change_ids_before - _stack_change_ids(cwd, branch)):
-            print(
-                f"warning: Change-Id {lost} left the stack; the next push creates a new change. "
-                f"The old change stays open on Gerrit: put `Change-Id: {lost}` back with `ger reword {short}` "
-                "to keep updating it, or abandon it there.",
-                file=sys.stderr,
-            )
+    if returncode == 0 and rebase_in_progress(cwd) and row and (hint := attention_stop_hint(row.attention_reasons)):
+        print(hint, file=sys.stderr)
     walked = args.next_attention or args.first_attention_commit
     moved = default_action == "edit" and walked and returncode == 0
     if moved and settings.show_after_edit:
@@ -345,7 +363,7 @@ def main_reword(argv: list[str] | None = None, *, gerrit: GerritRest | None = No
         lambda: _run_interactive_stack_rebase(
             argv,
             prog="ger reword",
-            description="Start an interactive rebase to reword a commit in the current stack (or use --edit / --drop).",
+            description=_REWORD_DESCRIPTION,
             default_action="reword",
             gerrit=gerrit,
         )

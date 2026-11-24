@@ -43,7 +43,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "change-id": ("Print or validate Change-Ids for commits or ranges.", "gerrit_workflow_tools.cli_changeid:main"),
     "edit": ("Interactive rebase: edit, reword, or drop a stack commit.", "gerrit_workflow_tools.cli_edit:main"),
     "reword": (
-        "Interactive rebase: reword, edit, or drop a stack commit.",
+        "Reword a stack commit, no rebase (-m / -F, or your editor); or edit or drop it.",
         "gerrit_workflow_tools.cli_edit:main_reword",
     ),
     "fetch-api": ("GET a Gerrit REST path with configured user and token.", "gerrit_workflow_tools.cli_fetch_api:main"),

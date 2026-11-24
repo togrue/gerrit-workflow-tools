@@ -134,7 +134,12 @@ def print_dropped(
 
 
 def print_outcome(
-    outcome: RewriteOutcome, *, walk_on: str | None, undo: Undo, previous_head: str | None = None
+    outcome: RewriteOutcome,
+    *,
+    walk_on: str | None,
+    undo: Undo,
+    previous_head: str | None = None,
+    done: str = "rebase finished",
 ) -> None:
     """ger's closing lines after a rewrite finished: what it dropped, what it did in words, and the next step.
 
@@ -142,7 +147,7 @@ def print_outcome(
     """
     for dropped in outcome.dropped:
         print_dropped(dropped, undo=undo, previous_head=previous_head)
-    print(f"rebase finished: {outcome_text(outcome)}", file=sys.stderr)
+    print(f"{done}: {outcome_text(outcome)}", file=sys.stderr)
     if walk_on:
         return
     if outcome.fixups_left:

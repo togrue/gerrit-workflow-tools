@@ -182,17 +182,9 @@ def test_cursor_stays_put_when_the_rebase_never_starts(web_stack_repo: Path, mon
 def test_greword_warns_when_the_change_id_changes(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     rows = stack_rows_mb_to_head(web_stack_repo)
     tip = rows[-1]
-    real_run = subprocess.run
-
-    def rewording_rebase(cmd, **kwargs):
-        if isinstance(cmd, list) and cmd[:2] == ["git", "rebase"]:
-            git("commit", "--amend", "--allow-empty", "-m", "no change id here", cwd=web_stack_repo)
-            return subprocess.CompletedProcess(cmd, 0)
-        return real_run(cmd, **kwargs)
-
-    monkeypatch.setattr(subprocess, "run", rewording_rebase)
     store = ChangeStore(build_details_by_change_id(rows))
-    code, _out, err = run_cli(web_stack_repo, greword_main, [tip.sha], monkeypatch, gerrit=store)
+    argv = ["-m", "another change\n\nChange-Id: Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", tip.sha]
+    code, _out, err = run_cli(web_stack_repo, greword_main, argv, monkeypatch, gerrit=store)
 
     assert code == 0
     assert f"warning: Change-Id {tip.change_id} left the stack" in err
@@ -333,6 +325,7 @@ def test_greword_next_ignores_show_after_edit(web_stack_repo: Path, monkeypatch:
         return 0
 
     monkeypatch.setattr("gerrit_workflow_tools.cli_ger.run_show", _run_show)
+    monkeypatch.setenv("GIT_EDITOR", "true")  # an editor that runs without a terminal
     _fake_rebase_capture(monkeypatch)
     code, _out, err = run_cli(web_stack_repo, greword_main, ["-n"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
@@ -448,6 +441,7 @@ def test_the_walk_says_which_commit_it_chose_before_the_editor(
     overrides: list[dict] = [{}] * len(rows)
     overrides[0] = {"unresolved_comment_count": 2}
     store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=overrides))
+    monkeypatch.setenv("GIT_EDITOR", "true")  # an editor that runs without a terminal
     _fake_rebase_capture(monkeypatch)
 
     code, _out, err = run_cli(web_stack_repo, greword_main, ["--first-attention-commit"], monkeypatch, gerrit=store)
@@ -499,18 +493,9 @@ def test_drop_says_what_it_dropped_and_how_to_get_it_back(
 def test_reword_warning_says_how_to_keep_the_old_change(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     rows = stack_rows_mb_to_head(web_stack_repo)
     tip = rows[-1]
-    real_run = subprocess.run
-
-    def rewording_rebase(cmd, **kwargs):
-        if isinstance(cmd, list) and cmd[:2] == ["git", "rebase"]:
-            git("commit", "--amend", "--allow-empty", "-m", "no change id here", cwd=web_stack_repo)
-            return subprocess.CompletedProcess(cmd, 0)
-        return real_run(cmd, **kwargs)
-
-    monkeypatch.setattr(subprocess, "run", rewording_rebase)
-    code, _out, err = run_cli(
-        web_stack_repo, greword_main, [tip.sha], monkeypatch, gerrit=ChangeStore(build_details_by_change_id(rows))
-    )
+    argv = ["-m", "another change\n\nChange-Id: Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", tip.sha]
+    store = ChangeStore(build_details_by_change_id(rows))
+    code, _out, err = run_cli(web_stack_repo, greword_main, argv, monkeypatch, gerrit=store)
 
     assert code == 0
     assert "The old change stays open on Gerrit" in err

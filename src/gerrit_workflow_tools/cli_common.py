@@ -195,6 +195,17 @@ def ask_choice(prompt: str, answers: Mapping[str, _T], *, hint: str | None = Non
             print(hint, file=sys.stderr)
 
 
+def add_message_args(parser: argparse.ArgumentParser) -> argparse._ArgumentGroup:
+    """Register ``-m``/``--message`` (repeatable) and ``-F``/``--file`` as a "message" group.
+
+    Read them with :func:`read_message`.
+    """
+    text = parser.add_argument_group("message")
+    text.add_argument("-m", "--message", action="append", default=None, help="Message; repeat for paragraphs.")
+    text.add_argument("-F", "--file", metavar="FILE", default=None, help="Read the message from FILE ('-': stdin).")
+    return text
+
+
 def read_message(messages: list[str] | None, file: str | None) -> str:
     """Message text from repeated ``-m`` (one paragraph each) or ``-F FILE`` (``-``: stdin), stripped."""
     if file is not None:

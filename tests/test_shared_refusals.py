@@ -74,7 +74,8 @@ def test_a_missing_upstream_reads_the_same_in_log_and_push(
     assert "Set it with:\n  git branch --set-upstream-to=origin/feature feature  # nearest: " in err
 
 
-@pytest.mark.parametrize(("main_fn", "argv"), [(edit_main, ["HEAD~1"]), (main_reword, ["HEAD~1"]), (rebase_main, [])])
+# Not `ger reword`: it rewrites messages only, so uncommitted changes are no obstacle (tests/test_reword.py).
+@pytest.mark.parametrize(("main_fn", "argv"), [(edit_main, ["HEAD~1"]), (rebase_main, [])])
 def test_every_history_rewrite_refuses_a_dirty_tree_the_same_way(
     main_fn: Callable[..., int], argv: list[str], stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -153,7 +154,8 @@ def test_a_history_rewrite_counts_as_uncommitted_exactly_what_git_stash_would_sa
     assert code == (ExitCode.USAGE if git_would_stash else ExitCode.OK), err
 
 
-@pytest.mark.parametrize(("main_fn", "argv"), [(edit_main, ["HEAD~1"]), (main_reword, ["HEAD~1"]), (rebase_main, [])])
+# Not `ger reword`: it rewrites messages only, so uncommitted changes are no obstacle (tests/test_reword.py).
+@pytest.mark.parametrize(("main_fn", "argv"), [(edit_main, ["HEAD~1"]), (rebase_main, [])])
 def test_a_submodule_staged_at_another_commit_stops_a_history_rewrite_without_asking_for_a_stash(
     main_fn: Callable[..., int], argv: list[str], stack_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -189,7 +191,8 @@ def test_the_unstage_command_for_two_staged_submodules_runs_as_given(
     assert history_rewrite_refusal(stack_repo) is None
 
 
-@pytest.mark.parametrize(("main_fn", "argv"), [(edit_main, ["HEAD~1"]), (main_reword, ["HEAD~1"]), (rebase_main, [])])
+# Not `ger reword`: it rewrites messages only, so uncommitted changes are no obstacle (tests/test_reword.py).
+@pytest.mark.parametrize(("main_fn", "argv"), [(edit_main, ["HEAD~1"]), (rebase_main, [])])
 def test_a_submodule_staged_below_the_stack_stops_a_history_rewrite_up_front(
     main_fn: Callable[..., int], argv: list[str], stack_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
