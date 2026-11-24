@@ -1893,7 +1893,7 @@ change | (the commit shown is only on the branch as it was before)
 
 ```
 dialog (warning): Finish the rebase first  [Abort] [Cancel]
-    detail: A rebase is in progress, and 'feature' still points at the commits from before it; finish it (`git rebase --continue`) or `git rebase --abort`, then push.
+    detail: A rebase is in progress, and 'feature' still points at the commits from before it; finish it (`ger rebase --continue`) or `ger rebase --abort`, then push.
     → pressed "Abort"
 terminal "ger": runs `ger rebase --abort`
 status bar message: $(terminal) ger rebase --abort runs in the ger terminal: the branch goes back to where it was before the rebase
@@ -2186,7 +2186,7 @@ dialog (warning): Save e.txt first? ger rebase --continue then says what it stil
     → pressed "Save All"
 terminal "ger": runs `ger rebase --continue`
 status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
-ger terminal | error: you have unstaged changes to e.txt; amend them in (`git commit --amend -a`) or `git stash` them, then continue
+ger terminal | error: you have unstaged changes to e.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`
 ger terminal | (exit 2)
 (no change)
 --- shown now:
