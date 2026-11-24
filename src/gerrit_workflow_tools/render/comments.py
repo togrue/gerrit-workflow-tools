@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime, timezone
 
+from gerrit_workflow_tools.core.changeish import change_label
 from gerrit_workflow_tools.core.comment_chains import CommentSelection
 from gerrit_workflow_tools.core.gerrit.rest import printable_path
 from gerrit_workflow_tools.core.gerrit_change_status import (
@@ -308,3 +310,13 @@ def empty_comments_message(comments: CommentSelection) -> str:
     if comments == "all":
         return "(no comments)"
     return "(no unresolved comments)"
+
+
+def drafts_elsewhere(counts: Mapping[int, int | None]) -> str:
+    """``1 unpublished draft on c2076: ger reply --publish c2076``, for drafts of yours that a step
+    leaves behind; a count of ``None`` is not known (a ``has:draft`` answer alone)."""
+    labels = [change_label(number) for number in counts]
+    known = [count for count in counts.values() if count is not None]
+    total = sum(known) if len(known) == len(counts) else None
+    what = "unpublished drafts" if total is None else f"{total} unpublished draft{'s' if total != 1 else ''}"
+    return f"{what} on {', '.join(labels)}: ger reply --publish {' '.join(labels)}"

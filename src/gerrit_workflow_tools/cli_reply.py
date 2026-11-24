@@ -6,7 +6,6 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
-from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
@@ -14,10 +13,8 @@ from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_output_format_args,
     add_verbose_and_debug_log_args,
-    assume_yes,
-    confirm,
+    confirm_publish,
     init_cli_runtime,
-    may_prompt,
     read_message,
     run_cli_command,
 )
@@ -31,11 +28,13 @@ from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import InlineComment, gerrit_inline_comment_url
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.core.votes import VOTE_HELP, parse_votes
 from gerrit_workflow_tools.render.comments import (
     chain_location,
     draft_transition,
+    drafts_elsewhere,
     drafts_in,
     first_line,
     format_pending_drafts,
@@ -172,16 +171,22 @@ class _Change:
     summary: str
 
 
-def _gerrit_changes(
-    service: GerritService, cwd: Path, revs: list[str], *, branch: str | None
-) -> tuple[list[_Change], str]:
+def _gerrit_changes(run: RunContext, revs: list[str], *, branch: str | None) -> tuple[list[_Change], str]:
     """The Gerrit changes *revs* name, else the local stack, else (no branch, e.g. detached) HEAD.
 
     Also returns a phrase naming where they came from, for messages.
     """
+    service, cwd = run.gerrit, run.cwd
     stack = not revs and branch is not None
     targets = resolve_show_targets(
-        cwd, revs, service.rest, settings=service.settings, stack=stack, branch=branch, changes=service.changes
+        cwd,
+        revs,
+        service.rest,
+        settings=service.settings,
+        stack=stack,
+        branch=branch,
+        changes=service.changes,
+        head=run.repo.head,
     )
     commits = annotate([t.row for t in targets], service=service, cwd=cwd).require_gerrit()
     found: dict[str, _Change] = {}
@@ -199,12 +204,10 @@ def _chain_line(match: ChainMatch) -> str:
     return f"  {match.chain.root_id}  {chain_location(match.chain)}  {words}"
 
 
-def _find(
-    service: GerritService, cwd: Path, ref: ChainRef, *, change: str | None, branch: str | None
-) -> tuple[ChainMatch, str | None]:
+def _find(run: RunContext, ref: ChainRef, *, change: str | None, branch: str | None) -> tuple[ChainMatch, str | None]:
     """The one chain *ref* names, and the web URL of its change. Not one: say which there are."""
-    changes, where = _gerrit_changes(service, cwd, [change] if change else [], branch=branch)
-    chains = service.comments.chains_on({c.key: c.freshness for c in changes})
+    changes, where = _gerrit_changes(run, [change] if change else [], branch=branch)
+    chains = run.gerrit.comments.chains_on({c.key: c.freshness for c in changes})
     matches = find_chains(chains, ref, lambda match: match.chain)
     if len(matches) > 1:
         listed = "\n".join(_chain_line(m) for m in matches)
@@ -259,18 +262,7 @@ def _emit_discard(match: ChainMatch, removed: InlineComment, url: str | None, *,
     print(f'discarded draft on {chain_location(match.chain)}: "{first_line(removed.message)}"')
 
 
-def _confirmed(args: argparse.Namespace, what: str) -> bool:
-    """Whether to go ahead: ``-y``, or a yes at a prompt. JSON output and no terminal never prompt."""
-    if args.yes or assume_yes():
-        return True
-    if not may_prompt(args):
-        raise UsageError("no prompt to answer (non-interactive, --json or --ai): pass -y to publish")
-    return confirm(f"Publish {what}?", default=False)
-
-
-def _publish(
-    args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritService, cwd: Path, branch: str | None
-) -> int:
+def _publish(args: argparse.Namespace, run: RunContext, branch: str | None) -> int:
     """List what goes out on the targets, confirm, and post it change by change.
 
     Your drafts (all, or ``--only`` ones), ``--vote`` votes and the ``-m`` message. A change
@@ -281,7 +273,8 @@ def _publish(
     if args.keep_drafts and args.only:
         raise UsageError("--keep-drafts publishes no drafts; it cannot be combined with --only")
     # Publishing acts on Gerrit changes, so a bare number names one (as for --change).
-    changes, where = _gerrit_changes(service, cwd, [as_change_only(t) for t in args.targets], branch=branch)
+    service = run.gerrit
+    changes, where = _gerrit_changes(run, [as_change_only(t) for t in args.targets], branch=branch)
     freshness = {c.key: c.freshness for c in changes}
     with_drafts = {} if args.keep_drafts else service.comments.drafts_to_publish(freshness, args.only, where=where)
     message = "\n\n".join(args.message) if args.message else None
@@ -299,9 +292,13 @@ def _publish(
                 print(f"  + {extras}")
         if not posts:
             print(f"no drafts to publish on {where}")
+    # Nothing here, and nothing named: say where your drafts are instead (one has:draft query).
+    elsewhere = _drafts_elsewhere(service, changes) if not posts and not args.targets else []
+    if elsewhere and not args.json_:
+        print(f"  {drafts_elsewhere(dict.fromkeys(elsewhere))}")
     count = sum(len(drafts_in(chains)) for chains in with_drafts.values())
     what = f"{count} draft(s){f' and {extras}' if extras else ''} on {len(posts)} change(s)"
-    if posts and not args.dry_run and not _confirmed(args, what):
+    if posts and not args.dry_run and not confirm_publish(args, what):
         return int(ExitCode.REFUSED)
 
     failed = False
@@ -330,8 +327,14 @@ def _publish(
                 print(f"gerrit error: {change.key}: {error}", file=sys.stderr)
         results.append(row)
     if args.json_:
-        print(json.dumps({"changes": results}, indent=2))
+        print(json.dumps({"changes": results, **({"drafts_elsewhere": elsewhere} if elsewhere else {})}, indent=2))
     return int(ExitCode.GERRIT) if failed else int(ExitCode.OK)
+
+
+def _drafts_elsewhere(service: GerritService, changes: list[_Change]) -> list[int]:
+    """Your changes beyond *changes* that hold drafts of yours, by number."""
+    here = {change.key for change in changes}
+    return [view.number for view in service.comments.drafted_changes() if view.number and view.key not in here]
 
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
@@ -357,8 +360,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
 
     service = run.gerrit
     if args.publish:
-        return _publish(args, p, service, cwd, branch)
-    match, change_url = _find(service, cwd, ref, change=change, branch=branch)
+        return _publish(args, run, branch)
+    match, change_url = _find(run, ref, change=change, branch=branch)
     url = gerrit_inline_comment_url(change_url, match.chain.root_id)
     if args.discard:
         removed = service.comments.discard_reply(match.change, match.chain)

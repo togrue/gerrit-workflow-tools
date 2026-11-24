@@ -221,9 +221,10 @@ def expand_stack_range(
     *,
     branch: str | None = None,
     settings: Settings | None = None,
+    head: str = "HEAD",
 ) -> list[ShowCommitResolution]:
-    """Oldest-first commits in ``upstream_tip..HEAD``."""
-    snap = get_stack_snapshot(cwd, branch, settings=settings)
+    """Oldest-first commits in ``upstream_tip..head``."""
+    snap = get_stack_snapshot(cwd, branch, head=head, settings=settings)
     return _local_resolutions(snap.commits, input_arg="--stack")
 
 
@@ -246,19 +247,21 @@ def resolve_show_targets(
     stack: bool = False,
     branch: str | None = None,
     changes: ChangeApi | None = None,
+    head: str = "HEAD",
 ) -> list[ShowCommitResolution]:
     """Resolve positional changeishes / ranges and optional ``--stack`` into a deduped list.
 
-    With no *args* and ``stack=False``, resolves ``HEAD``. With *changes* (the service's
+    With no *args* and ``stack=False``, resolves *head*: ``HEAD``, or what it stands for
+    (``run.repo.head``), which also tops the ``--stack``. With *changes* (the service's
     :class:`ChangeApi`) Gerrit is asked through the cache. Order: ``--stack`` commits first
     (oldest-first), then each positional arg in order (ranges oldest-first). Duplicates
     (same Change-Id, else same SHA) keep the first occurrence.
     """
     pieces: list[ShowCommitResolution] = []
     if stack:
-        pieces.extend(expand_stack_range(cwd, branch=branch, settings=settings))
+        pieces.extend(expand_stack_range(cwd, branch=branch, settings=settings, head=head))
     if not args and not stack:
-        pieces.append(resolve_show_commit_row(cwd, "HEAD", client, settings=settings, branch=branch, changes=changes))
+        pieces.append(resolve_show_commit_row(cwd, head, client, settings=settings, branch=branch, changes=changes))
     for raw in args:
         if parse_show_range(raw) is not None:
             pieces.extend(expand_show_range(cwd, raw, client, settings=settings, branch=branch, changes=changes))

@@ -443,7 +443,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | Module | Owns |
 |--------|------|
 | `cli_ger.py` | Dispatcher: the command registry `_COMMANDS`, aliases, global `--refresh` |
-| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`: `--json` / `--format` / `--ai`, read back by `output_format`), `confirm` |
+| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`: `--json` / `--format` / `--ai`, read back by `output_format`), `confirm`, `confirm_publish` (the one publish confirmation: `-y`, a prompt, or exit 2 without one) |
 | `cli_notes.py` | Transparency notes on stderr, dimmed: `print_note`, `print_resolution_note` (how a changeish resolved) |
 | `cli_terminal.py` | Whether the CLI can ask: `stdin_is_terminal`, `prompt_toolkit_can_run` (Windows `NUL` is no console) |
 | `cli_logging.py` | Diagnostic logging for `--debug-log`: `configure_logging` (package log level, the call trace, Gerrit response bodies) |
@@ -476,7 +476,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 |--------|------|
 | `core/run_context.py` | The **run context**: `RunContext` (the repository and the Gerrit service of one command run or one request; `run.cwd`, `run.settings`, `run.worktree` and `run.stack` read through them) |
 | `core/repository.py` | The repository a run works in, each answer read once for the run: `Repository` (its `worktree`, `working_branch`, `stack_branch`, `root` and **stack context**, `stack`) |
-| `core/votes.py` | The vote grammar (`CR+1`, `V=-1`): `parse_votes` for every command that votes |
+| `core/votes.py` | The vote grammar (`+1` for Code-Review, `CR+1`, `V=-1`): `parse_votes` for every command that votes, `format_votes`, and `votes_ruled_out` against a change's `ChangeView.permitted_votes` |
 | `core/usage.py` | `UsageError`: the command cannot run as asked (bad input, or a state it refuses to start from), exit `USAGE`; `Refusal`: ger will not go on without the user's decision (`ReviewRefusal`, `CheckoutRefusal`, `ReorderRefusal`), exit `REFUSED`, HTTP 409 |
 | `core/git_run.py` | Running git: the subprocess wrapper (`git`, `git_out`, `commit_sha_or_none`, `GitError`) |
 | `core/config.py` | `Settings`: one `git config --list --show-scope` snapshot (values + winning scope) |
@@ -510,7 +510,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/review_chain.py` | Review chains from `ChangeView`s; unreviewed age, wait age |
 | `core/inbox.py` | The inbox: **inbox section** queries (`build_to_review_query`), `load_inbox` (both sections), `section_summary`, the **headline** (`pick_headline`; a rebase underway, handed in as a `RebaseHeadline`, leads it), and which changes wait on your review (`waiting_on_your_review`: the *to review* query, narrowed to them; `to_review_needs_you_as_reviewer`: whether only changes that list you can match) |
 | `core/gerrit_patchset.py` | One Gerrit patchset: which one a changeish names (`resolve_change`, `resolve_patchset`, `GerritPatchset`), its `refs/changes/…` ref, fetching it |
-| `core/review_target.py` | The review chain a review walks: `related_chain_numbers` |
+| `core/review_target.py` | What a review acts on: the review chain it walks (`related_chain_numbers`) and the changes a vote goes to (`changes_by_number`, `vote_targets`: drafts and ruled-out votes per change) |
 | `core/change_checkout.py` | Checking a change out to work on it: the **local version** (`find_local_versions`), what to do with it (`plan_checkout`, `choose_action`), which commits above it take Gerrit's patchset (`gerrit_above`) |
 | `core/change_checkout_apply.py` | Doing what `ger checkout` decided (`apply_checkout`): moving the local version onto the patchset, taking the commits above as Gerrit has them or rebasing them, merging your edits into it; every outdated commit of the local stack (`update_stack`) |
 | `core/review_checkout.py` | Review checkout: the review worktree, `change-<number>` branches, staging, review state, walking a chain |
@@ -518,7 +518,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/suggested_edits.py` | A comment's suggested edits: Gerrit fix suggestions and ```` ```suggestion ```` blocks of its text, in one shape |
 | `core/comment_anchor.py` | Where a new comment sits: the LOCATION grammar, its check against a commit, the anchored text |
 | `core/anchor_mapping.py` | Re-anchoring: where a local comment's anchor lands on another version of its file, moved or outdated (ADR-0011) |
-| `core/comment_target.py` | Which change, commit and patchset a new comment is written on |
+| `core/comment_target.py` | Which change, commit and patchset a new comment is written on; a file only the change under review elsewhere has (`reviewed_elsewhere_target`) |
 | `core/comment_write.py` | Writing your own comments: starting a chain (a Gerrit draft, a local draft or a note), editing and discarding one not yet published |
 | `core/local_comments.py` | The local comment store: notes and local drafts under `refs/ger/comments` (ADR-0010) |
 | `core/gerrit_message_parsing.py` | Parsing Gerrit change messages, including CI URLs |
@@ -569,7 +569,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit/change_queries.py` | Batched change queries over the seam: `OR` chunks under a URL budget, halving, per-ref fallback, freshness probe (`change_freshness_key`) |
 | `core/gerrit/service.py` | `GerritService`: cache-aware batching, trust window, `fetch_gerrit_data`, `fetch_review_chains` |
 | `core/gerrit/changes.py` | `ChangeApi`: ChangeInfo payloads through the cache (`get_payloads` by id, `query` for a listing, `by_commit`: light request first, details only for what moved), footer lookups, reviewer writes |
-| `core/gerrit/comments.py` | `CommentApi`: inline comments for a change through the follow-up cache |
+| `core/gerrit/comments.py` | `CommentApi`: inline comments for a change through the follow-up cache; which changes hold drafts of yours (`drafted_changes`, one `has:draft` query; `draft_counts`) |
 | `core/gerrit/cache.py` | `GerritCache`: SQLite persistence of ChangeInfo keyed by triplet; the trust window (`load_changes`), `reconcile` (which rows are current, from freshness tokens), invalidation |
 | `core/gerrit/cache_follow_ups.py` | `FollowUpCache` (mixed into `GerritCache`): a change's comments and Checks rows, valid while its freshness token stands; `DEFAULT_CHANGE_TRUST_WINDOW_SECONDS` |
 | `core/gerrit/cache_facts.py` | `RememberedFacts` (mixed into `GerritCache`): host capabilities, the user's account id, settled commits, each with its lifetime |
@@ -591,7 +591,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/commit_row.py` | Full commit line layout for log/show |
 | `render/stack_log.py` | `ger log`'s text view: the rows with the ready boundary line (`row_lines`), the summary line (`summary_line`), the core's next steps in words (`next_steps`) and the rebase note (`rebase_note`) |
 | `render/status_fmt.py` | Plain status tokens (patchset, CR, verified, comments) for editable contexts, and the hint words for attention reasons (`attention_hints` for `ger log`, `member_hints` for `ger inbox`) |
-| `render/comments.py` | Inline comment chains in the terminal (boxes), and the words both views share (`chain_location`, `draft_label`, `chain_url`) |
+| `render/comments.py` | Inline comment chains in the terminal (boxes), and the words both views share (`chain_location`, `draft_label`, `chain_url`, `drafts_elsewhere`) |
 | `render/comments_markdown.py` | Inline comment chains as Markdown: `ger show --ai` and the agent runbook (`format_comment_chain_markdown`, `format_unresolved_section_markdown`) |
 | `render/suggested_fixes.py` | Gerrit fix suggestions written out below a comment, one shape for the terminal and Markdown (`shown_fixes`, `fix_rows`, `fixes_markdown`), and a comment's whole text with them (`comment_text`, what `ger serve` sends) |
 | `render/wrap.py` | Word wrap for `ger show` prose: comment boxes and the commit message |
@@ -605,6 +605,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/style.py` | ANSI color and hyperlink helpers, the run's color and hyperlink mode, UTF-8 stdio |
 | `render/download_meter.py` | The stderr meter for bytes still arriving (`DownloadMeter`) |
 | `summary_highlight.py` | Subject highlighting from stop/warning patterns: the run's highlighter (`run_summary_highlighter`) and the one for a branch's stack |
+| `review_vote.py` | What `ger review --vote` lists, asks and sends (`vote`): your drafts and the votes, per change |
 | `push_preview.py` | What `ger push` shows before it pushes: commit list, boundary notice, status line, the dry run |
 | `push_confirm.py` | What `ger push` asks: the confirm loop (ADR-0008), the push-options line, the Y/n/r question, `-i`, saving reviewers |
 | `push_outcome.py` | What `ger push` reports once `git push` ran (git's own output, errors, what it assigned, what it set over REST), or why it refused |

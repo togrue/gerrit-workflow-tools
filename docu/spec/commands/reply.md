@@ -105,7 +105,7 @@ An empty message exits `2`. Combining `--done` with `-m`, `-F` or `--unresolve` 
 
 - `--only ID` (repeatable) publishes just those drafts: the draft's own id, or any comment id of its chain (the `CHAIN` that `ger reply` answered); your other drafts stay drafts. An id that is none of your drafts on the targets exits `3` before anything is sent. This is how an agent sends its own answers without publishing a draft the human keeps for later.
 - `--keep-drafts` publishes no draft at all: only the `-m` message and `--vote` votes go out, with every draft kept. What an agent uses for a change-level note on a change where the human has drafts pending.
-- `--vote LABEL=N` (repeatable, the grammar of `ger review --vote`) votes with the review.
+- `--vote LABEL=N` (repeatable, the grammar of `ger review --vote`: a bare `+1` is `Code-Review+1`) votes with the review.
 - `-m MSG` is the change message. On a change you **named** as `REV`, `-m` or `--vote` alone posts even with no draft to publish: a change-level note or a vote, with every draft kept (Gerrit's `drafts: KEEP`). With no `REV` it never goes to every change of the stack: only changes that have drafts to publish get it.
 
 `ger review --vote` is the reviewer-flow spelling of the same review POST (`GerritComments.publish_drafts`): it publishes every draft on the change under review.
@@ -115,6 +115,8 @@ An empty message exits `2`. Combining `--done` with `-m`, `-F` or `--unresolve` 
 | `-m MSG` | Top-level change message posted with the drafts. It is posted only on changes that have drafts |
 | `--dry-run` | List what would be published and exit `0`. Allowed under the publish guard |
 | `-y`, `--yes` | Skip confirmation. Required when stdin is not a TTY, the same rule as `ger push`, and with `--json` or `--ai`, which never prompt |
+
+With no `REV` and no draft on the local stack, it says where your drafts are instead, from one `has:draft` query over your changes (at most 25): `no drafts to publish on the local stack`, then `  unpublished drafts on c2142: ger reply --publish c2142` (`drafts_elsewhere` in `--json`). A review left with `ger review --done` warns the same way.
 
 Publishing first prints every draft that is about to go out, grouped by change. Then it asks `Publish N draft(s)[ and <votes>, a message] on M change(s)? [y/N]` (default **no**: this one sends mail). Declining publishes nothing and exits `1`. A run without `-y` that cannot prompt (no terminal, `--json` or `--ai`) publishes nothing and exits `2` (`USAGE`), like every command that needs an answer it cannot ask for. Each published change prints `published N draft(s) on <subject>`.
 
@@ -209,6 +211,7 @@ DELETE /changes/{id}/revisions/{ps}/drafts/{draft-id}          discard
 POST   /changes/{id}/revisions/current/review                  publish:
          {"drafts": "PUBLISH_ALL_REVISIONS", "message": optional}
 GET    /changes/?q=has:draft+(change:N+OR+...)                 which pushed changes have drafts
+GET    /changes/?q=has:draft                                   which of your changes have drafts (nothing on the stack)
 ```
 
 The comment GET today already returns the published `patch_set`. The model keeps it: `InlineComment` gains its patchset and a draft flag, and `build_comment_chains` takes the drafts file map next to the published one. That keeps chain assembly in its one owner, `core/comment_chains.py`, so there is no second threading pass for drafts.
@@ -253,8 +256,8 @@ Shared table: [exit-codes.md](../exit-codes.md). No new codes.
 | Code | When |
 |------|------|
 | `0` | Draft written, discarded or published; `--dry-run` |
-| `1` | Publish declined, or non-TTY without `-y` |
-| `2` | Empty message, conflicting flags, `CHAIN` with `--publish`, a comment URL together with `--change`, no `CHAIN` without a TTY, publishing while `GER_NO_PUBLISH` is set |
+| `1` | Publish declined |
+| `2` | Publishing without a terminal (or with `--json` / `--ai`) and without `-y`: `no prompt to answer (non-interactive, --json or --ai): pass -y to publish`, the words of `ger review --vote` (`cli_common.confirm_publish`); empty message, conflicting flags, `CHAIN` with `--publish`, a comment URL together with `--change`, no `CHAIN` without a TTY, publishing while `GER_NO_PUBLISH` is set |
 | `3` | Chain or change not found; `--discard` with no draft |
 | `4` | `CHAIN` named more than one chain (a place with several open chains, a shared prefix); ambiguous changeish |
 | `5` | Gerrit rejected a write, including a partial publish |

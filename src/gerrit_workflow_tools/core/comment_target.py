@@ -8,12 +8,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from gerrit_workflow_tools.core.comment_anchor import LocationError, blob_of, parse_location, repository_path
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, build_triplet, resolve_stack_context
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_commit_row
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
+from gerrit_workflow_tools.core.review_checkout import ReviewState
 from gerrit_workflow_tools.core.stack import read_commit_rows
 
 
@@ -123,3 +125,23 @@ def target_at_commit(service: GerritService, cwd: Path | str, target: CommentTar
     if at.patch_set is None:
         raise ChangeResolutionError(f"commit {sha[:12]} is not a patchset of {target.key}")
     return at
+
+
+def reviewed_elsewhere_target(
+    service: GerritService, cwd: Path | str, location: str, review: ReviewState
+) -> CommentTarget | None:
+    """The change under review in another worktree, for a *location* only it has.
+
+    ``ger review`` acts on the review worktree from anywhere; a comment written from your own
+    checkout on a file its ``HEAD`` does not have, but the reviewed change does, is meant for that
+    change. ``None`` when ``HEAD``'s commit has the file too (or neither has it): the comment stays
+    on ``HEAD``, and a location that fits neither is reported there.
+    """
+    try:
+        path = repository_path(cwd, parse_location(location)).path
+    except LocationError:
+        return None
+    if blob_of(cwd, "HEAD", path) is not None or blob_of(cwd, review.commit, path) is None:
+        return None
+    change = review.change
+    return target_for_commit(service, change.key, change.change_id, change.commit)

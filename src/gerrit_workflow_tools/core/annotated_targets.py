@@ -19,12 +19,14 @@ from gerrit_workflow_tools.core.stack import Commit, StackSnapshot, get_stack_sn
 from gerrit_workflow_tools.core.upstream import NeedsUpstreamError
 
 
-def local_stack_or_none(cwd: Path | str, branch: str | None, *, settings: Settings) -> StackSnapshot | None:
-    """*branch*'s local stack, or ``None`` without a branch or an upstream to take it from."""
+def local_stack_or_none(
+    cwd: Path | str, branch: str | None, *, settings: Settings, head: str = "HEAD"
+) -> StackSnapshot | None:
+    """*branch*'s local stack up to *head* (``run.repo.head``), or ``None`` without a branch or an upstream."""
     if branch is None:
         return None
     try:
-        return get_stack_snapshot(cwd, branch, first_parent=True, settings=settings)
+        return get_stack_snapshot(cwd, branch, head=head, first_parent=True, settings=settings)
     except (GitError, NeedsUpstreamError):
         return None
 

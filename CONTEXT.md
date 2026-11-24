@@ -39,7 +39,7 @@ One command run, or one request `ger serve` answers: the repository it works in 
 _Avoid_: session, environment, runtime (for the object)
 
 **Working branch**:
-The branch a command works on: the checked-out branch; while a rebase is underway, the branch being rebased; on any other detached HEAD, a local branch pointing at it (preferring one with a Gerrit upstream). Its `branch.<name>.*` config applies, and its upstream defines the stack. There may be none.
+The branch a command works on: the checked-out branch; while a rebase is underway, the branch being rebased; in a staged `ger review` (HEAD detached at the reviewed change's parent), the review's `change-<number>` branch, whose tip then stands for HEAD; on any other detached HEAD, a local branch pointing at it (preferring one with a Gerrit upstream). Its `branch.<name>.*` config applies, and its upstream defines the stack. There may be none.
 _Avoid_: current branch (that is only the checked-out one)
 
 **Repository state**:

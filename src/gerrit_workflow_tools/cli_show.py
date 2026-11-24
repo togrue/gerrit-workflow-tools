@@ -275,6 +275,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
         stack=args.stack,
         branch=branch,
         changes=service.changes,
+        head=run.repo.head,
     )
     if not targets:
         raise ChangeResolutionError("no commits to show")
@@ -288,7 +289,11 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
         ci = CiContentService.from_settings(
             cwd, settings, web_base=service.web_base, http=ci_http, refresh=service.refresh, progress=meter
         )
-    snap = local_stack_or_none(cwd, branch, settings=settings) if any(t.is_local_commit for t in targets) else None
+    snap = (
+        local_stack_or_none(cwd, branch, settings=settings, head=run.repo.head)
+        if any(t.is_local_commit for t in targets)
+        else None
+    )
     try:
         shown = load_shown_commits(
             targets,

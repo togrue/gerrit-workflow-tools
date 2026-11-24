@@ -15,22 +15,19 @@ from gerrit_workflow_tools.cli_common import (
     add_output_format_args,
     add_verbose_and_debug_log_args,
     ask_choice,
-    assume_yes,
     changeish_help,
-    confirm,
     init_cli_runtime,
     may_prompt,
     run_cli_command,
 )
-from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.config_write import ConfigWrite, apply_config_write
-from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
-from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_patchset import resolve_patchset
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.review_checkout import (
+    BRANCH_PREFIX,
     CheckoutOptions,
     ReviewMode,
     ReviewState,
@@ -44,9 +41,11 @@ from gerrit_workflow_tools.core.review_checkout import (
 from gerrit_workflow_tools.core.review_delta import ReviewDelta, load_review_delta
 from gerrit_workflow_tools.core.review_target import related_chain_numbers
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.core.votes import VOTE_HELP, parse_votes
-from gerrit_workflow_tools.render.comments import drafts_in, format_pending_drafts
+from gerrit_workflow_tools.core.votes import VOTE_HELP
+from gerrit_workflow_tools.render.comments import drafts_elsewhere
 from gerrit_workflow_tools.render.review_json import review_state_json
+from gerrit_workflow_tools.render.style import shown_path
+from gerrit_workflow_tools.review_vote import vote
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -54,10 +53,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="ger review",
         usage=(
-            "ger review CHANGEISH [--patchset N] [--stage | --no-stage] [--in-worktree | --in-place] [--force]\n"
+            "ger review CHANGEISH [--patchset N | --bottom] [--stage | --no-stage] [--in-worktree | --in-place] "
+            "[--force]\n"
             "       ger review (--next | --prev) [--stage | --no-stage] [--force]\n"
             "       ger review (--stage | --unstage | --status | --done)\n"
-            "       ger review --vote LABEL=N ... [-m MSG] [--dry-run] [-y]"
+            "       ger review --vote [LABEL]+N ... [--chain | --change CHANGEISH ...] [-m MSG] [--dry-run] [-y]"
         ),
         description=(
             "Check a change out to review it, with its diff staged so every git tool shows what it changed. "
@@ -68,6 +68,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "changeish", nargs="?", metavar="CHANGEISH", help=changeish_help("The change to review", change_only=True)
     )
     p.add_argument("--patchset", type=int, default=None, metavar="N", help="Review patchset N (default: current).")
+    p.add_argument(
+        "--bottom",
+        action="store_true",
+        help="Start at the bottom of CHANGEISH's review chain (its lowest open change); walk up with --next.",
+    )
     walk = p.add_mutually_exclusive_group()
     walk.add_argument("--next", action="store_true", help="Review the change above in its review chain.")
     walk.add_argument("--prev", action="store_true", help="Review the change below in its review chain.")
@@ -85,11 +90,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "--vote",
         action="append",
         default=None,
-        metavar="LABEL=N",
+        metavar="VOTE",
         help=f"{VOTE_HELP} Publishes all your drafts on the change; to publish only some, or to post a "
         "message without a vote: ger reply --publish.",
     )
-    add_change_option(vote, "With --vote: vote on this change.")
+    add_change_option(vote, "With --vote: vote on this change; repeat for more.", repeatable=True)
+    vote.add_argument(
+        "--chain", action="store_true", help="With --vote: vote on every open change of the chain under review."
+    )
     vote.add_argument("-m", "--message", action="append", default=None, help="With --vote: a change message.")
     vote.add_argument("--dry-run", action="store_true", help="With --vote: list what would be sent.")
     vote.add_argument(
@@ -103,12 +111,16 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _check_args(p: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     opens = args.changeish is not None or args.next or args.prev
-    if args.vote is None and (args.change or args.message or args.dry_run or args.yes):
-        p.error("--change, -m, --dry-run and -y belong to --vote")
+    if args.vote is None and (args.change or args.chain or args.message or args.dry_run or args.yes):
+        p.error("--change, --chain, -m, --dry-run and -y belong to --vote")
+    if args.change and args.chain:
+        p.error("vote on the chain under review (--chain) or on the changes you name (--change), not both")
     if args.vote is not None and (opens or args.status or args.done or args.stage is not None):
         p.error("--vote acts on the change being reviewed; give it on its own")
     if args.changeish is not None and (args.next or args.prev or args.status or args.done):
         p.error("name a CHANGEISH or walk with --next/--prev, not both")
+    if args.bottom and (args.changeish is None or args.patchset is not None):
+        p.error("--bottom goes with a CHANGEISH, without --patchset: it starts at the chain's lowest open change")
     if not opens and (args.patchset is not None or args.mode is not None or args.force):
         p.error("--patchset, --in-worktree, --in-place and --force go with a CHANGEISH or --next/--prev")
     if not opens and args.vote is None and not args.status and not args.done and args.stage is None:
@@ -155,6 +167,21 @@ def _delta_lines(delta: ReviewDelta) -> list[str]:
     ]
 
 
+def next_steps(state: ReviewState, chain: list[int] | None, cwd: Path) -> str:
+    """The commands of the review loop from here: get to the worktree, read, comment, answer, walk, vote."""
+    worktree = Path(state.worktree)
+    here = cwd.resolve()
+    steps = (
+        [] if here == worktree.resolve() or worktree.resolve() in here.parents else [f"cd {shown_path(worktree, cwd)}"]
+    )
+    steps += ["ger show", "ger comment PATH:LINE -m …", "ger reply ID -m …"]
+    if chain is not None and chain[-1:] in ([state.number], []):  # the top, or no chain: nowhere to walk
+        steps += ["ger review --vote +1" + (" --chain" if len(chain) > 1 else ""), "ger review --done"]
+    else:
+        steps += ["ger review --next", "ger review --vote +1"]
+    return "next: " + " · ".join(steps)
+
+
 def _emit_state(
     state: ReviewState,
     *,
@@ -162,6 +189,7 @@ def _emit_state(
     url: str | None,
     as_json: bool,
     delta: ReviewDelta | None = None,
+    hint: str | None = None,
 ) -> None:
     if as_json:
         payload = review_state_json(state, chain=chain, url=url)
@@ -183,12 +211,18 @@ def _emit_state(
         print(f"  {url}")
     for line in _delta_lines(delta) if delta else ():
         print(line)
+    if hint:
+        print(hint)
 
 
 def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: ReviewState | None) -> int:
     settings = service.settings
+    chain: list[int] | None = None
     if args.changeish is not None:
         target, url = resolve_patchset(service, cwd, args.changeish, args.patchset)
+        chain = related_chain_numbers(service, target.key, target.patch_set) if args.bottom else None
+        if chain and chain[0] != target.number:
+            target, url = resolve_patchset(service, cwd, f"change:{chain[0]}", None)
         mode = _mode(args, cwd, settings)
     else:
         if state is None:
@@ -203,55 +237,26 @@ def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: Re
     new, moved_from = open_review(cwd, target, settings=settings, options=options)
     if moved_from is not None:
         print(f"moved {new.branch} off your commits; its old tip was {moved_from}", file=sys.stderr)
-    chain = related_chain_numbers(service, new.key, new.patch_set)
-    _emit_state(new, chain=chain, url=url, as_json=args.json_, delta=_since_reviewed(service, cwd, new))
+    chain = chain or related_chain_numbers(service, new.key, new.patch_set)
+    delta = _since_reviewed(service, cwd, new)
+    _emit_state(new, chain=chain, url=url, as_json=args.json_, delta=delta, hint=next_steps(new, chain, cwd))
     return int(ExitCode.OK)
 
 
-def _vote_target(args: argparse.Namespace, service: GerritService, cwd: Path) -> tuple[str, int, int | None]:
-    """``(triplet, number, reviewed patchset)`` to vote on: ``--change``, else the review going on."""
-    if args.change is not None:
-        target, _url = resolve_patchset(service, cwd, args.change, None)
-        return target.key, target.number, None
-    state = find_review(cwd, service.settings)
-    if state is None:
-        raise ReviewUsageError("no review going on here: name the change with --change")
-    return state.key, state.number, state.patch_set
+def _drafts_left(run: RunContext, state: ReviewState) -> dict[int, int]:
+    """Your unpublished drafts on the changes this review visited; nobody sees them until published.
 
-
-def _vote(args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritService, cwd: Path) -> int:
-    votes = parse_votes(args.vote)
-    if publish_blocked() and not args.dry_run:
-        p.error(f"publishing is blocked: {PUBLISH_GUARD_ENV} is set in the environment")
-    key, number, reviewed = _vote_target(args, service, cwd)
-    # Only a review going on names a patchset the vote could miss; --change was just read from Gerrit.
-    current = reviewed and ChangeView.from_payload(service.rest.get_change(key)).current_revision_number
-    if current != reviewed:
-        print(
-            f"change {number} is at patchset {current}, you reviewed {reviewed}: run ger review {number} first",
-            file=sys.stderr,
-        )
-        return int(ExitCode.REFUSED)
-    chains = service.comments.chains_with_drafts(key)
-    count = len(drafts_in(chains))
-    voted = ", ".join(f"{label}{value:+d}" for label, value in votes.items())
-    if not args.json_:
-        print("\n".join(format_pending_drafts(f"change {number}: {count} draft(s), {voted}", chains)))
-    if args.dry_run:
-        return int(ExitCode.OK)
-    if not (args.yes or assume_yes()):
-        if not may_prompt(args):
-            print("not publishing: pass -y to publish without a prompt", file=sys.stderr)
-            return int(ExitCode.REFUSED)
-        if not confirm(f"Publish {count} draft(s) and {voted} on {number}?", default=False):
-            return int(ExitCode.REFUSED)
-    message = "\n\n".join(args.message) if args.message else None
-    service.comments.publish_drafts(key, message=message, labels=votes)
-    if args.json_:
-        print(json.dumps({"change": key, "drafts": count, "labels": votes, "status": "published"}, indent=2))
-    else:
-        print(f"published {count} draft(s) and {voted} on {number}")
-    return int(ExitCode.OK)
+    A warning, never a reason to stop: without Gerrit, or when it fails, there are none to tell.
+    """
+    numbers = [
+        int(b.removeprefix(BRANCH_PREFIX)) for b in state.created_branches if b.removeprefix(BRANCH_PREFIX).isdigit()
+    ]
+    if not run.gerrit.configured:
+        return {}
+    try:
+        return run.gerrit.comments.draft_counts(sorted(set(numbers) | {state.number}))
+    except (GerritApiError, ConfigError):
+        return {}
 
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
@@ -273,18 +278,23 @@ def _act(args: argparse.Namespace, p: argparse.ArgumentParser, run: RunContext) 
         if state is None:
             print(json.dumps({"review": None}) if args.json_ else "no review going on")
         else:
-            _emit_state(state, chain=None, url=None, as_json=args.json_)
+            _emit_state(state, chain=None, url=None, as_json=args.json_, hint=next_steps(state, None, cwd))
         return int(ExitCode.OK)
     if args.done:
         if state is None:
             raise ReviewUsageError("no review going on here")
         deleted, kept = close_review(state)
+        left = _drafts_left(run, state)
         if args.json_:
-            print(json.dumps({"done": state.number, "deleted": deleted, "kept": kept}, indent=2))
+            payload = {"done": state.number, "deleted": deleted, "kept": kept, "drafts": left}
+            print(json.dumps(payload, indent=2))
         else:
             print(f"done reviewing {state.number}; deleted {', '.join(deleted) or 'no branches'}")
             for branch in kept:
                 print(f"  kept {branch}: it has commits of yours")
+        if left and not args.json_:
+            sys.stdout.flush()  # after what was done, also when both go to one pipe
+            print(f"warning: {drafts_elsewhere(left)}", file=sys.stderr)
         return int(ExitCode.OK)
     if args.vote is None and args.changeish is None and not args.next and not args.prev:
         if state is None:
@@ -293,7 +303,7 @@ def _act(args: argparse.Namespace, p: argparse.ArgumentParser, run: RunContext) 
         return int(ExitCode.OK)
     service = run.gerrit
     if args.vote is not None:
-        return _vote(args, p, service, cwd)
+        return vote(args, p, service, cwd)
     return _open(args, service, cwd, state)
 
 

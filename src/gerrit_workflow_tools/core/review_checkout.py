@@ -92,9 +92,7 @@ def _state_path(worktree: Path | str) -> Path | None:
     return repo_dir.joinpath(*_STATE_FILE) if repo_dir is not None else None
 
 
-def load_state(worktree: Path | str) -> ReviewState | None:
-    """The review state of *worktree*, or ``None`` when nothing is being reviewed there."""
-    path = _state_path(worktree)
+def _read_state(path: Path | None) -> ReviewState | None:
     if path is None or not path.is_file():
         return None
     try:
@@ -102,6 +100,27 @@ def load_state(worktree: Path | str) -> ReviewState | None:
         return ReviewState(**{**raw, "change": GerritPatchset(**raw["change"])})
     except (ValueError, TypeError, KeyError):
         return None
+
+
+def load_state(worktree: Path | str) -> ReviewState | None:
+    """The review state of *worktree*, or ``None`` when nothing is being reviewed there."""
+    return _read_state(_state_path(worktree))
+
+
+def staged_review_branch(repo_dir: Path | None, cwd: Path | str | None) -> str | None:
+    """The reviewed change's ``change-<number>`` branch while its staged review sits at its parent.
+
+    Staged, HEAD is detached at the change's parent and the branch is on the change itself: the
+    branch is the one being worked on, and its tip is what HEAD stands for (``Repository.head``).
+    ``None`` when no review is staged in the worktree of *repo_dir* (its git dir), or HEAD or the
+    branch moved away. Costs no git call when nothing is being reviewed.
+    """
+    state = _read_state(repo_dir.joinpath(*_STATE_FILE) if repo_dir is not None else None)
+    if state is None or not state.staged:
+        return None
+    p = git("rev-parse", "HEAD", f"{state.commit}^", f"refs/heads/{state.branch}", cwd=cwd, check=False)
+    shas = p.stdout.split() if p.returncode == 0 else []
+    return state.branch if len(shas) == 3 and shas[0] == shas[1] and shas[2] == state.commit else None
 
 
 def save_state(state: ReviewState) -> None:
@@ -167,8 +186,18 @@ def refuse_own_edits(worktree: Path | str, state: ReviewState | None, *, rerun: 
     does a submodule's own state, which switching and rebasing leave alone. A submodule change
     ``git stash`` does not save stops it with its own message (:func:`submodule_refusal`).
     """
-    base = state.commit if state is not None and state.staged else "HEAD"
+    staged = state is not None and state.staged
+    base = state.commit if state is not None and staged else "HEAD"
     changes = tracked_changes(worktree, base)
+    if changes.files and staged:
+        # git stash would take the staged change under review with them, and a commit commit it.
+        files = " ".join(_shell_word(path) for path in changes.files)
+        raise UsageError(
+            f"your working tree has changes to tracked files on top of the staged review ({', '.join(changes.files)}): "
+            f"keep them as a patch and put the change back, `git diff {base[:12]} -- {files} > review-edits.patch && "
+            f"git restore --source={base[:12]} --staged --worktree -- {files}` (`git apply review-edits.patch` "
+            f"brings them back), then run {rerun} again"
+        )
     if changes.files:
         raise UsageError(
             f"your working tree has changes to tracked files ({', '.join(changes.files)}): "
@@ -176,6 +205,11 @@ def refuse_own_edits(worktree: Path | str, state: ReviewState | None, *, rerun: 
         )
     if refusal := submodule_refusal(worktree, base, rerun=rerun, changes=changes):
         raise UsageError(refusal)
+
+
+def _shell_word(path: str) -> str:
+    """*path* as one word for a shell: quoted when it holds anything but plain path characters."""
+    return path if all(c.isalnum() or c in "/._-+" for c in path) else "'" + path.replace("'", "'\\''") + "'"
 
 
 def _commits_not_in(worktree: Path | str, tip: str, *bases: str) -> list[str]:

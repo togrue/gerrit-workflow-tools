@@ -219,17 +219,26 @@ def confirm(question: str, *, default: bool) -> bool:
     return ask_choice(f"{question} {suffix}: ", answers, on_eof=False)
 
 
+def confirm_publish(args: argparse.Namespace, what: str) -> bool:
+    """Whether to publish *what*: ``-y`` (or ``GER_ASSUME_YES``), else a yes at ``Publish <what>?``.
+
+    Without a prompt to answer (no terminal, ``--json``, ``--ai``) it raises :class:`UsageError`: pass ``-y``.
+    """
+    if args.yes or assume_yes():
+        return True
+    if not may_prompt(args):
+        raise UsageError("no prompt to answer (non-interactive, --json or --ai): pass -y to publish")
+    return confirm(f"Publish {what}?", default=False)
+
+
 def add_follow_merges_args(parser: argparse.ArgumentParser) -> None:
     """Register ``--follow-merges`` (used by commands that display a local stack)."""
     parser.add_argument(
         "--follow-merges",
         action="store_true",
         default=False,
-        help=(
-            "Traverse all commit parents (including merge commits) instead of "
-            "only the first-parent chain. By default only the first-parent chain "
-            "is shown, matching Gerrit's relation-chain semantics."
-        ),
+        help="Traverse all commit parents (including merge commits) instead of only the first-parent chain. "
+        "By default only the first-parent chain is shown, matching Gerrit's relation-chain semantics.",
     )
 
 
@@ -247,15 +256,18 @@ def changeish_help(what: str, *, change_only: bool = False) -> str:
     return f"{what}: a git revision (<n> and c<n> too, else the change), {_CHANGEISH_FORMS}."
 
 
-def add_change_option(parser: argparse.ArgumentParser | argparse._ArgumentGroup, help_text: str) -> None:
+def add_change_option(
+    parser: argparse.ArgumentParser | argparse._ArgumentGroup, help_text: str, *, repeatable: bool = False
+) -> None:
     """Register ``--change CHANGEISH``: it only ever names a Gerrit change, so a bare number is one.
 
     One registration for every command, so ``--change 692`` means change 692 everywhere.
-    """
+    *repeatable* collects every ``--change`` in a list (``None`` without one)."""
     parser.add_argument(
         "--change",
         metavar="CHANGEISH",
         default=None,
+        action="append" if repeatable else "store",
         type=as_change_only,
         help=f"{help_text} A change number, {_CHANGEISH_FORMS}.",
     )
@@ -299,20 +311,8 @@ def may_prompt(args: argparse.Namespace) -> bool:
 
 def add_color_args(parser: argparse.ArgumentParser) -> None:
     """Register shared color-output and hyperlink flags."""
-    parser.add_argument(
-        "--color",
-        choices=("always", "auto", "never"),
-        default="auto",
-        metavar="WHEN",
-        help=HELP_COLOR,
-    )
-    parser.add_argument(
-        "--hyperlinks",
-        choices=("always", "auto", "never"),
-        default="auto",
-        metavar="WHEN",
-        help=HELP_HYPERLINKS,
-    )
+    for flag, help_text in (("--color", HELP_COLOR), ("--hyperlinks", HELP_HYPERLINKS)):
+        parser.add_argument(flag, choices=("always", "auto", "never"), default="auto", metavar="WHEN", help=help_text)
 
 
 def add_verbose_and_debug_log_args(

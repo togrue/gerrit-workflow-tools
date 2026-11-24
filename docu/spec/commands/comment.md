@@ -31,7 +31,7 @@ ger comment --discard ID [--change CHANGEISH] [--json | --ai]
 
 ### Which change
 
-`--change` takes the full changeish grammar ([change-and-commit-identifiers.md](../change-and-commit-identifiers.md)). Without it the comment goes on the change being reviewed in this worktree ([`ger review`](review.md)), else on `HEAD`'s commit. A commit without a valid Change-Id exits `9`.
+`--change` takes the full changeish grammar ([change-and-commit-identifiers.md](../change-and-commit-identifiers.md)). Without it the comment goes on the change being reviewed in this worktree ([`ger review`](review.md)), else on `HEAD`'s commit. One exception, since `ger review` acts on the review worktree from anywhere: from another worktree, a `LOCATION` whose file `HEAD`'s commit does not have but the change under review in the review worktree does goes on that change, and the output says so first: `comment on c2082 (under review in ../repo-review)` (`under_review_in` in `--json`; `core/comment_target.reviewed_elsewhere_target`). A file both have stays on `HEAD`. A commit without a valid Change-Id exits `9`.
 
 ### LOCATION
 

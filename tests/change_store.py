@@ -347,7 +347,9 @@ class ChangeStore:
         """
         if "has:draft" in query:
             drafted = {key for key, file_map in self._drafts.items() if any(file_map.values())}
-            return [row for row in self._query_rows(query.replace("has:draft", "")) if str(row.get("id")) in drafted]
+            rest = query.replace("has:draft", "").strip()
+            rows = self._query_rows(rest) if rest else list(self._changes.values())
+            return [row for row in rows if str(row.get("id")) in drafted]
         since_match = re.search(r'since:"([^"]+)"', query) or re.search(r"since:(\S+)", query)
         if since_match:
             since_val = since_match.group(1).rstrip(")")

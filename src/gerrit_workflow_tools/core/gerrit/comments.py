@@ -15,8 +15,9 @@ from gerrit_workflow_tools.core.comment_chains import (
     find_chains,
     parse_chain_ref,
 )
-from gerrit_workflow_tools.core.gerrit.cache_rows import comments_context_key
-from gerrit_workflow_tools.core.gerrit.rest import parallel_map, printable_path
+from gerrit_workflow_tools.core.gerrit.cache_rows import comments_context_key, dict_rows
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
+from gerrit_workflow_tools.core.gerrit.rest import LIGHT_QUERY_OPTIONS, parallel_map, printable_path
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
 
@@ -102,6 +103,26 @@ class CommentApi:
             ]
         )
         return collect_comment_chains(file_map, comments=comments, drafts=drafts)
+
+    def drafted_changes(self, numbers: Sequence[int] | None = None, *, n: int = 25) -> list[ChangeView]:
+        """The changes holding drafts of yours: one light ``has:draft`` query, among *numbers* when given.
+
+        Drafts live in All-Users, so this is asked every time (never the cache). Without *numbers*,
+        every change of yours on the host, at most *n*.
+        """
+        if numbers is not None and not numbers:
+            return []
+        among = f" ({' OR '.join(f'change:{number}' for number in numbers)})" if numbers else ""
+        limit = len(numbers) if numbers else n
+        rows = self._service.rest.query_changes(f"has:draft{among}", n=limit, options=list(LIGHT_QUERY_OPTIONS))
+        return [ChangeView.from_payload(row) for row in dict_rows(rows)]
+
+    def draft_counts(self, numbers: Sequence[int]) -> dict[int, int]:
+        """How many drafts of yours each of *numbers* holds, those with none left out: the
+        ``has:draft`` query, then a drafts GET only where it found some."""
+        found = [view for view in self.drafted_changes(numbers) if view.number is not None]
+        counts = {view.number: sum(map(len, self.get_drafts(view.key).values())) for view in found}
+        return {number: counts[number] for number in numbers if counts.get(number)}
 
     def chains_with_drafts(self, change_id: str, *, change_updated: str | None = None) -> list[CommentChain]:
         """The chains of *change_id* that hold a draft of yours: what a publish would send."""

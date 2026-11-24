@@ -8,6 +8,7 @@ import re
 import shutil
 import sys
 from collections.abc import Mapping
+from pathlib import Path
 
 
 ANSI_RESET = "\033[0m"
@@ -226,3 +227,12 @@ def visible_len(text: str) -> int:
 def color_stat(label: str, value: object, color: str) -> str:
     """A dim *label* followed by a highlighted *value*, as summary lines show them."""
     return color_text(label, ANSI_DIM) + color_text(str(value), color)
+
+
+def shown_path(path: Path | str, cwd: Path | str) -> str:
+    """*path* relative to *cwd* when that is shorter, as one types it after ``cd``."""
+    try:
+        relative = os.path.relpath(path, cwd)
+    except ValueError:  # another drive (Windows)
+        return str(path)
+    return relative if len(relative) < len(str(path)) else str(path)

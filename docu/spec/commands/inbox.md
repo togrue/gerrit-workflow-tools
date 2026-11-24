@@ -138,7 +138,7 @@ c4380  9 changes  worst v-1 cr0       waiting 6d             carol  # refactor: 
   └ c4379  v+1 cr0  com  # 2 unresolved comments
 
 summary: 3 chains · 15 changes · longest wait 6d · build failed 1 · comments 1
-next: ger review c4317 (base of c4321's chain), then --next
+next: ger review c4321 --bottom, then --next
 
 outgoing (5; 1 needs you)
 c4410  2 changes  worst v-1 cr0       active 2h  # feat: quota headers
@@ -160,6 +160,7 @@ An *outgoing* line is yours: it has no waiting clock and no owner, and ends in `
 | `active` | Wait age — last activity on any member (*outgoing*) |
 | owner | Chain-top owner, cut at 18 characters |
 | `# subject` | Chain top's subject, highlighted per `ger.warningPattern`. On a terminal it is cut with `…` to the width, one column spare; with less than 12 columns left it goes on a line of its own. Piped, nothing is cut |
+| `# drafts of yours on c<n>` | Members holding drafts of yours: nobody sees them until you publish (`ger reply --publish c<n>`). One light `has:draft` query beside the section queries, text view only (`InboxSection.drafted`) |
 | URL | Gerrit page for the **chain top** (default on) |
 
 **The heading** counts the chains shown. *To review* adds the chains its query leaves out as not ready (WIP, private, no `Verified`), when there are any: one more query beside it, asked only for the text view and never with `--unready` or a custom `ger.inboxToReviewQuery`. *Outgoing* adds how many need you (`core.inbox.needs_author`: failed CI, unresolved comments, a negative vote, or WIP).
@@ -168,7 +169,7 @@ An *outgoing* line is yours: it has no waiting clock and no owner, and ends in `
 
 **Indented member lines** appear for members with attention reasons — CI failure, unresolved comments, negative vote — on a chain of several changes, the top included. A single change's row already says it all. A healthy chain stays one line plus its URL.
 
-**The footer** of *to review* names the command that starts on the longest-waiting chain where review begins, its base: `next: ger review c4317 (base of c4321's chain), then --next` (`ger review` checks out the change named, so the top would start at the end).
+**The footer** of *to review* names the command that starts on the longest-waiting chain where review begins, its bottom: `next: ger review c4321 --bottom, then --next`. A row names its chain by the top, and `ger review` checks out the change named, so `--bottom` starts at the chain's lowest open change instead: the same command works for every row.
 
 **Empty sections** print a dim `(nothing to review)` / `(no open chains of yours)` rather than vanishing, so the output shape is stable.
 

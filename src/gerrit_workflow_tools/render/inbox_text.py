@@ -79,6 +79,16 @@ def _marks(work_in_progress: bool, private: bool) -> str:
     return f"  {color_text('# ', ANSI_DIM)}{', '.join(words)}" if words else ""
 
 
+def _drafts_mark(chain: ReviewChain, drafted: frozenset[int]) -> str:
+    """``# drafts of yours on c2142``: what ``ger reply --publish`` would send there."""
+    numbers = [change_label(m.number) for m in chain.members if m.number in drafted]
+    return (
+        f"  {color_text('# ', ANSI_DIM)}{color_text('drafts of yours on ' + ', '.join(numbers), ANSI_YELLOW)}"
+        if numbers
+        else ""
+    )
+
+
 _VOTES = 2
 """The votes cell, right-aligned: a single change's tokens sit under the ``worst`` ones of a chain."""
 
@@ -197,7 +207,9 @@ def _render_section(
     widths = [max(visible_len(row[i]) for row in rows) for i in range(len(rows[0]))] if rows else []
     for chain, cells in zip(shown, rows, strict=True):
         head = _pad(cells, widths) + "  "
-        marks = _marks(chain.work_in_progress, chain.private) if outgoing else ""
+        marks = (_marks(chain.work_in_progress, chain.private) if outgoing else "") + _drafts_mark(
+            chain, section.drafted
+        )
         used = visible_len(head) + visible_len(marks)
         print(head + _subject(chain.top.subject, used=used, columns=columns, highlighter=highlighter) + marks)
         if show_url and chain.url:
@@ -215,11 +227,13 @@ def _render_section(
 
 
 def _review_hint(chain: ReviewChain) -> str:
-    """The command that starts on the chain waiting longest: at its base, where review begins."""
-    base = chain.members[0].number
+    """The command that starts on the chain waiting longest: at its bottom, where review begins.
+
+    Named by the row's change, with ``ger review --bottom``: the same command works for every row.
+    """
     if chain.depth == 1:
-        return f"next: ger review {change_label(base)}"
-    return f"next: ger review {change_label(base)} (base of {change_label(chain.top.number)}'s chain), then --next"
+        return f"next: ger review {change_label(chain.top.number)}"
+    return f"next: ger review {change_label(chain.top.number)} --bottom, then --next"
 
 
 def render_inbox_text(
