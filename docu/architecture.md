@@ -624,7 +624,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `reviewer_catalog.py` | Reviewer discovery and soft validation for the push prompt |
 | `rebase_enricher.py` | `GIT_SEQUENCE_EDITOR`: annotate the rebase todo with Gerrit status |
 | `rebase_sequence_editor.py` | `GIT_SEQUENCE_EDITOR`: patch one `pick` line for `ger edit` |
-| `rebase_run.py` | Running `git rebase` from a command: `require_history_rewrite` before, `run_interactive_rebase` / `go_on_with_rebase` (refused first by `rebase_next_step.go_on_refusal`, of the stop `rebasing_stack.stopped_rebase` reads) and the conflict next step after |
+| `rebase_run.py` | Running `git rebase` from a command: `require_history_rewrite` before, `run_interactive_rebase` / `go_on_with_rebase` (refused first by `rebase_next_step.go_on_refusal`, of the stop `rebasing_stack.stopped_rebase` reads) and the conflict next step after; git's own advice kept off its stderr (`_git_rebase`, the one way a command runs a rebase the user sees) |
 | `reword_run.py` | Rewording a commit from a command (`ger reword`, `ger edit --reword`), with no rebase: the message from the user's editor (`message_from_editor`), the reword itself through `core/reword.py`, and what it says once done (`reword`) |
 | `bash_completion_generator.py` | Bash completion generated from live argparse definitions |
 

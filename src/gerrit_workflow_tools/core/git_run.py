@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import codecs
 import logging
 import os
 import re
 import subprocess
+import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from gerrit_workflow_tools.core.call_trace import record_call
@@ -66,6 +69,7 @@ def _run_git(
     env: dict[str, str] | None = None,
     input_text: str | None = None,
     capture: bool = True,
+    on_stderr: Callable[[str], None] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     cmd = ["git", *args]
     cwd_str = str(cwd) if cwd is not None else None
@@ -73,7 +77,9 @@ def _run_git(
     merged = {**os.environ, **env} if env else None
     t0 = time.perf_counter()
     result: subprocess.CompletedProcess[str]
-    if input_text is None:
+    if on_stderr is not None:
+        result = _stream_stderr(cmd, cwd=cwd, env=merged, on_line=on_stderr)
+    elif input_text is None:
         result = subprocess.run(
             cmd,
             cwd=cwd,
@@ -93,6 +99,42 @@ def _run_git(
         result = subprocess.CompletedProcess(raw.args, raw.returncode, _as_text(raw.stdout), _as_text(raw.stderr))
     record_call("git", " ".join(cmd), time.perf_counter() - t0)
     return result
+
+
+_LINE_END = re.compile(r"\r\n|\r|\n")
+_DRAIN_SECONDS = 1.0
+"""How long stderr may stay open once git exited: a process git started and left running holds it."""
+
+
+def _stream_stderr(
+    cmd: list[str], *, cwd: Path | str | None, env: dict[str, str] | None, on_line: Callable[[str], None]
+) -> subprocess.CompletedProcess[str]:
+    """Run *cmd* talking to the terminal, except for stderr: each line of it goes to *on_line* as it comes.
+
+    A line ends at a line feed or a carriage return (git's progress, ``Rebasing (1/2)`` and a
+    carriage return), so nothing waits for a newline git never writes.
+    """
+    read_end, write_end = os.pipe()
+    reader = threading.Thread(target=_read_lines, args=(read_end, on_line), daemon=True)
+    reader.start()
+    try:
+        result = subprocess.run(cmd, cwd=cwd, env=env, stderr=write_end, check=False)
+    finally:
+        os.close(write_end)
+        reader.join(_DRAIN_SECONDS)
+    return subprocess.CompletedProcess(cmd, result.returncode, None, None)
+
+
+def _read_lines(fd: int, on_line: Callable[[str], None]) -> None:
+    decode = codecs.getincrementaldecoder("utf-8")(errors="replace").decode
+    pending = ""
+    with os.fdopen(fd, "rb", buffering=0) as stream:
+        while chunk := stream.read(4096):
+            *lines, pending = _LINE_END.split(pending + decode(chunk))
+            for line in lines:
+                on_line(line)
+    if rest := pending + decode(b"", final=True):
+        on_line(rest)
 
 
 def _as_text(output: bytes | None) -> str:
@@ -124,6 +166,7 @@ def git(
     check: bool = True,
     input: str | None = None,
     capture: bool = True,
+    on_stderr: Callable[[str], None] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run git with given args; cwd defaults to current directory.
 
@@ -131,9 +174,9 @@ def git(
     went stale. What a run reads once it keeps itself (``core/repository.py``).
 
     Pass *input* to feed stdin. Pass ``capture=False`` for a git that talks to the terminal
-    itself, such as ``rebase -i``.
+    itself, such as ``rebase -i``; with *on_stderr* as well, its stderr goes there line by line.
     """
-    p = _run_git(*args, cwd=cwd, env=env, input_text=input, capture=capture)
+    p = _run_git(*args, cwd=cwd, env=env, input_text=input, capture=capture, on_stderr=on_stderr)
     _raise_if_failed(args, p, check=check)
     return p
 

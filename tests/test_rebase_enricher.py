@@ -16,7 +16,7 @@ from tests.cli_gerrit_mocks import (
     build_details_by_change_id,
     stack_rows_mb_to_head,
 )
-from tests.helpers import write_rebase_head
+from tests.helpers import plain_git, write_rebase_head
 
 
 # ---------------------------------------------------------------------------
@@ -441,8 +441,8 @@ def _make_rebase_interceptor(captured: dict):
     """Return a fake subprocess.run that intercepts only ``git rebase -i …``."""
 
     def fake_run(cmd, **kwargs):
-        if isinstance(cmd, (list, tuple)) and list(cmd[:3]) == ["git", "rebase", "-i"]:
-            captured["cmd"] = list(cmd)
+        if plain_git(cmd)[:3] == ["git", "rebase", "-i"]:
+            captured["cmd"] = plain_git(cmd)
             captured["env"] = kwargs.get("env", {})
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
         return _real_subprocess_run(cmd, **kwargs)

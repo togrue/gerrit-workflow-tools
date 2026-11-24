@@ -97,9 +97,18 @@ message as it is, and so is any later `reword` or `squash` message in the todo. 
 wants to write those sets `GIT_EDITOR`. `ger edit -n` goes on the same way. A stop on the next
 conflict ends with the shared next step, as below.
 
-A rebase that stops ends with ger's own lines after git's, the same for every ger-started rebase
-(`rebase_run.print_stop`, words from `rebase_next_step.stop_next_step`): where it stopped, unless git
-just named the commit of a conflict, and one `next:` step that names ger's way on, never raw git:
+A rebase that stops ends with ger's own lines, the same for every ger-started rebase
+(`rebase_run.print_stop`, words from `rebase_next_step.stop_next_step`): where it stopped
+(`stopped at <sha> <subject>`, `(conflict)` after it on a conflict), and one `next:` step that names
+ger's way on, never raw git. Git's own advice is off for the invocation (`git -c advice.mergeConflict=false
+-c advice.resolveConflict=false -c advice.waitingForEditor=false -c advice.skippedCherryPicks=false`,
+never written to config; a git that does not know a key ignores it), and what no key turns off is
+left out of its stderr (`rebase_run._GitsWords`): `hint:` lines (an older git's conflict hints),
+`Rebasing (n/m)`, `Stopped at …`, `Could not apply …`, the `You can amend the commit now … git rebase
+--continue` block of an `edit` stop and its likes for `exec`, and `Successfully rebased …`. Each
+remaining line of git's stderr (errors, warnings) is printed on its own line; what the merge says of a
+conflict (`CONFLICT (content): …`) is on stdout and stays as it is. Git localised to another
+language passes through unfiltered.
 
 | Stop | `next:` |
 |--|--|
@@ -117,7 +126,7 @@ every history-moving command a rebase underway stops (`a rebase is already in pr
 
 ### After a rebase finishes
 
-Git's `Successfully rebased and updated refs/heads/…` is not the last line. Every ger-started
+Git's `Successfully rebased and updated refs/heads/…` is not shown. Every ger-started
 rebase that finishes (`ger rebase [REV]`, `--autosquash`, `--continue`, `--skip`, `ger edit`,
 `ger reword`, `ger edit -n`) ends with ger's own, against the local stack before it (the stack at
 `HEAD` when ger started the rebase, or at the rebase's `orig-head` for `--continue` / `--skip`);
