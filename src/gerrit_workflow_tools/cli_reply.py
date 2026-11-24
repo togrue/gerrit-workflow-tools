@@ -32,6 +32,7 @@ from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.core.votes import VOTE_HELP, parse_votes
+from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.comments import (
     chain_location,
     draft_transition,
@@ -289,7 +290,7 @@ def _publish(args: argparse.Namespace, run: RunContext, branch: str | None) -> i
     if elsewhere and not args.json_:
         print(f"  {drafts_elsewhere(dict.fromkeys(elsewhere))}")
     count = sum(len(drafts_in(chains)) for chains in with_drafts.values())
-    what = f"{count} draft(s){f' and {extras}' if extras else ''} on {len(posts)} change(s)"
+    what = f"{counted(count, 'draft')}{f' and {extras}' if extras else ''} on {counted(len(posts), 'change')}"
     if posts and not args.dry_run and not confirm_publish(args, what):
         return int(ExitCode.REFUSED)
 
@@ -312,7 +313,8 @@ def _publish(args: argparse.Namespace, run: RunContext, branch: str | None) -> i
                 )
                 row["status"] = "published"
                 if not args.json_:
-                    print(f"published {row['drafts']} draft(s){f' and {extras}' if extras else ''} on {change.summary}")
+                    with_extras = f" and {extras}" if extras else ""
+                    print(f"published {counted(len(drafts), 'draft')}{with_extras} on {change.summary}")
             except GerritApiError as error:
                 failed = True
                 row.update(status="failed", error=str(error))

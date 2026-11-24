@@ -24,6 +24,7 @@ from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.git_state import configured_upstream_abbrev
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PickStop, PreviewUnavailable, replay_conflict
 from gerrit_workflow_tools.core.stack import Commit
+from gerrit_workflow_tools.core.words import counted
 
 
 DROP_MERGED = "--drop-merged-equivalent"
@@ -57,7 +58,7 @@ class UpstreamMoved:
 
     def advice(self) -> str:
         """What to do about it, in words: ``origin/main has 1 new commit; rebase onto it with …``."""
-        said = f"{self.name} has {self.behind} new commit{'' if self.behind == 1 else 's'}"
+        said = f"{self.name} has {counted(self.behind, 'new commit')}"
         hit = self.conflict
         if hit is None:
             stop = ""

@@ -1,4 +1,4 @@
-"""CLI for ``ger show``: commit(s) vs Gerrit (status + inline comments)."""
+"""CLI for ``ger show``: commits vs Gerrit (status + inline comments)."""
 
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ def _build_parser() -> argparse.ArgumentParser:
     """Build and return the command-line parser for ``ger show``."""
     p = argparse.ArgumentParser(
         prog="ger show",
-        description="Show commit(s) and Gerrit status (labels, comments, CI).",
+        description="Show commits and their Gerrit status (labels, comments, CI).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""examples:
   ger show                  HEAD: votes, attention and unresolved comments (with their ids)
@@ -226,7 +226,7 @@ def _emit_brief_commit(commit: LogCommit, *, comments: CommentSelection) -> None
 
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None, ci_http: CiHttp | None = None) -> int:
-    """Resolve revision(s) and print human, Markdown, or JSON Gerrit status details."""
+    """Resolve the revisions and print human, Markdown, or JSON Gerrit status details."""
     return run_cli_command(lambda: _run(argv, gerrit=gerrit, ci_http=ci_http))
 
 

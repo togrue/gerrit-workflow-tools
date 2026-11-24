@@ -5,6 +5,7 @@ from __future__ import annotations
 from gerrit_workflow_tools.core.attention import Attention, blocking_reason
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.inbox import OUTGOING, TO_REVIEW
+from gerrit_workflow_tools.core.words import counted
 
 
 # The one definition of each status token and what it means: the columns use it, and so does the
@@ -98,8 +99,7 @@ _TERMINAL_TEXT = (
 
 def unresolved_comments_text(count: int) -> str:
     """``1 unresolved comment`` / ``3 unresolved comments``."""
-    noun = "comment" if count == 1 else "comments"
-    return f"{count} unresolved {noun}"
+    return counted(count, "unresolved comment")
 
 
 SECTION_HEADINGS = {TO_REVIEW: "to review", OUTGOING: "outgoing"}

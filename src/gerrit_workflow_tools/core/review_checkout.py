@@ -19,6 +19,7 @@ from gerrit_workflow_tools.core.rewrite_refusal import submodule_refusal
 from gerrit_workflow_tools.core.tracked_changes import tracked_changes
 from gerrit_workflow_tools.core.upstream import track_remote_branch
 from gerrit_workflow_tools.core.usage import Refusal, UsageError
+from gerrit_workflow_tools.core.words import counted
 
 
 ReviewMode = Literal["worktree", "branch"]
@@ -298,7 +299,7 @@ def _claim_branch(
         moved_from = existing if own else None
         if own and not force:
             raise ReviewRefusal(
-                f"{branch} has {len(own)} commit(s) the patchset does not: {', '.join(c[:7] for c in own)}. "
+                f"{branch} has {counted(len(own), 'commit')} the patchset does not: {', '.join(c[:7] for c in own)}. "
                 "Pass --force to move it (its tip is printed)"
             )
     if existing is None or branch in created:

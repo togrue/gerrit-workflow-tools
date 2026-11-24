@@ -28,6 +28,7 @@ from gerrit_workflow_tools.core.push_reviewers import change_ref_of
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import UsageError
+from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.push_input_line import KW_PUBLISH_DRAFTS, ParseResult, PushLineState, format_canonical
 from gerrit_workflow_tools.push_input_prompt import LINE_HELP
 from gerrit_workflow_tools.push_preview import print_dry_run, print_plan_status, print_push_preview
@@ -55,7 +56,7 @@ def ask_push_action(drafts: int, *, sends: bool = True) -> str:
     }
     if drafts:
         return ask_choice(
-            f"Push and publish {drafts} draft(s)? [Y/n/p/r]: ",
+            f"Push and publish {counted(drafts, 'draft')}? [Y/n/p/r]: ",
             {**answers, "p": "push-only"},
             hint="  (Enter or y: push and publish, p: push and keep the drafts, n: cancel, r: set reviewers)",
             on_eof="cancel",

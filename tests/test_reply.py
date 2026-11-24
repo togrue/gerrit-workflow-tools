@@ -397,7 +397,7 @@ def test_publish_a_message_alone_on_a_named_change(web_stack_repo: Path, monkeyp
         None,
         [],
     )
-    assert "published 0 draft(s) and a message" in out
+    assert "published 0 drafts and a message" in out
 
 
 def test_publish_a_message_never_goes_to_every_change_of_the_stack(

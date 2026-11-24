@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from gerrit_workflow_tools.core.agent_runbook import RunbookStop
 from gerrit_workflow_tools.core.ci_content import CiFinding
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain
+from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.comments import chain_location, first_line
 from gerrit_workflow_tools.render.comments_markdown import format_comment_chain_markdown
 
@@ -98,7 +99,7 @@ def runbook_markdown(stops: Sequence[RunbookStop], *, branch: str | None) -> str
     lines = [
         "# Address the review feedback on this stack",
         "",
-        f"Branch `{branch or 'HEAD'}`: {len(work)} commit(s) to work on.",
+        f"Branch `{branch or 'HEAD'}`: {counted(len(work), 'commit')} to work on.",
         "",
         _RULES,
     ]

@@ -106,10 +106,10 @@ def test_an_identical_local_version_is_switched_to(
     git("switch", "-q", "main", cwd=stack_repo)
     code, out, err = _checkout(stack_repo, gerrit, ["102"], monkeypatch)
     assert code == ExitCode.OK, err
-    assert 'switched to feature: change 102 patchset 1 "subj" is 1 commit(s) below HEAD' in out
+    assert 'switched to feature: change 102 patchset 1 "subj" is 1 commit below HEAD' in out
     assert _on(stack_repo) == ("feature", gerrit.shas[3])
     code, out, _ = _checkout(stack_repo, gerrit, ["change:102"], monkeypatch)
-    assert code == ExitCode.OK and 'already on feature: change 102 patchset 1 "subj" is 1 commit(s) below HEAD' in out
+    assert code == ExitCode.OK and 'already on feature: change 102 patchset 1 "subj" is 1 commit below HEAD' in out
     assert _on(stack_repo) == ("feature", gerrit.shas[3]), "HEAD stays where it was"
     code, out, _ = _checkout(stack_repo, gerrit, ["change:103"], monkeypatch)
     assert code == ExitCode.OK and "already on feature: it has change 103 patchset 1" in out
@@ -123,14 +123,14 @@ def test_an_older_patchset_is_updated_and_the_commits_above_it_rebased(
     code, out, err = _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)
     assert code == ExitCode.OK, err
     assert "updated feature from patchset 1 to change 102 patchset 2" in out
-    assert "rebased the 1 commit(s) above it" in out
+    assert "rebased the 1 commit above it" in out
     assert git_out("rev-parse", "feature~1", cwd=stack_repo) == ps2
     assert git_out("log", "-1", "--format=%s", "feature", cwd=stack_repo) == "Cleanup after experiment"
     assert _upstream(stack_repo, "feature") == "origin/main"
     # Updated, it is the patchset Gerrit has: the next checkout just says so.
     code, out, _ = _checkout(stack_repo, gerrit, ["102"], monkeypatch)
     assert code == ExitCode.OK and "already on feature: change 102 patchset 2" in out
-    assert "is 1 commit(s) below HEAD" in out
+    assert "is 1 commit below HEAD" in out
 
 
 def _merge_above(repo: Path) -> str:
@@ -207,7 +207,7 @@ def test_at_a_terminal_the_update_is_asked_and_defaults_to_yes(
     monkeypatch.setattr("builtins.input", _answer)
     assert _checkout(stack_repo, gerrit, ["102"], monkeypatch)[0] == ExitCode.OK
     assert asked == [
-        "feature has patchset 1 of change 102. Update it to patchset 2 and rebase the 1 commit(s) above it? [Y/n]: "
+        "feature has patchset 1 of change 102. Update it to patchset 2 and rebase the 1 commit above it? [Y/n]: "
     ]
     assert (git_out("rev-parse", "feature~1", cwd=stack_repo) == ps2) is updated
 
@@ -292,7 +292,7 @@ def test_a_submodule_at_another_commit_or_with_edits_inside_does_not_stop_an_upd
     code, out, err = _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)
     assert code == ExitCode.OK, err
     assert "updated feature from patchset 1 to change 102 patchset 2" in out
-    assert "rebased the 2 commit(s) above it" in out
+    assert "rebased the 2 commits above it" in out
     assert git_out("rev-parse", "HEAD", cwd=sub) == sub_head
     assert (sub / "a.txt").read_text(encoding="utf-8") == "dirty\n"
     assert (sub / "untracked.txt").read_text(encoding="utf-8") == "new\n"
@@ -611,7 +611,7 @@ def test_a_commit_above_that_gerrit_left_on_the_old_patchset_is_rebased(
     bottom2, top2 = _web_edited_bottom(stack_repo, gerrit, rebased_by_gerrit=False)
     code, out, err = _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)
     assert code == ExitCode.OK, err
-    assert "rebased the 1 commit(s) above it" in out and "took" not in out
+    assert "rebased the 1 commit above it" in out and "took" not in out
     assert git_out("rev-parse", "feature~1", cwd=stack_repo) == bottom2
     assert git_out("rev-parse", "feature", cwd=stack_repo) != top2
 

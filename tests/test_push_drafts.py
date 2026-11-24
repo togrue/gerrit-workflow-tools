@@ -83,7 +83,7 @@ def test_prompt_offers_to_publish_the_drafts(
     monkeypatch.setattr("builtins.input", _input)
     code, out, _err, refspec = _run_push(stack_repo, monkeypatch, [], store)
     assert code == ExitCode.OK
-    assert any("Push and publish 1 draft(s)? [Y/n/p/r]" in p for p in prompts)
+    assert any("Push and publish 1 draft? [Y/n/p/r]" in p for p in prompts)
     assert "Drafts keep 1" in out
     assert option in _options(refspec)
     assert ("no-publish-comments" in _options(refspec)) is (option == "no-publish-comments")

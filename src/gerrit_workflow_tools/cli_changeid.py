@@ -16,6 +16,7 @@ from gerrit_workflow_tools.core.git_state import current_branch
 from gerrit_workflow_tools.core.reword import add_missing_change_ids
 from gerrit_workflow_tools.core.stack import Commit, read_commit_rows, rev_spec_stack_base_to_end
 from gerrit_workflow_tools.core.usage import UsageError
+from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.style import color_short_sha
 from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
@@ -104,7 +105,7 @@ def _run(argv: list[str] | None) -> int:
             raise UsageError("--check always scans the full current stack; do not pass REV_OR_RANGE")
         checked = check_stack_change_ids(cwd)
         if sys.stdout.isatty():
-            print(f"{checked} commit{'' if checked == 1 else 's'}, all Change-Ids valid")
+            print(f"{counted(checked, 'commit')}, all Change-Ids valid")
     elif is_change_id(input_arg):
         print(input_arg)
     else:

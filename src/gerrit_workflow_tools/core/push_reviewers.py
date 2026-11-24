@@ -23,6 +23,7 @@ from gerrit_workflow_tools.core.reviewer import (
 )
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit
+from gerrit_workflow_tools.core.words import counted
 
 
 @dataclass(frozen=True)
@@ -240,7 +241,7 @@ def apply_reviewer_strategy_after_push_service(
 
     ok = not issues
     for slug, change_ids in kept.items():
-        where = "1 change" if len(change_ids) == 1 else f"{len(change_ids)} changes"
+        where = counted(len(change_ids), "change")
         issues.append(
             ReviewerApplyIssue(
                 "warning",
@@ -250,7 +251,7 @@ def apply_reviewer_strategy_after_push_service(
         )
     if held and not lookup_failed:
         held_on = len({change_id for change_ids in held.values() for change_id in change_ids})
-        where = "1 change" if held_on == 1 else f"{held_on} changes"
+        where = counted(held_on, "change")
         issues.append(
             ReviewerApplyIssue(
                 "warning",

@@ -15,6 +15,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     gerrit_inline_comment_url,
 )
 from gerrit_workflow_tools.core.review_chain import format_age
+from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.style import (
     ANSI_BLUE,
     ANSI_BOLD,
@@ -318,5 +319,5 @@ def drafts_elsewhere(counts: Mapping[int, int | None]) -> str:
     labels = [change_label(number) for number in counts]
     known = [count for count in counts.values() if count is not None]
     total = sum(known) if len(known) == len(counts) else None
-    what = "unpublished drafts" if total is None else f"{total} unpublished draft{'s' if total != 1 else ''}"
+    what = "unpublished drafts" if total is None else counted(total, "unpublished draft")
     return f"{what} on {', '.join(labels)}: ger reply --publish {' '.join(labels)}"

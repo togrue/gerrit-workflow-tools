@@ -29,6 +29,7 @@ from gerrit_workflow_tools.core.gerrit_patchset import resolve_change
 from gerrit_workflow_tools.core.rebase_next_step import rebase_refusal
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import UsageError
+from gerrit_workflow_tools.core.words import counted
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -94,7 +95,7 @@ def _ask_update(args: argparse.Namespace, plan: CheckoutPlan) -> CheckoutAction:
         instead=f"--update to update {plan.branch} from patchset {local.patch_set} to {patchset.patch_set}, "
         "or --no-update to switch to it as it is",
     )
-    rebase = f" and rebase the {len(local.above)} commit(s) above it" if local.above else ""
+    rebase = f" and rebase the {counted(len(local.above), 'commit')} above it" if local.above else ""
     question = f"{have}. Update it to patchset {patchset.patch_set}{rebase}?"
     return CheckoutAction.UPDATE if confirm(question, default=True) else CheckoutAction.SWITCH
 
@@ -103,7 +104,7 @@ def _above(result: CheckoutResult) -> str:
     """What became of the commits above: taken as Gerrit has them, rebased."""
     took = ", ".join(f"change {p.number} patchset {p.patch_set}" for p in result.took)
     parts = [f"took {took} above it as Gerrit has it"] if took else []
-    parts += [f"rebased the {result.rebased} commit(s) above it"] if result.rebased else []
+    parts += [f"rebased the {counted(result.rebased, 'commit')} above it"] if result.rebased else []
     return "".join(f", {part}" for part in parts)
 
 
@@ -124,7 +125,7 @@ def _report(plan: CheckoutPlan, result: CheckoutResult, url: str | None) -> None
         print(f"merged your version on {branch} into {change}{base}{_above(result)}; push it as the next patchset")
     elif plan.state is LocalState.SAME:
         above = len(plan.local.above) if plan.local else 0  # the branch tip, where HEAD is now
-        where_it_is = f"{change} is {above} commit(s) below HEAD" if above else f"it has {change}"
+        where_it_is = f"{change} is {counted(above, 'commit')} below HEAD" if above else f"it has {change}"
         print(f"{'already on' if result.unchanged else 'switched to'} {branch}: {where_it_is}")
     elif plan.state is LocalState.PUSHED:
         old = plan.local.patch_set if plan.local else None

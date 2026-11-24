@@ -13,6 +13,7 @@ from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.inbox import OUTGOING, InboxSection
 from gerrit_workflow_tools.core.review_chain import ReviewChain, format_age
+from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.status_fmt import (
     SECTION_HEADINGS,
     attention_hints,
@@ -28,10 +29,6 @@ def vote_words(verified: int | None, code_review: int | None) -> list[str]:
     if code_review:
         words.append(code_review_token(code_review))
     return [word.strip().upper() for word in words]
-
-
-def _plural(count: int, noun: str) -> str:
-    return f"{count} {noun}{'' if count == 1 else 's'}"
 
 
 def _item(head: str, facts: Sequence[str]) -> str:
@@ -69,13 +66,13 @@ def stack_ai_lines(
 
     *upload* is what ``ger push`` would upload (``StackOverview.to_upload``).
     """
-    lines = [f"stack: {project}, branch {branch}, {_plural(len(commits), 'commit')}, {_uploads(commits, upload)}"]
+    lines = [f"stack: {project}, branch {branch}, {counted(len(commits), 'commit')}, {_uploads(commits, upload)}"]
     lines += [_item(f"{i}. {c.short_sha} {c.summary}", commit_facts(c)) for i, c in enumerate(commits, 1)]
     return [*lines, *next_lines]
 
 
 def _chain_facts(chain: ReviewChain, *, outgoing: bool) -> list[str]:
-    facts = [_plural(chain.depth, "change")] if chain.depth > 1 else []
+    facts = [counted(chain.depth, "change")] if chain.depth > 1 else []
     if not outgoing:
         facts += [f"by {chain.owner_name}", f"waiting on you {format_age(chain.unreviewed_age_seconds)}"]
     facts.append(f"last activity {format_age(chain.wait_age_seconds)}")
@@ -94,7 +91,7 @@ def inbox_ai_lines(sections: Sequence[InboxSection], *, projects: Sequence[str])
         name = SECTION_HEADINGS[section.name]
         chains = section.chains
         changes = sum(chain.depth for chain in chains)
-        count = f"{_plural(len(chains), 'chain')}, {_plural(changes, 'change')}" if chains else "none"
+        count = f"{counted(len(chains), 'chain')}, {counted(changes, 'change')}" if chains else "none"
         lines.append(f"{name}: {count}")
         outgoing = section.name == OUTGOING
         lines += [_item(f"change {c.top.number} {c.top.subject}", _chain_facts(c, outgoing=outgoing)) for c in chains]

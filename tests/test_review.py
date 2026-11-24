@@ -161,7 +161,7 @@ def test_a_change_branch_with_your_commits_is_not_moved_without_force(
     mine = _head(worktree)
     _review(stack_repo, store, ["101"], monkeypatch)
     code, _, err = _review(stack_repo, store, ["102"], monkeypatch)
-    assert code == ExitCode.REFUSED and "change-102 has 1 commit(s)" in err
+    assert code == ExitCode.REFUSED and "change-102 has 1 commit the patchset" in err
     code, _, err = _review(stack_repo, store, ["102", "--force"], monkeypatch)
     assert code == ExitCode.OK and f"old tip was {mine}" in err
     assert git_out("rev-parse", "change-102", cwd=worktree) == shas[2]

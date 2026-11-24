@@ -277,6 +277,17 @@ CONCEPTS = [
         owners={"cli_terminal.py": "ask_choice and confirm parse every prompt's reply"},
         fix="Ask through cli_terminal.confirm, or ask_choice when the answers are not yes and no.",
     ),
+    Concept(
+        name="'(s)' plural",
+        pattern=r"(?<![\w.])[a-z]+\(s\)[ ?{,]",  # `draft(s) `, not a call such as `parse(s)`
+        owners={"core/words.py": "counted says a count with its noun, agreeing"},
+        debt={
+            "review_vote.py": "off-limits in the pass that fixed the others",
+            # A substrate module: it may not import core/words.py. Its --debug-log summary only.
+            "core/call_trace.py": "substrate",
+        },
+        fix="The count is known: say it with core.words.counted (`1 draft`, `2 drafts`).",
+    ),
 ]
 
 

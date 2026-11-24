@@ -10,6 +10,7 @@ from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.changeish import change_label
 from gerrit_workflow_tools.core.inbox import OUTGOING, TO_REVIEW, InboxSection, needs_author, section_summary
 from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain, format_age
+from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.commit_row import fmt_code_review, fmt_comments, fmt_verified
 from gerrit_workflow_tools.render.status_fmt import SECTION_HEADINGS, member_hints
 from gerrit_workflow_tools.render.style import (
@@ -52,7 +53,7 @@ def _fmt_chain_votes(chain: ReviewChain) -> str:
 
 
 def _fmt_size(depth: int) -> str:
-    return color_text(f"{depth} change{'s' if depth != 1 else ''}", ANSI_DIM)
+    return color_text(counted(depth, "change"), ANSI_DIM)
 
 
 def _fmt_age(label: str, seconds: int, color: str) -> str:

@@ -118,7 +118,7 @@ An empty message exits `2`. Combining `--done` with `-m`, `-F` or `--unresolve` 
 
 With no `REV` and no draft on the local stack, it says where your drafts are instead, from one `has:draft` query over your changes (at most 25): `no drafts to publish on the local stack`, then `  unpublished drafts on c2142: ger reply --publish c2142` (`drafts_elsewhere` in `--json`). A review left with `ger review --done` warns the same way.
 
-Publishing first prints every draft that is about to go out, grouped by change. Then it asks `Publish N draft(s)[ and <votes>, a message] on M change(s)? [y/N]` (default **no**: this one sends mail). Declining publishes nothing and exits `1`. A run without `-y` that cannot prompt (no terminal, `--json` or `--ai`) publishes nothing and exits `2` (`USAGE`), like every command that needs an answer it cannot ask for. Each published change prints `published N draft(s) on <subject>`.
+Publishing first prints every draft that is about to go out, grouped by change. Then it asks `Publish N drafts[ and <votes>, a message] on M changes? [y/N]` (`1 draft`, `1 change` for one) (default **no**: this one sends mail). Declining publishes nothing and exits `1`. A run without `-y` that cannot prompt (no terminal, `--json` or `--ai`) publishes nothing and exits `2` (`USAGE`), like every command that needs an answer it cannot ask for. Each published change prints `published N drafts on <subject>`.
 
 Each change is one REST call. A failure on one change is reported, the others are still tried, and the exit is `5` if any failed. A partial publish is listed per change, never summarised away. A publish drops the change's cached rows, so the next `ger show` sees the published chains at once.
 
@@ -135,7 +135,7 @@ With `--json`: `{"changes": [{"change": <triplet>, "url": ..., "drafts": N, "lab
 
 `ger push` looks for your drafts on the changes it is about to push: one `has:draft` query for those change numbers. When there are any:
 
-- **On a TTY**, the push options line is the usual one with `publish-drafts` at its end, and the status line shows `Drafts publish N`. Enter adds Gerrit's `publish-comments` push option ([Gerrit: publish-comments](https://gerrit-review.googlesource.com/Documentation/user-upload.html#publish-comments)), which publishes your drafts on every change the push updates. Without `publish-drafts` on the line, the push keeps them. `ger.pushPublishDrafts = false` starts the line without it ([Configuration](../../Configuration.md)). Without a terminal on stdout the prompt is `Push and publish N draft(s)? [Y/n/p/r]`, and `p` pushes without publishing.
+- **On a TTY**, the push options line is the usual one with `publish-drafts` at its end, and the status line shows `Drafts publish N`. Enter adds Gerrit's `publish-comments` push option ([Gerrit: publish-comments](https://gerrit-review.googlesource.com/Documentation/user-upload.html#publish-comments)), which publishes your drafts on every change the push updates. Without `publish-drafts` on the line, the push keeps them. `ger.pushPublishDrafts = false` starts the line without it ([Configuration](../../Configuration.md)). Without a terminal on stdout the prompt is `Push and publish N drafts? [Y/n/p/r]`, and `p` pushes without publishing.
 - **With `-y`**, drafts are published only when `--publish-comments` is also given. Scripts and agents never publish by accident.
 - Drafts on a change the push does **not** update (behind the ready boundary, or with nothing new) stay drafts. The preview lists them by change.
 

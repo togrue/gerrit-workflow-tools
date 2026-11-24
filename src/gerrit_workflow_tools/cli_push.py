@@ -131,7 +131,9 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 def _add_mark_flags(group: argparse._MutuallyExclusiveGroup, *flags: tuple[str, str]) -> None:
     for flag, what in flags:
-        group.add_argument(flag, action="store_true", help=f"Mark change(s) {what}; REST where Gerrit has the commit).")
+        group.add_argument(
+            flag, action="store_true", help=f"Mark the changes {what}; REST where Gerrit has the commit)."
+        )
 
 
 def _gerrit_flags_set(args: argparse.Namespace) -> bool:
