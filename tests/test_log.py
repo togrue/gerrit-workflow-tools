@@ -885,6 +885,32 @@ def test_log_says_what_to_run_next_for_a_blocked_chain(stack_repo: Path, monkeyp
     assert f"chain blocked by {rows[0].short_sha} (awaiting review)" in lines
 
 
+def test_outdated_commits_of_the_stack_are_taken_with_one_checkout_update(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`ger checkout --update` alone brings the whole local stack to Gerrit; a range shown is one change at a time."""
+    from tests.change_store import ChangeStore
+    from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head, web_edit
+
+    git("config", "ger.webUrl", "https://g.example", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    details = build_details_by_change_id(rows)
+    keys = list(details)
+    for key, row in list(zip(keys, rows, strict=True))[:2]:
+        web_edit(details[key], row.sha)
+    store = ChangeStore(details)
+    _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=store)
+    assert "next: 2 commits have a newer patchset on Gerrit: take them with `ger checkout --update`" in out
+    _code, out, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+    [step] = [s for s in json_stdout(out)["next"] if s["kind"] == "outdated-patchset"]
+    assert step["shas"] == [rows[0].sha, rows[1].sha]
+    _code, out, _err = run_cli(stack_repo, log_main, [f"{rows[0].sha}^..HEAD"], monkeypatch, gerrit=store)
+    assert (
+        f"next: {rows[0].short_sha} has a newer patchset on Gerrit: take it with `ger checkout change:100 --update`"
+        in out
+    )
+
+
 def test_log_verbose_lists_reviewers_and_ccs(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``-v`` names who is on each change, CCs apart; JSON carries the same with the role."""
     rows = stack_rows_mb_to_head(web_stack_repo)

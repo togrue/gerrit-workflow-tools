@@ -278,6 +278,9 @@ class StackOverview:
     moved: UpstreamMoved | None
     """How far the upstream moved past the local stack; ``None`` for a revision range, during a
     rebase (that one is finished first), or without an upstream."""
+    whole_stack: bool = False
+    """The commits are the local stack of the checked-out branch, no rebase underway: what
+    ``ger checkout --update`` alone brings to Gerrit's current patchsets."""
 
     @property
     def ready(self) -> int:
@@ -313,13 +316,13 @@ class StackOverview:
         for kind, hit in (
             (NextStepKind.ABANDONED, [c for c in commits if c.abandoned]),
             (NextStepKind.DIVERGED, [c for c in commits if Attention.DIVERGED in c.attention_reasons and c.number]),
-            (
-                NextStepKind.OUTDATED,
-                [c for c in commits if Attention.OUTDATED_PATCHSET in c.attention_reasons and c.number],
-            ),
         ):
             if hit:
                 steps.append(NextStep(kind, (hit[0],)))
+        if outdated := [c for c in commits if Attention.OUTDATED_PATCHSET in c.attention_reasons and c.number]:
+            # One command takes them all on the stack; elsewhere, one change at a time, the lowest first.
+            taken = outdated if self.whole_stack else outdated[:1]
+            steps.append(NextStep(NextStepKind.OUTDATED, tuple(taken), whole_stack=self.whole_stack))
         if upload := self.to_upload:
             steps.append(NextStep(NextStepKind.UPLOAD, tuple(upload)))
         if wip := [c for c in commits if c.pushed and Attention.WIP in c.attention_reasons]:
@@ -355,6 +358,9 @@ class NextStep:
     commits: tuple[LogCommit, ...] = ()
     beyond_boundary: bool = False
     """WIP only: some of them sit above the ready boundary, so only ``ger push --all`` reaches them."""
+    whole_stack: bool = False
+    """OUTDATED only: :attr:`commits` are every outdated commit, and ``ger checkout --update`` alone
+    updates them (:attr:`StackOverview.whole_stack`); else the lowest, by its change."""
 
 
 def load_stack_overview(
@@ -387,4 +393,5 @@ def load_stack_overview(
         if on_stack
         else None
     )
-    return StackOverview(view, blocked, progress, moved)
+    whole = on_stack and run.worktree.branch is not None
+    return StackOverview(view, blocked, progress, moved, whole_stack=whole)

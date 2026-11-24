@@ -125,6 +125,9 @@ def _step_text(step: NextStep, moved: UpstreamMoved | None) -> str:
         case NextStepKind.DIVERGED:
             how = f"merge Gerrit's patchset into yours with `ger checkout change:{n} --update`"
             return f"next: {sha} diverged from Gerrit: {how}"
+        case NextStepKind.OUTDATED if step.whole_stack:
+            what, them = (f"{sha} has", "it") if count == 1 else (f"{count} commits have", "them")
+            return f"next: {what} a newer patchset on Gerrit: take {them} with `ger checkout --update`"
         case NextStepKind.OUTDATED:
             return f"next: {sha} has a newer patchset on Gerrit: take it with `ger checkout change:{n} --update`"
         case NextStepKind.UPLOAD:
