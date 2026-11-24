@@ -1485,8 +1485,11 @@ def test_gpush_names_the_ready_boundary_on_every_path(
 @pytest.mark.parametrize(
     ("footer", "fix"),
     [
-        ("", "(`git commit --amend` at HEAD) adds one, with Gerrit's commit-msg hook installed"),
-        ("\n\nChange-Id: Inot-a-valid-id", "and delete its Change-Id line; Gerrit's commit-msg hook adds a new one"),
+        ("", "`git commit --amend` adds one, with Gerrit's commit-msg hook installed"),
+        (
+            "\n\nChange-Id: Inot-a-valid-id",
+            "`ger reword {short}` and delete its Change-Id line; Gerrit's commit-msg hook adds a new one",
+        ),
     ],
 )
 def test_gpush_a_change_id_boundary_names_the_fix(
@@ -1497,7 +1500,7 @@ def test_gpush_a_change_id_boundary_names_the_fix(
     short = git("rev-parse", "--short", "HEAD", cwd=stack_repo).stdout.strip()
     code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "--all"], monkeypatch)
     assert code == 0
-    assert f"... 1 commit held back by the ready boundary; `ger reword {short}` {fix}" in out
+    assert f"... 1 commit held back by the ready boundary; {fix.format(short=short)}" in out
 
 
 def test_gpush_wip_from_above_the_ready_boundary_names_it_and_all(

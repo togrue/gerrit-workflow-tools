@@ -356,11 +356,11 @@ def push_boundary(cwd: Path, ready: ReadyResult, *, head: str) -> PushBoundary:
     count = git_or_none(cwd, "rev-list", "--count", f"{sha}..{head}") if sha else None
     # The boundary commit itself is held back too, and `sha..head` leaves it out.
     held = int(count) + 1 if count and count.isdigit() else 0
-    fix = _boundary_fix(cwd, sha, short_sha or sha[:7], subject or "", ready) if sha else None
+    fix = _boundary_fix(cwd, sha, short_sha or sha[:7], subject or "", ready, at_tip=held == 1) if sha else None
     return PushBoundary(sha, ready.boundary_reason, short_sha, subject, held, fix, ready.all_lifts_boundary)
 
 
-def _boundary_fix(cwd: Path, sha: str, short_sha: str, subject: str, ready: ReadyResult) -> str | None:
+def _boundary_fix(cwd: Path, sha: str, short_sha: str, subject: str, ready: ReadyResult, *, at_tip: bool) -> str | None:
     """How the commits *ready* holds back get past its boundary at *sha*."""
     if ready.all_lifts_boundary:
         return "`ger push --all` sends them as work-in-progress"
@@ -370,7 +370,6 @@ def _boundary_fix(cwd: Path, sha: str, short_sha: str, subject: str, ready: Read
         parse_change_id_footer(git_or_none(cwd, "show", "-s", "--format=%B", sha) or "")
     )
     if not found and not malformed:
-        return (
-            f"`ger reword {short_sha}` (`git commit --amend` at HEAD) adds one, with Gerrit's commit-msg hook installed"
-        )
+        how = "`git commit --amend`" if at_tip else f"`ger reword {short_sha}`"
+        return f"{how} adds one, with Gerrit's commit-msg hook installed"
     return f"`ger reword {short_sha}` and delete its Change-Id line; Gerrit's commit-msg hook adds a new one"
