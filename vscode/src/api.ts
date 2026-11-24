@@ -363,6 +363,8 @@ export interface CiFinding {
 export interface CiContent {
   label: string;
   url: string;
+  /** What the build reported, as on its CI link: an unstable one is read like a failed one. */
+  verdict?: "failed" | "unstable";
   provenance: {
     url: string;
     provider: string | null;
