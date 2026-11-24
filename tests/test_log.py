@@ -27,6 +27,7 @@ from gerrit_workflow_tools.render.style import (
     ANSI_DIM_GRAY,
     ANSI_GREEN,
     ANSI_RED,
+    ANSI_STRIKE,
     ANSI_YELLOW,
     GERRIT_LINK_LABEL,
     strip_ansi,
@@ -438,12 +439,8 @@ def test_log_verbose_shows_outdated_message_ci_in_grey(
     assert "Widget/job/Widget/10" in out
 
 
-def _unicode_strikethrough(s: str) -> str:
-    return "".join(f"{c}\u0336" for c in s)
-
-
 def test_log_abandoned_strikes_summary(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Abandoned Gerrit changes render the subject with strike-through (no TTY: combining chars)."""
+    """Abandoned Gerrit changes render the subject struck through with colour, plain without (``grep`` finds it)."""
     rows = stack_rows_mb_to_head(web_stack_repo)
     overrides: list[dict] = [{}] * len(rows)
     if overrides:
@@ -451,7 +448,12 @@ def test_log_abandoned_strikes_summary(web_stack_repo: Path, monkeypatch: pytest
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
     code, out, err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
-    assert _unicode_strikethrough(rows[-1].subject) in out
+    row = next(line for line in out.splitlines() if line.startswith(rows[-1].short_sha))
+    assert f"# {rows[-1].subject}  " in row and row.endswith("# abandoned")
+    assert "\u0336" not in out
+    code, out, err = run_cli(web_stack_repo, log_main, ["--color=always"], monkeypatch, gerrit=ChangeStore(details))
+    assert code == 0, err
+    assert f"{ANSI_STRIKE}{rows[-1].subject}" in out
 
 
 def test_log_file_redirect_encodes_unicode(
@@ -461,8 +463,7 @@ def test_log_file_redirect_encodes_unicode(
 ) -> None:
     """``ger log > output-file.txt`` must not raise UnicodeEncodeError on legacy encodings.
 
-    Redirected stdout often uses the locale encoding (e.g. cp1252 on Windows). Abandoned
-    summaries use combining strikethrough (U+0336), which is not encodable there.
+    Redirected stdout often uses the locale encoding (e.g. cp1252 on Windows); ger writes UTF-8.
     """
     import io
     import sys
@@ -484,7 +485,7 @@ def test_log_file_redirect_encodes_unicode(
     assert code == 0, err_buf.getvalue()
     text = out_path.read_text(encoding="utf-8")
     assert "summary:" in text
-    assert _unicode_strikethrough(rows[-1].subject) in text
+    assert rows[-1].subject in text
 
 
 def test_log_config_default_show_url(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

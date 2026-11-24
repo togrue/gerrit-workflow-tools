@@ -78,10 +78,13 @@ def _status_sha_column(short_sha: str) -> str:
 
 
 def fmt_summary_strike(summary: str) -> str:
-    """Strike through the commit summary (ANSI SGR 9, or combining chars without a TTY)."""
+    """Strike through the commit summary (ANSI SGR 9) when colour is on; else plain, so ``grep`` still finds it.
+
+    The ``# abandoned`` hint says it either way.
+    """
     if is_color_enabled():
         return f"{ANSI_STRIKE}{summary}{ANSI_RESET}"
-    return "".join(f"{c}̶" for c in summary)
+    return summary
 
 
 def fmt_patchset_column(commit: LogCommit) -> str:

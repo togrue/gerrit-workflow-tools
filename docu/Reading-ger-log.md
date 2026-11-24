@@ -141,7 +141,7 @@ When color is enabled, commit subjects may be highlighted:
 - **Stop pattern** (`ger.stopPattern`) — marks the ready-boundary tail (commits excluded from default push)
 - **Warning pattern** (`ger.warningPattern`) — flags WIP-like or single-word subjects
 
-Abandoned changes show a struck-through subject.
+Abandoned changes show a struck-through subject when colour is on; without colour (piped, `NO_COLOR`) the subject is plain, so `grep` still finds it, and the `# abandoned` hint says it.
 
 Configure patterns in [Configuration.md](Configuration.md).
 
