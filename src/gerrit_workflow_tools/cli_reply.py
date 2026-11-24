@@ -11,8 +11,11 @@ from gerrit_workflow_tools.cli_args import (
     add_branch_arg,
     add_change_option,
     add_color_args,
+    add_dry_run_arg,
+    add_message_args,
     add_output_format_args,
     add_verbose_and_debug_log_args,
+    add_yes_arg,
     read_message,
 )
 from gerrit_workflow_tools.cli_common import ExitCode, confirm_publish, init_cli_runtime, run_cli_command
@@ -73,9 +76,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     add_change_option(p, "Look for CHAIN on this change only (default: every change in the local stack).")
     add_branch_arg(p)
-    text = p.add_argument_group("message")
-    text.add_argument("-m", "--message", action="append", default=None, help="Message; repeat for paragraphs.")
-    text.add_argument("-F", "--file", metavar="FILE", default=None, help="Read the message from FILE ('-': stdin).")
+    text = add_message_args(p)
     text.add_argument("--done", action="store_true", help=f"Reply {_DONE!r} and resolve the chain.")
     state = p.add_mutually_exclusive_group()
     state.add_argument("--resolve", action="store_true", help="Resolve the chain once the draft is published.")
@@ -101,10 +102,8 @@ def _build_parser() -> argparse.ArgumentParser:
     publish.add_argument(
         "--vote", action="append", default=None, metavar="LABEL=N", help=f"With --publish: {VOTE_HELP}"
     )
-    publish.add_argument("--dry-run", action="store_true", help="With --publish: list the drafts, publish nothing.")
-    publish.add_argument(
-        "-y", "--yes", action="store_true", help="With --publish: skip the confirmation (GER_ASSUME_YES=1 too)."
-    )
+    add_dry_run_arg(publish, scope="--publish")
+    add_yes_arg(publish, scope="--publish")
     add_output_format_args(p)
     add_color_args(p)
     add_verbose_and_debug_log_args(p)

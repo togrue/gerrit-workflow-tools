@@ -46,6 +46,33 @@ def add_stack_arg(parser: argparse.ArgumentParser | argparse._ArgumentGroup) -> 
     )
 
 
+HELP_YES = "Answer yes instead of asking; needed without a terminal (GER_ASSUME_YES=1 too)."
+HELP_DRY_RUN = "Show what would be sent, and send nothing."
+
+
+def _scoped(help_text: str, scope: str | None) -> str:
+    """*help_text* for a flag that only applies with *scope* (``--publish``): ``With --publish: …``."""
+    return f"With {scope}: {help_text[:1].lower()}{help_text[1:]}" if scope else help_text
+
+
+def add_yes_arg(parser: argparse.ArgumentParser | argparse._ArgumentGroup, *, scope: str | None = None) -> None:
+    """Register ``-y``/``--yes``: answer the command's confirmation with yes (``GER_ASSUME_YES=1`` too).
+
+    *scope* names the flag it belongs to when only one mode of the command asks (``--publish``).
+    """
+    parser.add_argument("-y", "--yes", action="store_true", help=_scoped(HELP_YES, scope))
+
+
+def add_dry_run_arg(parser: argparse.ArgumentParser | argparse._ArgumentGroup, *, scope: str | None = None) -> None:
+    """Register ``--dry-run``: show what the command would send, and send nothing."""
+    parser.add_argument("--dry-run", action="store_true", help=_scoped(HELP_DRY_RUN, scope))
+
+
+def add_patchset_arg(parser: argparse.ArgumentParser | argparse._ArgumentGroup) -> None:
+    """Register ``--patchset N``: which patch set of the change to take (default: the current one)."""
+    parser.add_argument("--patchset", type=int, default=None, metavar="N", help="Take patchset N (default: current).")
+
+
 def add_message_args(parser: argparse.ArgumentParser) -> argparse._ArgumentGroup:
     """Register ``-m``/``--message`` (repeatable) and ``-F``/``--file`` as a "message" group.
 

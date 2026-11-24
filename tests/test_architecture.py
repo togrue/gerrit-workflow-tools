@@ -541,21 +541,20 @@ def test_a_flag_means_one_thing() -> None:
         "review --next": "the next change in the review chain, not the next edit-attention commit",
         # Debt: one concept, several definitions.
         "review --debug-log": "backlog 4",
-        "--dry-run": "backlog 4",
-        "--message": "backlog 4",
-        "--patchset": "backlog 4",
+        "review --dry-run": "backlog 4",
+        "review --message": "backlog 4",
+        "review --patchset": "backlog 4",
         "--vote": "backlog 4",
-        "--yes": "backlog 4",
+        "review --yes": "backlog 4",
     }
     found: set[str] = set()
     for flag, by_command in _flag_uses().items():
-        rest = {}
-        for command, action in by_command.items():
-            if f"{command} {flag}" in exceptions:
-                found.add(f"{command} {flag}")
-            else:
-                rest[command] = _flag_definition(action)
-        if len(set(rest.values())) > 1:
+        definitions = {command: _flag_definition(action) for command, action in by_command.items()}
+        own = {command for command in definitions if f"{command} {flag}" in exceptions}
+        rest = {definitions[command] for command in definitions.keys() - own}
+        # A command's own flag is still needed only while it differs from what the others define.
+        found |= {f"{command} {flag}" for command in own if definitions[command] not in rest}
+        if len(rest) > 1:
             found.add(flag)
     _check(
         "one flag, several definitions",

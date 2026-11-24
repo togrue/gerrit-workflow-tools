@@ -5,7 +5,13 @@ from __future__ import annotations
 import argparse
 import sys
 
-from gerrit_workflow_tools.cli_args import add_color_args, add_verbose_and_debug_log_args, changeish_help
+from gerrit_workflow_tools.cli_args import (
+    add_color_args,
+    add_patchset_arg,
+    add_verbose_and_debug_log_args,
+    add_yes_arg,
+    changeish_help,
+)
 from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.cli_notes import print_note, print_resolution_note
 from gerrit_workflow_tools.cli_terminal import assume_yes, confirm, stdin_is_terminal
@@ -46,7 +52,7 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="?",
         help=changeish_help("The change", change_only=True) + " Leave it out with --update: the whole local stack.",
     )
-    p.add_argument("--patchset", type=int, default=None, metavar="N", help="Check out patchset N (default: current).")
+    add_patchset_arg(p)
     p.add_argument(
         "-b",
         "--branch",
@@ -73,12 +79,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Replace a local version Gerrit never had, or reset an existing branch NAME.",
     )
-    p.add_argument(
-        "-y",
-        "--yes",
-        action="store_true",
-        help="Answer the update question with yes, as --update does (GER_ASSUME_YES=1 too).",
-    )
+    add_yes_arg(p)
     add_color_args(p)
     add_verbose_and_debug_log_args(p)
     return p

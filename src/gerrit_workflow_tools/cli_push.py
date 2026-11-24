@@ -9,8 +9,10 @@ import sys
 from gerrit_workflow_tools.cli_args import (
     add_branch_arg,
     add_color_args,
+    add_dry_run_arg,
     add_follow_merges_args,
     add_verbose_and_debug_log_args,
+    add_yes_arg,
 )
 from gerrit_workflow_tools.cli_attention import resolve_in_stack
 from gerrit_workflow_tools.cli_common import init_cli_runtime, run_cli_command
@@ -47,18 +49,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     add_branch_arg(parser)
-    parser.add_argument("--dry-run", action="store_true", help="Print actions only; do not push.")
+    add_dry_run_arg(parser)
     parser.add_argument(
         "--no-rebase-check",
         action="store_true",
         help="Do not fetch or verify that HEAD is linear on the remote Gerrit target (see ger.pushRemotePolicy).",
     )
-    parser.add_argument(
-        "-y",
-        "--yes",
-        action="store_true",
-        help="Push without confirmation (required when stdin is not a terminal; GER_ASSUME_YES=1 sets it).",
-    )
+    add_yes_arg(parser)
     parser.add_argument(
         "--publish-comments",
         action="store_true",
