@@ -516,7 +516,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/suggested_edits.py` | A comment's suggested edits: Gerrit fix suggestions and ```` ```suggestion ```` blocks of its text, in one shape |
 | `core/comment_anchor.py` | Where a new comment sits: the LOCATION grammar, its check against a commit, the anchored text |
 | `core/anchor_mapping.py` | Re-anchoring: where a local comment's anchor lands on another version of its file, moved or outdated (ADR-0011) |
-| `core/comment_target.py` | Which change, commit and patchset a new comment is written on |
+| `core/comment_target.py` | Which change, commit and patchset a new comment is written on; a file only the change under review elsewhere has (`reviewed_elsewhere_target`) |
 | `core/comment_write.py` | Writing your own comments: starting a chain (a Gerrit draft, a local draft or a note), editing and discarding one not yet published |
 | `core/local_comments.py` | The local comment store: notes and local drafts under `refs/ger/comments` (ADR-0010) |
 | `core/gerrit_message_parsing.py` | Parsing Gerrit change messages, including CI URLs |

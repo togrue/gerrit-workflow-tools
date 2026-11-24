@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -45,6 +44,7 @@ from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.votes import VOTE_HELP
 from gerrit_workflow_tools.render.comments import drafts_elsewhere
 from gerrit_workflow_tools.render.review_json import review_state_json
+from gerrit_workflow_tools.render.style import shown_path
 from gerrit_workflow_tools.review_vote import vote
 
 
@@ -172,7 +172,7 @@ def next_steps(state: ReviewState, chain: list[int] | None, cwd: Path) -> str:
     worktree = Path(state.worktree)
     here = cwd.resolve()
     steps = (
-        [] if here == worktree.resolve() or worktree.resolve() in here.parents else [f"cd {_shown_path(worktree, cwd)}"]
+        [] if here == worktree.resolve() or worktree.resolve() in here.parents else [f"cd {shown_path(worktree, cwd)}"]
     )
     steps += ["ger show", "ger comment PATH:LINE -m …", "ger reply ID -m …"]
     if chain is not None and chain[-1:] == [state.number]:  # the top: nothing left to walk to
@@ -180,15 +180,6 @@ def next_steps(state: ReviewState, chain: list[int] | None, cwd: Path) -> str:
     else:
         steps += ["ger review --next", "ger review --vote +1"]
     return "next: " + " · ".join(steps)
-
-
-def _shown_path(path: Path, cwd: Path) -> str:
-    """*path* relative to *cwd* when that is shorter, as one types it after ``cd``."""
-    try:
-        relative = os.path.relpath(path, cwd)
-    except ValueError:  # another drive (Windows)
-        return str(path)
-    return relative if len(relative) < len(str(path)) else str(path)
 
 
 def _emit_state(

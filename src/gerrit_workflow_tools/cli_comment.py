@@ -16,12 +16,14 @@ from gerrit_workflow_tools.cli_common import (
     read_message,
     run_cli_command,
 )
+from gerrit_workflow_tools.core.changeish import change_label
 from gerrit_workflow_tools.core.comment_anchor import CommentLocation, LocationError
 from gerrit_workflow_tools.core.comment_chains import ChainRefError, parse_chain_ref
 from gerrit_workflow_tools.core.comment_target import (
     CommentTarget,
     local_target,
     resolve_comment_target,
+    reviewed_elsewhere_target,
     target_for_commit,
 )
 from gerrit_workflow_tools.core.comment_write import (
@@ -35,10 +37,11 @@ from gerrit_workflow_tools.core.comment_write import (
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import CommentState
-from gerrit_workflow_tools.core.review_checkout import load_state
+from gerrit_workflow_tools.core.review_checkout import ReviewState, find_review, load_state
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.render.comments import first_line
 from gerrit_workflow_tools.render.show_json import changed_comment_json, written_comment_json
+from gerrit_workflow_tools.render.style import shown_path
 
 
 _LABELS: dict[str, str] = {"note": "note", "local-draft": "local draft", "draft": "draft"}
@@ -187,18 +190,24 @@ def _service(run: RunContext, *, local_only: bool) -> GerritService | None:
     return None if local_only and not run.gerrit.configured else run.gerrit
 
 
-def _target(args: argparse.Namespace, run: RunContext, service: GerritService | None) -> CommentTarget:
-    """The change under review in this worktree, else ``--change`` or ``HEAD``."""
+def _target(
+    args: argparse.Namespace, run: RunContext, service: GerritService | None
+) -> tuple[CommentTarget, ReviewState | None]:
+    """The change under review in this worktree, else ``--change`` or ``HEAD``; or the change under
+    review in another worktree, for a file only it has (that review is returned too)."""
     cwd, settings = run.cwd, run.settings
     branch = args.branch or run.repo.working_branch
     review = load_state(cwd) if args.change is None else None
     if service is None:
-        return local_target(cwd, args.change, settings=settings, branch=branch)
+        return local_target(cwd, args.change, settings=settings, branch=branch), None
     if review is not None:
         # Staged, HEAD sits at the parent: the review state names the commit under review.
         change = review.change
-        return target_for_commit(service, change.key, change.change_id, change.commit)
-    return resolve_comment_target(service, cwd, args.change, branch=branch)
+        return target_for_commit(service, change.key, change.change_id, change.commit), None
+    away = find_review(cwd, settings) if args.change is None and args.location else None
+    if away is not None and (target := reviewed_elsewhere_target(service, cwd, args.location, away)):
+        return target, away
+    return resolve_comment_target(service, cwd, args.change, branch=branch), None
 
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
@@ -215,7 +224,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     run = init_cli_runtime(args, gerrit=gerrit)
     cwd = run.cwd
     service = _service(run, local_only=args.note or args.local or by_id is not None)
-    target = _target(args, run, service)
+    target, away = _target(args, run, service)
     if args.discard is not None:
         _discard(cwd, service, target, comment_id, as_json=args.json_)
         return int(ExitCode.OK)
@@ -226,7 +235,12 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     written = write_comment(
         cwd, service, target, location, message, state=_state(args, target, service), unresolved=not args.resolved
     )
-    _emit(written_comment_json(written), _line(written), as_json=args.json_)
+    payload = written_comment_json(written)
+    if away is not None:
+        payload["under_review_in"] = away.worktree
+        if not args.json_:
+            print(f"comment on {change_label(away.number)} (under review in {shown_path(away.worktree, cwd)})")
+    _emit(payload, _line(written), as_json=args.json_)
     return int(ExitCode.OK)
 
 

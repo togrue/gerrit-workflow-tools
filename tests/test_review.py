@@ -526,3 +526,19 @@ def test_done_warns_about_drafts_left_unpublished_and_still_finishes(
         "no drafts to publish on the local stack",
         "  unpublished drafts on c101: ger reply --publish c101",
     ]
+
+
+def test_comment_from_your_checkout_on_a_file_only_the_reviewed_change_has_goes_to_that_change(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ger review acts on the review worktree from anywhere; so does a comment that can only be meant for it."""
+    store, keys, _shas = gerrit
+    git("switch", "-q", "-c", "other", "--track", "origin/main", cwd=stack_repo)  # c.txt is not here
+    _review(stack_repo, store, ["102"], monkeypatch)
+    code, out, err = run_cli(stack_repo, comment_main, ["c.txt:1", "-m", "nit"], monkeypatch, gerrit=store)
+    assert code == ExitCode.OK, err
+    assert out.splitlines()[:2] == [
+        "comment on c102 (under review in ../stack-review)",
+        "draft on c.txt:1 (patchset 1)",
+    ]
+    assert [d["message"] for rows in store.list_drafts(keys[2]).values() for d in rows] == ["nit"]
