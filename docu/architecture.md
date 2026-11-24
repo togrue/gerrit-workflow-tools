@@ -417,7 +417,7 @@ flowchart LR
   client[VS Code extension · vscode/]
   httpd[server/httpd.py · token, loopback, errors]
   api[server/api.py · routes, per-request context]
-  ends[server/views.py · server/actions.py]
+  ends[server/views.py · server/actions.py · server/vote.py]
   core[core/ · inbox, annotated stack, show, review checkout, reorder]
   json[render/ JSON builders]
 
@@ -511,7 +511,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/review_chain.py` | Review chains from `ChangeView`s; unreviewed age, wait age |
 | `core/inbox.py` | The inbox: **inbox section** queries (`build_to_review_query`), `load_inbox` (both sections), `section_summary`, the **headline** (`pick_headline`; a rebase underway, handed in as a `RebaseHeadline`, leads it), and which changes wait on your review (`waiting_on_your_review`: the *to review* query, narrowed to them; `to_review_needs_you_as_reviewer`: whether only changes that list you can match) |
 | `core/gerrit_patchset.py` | One Gerrit patchset: which one a changeish names (`resolve_change`, `resolve_patchset`, `GerritPatchset`), its `refs/changes/…` ref, fetching it |
-| `core/review_target.py` | What a review acts on: the review chain it walks (`related_chain_numbers`) and the changes a vote goes to (`changes_by_number`, `vote_targets`: drafts and ruled-out votes per change) |
+| `core/review_target.py` | What a review acts on: the review chain it walks (`related_chain_numbers`), the changes a vote goes to (`vote_changes`, `changes_by_number`, `vote_targets`: drafts and ruled-out votes per change), and the vote: `plan_vote` (a `VotePlan`), `send_vote`. `ger review --vote` and `ger serve` share both |
 | `core/change_checkout.py` | Checking a change out to work on it: the **local version** (`find_local_versions`), what to do with it (`plan_checkout`, `choose_action`), which commits above it take Gerrit's patchset (`gerrit_above`) |
 | `core/change_checkout_apply.py` | Doing what `ger checkout` decided (`apply_checkout`): moving the local version onto the patchset, taking the commits above as Gerrit has them or rebasing them, merging your edits into it; every outdated commit of the local stack (`update_stack`) |
 | `core/review_checkout.py` | Review checkout: the review worktree, `change-<number>` branches, staging, review state, walking a chain |
@@ -608,7 +608,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/style.py` | ANSI color and hyperlink helpers, the run's color and hyperlink mode, UTF-8 stdio |
 | `render/download_meter.py` | The stderr meter for bytes still arriving (`DownloadMeter`) |
 | `summary_highlight.py` | Subject highlighting from stop/warning patterns: the run's highlighter (`run_summary_highlighter`) and the one for a branch's stack |
-| `review_vote.py` | What `ger review --vote` lists, asks and sends (`vote`): your drafts and the votes, per change |
+| `review_vote.py` | What `ger review --vote` lists and asks (`vote`): your drafts and the votes, per change; core plans and sends |
 | `push_preview.py` | What `ger push` shows before it pushes: commit list, boundary notice, status line, the dry run |
 | `push_confirm.py` | What `ger push` asks: the confirm loop (ADR-0008), the push-options line, the Y/n/r question, `-i`, saving reviewers |
 | `push_outcome.py` | What `ger push` reports once `git push` ran (git's own output, errors, what it assigned, what it set over REST), or why it refused |
@@ -633,6 +633,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `server/views.py` | Read endpoints: health, overview, stack (with rebase progress and how far the upstream moved), stack moves (conflict preview), chain, show, review, agent runbook; `error_json` |
 | `server/diff_views.py` | Read endpoints about what a change changed: diff (a commit, a patchset, the **review delta**, Gerrit against local), patchsets, file |
 | `server/actions.py` | Endpoints that change something: review checkout, draft reply, hold, stack rewrite, reword and their undo |
+| `server/vote.py` | The vote: what it would send (`GET /vote`, with the votes on offer) and sending it (`POST /vote`), through core's `plan_vote` and `send_vote` |
 | `server/httpd.py` | HTTP transport: loopback, bearer token, JSON bodies, `failure_response` (failure to status) |
 | `server/activity.py` | The **activity sequence** (`Activity`: raised, long-polled by `GET /activity`) and `follow_events`: the **event stream** wired to it, applied under the request lock |
 
@@ -688,8 +689,8 @@ contract between engine and shell is worth keeping clean.
    service. Parity is about what can be done, not about command names: reorder, squash and drop
    are `ger rebase` on the command line and a drag in the editor. A capability offered by only
    one shell is a written exception with a reason, agreed by the maintainer, in a guardrail of
-   `tests/test_architecture.py`. Known gaps today: push, vote and publish are not served; undo
-   and the conflict preview have no command.
+   `tests/test_architecture.py`. Known gaps today: push is not served; undo and the conflict
+   preview have no command.
 6. **State lives in git and the Gerrit cache, never in the process**
    ([ADR-0014](adr/0014-memos-live-on-the-run.md)). The service gets faster through memos keyed
    by object id, reads off the request lock and pushed events

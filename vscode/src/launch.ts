@@ -113,3 +113,30 @@ export function versionSkewWarner(
       });
   };
 }
+
+/**
+ * What ger warns about in the repository's configuration (old git config key names), as each of
+ * its commands logs it once: here once per session, with a button that runs core's fix in the ger
+ * terminal. Every warning also goes to the log.
+ */
+export function configWarner(cwd: string, log: (line: string) => void): (health: Health) => void {
+  const told = new Set<string>();
+  return (health) => {
+    for (const warning of health.warnings ?? []) {
+      log(`ger warns: ${warning.message}`);
+      if (told.has(warning.message)) {
+        continue;
+      }
+      told.add(warning.message);
+      const fix = warning.argv ? `Run ger ${warning.argv.join(" ")}` : undefined;
+      void ui()
+        .message("warning", `ger: ${warning.message}.`, {}, fix ? [fix] : [])
+        .then((picked) => {
+          if (picked && warning.argv) {
+            runInTerminal(cwd, warning.argv);
+            feedback(`ger ${warning.argv.join(" ")} runs in the ger terminal`, { icon: "terminal" });
+          }
+        });
+    }
+  };
+}

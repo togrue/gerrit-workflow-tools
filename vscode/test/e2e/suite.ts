@@ -137,6 +137,8 @@ export async function run(): Promise<void> {
       return [
         `status bar | ${status()}`,
         `state  | ${api.model.state}`,
+        // Which welcome text Review chains shows while setup is wanting: the cause ger names.
+        ...(api.model.state === "setup" ? [`chains | (welcome text for setup: ${api.model.setupReason || "any other cause"})`] : []),
         `events | ${api.events.events?.state ?? "(not said)"}`,
         ...(await dump(api.overviewView)).map((line) => `chains | ${line}`),
         ...api.stackView.lines().map((line) => `stack  | ${line}`),
@@ -345,6 +347,29 @@ export async function run(): Promise<void> {
       "Settings › ger.executable set back",
       "ger serve starts again at once, without a reload, and the views show what they showed before.",
       () => settings.update("executable", executable, vscode.ConfigurationTarget.Global),
+    );
+    const webUrl = (url: string) => execFileSync("git", ["config", "ger.webUrl", url], { cwd: repo });
+    await press(
+      "In a terminal, ger.webUrl becomes http://gerrit.example; then Review chains › Refresh from Gerrit",
+      "ger will not send credentials over plain http. Review chains' welcome text says that is why, and names the two ways out (the https:// address, or ger.allowInsecureHttp for a test Gerrit) with Run ger setup and Retry; it does not claim the address is missing. Local stack and Change say ger's own words, with Run ger setup; so does the notification, as you asked for the refresh.",
+      async () => {
+        webUrl("http://gerrit.example");
+        await vscode.commands.executeCommand("ger.refresh");
+        assert.equal(api.model.setupReason, "insecure-http");
+      },
+    );
+    await press(
+      "Review chains › Retry, nothing fixed",
+      "It restarts ger serve, and says what it found: the same refusal, in a notification.",
+      exec("ger.refresh"),
+    );
+    await press(
+      "In a terminal, ger.webUrl is the https:// address again; then Review chains › Retry",
+      "ger serve starts, and the views show what they showed before.",
+      async () => {
+        webUrl("https://g.example");
+        await vscode.commands.executeCommand("ger.refresh");
+      },
     );
 
     // --- Your commit with comments ----------------------------------------------------
@@ -790,8 +815,8 @@ export async function run(): Promise<void> {
       const servedApi = process.env.GER_E2E_API ?? "";
       fs.writeFileSync(servedApi, "2.0.0\n");
       await note(
-        "ger serve restarts as a ger whose API is 2.0, while the extension needs 1.0",
-        "The views refuse it rather than break on it: Local stack and the Change view say ger speaks API 2.0 and the extension needs 1.0, and that the extension is what to update, with a button to install the ger that matches it; the status bar shows a warning.",
+        "ger serve restarts as a ger whose API is 2.0, while the extension needs 1.1",
+        "The views refuse it rather than break on it: Local stack and the Change view say ger speaks API 2.0 and the extension needs 1.1, and that the extension is what to update, with a button to install the ger that matches it; the status bar shows a warning.",
         async () => {
           api.model.restart();
           await api.model.refresh();
@@ -1239,6 +1264,44 @@ export async function run(): Promise<void> {
         await vscode.workspace.getConfiguration("ger").update("closeDiffsOnRebase", undefined, vscode.ConfigurationTarget.Global);
       }
       fs.rmSync(scratch, { recursive: true, force: true });
+    }
+
+    // --- Reviewing someone's change: vote and publish ---------------------------------------
+    {
+      await press(
+        "Click \"Add retry to the uploader\" under To review",
+        "The Change view shows change 900, Alice's; its title bar offers Vote and Publish.",
+        exec("ger.openChange", await chainRow("Add retry to the uploader")),
+      );
+      const uploader = { uri: fileUri(api.changeView.diff?.commit ?? "", "uploader.txt"), range: new vscode.Range(0, 0, 0, 0), dispose: () => undefined };
+      await press(
+        "\"+\" on line 1 of uploader.txt in the diff › Save Draft",
+        "The draft is saved on Gerrit and shows as yours in the Change view. Only you see it until it is published, and as it is not your change, ger push would not publish it: the notification offers Vote and Publish.",
+        exec("ger.comment.saveDraft", { thread: uploader, text: "Cap the retries at 5?" }),
+      );
+      await press(
+        "Change › Vote and Publish… › Escape",
+        "A picker offers the votes Gerrit lets you give on 900, each with what the project says it means, opening on Code-Review +1, and your draft without a vote. Escape sends nothing.",
+        exec("ger.vote"),
+        [{ dismiss: true }],
+      );
+      await press(
+        "Change › Vote and Publish… › Code-Review +1 › type \"Thanks!\" › Publish",
+        "After the vote, an optional message; then one dialog lists what goes out (Code-Review +1, the draft at uploader.txt:1, the message, on change 900) and says it cannot be taken back. Publish sends it; a notification says what was published, the draft shows as published in the Change view and the vote on 900's row.",
+        exec("ger.vote"),
+        [{ pick: "$(thumbsup) Code-Review +1" }, { type: "Thanks!" }, { button: "Publish" }],
+      );
+      await press(
+        "Inline Vote and Publish… on the To review row of 900 › Code-Review +2 › no message › Cancel",
+        "The row's button votes on its chain (here only 900): the same picker and message, and the dialog. Cancelled, nothing is sent.",
+        exec("ger.vote", await chainRow("Add retry to the uploader")),
+        [{ pick: "$(thumbsup) Code-Review +2" }, { type: "" }, { dismiss: true }],
+      );
+      await press(
+        "Command palette › ger: Publish Drafts…, with no drafts left on 900",
+        "It says there are no drafts of yours on 900 to publish, and asks nothing.",
+        exec("ger.publishDrafts"),
+      );
     }
 
     out.push("## At the end", "", "```", ...before, "```", "");

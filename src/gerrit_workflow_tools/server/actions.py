@@ -1,7 +1,8 @@
 """Endpoints of ``ger serve`` that change something: the review checkout, draft replies, the local stack.
 
-None of them publishes to Gerrit: replies are drafts, and publishing stays with ``ger push`` /
-``ger review --vote``, in front of a human. Spec: docu/spec/commands/serve.md.
+None of them publishes to Gerrit: replies are drafts. Publishing is ``ger push``, ``ger review --vote``
+and the vote of :mod:`~gerrit_workflow_tools.server.vote`, each after a person said yes.
+Spec: docu/spec/commands/serve.md.
 """
 
 from __future__ import annotations

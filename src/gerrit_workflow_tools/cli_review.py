@@ -96,7 +96,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     add_change_option(vote, "With --vote: vote on this change; repeat for more.", repeatable=True)
     vote.add_argument(
-        "--chain", action="store_true", help="With --vote: vote on every open change of the chain under review."
+        "--chain",
+        action="store_true",
+        help="With --vote: vote on every open change of the chain under review, or of the one --change.",
     )
     vote.add_argument("-m", "--message", action="append", default=None, help="With --vote: a change message.")
     vote.add_argument("--dry-run", action="store_true", help="With --vote: list what would be sent.")
@@ -113,8 +115,8 @@ def _check_args(p: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     opens = args.changeish is not None or args.next or args.prev
     if args.vote is None and (args.change or args.chain or args.message or args.dry_run or args.yes):
         p.error("--change, --chain, -m, --dry-run and -y belong to --vote")
-    if args.change and args.chain:
-        p.error("vote on the chain under review (--chain) or on the changes you name (--change), not both")
+    if args.chain and args.change and len(args.change) > 1:
+        p.error("--chain votes on the chain under review, or on the chain of one --change: not of several")
     if args.vote is not None and (opens or args.status or args.done or args.stage is not None):
         p.error("--vote acts on the change being reviewed; give it on its own")
     if args.changeish is not None and (args.next or args.prev or args.status or args.done):

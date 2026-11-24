@@ -199,6 +199,8 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     invalid_footer: str | None = None
     """The **footer value** when the commit has one that is not a valid **Change-Id** (``change_id``
     is then ``None``): what lets attention call the footer invalid rather than missing."""
+    owner_account_id: int | None = None
+    """The change owner's account id (:meth:`ChangeView.owned_by`); ``None`` before the first push."""
     blocks_chain: bool = False
     """The first commit that holds the changes above it back (they carry ``chain-blocked``):
     attention's verdict, and :func:`core.attention.blocking_reason` says why."""
@@ -366,6 +368,7 @@ def build_log_commit(
             change_status=change.status,
             merged_equivalent=merged_eq,
             reviewers=list(change.reviewers or ()),
+            owner_account_id=change.owner_account_id,
             updated=change.updated,
             freshness=change.freshness,
             wip=change.work_in_progress,

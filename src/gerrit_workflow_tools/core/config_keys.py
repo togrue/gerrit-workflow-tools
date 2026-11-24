@@ -9,6 +9,7 @@ that they were spread over ``gerrit.*``, ``inbox.*`` and ``branch.<name>.gerrit*
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from enum import Enum
 
 
@@ -138,3 +139,22 @@ def legacy_keys_warning(moves: Mapping[str, ConfigScope | None]) -> str:
     if on_command_line:
         parts.append(f"rename git -c {', '.join(on_command_line)}")
     return "; ".join(parts)
+
+
+@dataclass(frozen=True)
+class LegacyKeysNotice:
+    """What to say about the old key names a configuration still answers from, and the fix."""
+
+    message: str
+    """:func:`legacy_keys_warning`'s line: what each command logs once."""
+    argv: tuple[str, ...] | None
+    """The ger command that moves them (``config --migrate``, ``ger`` left out); ``None`` when none is on disk."""
+
+
+def legacy_keys_notice(values: Mapping[str, str], scopes: Mapping[str, ConfigScope]) -> LegacyKeysNotice | None:
+    """The notice for *values* (a snapshot's keys and scopes); ``None`` when no old name stands in."""
+    moves = legacy_keys_standing_in(values, scopes)
+    if not moves:
+        return None
+    on_disk = any(scope is not None and scope.flag is not None for scope in moves.values())
+    return LegacyKeysNotice(legacy_keys_warning(moves), tuple(MIGRATE_COMMAND.split()[1:]) if on_disk else None)

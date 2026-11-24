@@ -209,13 +209,16 @@ export function chainDescription(chain: Chain, section: string): string {
 /** Last activity per chain, as remembered from the previous look. */
 export type Seen = Record<string, string>;
 
-/** Chains whose last activity is newer than what was seen. A chain never seen before is not news. */
+/**
+ * Chains whose last activity is newer than what was seen. A chain never seen before is not news,
+ * nor one whose last activity is your own (core's `last_activity_yours`: your push, your vote).
+ */
 export function chainsWithActivity(overview: Overview | undefined, seen: Seen): Set<string> {
   const active = new Set<string>();
   for (const section of overview?.sections ?? []) {
     for (const chain of section.chains) {
       const before = seen[chain.key];
-      if (before !== undefined && chain.last_activity !== null && chain.last_activity > before) {
+      if (before !== undefined && !chain.last_activity_yours && chain.last_activity !== null && chain.last_activity > before) {
         active.add(chain.key);
       }
     }
@@ -243,7 +246,9 @@ export function rememberSeen(overview: Overview | undefined, seen: Seen, mark: I
   for (const section of overview?.sections ?? []) {
     for (const chain of section.chains) {
       const before = seen[chain.key];
-      next[chain.key] = before === undefined || marked.has(chain.key) ? (chain.last_activity ?? "") : before;
+      // What you did yourself counts as seen: you were there.
+      const now = before === undefined || marked.has(chain.key) || chain.last_activity_yours;
+      next[chain.key] = now ? (chain.last_activity ?? "") : before;
     }
   }
   return next;
@@ -313,4 +318,13 @@ export function commentLocation(file: string, lines?: { start: number; end: numb
   }
   const [start, end] = [Math.min(lines.start, lines.end), Math.max(lines.start, lines.end)];
   return start === end ? `${file}:${start}` : `${file}:${start}-${end}`;
+}
+
+/**
+ * `text` as Markdown that shows it as it is: every punctuation mark Markdown (or a theme icon,
+ * `$(name)`) could read escaped, a line break a paragraph. `MarkdownString.appendText` turns
+ * each space into `&nbsp;`, which a status bar tooltip shows as those six characters.
+ */
+export function markdownText(text: string): string {
+  return text.replace(/[\\`*_{}[\]()#+\-.!|<>$~&]/g, "\\$&").replace(/\n/g, "\n\n");
 }

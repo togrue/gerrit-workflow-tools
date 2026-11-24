@@ -20,10 +20,13 @@ export interface TerminalOptions {
   env?: Record<string, string>;
 }
 
+/** A picker's options; `active` is the item it opens on (the first one otherwise). */
+export type PickOptions<T> = vscode.QuickPickOptions & { active?: T };
+
 export interface Ui {
   /** A notification (or a modal dialog) with buttons; resolves to the button pressed. */
   message(level: Level, text: string, options: MessageOptions, buttons: string[]): Thenable<string | undefined>;
-  pick<T extends vscode.QuickPickItem>(items: T[], options: vscode.QuickPickOptions): Thenable<T | undefined>;
+  pick<T extends vscode.QuickPickItem>(items: T[], options: PickOptions<T>): Thenable<T | undefined>;
   input(options: vscode.InputBoxOptions): Thenable<string | undefined>;
   /** A transient status bar message. */
   status(text: string, milliseconds: number): void;
@@ -98,7 +101,29 @@ export const vscodeUi: Ui = {
     const show = level === "error" ? vscode.window.showErrorMessage : level === "warning" ? vscode.window.showWarningMessage : vscode.window.showInformationMessage;
     return options.modal || options.detail ? show(text, { modal: options.modal, detail: options.detail }, ...buttons) : show(text, ...buttons);
   },
-  pick: (items, options) => vscode.window.showQuickPick(items, options),
+  pick(items, options) {
+    const active = options.active;
+    if (!active) {
+      return vscode.window.showQuickPick(items, options);
+    }
+    // showQuickPick always opens on the first item: a picker of our own opens on the one asked for.
+    return new Promise((resolve) => {
+      const picker = vscode.window.createQuickPick<(typeof items)[number]>();
+      [picker.items, picker.activeItems] = [items, [active]];
+      [picker.title, picker.placeholder] = [options.title, options.placeHolder];
+      [picker.matchOnDescription, picker.matchOnDetail] = [options.matchOnDescription ?? false, options.matchOnDetail ?? false];
+      picker.ignoreFocusOut = options.ignoreFocusOut ?? false;
+      picker.onDidAccept(() => {
+        resolve(picker.selectedItems[0] ?? picker.activeItems[0]);
+        picker.hide();
+      });
+      picker.onDidHide(() => {
+        resolve(undefined);
+        picker.dispose();
+      });
+      picker.show();
+    });
+  },
   input: (options) => vscode.window.showInputBox(options),
   status(text, milliseconds) {
     vscode.window.setStatusBarMessage(text, milliseconds);

@@ -40,6 +40,8 @@ class ChainMember:  # pylint: disable=too-many-instance-attributes
     """The commit of the current patch set, when Gerrit sent it."""
     work_in_progress: bool = False
     private: bool = False
+    updated_by_you: bool = False
+    """Your upload or your vote is its last update (:meth:`ChangeView.updated_by`): no news for you."""
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,8 @@ class ReviewChain:  # pylint: disable=too-many-instance-attributes
     attention_reasons: tuple[str, ...]
     partial_chain: bool
     url: str | None
+    last_activity_yours: bool = False
+    """The member updated last was updated by you (your push, your vote): not news to you."""
 
     @property
     def work_in_progress(self) -> bool:
@@ -144,7 +148,7 @@ def _worst_label(values: list[int | None]) -> int | None:
     return min(known) if known else None
 
 
-def _to_member(change: ChangeView, web_base: str) -> ChainMember | None:
+def _to_member(change: ChangeView, web_base: str, self_account_id: int | None = None) -> ChainMember | None:
     if change.number is None:
         return None
     return ChainMember(
@@ -164,6 +168,7 @@ def _to_member(change: ChangeView, web_base: str) -> ChainMember | None:
         sha=change.current_revision,
         work_in_progress=change.work_in_progress,
         private=change.private,
+        updated_by_you=change.updated_by(self_account_id),
     )
 
 
@@ -270,13 +275,16 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
 ) -> ReviewChain | None:
     """Build one ReviewChain from a connected component, or None if it has no numbers."""
     ordered_ids = _order_members(component, payloads, sha_to_id)
-    members = [member for member_id in ordered_ids if (member := _to_member(payloads[member_id], web_base))]
+    members = [
+        member for member_id in ordered_ids if (member := _to_member(payloads[member_id], web_base, self_account_id))
+    ]
     if not members:
         return None
     top_id = _pick_top(ordered_ids, component, payloads, sha_to_id)
     top_number = payloads[top_id].number
     top_member = next((member for member in members if member.number == top_number), members[-1])
     last_activity = max((member.updated for member in members if member.updated is not None), default=None)
+    last = [member for member in members if member.updated == last_activity]
     stamps = (member_unreviewed_since(payloads[member_id], self_account_id) for member_id in ordered_ids)
     unreviewed_at = min((stamp for stamp in stamps if stamp is not None), default=None)
     project = top_member.project
@@ -298,6 +306,7 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
         attention_reasons=tuple(dict.fromkeys(reason for member in members for reason in member.attention_reasons)),
         partial_chain=any(payloads[member_id].first_parent in unmatched for member_id in component),
         url=top_member.url,
+        last_activity_yours=last_activity is not None and all(member.updated_by_you for member in last),
     )
 
 

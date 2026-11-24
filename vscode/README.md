@@ -201,8 +201,8 @@ The commits above your upstream, newest first. One row per commit:
   through the unresolved ones, across files. `Alt+F9` / `Shift+Alt+F9` do it too while the Change view or a
   diff of the change has focus; anywhere else they stay VS Code's own next / previous comment thread, which only
   walks the open file. For a local commit they also appear as comment threads in the
-  editor. Reply, or reply "Done" and resolve — saved as **drafts** on Gerrit, published later by
-  `ger push` or `ger review --vote`. A reply box has **Save** and **Cancel**, and Gerrit's **Resolved**
+  editor. Reply, or reply "Done" and resolve — saved as **drafts** on Gerrit, published later:
+  on your own commit by your next `ger push`, anywhere else by *Vote and Publish…*. A reply box has **Save** and **Cancel**, and Gerrit's **Resolved**
   checkbox: by the box in the Change view; in an editor thread a toggle in the thread's header
   (VS Code empties the reply box on any button beside it), its label saying what Save will do. It
   starts where the comment stands, and with your draft there already it changes that draft at once.
@@ -214,7 +214,9 @@ The commits above your upstream, newest first. One row per commit:
   as **Suggested fix**, where it applies and the new text. It is shown, not applied.
 - **New comments**: hover a line (or select lines) in the change's diff — or in your file, when
   the shown commit is HEAD — and click **+**. Save it as:
-  - **Draft**, when Gerrit has this very commit: on Gerrit, visible only to you until published;
+  - **Draft**, when Gerrit has this very commit: on Gerrit, visible only to you until published.
+    The first draft on a change says what publishes it, with a button that does it now: on your own
+    commit your next push (**Publish Drafts…**), on anyone else's **Vote and Publish…**;
   - **Local draft**, when Gerrit does not (never pushed, or amended since): kept here, in
     `refs/ger/comments`, for when the commit is pushed;
   - **Private note**, always: kept here and never uploaded.
@@ -225,6 +227,16 @@ The commits above your upstream, newest first. One row per commit:
   of its chain). Findings this change **introduced** are
   on top with a flame; findings that already fail on its parent are dimmed. Click a finding to
   jump to its file and line.
+- **Vote and Publish…** (check icon in the Change view's title bar for someone else's change, and
+  on a *To review* row, where it takes the row's whole chain): `ger review --vote`. A picker offers
+  the votes Gerrit lets you give there, each with what the project says it means, opening on
+  Code-Review +1, and your drafts without a vote. Then an optional message, then one dialog listing
+  everything that goes out: the vote, each draft (`path:line` and its first words), the message,
+  on which changes, and the changes of a chain that do not take the vote. Publish sends it; a
+  notification says what went out and the views refresh, so the chain leaves *To review* when
+  Gerrit says so. Should the change get a new patchset meanwhile, nothing is sent and **Look
+  Again** starts over on what is there now. **Publish Drafts…** (the Change view's `…` menu, the
+  palette) sends your drafts without a vote: `ger reply --publish`.
 - **Review Change** (eye icon, changes that are not in your stack): `ger review`
   fetches the change into the review worktree and offers to open that worktree in a new window; your
   own stack is not touched. When the git config key `ger.reviewCheckout` says `branch`, it switches
@@ -267,6 +279,10 @@ publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to t
 | `ger.pollSeconds` | `120` | Background refresh from Gerrit while the window has focus; a change applies at once. It also refreshes when the window regains focus. While Gerrit's event stream is live (below) it slows to every 15 minutes (or this, when longer), a safety net. |
 | `ger.notify` | `true` | Notify when a background refresh finds something new to be the most important change. Not for what you just did: the status bar shows that. |
 | `ger.closeDiffsOnRebase` | `false` | Close a diff tab opened from the Change view once it is stale: its commit left the stack (rewritten by a rebase, in the views or in a terminal, an amend or a reorder; dropped; or merged past the upstream), or, with your file on its right, HEAD moved off it. Off: the tab stays open and its title says *stale* (`b.txt (6827cbfe) — stale`). A tab that may hold unsaved edits is never closed. |
+
+**Old setting names.** When the repository still uses git config keys under their old names
+(`gerrit.project` for `ger.project`), every ger command warns once, and so does the extension,
+once per session, with **Run ger config --migrate**, which renames them all in the *ger* terminal.
 
 **Gerrit's event stream.** When `ger serve` can follow Gerrit's event stream (`ssh … gerrit
 **Your repository.** The views follow it as the built-in Git view does: a commit, a checkout, a
@@ -319,11 +335,16 @@ When something is missing, the *Review chains* view says what and offers the nex
 |---------------|-----------|
 | Open a folder with a Gerrit checkout / none of the folders is in a git checkout | **Open Folder** (a folder you add later starts ger without a reload) |
 | The program that runs ger was not found | **Install ger** (in a terminal, with uv or pipx), then **Retry**; or **Open Settings** on `ger.executable` when it is installed somewhere else |
-| This repository is not set up for Gerrit yet | **Run ger setup** (in a terminal), then **Retry** |
+| This repository is not set up for Gerrit yet (no `ger.webUrl`) | **Run ger setup** (in a terminal), then **Retry** |
+| ger refuses `ger.webUrl`: it is a plain http:// address | the https:// address (**Run ger setup**), or `git config ger.allowInsecureHttp true` for a test Gerrit; then **Retry** |
+| ger cannot ask Gerrit yet: a setting is missing or wrong | **Run ger setup**, then **Retry** |
 | ger and this extension do not speak the same version of the `ger serve` API (the line above says which versions, and which to update) | **Install the Matching ger** (the release with the extension's version), then **Retry**; when ger is the newer one, updating the extension fixes it too |
 | `ger serve` stopped or failed | **Retry**, or **Show Log** for why |
 
-*Local stack* and *Change* say the same in a line and point to *Review chains*; their buttons in the view title bars appear once ger is running. For an API version they cannot use they say which versions instead, and offer **Update ger** (or, when ger is newer, **Install Matching ger**) themselves.
+**Retry** says what it found when it still cannot start: a notification with ger's reason.
+
+While a setting is wanting, *Local stack* and *Change* say ger's own words for it, with **Run ger setup**.
+Otherwise *Local stack* and *Change* say the same in a line and point to *Review chains*; their buttons in the view title bars appear once ger is running. For an API version they cannot use they say which versions instead, and offer **Update ger** (or, when ger is newer, **Install Matching ger**) themselves.
 
 When the API fits but ger's version differs from the extension's, everything works and a warning says so, once a session: with **Update ger** when ger is older, or a suggestion to update the extension when ger is newer, and **Don't Show Again** for that pair of versions. Dev and local builds are not compared. The log records each comparison and what you chose.
 
@@ -483,6 +504,7 @@ printed.
 | `src/diffTabs.ts`, `src/staleDiffs.ts` | `ger-file:` documents and the diff tabs of them: opening one, knowing it again, marking it stale or closing it once its right side is no longer the commit its title names, unmarking it once it is again (the rule is pure, unit-tested); your files' repository paths; saving before a rebase continues. |
 | `src/changeLoad.ts` | Which change the Change view shows and what of it has come: drawn at once from the clicked row, filled in answer by answer, a stale answer dropped. Pure, unit-tested. |
 | `src/review.ts` | Review Change, Check Out to Work On, Leave Review Checkout, Edit Commit Here. |
+| `src/vote.ts`, `src/voteText.ts` | Vote and Publish, Publish Drafts: the questions, around `GET /vote` and `POST /vote`; their words (pure, unit-tested). |
 | `src/upstream.ts` | Giving the branch an upstream. |
 | `src/agent.ts` | Handing a runbook to a coding agent. |
 | `src/config.ts`, `src/launch.ts`, `src/commandLine.ts` | The `ger.*` settings; how ger is started, as a process or in a terminal; installing ger, and the warning when its version is not the extension's. |

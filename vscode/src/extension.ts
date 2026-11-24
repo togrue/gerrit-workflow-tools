@@ -4,7 +4,7 @@
 import * as vscode from "vscode";
 
 import { handToAgent, runAgent } from "./agent";
-import { CommentChain, Diff, FileChange } from "./api";
+import { CommentChain, Diff, FileChange, Health } from "./api";
 import { ChangeView, Location, ThreadArg } from "./changeView";
 import { DiffTabs, FILE_SCHEME } from "./diffTabs";
 import { CommentThreads, ThreadComment, closeComment, leaveCommentBox } from "./comments";
@@ -12,7 +12,7 @@ import { setting } from "./config";
 import { EventFollower } from "./events";
 import { ShownCommitFollower } from "./follow";
 import { plural } from "./format";
-import { gerProgram, installGer, runInTerminal, versionSkewWarner } from "./launch";
+import { configWarner, gerProgram, installGer, runInTerminal, versionSkewWarner } from "./launch";
 import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
 import { Poller } from "./poller";
@@ -26,6 +26,7 @@ import { waitsForYou } from "./state";
 import { statusBar } from "./statusBar";
 import { Ui, feedback, ui, useUi } from "./ui";
 import { setUpstream } from "./upstream";
+import { voteAndPublish } from "./vote";
 import { staticView } from "./webview";
 import { RepoChoice, chooseRepo, gitDirs, repoNote } from "./workspace";
 
@@ -102,7 +103,12 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   void vscode.commands.executeCommand("setContext", "ger.state", "starting");
   const logLine = (line: string) => log.appendLine(line);
   const skew = versionSkewWarner(repo, context.extension.packageJSON, context.globalState, logLine);
-  const model = new Model(new GerProcess(repo, gerProgram, logLine, skew), context.workspaceState, repo);
+  const warnings = configWarner(repo, logLine);
+  const served = (health: Health) => {
+    skew(health);
+    warnings(health);
+  };
+  const model = new Model(new GerProcess(repo, gerProgram, logLine, served), context.workspaceState, repo);
   const overviewView = new OverviewView(model, context.workspaceState);
   const stackView = new StackView(context.extensionUri, model);
   const changeView = new ChangeView(context.extensionUri, model);
@@ -117,7 +123,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   model.onDidChange(() => {
     const waiting = model.overview?.sections?.find((s) => s.name === "to-review")?.chains.length ?? 0;
     overviewTree.description = model.stale ? "out of date" : undefined;
-    // Over the welcome text, which cannot say which versions: this can.
+    // Over the welcome text, which cannot say which versions: this can. (A message hides the welcome text and its
+    // buttons, so setup wanting says its cause there by `ger.setupReason`, and ger's own words in the other views.)
     overviewTree.message = model.incompatible?.message;
     overviewTree.badge = waiting ? { value: waiting, tooltip: `${plural(waiting, "chain")} to review` } : undefined;
   });
@@ -183,6 +190,22 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     feedback(`Copied ${values.length === 1 ? `${noun} ${values[0].slice(0, 12)}…` : `${values.length} ${noun}s`}`);
   };
 
+  // Vote and Publish is the reviewer's: offered in the Change view for a change on Gerrit that is not yours.
+  context.subscriptions.push(
+    changeView.onDidLoad(() => {
+      const shown = changeView.target ? changeView.shown : undefined;
+      void vscode.commands.executeCommand("setContext", "ger.changeOnGerrit", Boolean(shown?.pushed));
+      void vscode.commands.executeCommand("setContext", "ger.changeVotable", Boolean(shown?.pushed) && shown?.own === false);
+    }),
+  );
+  /** What was published shows at once: Review chains (it may leave *To review*), the change and its threads. */
+  const afterVote = async () => {
+    await model.refresh({ fromGerrit: true });
+    await changeView.open();
+  };
+  /** A chain row of Review chains votes on its whole chain. */
+  const isChainRow = (arg: unknown) => (arg as { kind?: unknown } | undefined)?.kind === "chain";
+
   const setHold = async (arg: unknown, held: boolean) => {
     const chain = threadOf(arg);
     if (chain) {
@@ -194,7 +217,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
 
   const commands: Record<string, (...args: never[]) => unknown> = {
     "ger.refresh": async () => {
-      if (model.failure || model.stale) {
+      const retried = Boolean(model.failure || model.stale);
+      if (retried) {
         // It failed: Retry starts ger serve afresh, and says so.
         await ui().progress(vscode.ProgressLocation.Notification, "Restarting ger serve", () => {
           model.restart();
@@ -208,6 +232,9 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       if (model.stale) {
         // Failed again: the views keep the last answer (marked out of date); you asked, so say why.
         void ui().message("warning", `Still out of date: ${model.stale}`, {}, []);
+      } else if (model.failure) {
+        // You asked, and it cannot show anything: say what it found this time, not only that it tried.
+        void ui().message("warning", `${retried ? "Still not working" : "Refresh failed"}: ${model.failure}`, {}, []);
       } else if (model.state === "ready") {
         feedback("Refreshed from Gerrit");
         await changeView.open(); // still failing: the change shown stays as it was, the welcome text says why
@@ -243,6 +270,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg)),
     "ger.setUpstream": (upstream?: unknown) => setUpstream(model, typeof upstream === "string" ? upstream : undefined),
     "ger.reviewDone": () => leaveReview(model),
+    "ger.vote": (arg: unknown) => voteAndPublish(model, targetOf(arg), { chain: isChainRow(arg), after: afterVote }),
+    "ger.publishDrafts": (arg: unknown) => voteAndPublish(model, targetOf(arg), { draftsOnly: true, after: afterVote }),
     "ger.push": () => push(model),
     "ger.rebase.continue": () => rebaseStep(model, "continue"),
     "ger.rebase.abort": () => rebaseStep(model, "abort"),

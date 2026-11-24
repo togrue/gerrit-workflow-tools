@@ -379,6 +379,8 @@ function ciLinks(ci: CiView): CiLinkRow[] {
   }
   return ci.contents.map((content) => {
     const failed = content.provenance.error !== null;
+    // An unstable build (core's verdict) is read like a failed one, and says it is unstable: a warning, not an error.
+    const unstable = content.verdict === "unstable";
     const rows = content.findings.map((item) => ({ item, introduced: ci.introduced ? ci.introduced.has(item.fingerprint) : null }));
     // What this change broke comes first; what it inherited from below follows. Errors before warnings.
     const rank = (row: (typeof rows)[number]) => (row.introduced ? 0 : 2) + (row.item.severity === "warning" ? 1 : 0);
@@ -388,10 +390,10 @@ function ciLinks(ci: CiView): CiLinkRow[] {
     const warnings = rows.filter(collapsed);
     const counted = [plural(leading.length, "finding"), warnings.length ? plural(warnings.length, "warning") : ""];
     return {
-      icon: failed ? "warning" : "beaker",
-      tone: failed ? "warn" : undefined,
+      icon: failed || unstable ? "warning" : "beaker",
+      tone: failed || unstable ? "warn" : undefined,
       text: content.provenance.build ?? content.label,
-      detail: failed ? `could not be read: ${content.provenance.error}` : counted.filter(Boolean).join(" · "),
+      detail: failed ? `could not be read: ${content.provenance.error}` : [unstable ? "unstable" : "", ...counted].filter(Boolean).join(" · "),
       url: content.provenance.url,
       tooltip: `${content.provenance.url}${content.provenance.truncated ? "\nThe log was cut: findings may be incomplete." : ""}`,
       findings: leading.map(({ item, introduced }) => finding(item, introduced)),
@@ -469,7 +471,9 @@ export function changeVm(state: ChangeState): ChangeVm {
     ci: hasCi
       ? {
           // The head already says "CI failed": the section names the failing builds, or nothing.
-          summary: commit.ci_failures.join(", "),
+          summary: commit.ci_failures
+            .map((label) => (commit.ci_links.some((link) => link.label === label && link.verdict === "unstable") ? `${label} (unstable)` : label))
+            .join(", "),
           state: state.ci.state,
           error: state.ci.state === "error" ? state.ci.error : "",
           // The builds and logs are the last pushed patchset's, true while stopped too; why there is

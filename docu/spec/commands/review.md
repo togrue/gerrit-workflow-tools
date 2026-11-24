@@ -3,7 +3,7 @@
 | | |
 |--|--|
 | **Status** | **Implemented** |
-| **Module** | `cli_review.py`; the vote in `review_vote.py`; checkout and review state in `core/review_checkout.py`; votes on `CommentApi` in `core/gerrit/comments.py`; the chain from `GerritRest.get_related` |
+| **Module** | `cli_review.py`; the vote in `review_vote.py`, planned and sent by `core/review_target.py` (`plan_vote`, `send_vote`: `ger serve` sends through the same); checkout and review state in `core/review_checkout.py`; votes on `CommentApi` in `core/gerrit/comments.py`; the chain from `GerritRest.get_related` |
 | **Requires** | A git repository, `ger.webUrl`, credentials |
 
 Review someone else's change in your editor. `ger review` checks the change out, shows *what this commit changed* to every git tool you already use, walks up and down its review chain, and publishes your comments with your vote.
@@ -106,8 +106,8 @@ What it votes on:
 | | |
 |--|--|
 | (default) | The change being reviewed |
-| `--chain` | Every open change of the chain under review (Gerrit's related changes of the reviewed patchset), base first: a reviewed chain is finished in one command |
-| `--change CHANGEISH` | That change; repeat it to vote on several (`--change 2078 --change 2079`). Not with `--chain` |
+| `--chain` | Every open change of the chain under review (Gerrit's related changes of the reviewed patchset), base first: a reviewed chain is finished in one command. With one `--change`, every open change of that change's chain (its current patchset's related changes), with no review checkout |
+| `--change CHANGEISH` | That change; repeat it to vote on several (`--change 2078 --change 2079`). With `--chain`, only one |
 
 Before anything is sent, the changes are read from Gerrit in one light query (one read per `--change`), and your drafts with one `has:draft` query over them; a change's chains are fetched only when it holds drafts. A vote Gerrit does not let you give on a change (outside its `permitted_labels`, when the change data has them) is named with what you may give: `change 2142 does not take Code-Review+3 (you may give -2, -1, 0, +1, +2)`. With `--chain`, such a change is skipped and listed as `skipped change N "subject": …`; when no change takes the vote, the command exits `2`, also under `--dry-run`.
 
@@ -151,7 +151,7 @@ When you have reviewed an older patchset of the change (posted a vote, comment o
 
 **`--ai`** (or `--format ai`): the human output with colour and hyperlinks off ([Output formats](../../SPEC.md#output-formats)).
 
-**JSON** (`--json`): the review state, plus `chain` (change numbers, base first), `url`, and `since_reviewed` (`{patch_set, base, rebased, files}`) when there is a delta. `--vote --json`: for one change `{change, drafts, labels, message, status}` (`status` is `published` or `dry-run`); with `--chain` or several `--change`, `{changes: [those], skipped: [{change, ruled_out}]}`.
+**JSON** (`--json`): the review state, plus `chain` (change numbers, base first), `url`, and `since_reviewed` (`{patch_set, base, rebased, files}`) when there is a delta. `--vote --json`: for one change `{change, number, drafts, labels, message, status}` (`status` is `published` or `dry-run`); with `--chain` or several `--change`, `{changes: [those], skipped: [{change, number, ruled_out}]}`, which is also what `ger serve`'s `POST /vote` answers ([serve](serve.md)).
 
 ---
 

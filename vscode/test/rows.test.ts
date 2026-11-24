@@ -263,6 +263,9 @@ test("without an upstream the stack offers one to track; while ger is not runnin
   assert.equal(waitingFor("ready", "Your local stack"), undefined);
   assert.equal(waitingFor("starting", "Your local stack")?.text, "Starting ger serve…");
   assert.equal(waitingFor("setup", "Your local stack")?.link?.command, "ger.overview.focus");
+  // Setup wanting, with ger's reason: said in ger's words, with the step that fixes it.
+  const refused = waitingFor("setup", "Your local stack", undefined, "ger.webUrl must use https://");
+  assert.deepEqual(refused, { text: "Your local stack shows here once ger can ask Gerrit. ger says: ger.webUrl must use https://", link: { label: "Run ger setup", command: "ger.setup" } });
 });
 
 // --- Change -------------------------------------------------------------------------
@@ -463,6 +466,17 @@ test("the CI group lists errors first and keeps the warnings behind a count", ()
   // With no error to explain the failure, the warnings are the lead and stay in view.
   const only = changeVm(state({ shown: failing, ci: { state: "loaded", contents: [content(false, [both[0]])], introduced: null } }));
   assert.deepEqual([only.ci?.links[0].findings.length, only.ci?.links[0].warnings.length], [1, 0]);
+});
+
+test("an unstable build is named so, with a warning (not the error), and still counts as CI to look at", () => {
+  const link = { label: "jenkins", url: "https://ci.example.org/job/Widget/55/", source: "message" };
+  const unstable = commit("c", { ci_failures: ["jenkins"], verified: -1, attention_reasons: ["ci-failed"], ci_links: [{ ...link, verdict: "unstable" }] });
+  const ci = badges(unstable)[2];
+  assert.deepEqual([ci?.icon, ci?.tone, ci?.title], ["warning", "warn", "CI unstable: jenkins"]);
+  const failed = badges({ ...unstable, ci_links: [{ ...link, verdict: "unstable" }, { ...link, label: "lint", verdict: "failed" }] })[2];
+  assert.deepEqual([failed?.icon, failed?.tone], ["error", "bad"], "one failed build among them: CI failed");
+  const vm = changeVm(state({ shown: shown({ ...unstable }), ci: { state: "loaded", contents: [{ ...content(true, []), verdict: "unstable" }], introduced: null } }));
+  assert.deepEqual([vm.ci?.summary, vm.ci?.links[0].icon, vm.ci?.links[0].tone, vm.ci?.links[0].detail], ["jenkins (unstable)", "warning", "warn", "unstable · 0 findings"]);
 });
 
 // A4: Review chains showed a comment icon for a negative vote, where the Change view listed no comment.

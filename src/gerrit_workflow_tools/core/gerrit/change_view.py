@@ -110,6 +110,7 @@ class Revision:
     created: datetime | None
     committer_date: datetime | None
     first_parent: str | None
+    uploader_account_id: int | None = None
 
 
 def _revision(raw: Mapping[str, Any]) -> Revision:
@@ -130,6 +131,7 @@ def _revision(raw: Mapping[str, Any]) -> Revision:
         created=parse_gerrit_time(raw.get("created")),
         committer_date=committer_date,
         first_parent=first_parent,
+        uploader_account_id=_account_id(raw.get("uploader")),
     )
 
 
@@ -175,6 +177,17 @@ def _permitted_votes(raw: object) -> dict[str, tuple[int, ...]]:
     return permitted
 
 
+def _label_meanings(labels: Mapping[str, Any]) -> dict[str, dict[int, str]]:
+    """What each value of each label means (``DETAILED_LABELS``' ``values``): ``+1``, "Looks good to me…"."""
+    meanings: dict[str, dict[int, str]] = {}
+    for label, info in labels.items():
+        values = info.get("values") if isinstance(info, dict) else None
+        for raw, text in (values if isinstance(values, dict) else {}).items():
+            if isinstance(raw, str) and raw.strip().lstrip("+-").isdigit() and isinstance(text, str):
+                meanings.setdefault(str(label), {})[int(raw)] = text.strip()
+    return meanings
+
+
 def _attention_set(raw: object) -> dict[int, datetime | None]:
     """``last_update`` per account id, from the key or from the entry's account."""
     out: dict[int, datetime | None] = {}
@@ -190,6 +203,11 @@ def _attention_set(raw: object) -> dict[int, datetime | None]:
         if isinstance(key, str) and key.isdigit():
             out[int(key)] = stamp
     return out
+
+
+def _account_id(account: object) -> int | None:
+    raw = account.get("_account_id") if isinstance(account, dict) else None
+    return raw if isinstance(raw, int) and not isinstance(raw, bool) else None
 
 
 def _owner_name(owner: object) -> str:
@@ -238,12 +256,16 @@ class ChangeView:  # pylint: disable=too-many-instance-attributes
     attention_set: Mapping[int, datetime | None] = field(default_factory=dict)
     owner_username: str | None = None
     """The owner's Gerrit username, when Gerrit sent it (``DETAILED_ACCOUNTS``)."""
+    owner_account_id: int | None = None
+    """The owner's account id: :meth:`owned_by` compares it with yours."""
     freshness: str | None = None
     work_in_progress: bool = False
     private: bool = False
     topic: str | None = None
     permitted_votes: Mapping[str, tuple[int, ...]] = field(default_factory=dict)
     """What you may vote, per label (``permitted_labels``); empty when Gerrit did not say."""
+    label_meanings: Mapping[str, Mapping[int, str]] = field(default_factory=dict)
+    """What each vote of a label means, as the project words it; empty when Gerrit did not say."""
 
     def contradicts(self, parsed: Changeish) -> str | None:
         """Why this change is not the one *parsed* addressed, or ``None`` when it is."""
@@ -297,11 +319,29 @@ class ChangeView:  # pylint: disable=too-many-instance-attributes
             attention_set=_attention_set(payload.get("attention_set")),
             freshness=change_freshness_key(payload),
             owner_username=_str(owner.get("username")) if isinstance(owner, dict) else None,
+            owner_account_id=_account_id(owner),
             work_in_progress=payload.get("work_in_progress") is True,
             private=payload.get("is_private") is True,
             topic=_str(payload.get("topic")) or None,
             permitted_votes=_permitted_votes(payload.get("permitted_labels")),
+            label_meanings=_label_meanings(labels),
         )
+
+    def updated_by(self, account_id: int | None) -> bool:
+        """Whether *account_id* made the change's last update, as far as the ChangeInfo tells:
+        a patchset it uploaded, or a vote it gave, at that moment. A comment alone does not tell.
+        """
+        updated = parse_gerrit_time(self.updated)
+        if account_id is None or updated is None:
+            return False
+        moments = [rev.created for rev in self.revisions.values() if rev.uploader_account_id == account_id]
+        votes = (*self.code_review_votes, *(vote for votes in self.label_votes.values() for vote in votes))
+        moments += [vote.date for vote in votes if vote.account_id == account_id]
+        return any(moment is not None and abs((updated - moment).total_seconds()) < 1 for moment in moments)
+
+    def owned_by(self, account_id: int | None) -> bool:
+        """Whether the account *account_id* (``GerritService.self_account_id``: you) owns this change."""
+        return account_id is not None and self.owner_account_id == account_id
 
     @property
     def is_open(self) -> bool:

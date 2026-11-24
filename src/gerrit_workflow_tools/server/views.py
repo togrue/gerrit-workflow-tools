@@ -19,6 +19,7 @@ from gerrit_workflow_tools.core.attention import Attention, commit_needs_edit_at
 from gerrit_workflow_tools.core.ci_content import introduced_fingerprints
 from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS
 from gerrit_workflow_tools.core.comment_write import new_comment_state
+from gerrit_workflow_tools.core.config_keys import legacy_keys_notice
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.change_view import parse_gerrit_time
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
@@ -30,7 +31,7 @@ from gerrit_workflow_tools.core.rebase_state import rebase_underway
 from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_conflicts
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import find_review
-from gerrit_workflow_tools.core.review_target import related_chain_numbers
+from gerrit_workflow_tools.core.review_target import drafts_published_by, related_chain_numbers
 from gerrit_workflow_tools.core.stack import (
     get_stack_snapshot,
     merge_commits,
@@ -61,7 +62,7 @@ from gerrit_workflow_tools.server.diff_views import commit_files
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
 
-API_VERSION = "1.0.0"
+API_VERSION = "1.1.0"
 """The serve contract's version, ``MAJOR.MINOR.PATCH`` (bump rules: ``docu/spec/commands/serve.md``)."""
 _T = TypeVar("_T")
 _NOT_ON_GERRIT = frozenset({Attention.NOT_PUSHED, Attention.AHEAD_OF_GERRIT, Attention.DIVERGED})
@@ -79,8 +80,10 @@ def error_json(error: BaseException) -> dict[str, str]:
 
 
 def health(ctx: Context, _req: Request) -> dict[str, Any]:
-    """Who is answering, for which repository, and whether Gerrit's event stream is followed."""
+    """Who is answering, for which repository, whether Gerrit's event stream is followed, and what
+    in this repository's configuration ger warns about (old key names), with the command that fixes it."""
     top = ctx.run.repo.root
+    legacy = legacy_keys_notice(ctx.settings.values, ctx.settings.scopes)
     return {
         "name": "ger",
         "version": __version__,
@@ -88,6 +91,7 @@ def health(ctx: Context, _req: Request) -> dict[str, Any]:
         "repo": str(top) if top else None,
         "branch": ctx.run.worktree.branch,
         "host": host_from_web_base(ctx.service.web_base),
+        "warnings": [{"message": legacy.message, "argv": list(legacy.argv) if legacy.argv else None}] if legacy else [],
         **ctx.activity.json(),
     }
 
@@ -301,6 +305,7 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
     is_chain = req.flag("ci") and (req.flag("stack") or req.flag("chain"))
     introduced = introduced_fingerprints([item.ci_verdict_contents for item in shown]) if is_chain else None
     holds = load_holds(ctx.cwd)
+    me = ctx.service.self_account_id() if any(item.commit.pushed for item in shown) else None
     commits = []
     for index, item in enumerate(shown):
         payload = commit_json_payload(
@@ -312,6 +317,8 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
         )
         payload["short_sha"] = item.commit.short_sha
         payload["new_comment"] = new_comment_state(item.commit, is_local=item.target.is_local_commit)
+        payload["own"] = item.commit.owner_account_id == me if item.commit.pushed and me is not None else None
+        payload["drafts_published_by"] = drafts_published_by(item.commit, is_local=item.target.is_local_commit, me=me)
         served_chains = cast(list[dict[str, Any]], payload["comment_chains"])
         for chain_payload, chain in zip(served_chains, item.chains, strict=True):
             chain_payload["held"] = chain_payload["root_id"] in holds

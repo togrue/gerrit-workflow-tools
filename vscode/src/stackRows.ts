@@ -95,6 +95,9 @@ export function badges(commit: CommitStatus): (Badge | null)[] {
   const review = stale ? (last?.code_review ?? null) : commit.code_review;
   const verified = stale ? (last?.verified ?? null) : commit.verified;
   const failed = commit.ci_failures.length > 0 || (verified !== null && verified < 0);
+  // Every build that failed only marked itself unstable (core's verdict per CI link): a warning, still CI to look at.
+  const verdicts = commit.ci_links.map((link) => link.verdict).filter(Boolean);
+  const unstable = verdicts.length > 0 && verdicts.every((verdict) => verdict === "unstable");
   const count = commit.comments_unresolved;
   const who = reviewerWords(commit.reviewers);
   return [
@@ -130,10 +133,10 @@ export function badges(commit: CommitStatus): (Badge | null)[] {
     failed
       ? {
           kind: "ci",
-          icon: "error",
-          tone: "bad",
+          icon: unstable ? "warning" : "error",
+          tone: unstable ? "warn" : "bad",
           text: "",
-          title: `CI failed${commit.ci_failures.length ? `: ${commit.ci_failures.join(", ")}` : ""}${note}`,
+          title: `${unstable ? "CI unstable" : "CI failed"}${commit.ci_failures.length ? `: ${commit.ci_failures.join(", ")}` : ""}${note}`,
           stale,
         }
       : verified

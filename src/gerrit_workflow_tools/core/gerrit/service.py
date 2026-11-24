@@ -61,6 +61,8 @@ class GerritService:
         # known. A property of the host, not of any change, so it is answered from the
         # cache and only rediscovered once that verdict expires.
         self._checks_endpoint_available: bool | None = None
+        # Who you are, once asked in this run: an account id never changes.
+        self._self_account_id: int | None = None
         self.changes = ChangeApi(self)
         self.comments = CommentApi(self)
 
@@ -114,13 +116,17 @@ class GerritService:
         Asked once per user and host and then remembered: an account id never changes, and
         every inbox load and review delta needs it.
         """
+        if self._self_account_id is not None:
+            return self._self_account_id
         user = self.settings.get("ger.user") or ""
         known = None if self.refresh else self.cache.account_id(user)
         if known is not None:
+            self._self_account_id = known
             return known
         asked = account_id_of_self(self.rest)
         if asked is not None:
             self.cache.set_account_id(user, asked)
+            self._self_account_id = asked
         return asked
 
     def stack_context(self) -> StackContext:

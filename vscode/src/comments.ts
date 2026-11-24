@@ -5,7 +5,7 @@
 
 import * as vscode from "vscode";
 
-import { Comment, CommentChain, NewCommentState } from "./api";
+import { Comment, CommentChain, NewCommentState, ShownCommit } from "./api";
 import { ownComment } from "./changeRows";
 import { ChangeView } from "./changeView";
 import { FILE_SCHEME, repoPath } from "./diffTabs";
@@ -19,11 +19,21 @@ const FILE_PROMPT: Record<NewCommentState, string> = {
   note: "About the whole file. A private note: it never leaves this repository.",
 };
 
-const SAVED: Record<NewCommentState, string> = {
-  draft: "Draft saved on Gerrit, visible only to you. Publish it with ger push.",
+const SAVED: Record<Exclude<NewCommentState, "draft">, string> = {
   "local-draft": "Local draft saved here. It goes to Gerrit once the commit is pushed.",
   note: "Private note saved here. It never leaves this repository.",
 };
+
+/**
+ * What publishes a draft on the change shown, as core says (`drafts_published_by`), and the command
+ * that publishes it now: on your own commit of the local stack your next push, anywhere else a vote
+ * (`ger push` only publishes the drafts on the changes it sends).
+ */
+function publishing(shown: ShownCommit | undefined): { words: string; button: string; command: string } {
+  return shown?.drafts_published_by === "push"
+    ? { words: "your next push publishes it", button: "Publish Drafts…", command: "ger.publishDrafts" }
+    : { words: "Vote and Publish sends it", button: "Vote and Publish…", command: "ger.vote" };
+}
 
 /** What an unpublished comment of yours is called. */
 const YOURS: Record<string, string> = { draft: "draft", "local-draft": "local draft", note: "private note" };
@@ -101,6 +111,8 @@ export class CommentThreads implements vscode.Disposable {
   private readonly boxes = new Set<vscode.CommentThread>();
   /** Comments you are editing: the threads are left alone until you save or cancel. */
   private readonly editing = new Set<ThreadComment>();
+  /** The changes a notification already said, this session, how a draft on them is published. */
+  private readonly toldAbout = new Set<string>();
   private outdated = false;
   private readonly listeners: vscode.Disposable[] = [];
   private cursor = -1;
@@ -214,7 +226,7 @@ export class CommentThreads implements vscode.Disposable {
     }
     try {
       await (await this.model.client()).newComment(target.rev, commentLocation(file), text.trim(), state, this.view.diff?.commit);
-      ui().status(`$(check) ${SAVED[state]}`, 6000);
+      this.saved(state, "Draft saved on Gerrit");
       await this.view.open();
     } catch (error) {
       void ui().message("error", `Comment not saved: ${describeError(error)}`, {}, []);
@@ -237,7 +249,7 @@ export class CommentThreads implements vscode.Disposable {
       await client.newComment(target.rev, location, text, state, this.view.diff?.commit);
       this.boxes.delete(reply.thread);
       reply.thread.dispose(); // the saved chain comes back with the reload, in its place
-      ui().status(`$(check) ${SAVED[state]}`, 6000);
+      this.saved(state, "Draft saved on Gerrit");
       await this.view.open();
     } catch (error) {
       // The box stays open with the text, to try again or save it another way.
@@ -387,7 +399,7 @@ export class CommentThreads implements vscode.Disposable {
       ? (draft?.message ?? "Done")
       : await ui().input({
           title: draft ? `Edit your draft reply — ${where}` : `Reply to ${chain.comments.at(-1)?.author ?? "comment"} — ${where}`,
-          prompt: "Saved as a draft on Gerrit. Drafts are published with `ger push` or `ger review --vote`.",
+          prompt: `Saved as a draft on Gerrit, visible only to you: ${publishing(this.view.shown).words}.`,
           placeHolder: chain.comments.at(-1)?.message.split("\n")[0],
           value: draft?.message,
         });
@@ -407,13 +419,39 @@ export class CommentThreads implements vscode.Disposable {
       const saved = await client.reply(target.rev, anchorId, message.trim(), resolved);
       const what = saved.reply.action === "updated" ? "Draft updated" : "Draft saved";
       const how = resolved ? ", resolving the comment" : resolved === false && chain.resolved_after_publish ? ", leaving the comment unresolved" : "";
-      ui().status(`$(check) ${what}${how}. Publish it with ger push.`, 6000);
+      this.draftSaved(`${what}${how}`);
       await this.view.open();
       return true;
     } catch (error) {
       void ui().message("error", `Draft not saved: ${describeError(error)}`, {}, []);
       return false;
     }
+  }
+
+  /** Say that a comment was saved: a draft on Gerrit says what publishes it, a local one where it stays. */
+  private saved(state: NewCommentState, draft: string): void {
+    if (state === "draft") {
+      this.draftSaved(draft);
+    } else {
+      ui().status(`$(check) ${SAVED[state]}`, 6000);
+    }
+  }
+
+  /**
+   * A draft on Gerrit was saved: only you see it until it is published, and the way to publish it
+   * is one click away. The first draft on a change says so in a notification with that button; the
+   * ones after it in the status bar, so a reviewer writing ten drafts is not told ten times.
+   */
+  private draftSaved(what: string): void {
+    const how = publishing(this.view.shown);
+    const text = `${what}, visible only to you: ${how.words}.`;
+    const change = this.view.target?.changeId ?? this.view.target?.rev ?? "";
+    if (this.toldAbout.has(change)) {
+      ui().status(`$(check) ${text}`, 6000);
+      return;
+    }
+    this.toldAbout.add(change);
+    void Promise.resolve(ui().message("info", text, {}, [how.button])).then((picked) => (picked ? vscode.commands.executeCommand(how.command) : undefined));
   }
 
   // --- Your own unpublished comments --------------------------------------------------

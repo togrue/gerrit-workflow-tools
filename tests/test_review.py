@@ -487,11 +487,16 @@ def test_a_chain_vote_skips_the_changes_that_do_not_take_it_and_says_so(
     assert [call.args[0] for call in store.calls_to("publish_drafts")] == keys[1:]
 
 
-def test_chain_and_change_together_are_a_usage_error(
+def test_chain_with_one_named_change_votes_on_its_chain_with_no_review_checkout(
     stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    store, _keys, _shas = gerrit
-    assert _review(stack_repo, store, ["--vote", "+1", "--chain", "--change", "100"], monkeypatch)[0] == ExitCode.USAGE
+    """What a *To review* chain row's Vote and Publish does (``POST /vote`` with ``chain``), from the command line."""
+    store, keys, _shas = gerrit
+    code, _out, err = _review(stack_repo, store, ["--vote", "+1", "--chain", "--change", "101", "-y"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert [call.args[0] for call in store.calls_to("publish_drafts")] == keys
+    several = ["--vote", "+1", "--chain", "--change", "100", "--change", "101"]
+    assert _review(stack_repo, store, several, monkeypatch)[0] == ExitCode.USAGE
     assert _review(stack_repo, store, ["--chain"], monkeypatch)[0] == ExitCode.USAGE
 
 

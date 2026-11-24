@@ -38,6 +38,7 @@ from tests.test_serve import WEB, _gerrit  # noqa: E402
 from gerrit_workflow_tools.cli_rebase import main as rebase_main  # noqa: E402
 from gerrit_workflow_tools.cli_serve import main as serve_main  # noqa: E402
 from gerrit_workflow_tools.core.config import Settings  # noqa: E402
+from gerrit_workflow_tools.core.gerrit.rest import resolve_gerrit_web_base  # noqa: E402
 from gerrit_workflow_tools.core.git_run import git, git_out  # noqa: E402
 from gerrit_workflow_tools.core.inbox import build_to_review_query  # noqa: E402
 from gerrit_workflow_tools.server import views  # noqa: E402
@@ -64,6 +65,17 @@ def make_repo(path: Path) -> None:
     git("-c", "user.name=alice", "-c", "user.email=alice@example.com", "commit", "-qm", message, cwd=path)
     git("update-ref", THEIRS_REF, "HEAD", cwd=path)
     git("switch", "-q", "feature", cwd=path)
+
+
+class SettingsCheckedStore(ChangeStore):
+    """The fake Gerrit, reached only as the real client would reach it: with ``ger.webUrl`` as git
+    config has it now. An ``http://`` one without ``ger.allowInsecureHttp`` is refused with the real
+    ``ConfigError``, so the extension shows ger's own refusal, as it would against a real Gerrit."""
+
+    @property
+    def web_base(self) -> str:  # type: ignore[override]
+        resolve_gerrit_web_base(Settings.from_cwd(Path.cwd()))
+        return str(self.__dict__["web_base"])  # as the store was made
 
 
 class FileEvents:
@@ -123,6 +135,7 @@ def fake_gerrit(repo: Path) -> tuple[ChangeStore, dict[int, dict[str, Any]]]:
     """The Gerrit the fixture repository talks to, and its changes an event may change."""
     overrides = [{}, {"unresolved_comment_count": 2}, {"verified": -1}, {"verified": -1}]
     store, keys, _rows = _gerrit(repo, overrides)
+    store.__class__ = SettingsCheckedStore  # its web address read as git config has it, at each use
     store.set_comments(
         keys[1],
         {
@@ -183,7 +196,16 @@ def fake_gerrit(repo: Path) -> tuple[ChangeStore, dict[int, dict[str, Any]]]:
         project="testproj",
         id=f"testproj~main~{THEIRS_CHANGE_ID}",
         reviewers={"REVIEWER": [{"_account_id": SELF, "name": "me", "username": "me"}]},
+        # What you may vote on it, and what each vote means, as Gerrit's DETAILED_LABELS says.
+        permitted_labels={"Code-Review": ["-2", "-1", " 0", "+1", "+2"]},
     )
+    theirs["labels"]["Code-Review"]["values"] = {
+        "-2": "This shall not be submitted",
+        "-1": "I would prefer this is not submitted as is",
+        " 0": "No score",
+        "+1": "Looks good to me, but someone else must approve",
+        "+2": "Looks good to me, approved",
+    }
     store.add_change(theirs)
     store.stub_query(
         build_to_review_query(Settings.from_cwd(repo), projects=["testproj"], include_unready=False), [theirs]

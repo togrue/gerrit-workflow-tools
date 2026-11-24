@@ -10,7 +10,15 @@ export interface Hello {
 }
 
 /** `GET /health`: who answers. `api` is the serve API version, `MAJOR.MINOR.PATCH` (a bare number from an older ger). */
-export type Health = { name: string; version: string; api: string | number; repo: string | null; branch: string | null } & Activity;
+export type Health = {
+  name: string;
+  version: string;
+  api: string | number;
+  repo: string | null;
+  branch: string | null;
+  /** What ger warns about in this repository's configuration (old key names), and the ger command that fixes it (`ger` left out). */
+  warnings?: { message: string; argv: string[] | null }[];
+} & Activity;
 
 export interface ApiError {
   code: string;
@@ -69,6 +77,8 @@ export interface Chain {
   wait_age_seconds: number;
   unreviewed_age_seconds: number;
   last_activity: string | null;
+  /** That last activity was yours (your upload or your vote, as Gerrit tells it): not news. */
+  last_activity_yours?: boolean;
   verified: number | null;
   code_review: number | null;
   comments_unresolved: number;
@@ -363,6 +373,8 @@ export interface CiFinding {
 export interface CiContent {
   label: string;
   url: string;
+  /** What the build reported, as on its CI link: an unstable one is read like a failed one. */
+  verdict?: "failed" | "unstable";
   provenance: {
     url: string;
     provider: string | null;
@@ -389,6 +401,10 @@ export interface ShownCommit extends CommitStatus {
   markdown?: string;
   /** With `files`: what `/diff` answers for the commit. */
   files?: Diff;
+  /** You own the change; null when it is not on Gerrit or Gerrit will not say who you are. */
+  own?: boolean | null;
+  /** What publishes your drafts on it: your next push (your own commit of the local stack), or a vote; null off Gerrit. */
+  drafts_published_by?: "push" | "vote" | null;
 }
 
 export interface FileChange {
@@ -459,6 +475,53 @@ export interface Runbook {
   }[];
   totals: { commits: number; comments: number; held: number; findings: number };
   markdown: string;
+}
+
+/** One draft of yours a vote publishes: where, its first line, what it does to its chain. */
+export interface VoteDraft {
+  path: string;
+  line: number | null;
+  /** `path:line`, in words for the commit message and the patchset level. */
+  location: string;
+  text: string;
+  transition: "resolves" | "reopens" | null;
+}
+
+/** One change a vote goes to, as `GET /vote` serves it. */
+export interface VoteChange {
+  number: number;
+  change: string;
+  subject: string;
+  /** Gerrit's current patchset: what `POST /vote` names back. */
+  patch_set: number | null;
+  url: string | null;
+  owner: string;
+  own: boolean;
+  permitted: Record<string, number[]>;
+  ruled_out: string[];
+  drafts: VoteDraft[];
+}
+
+/** A vote to offer: what the project says it means, and which changes take it. */
+export interface VoteOption {
+  label: string;
+  value: number;
+  meaning: string;
+  takes: number[];
+}
+
+/** `GET /vote`: what a vote would send. Nothing is sent. */
+export interface VotePlan {
+  changes: VoteChange[];
+  votes: Record<string, number>;
+  drafts: number;
+  options: VoteOption[];
+}
+
+/** `POST /vote`'s answer: where it went, and where it did not. */
+export interface VoteSent {
+  changes: { change: string; number: number; drafts: number; labels: Record<string, number>; message: string | null; status: string }[];
+  skipped: { change: string; number: number; ruled_out: string[] }[];
 }
 
 /** A commit id (kept as it is), or what to do with it: fold into the commit below, or drop. */
@@ -649,6 +712,19 @@ export class GerClient {
   /** Give one commit of the local stack a new commit message. Nothing else changes. */
   reword(rev: string, message: string): Promise<Rewritten> {
     return this.call("POST", "/stack/reword", undefined, { rev, message, keep_change_id: true });
+  }
+
+  /** What a vote on change `number` (`chain`: on every open change of its chain) would send. Sends nothing. */
+  votePlan(number: number, chain: boolean): Promise<VotePlan> {
+    return this.call("GET", "/vote", { change: number, chain });
+  }
+
+  /**
+   * Publish your drafts with `votes` ({} for none) and `message` on change `number` (or its chain).
+   * `patchSets` is what `votePlan` showed: when that moved, nothing is sent (`REFUSED`).
+   */
+  vote(number: number, chain: boolean, votes: Record<string, number>, message: string | undefined, patchSets: Record<string, number>): Promise<VoteSent> {
+    return this.call("POST", "/vote", undefined, { change: number, chain, votes, message, patch_sets: patchSets });
   }
 
   /** Take a rewrite back, while the branch is still where it left it. */
