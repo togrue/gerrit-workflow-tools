@@ -34,6 +34,13 @@ def patchset_token(commit: LogCommit) -> str:
     return PATCHSET_TOKENS.get(PatchsetStatus(commit.patchset_status), ("-", ""))[0]
 
 
+def patchset_words(commit: LogCommit) -> str:
+    """What the patchset column says of *commit*, in words (``pushed: Gerrit's current patchset``)."""
+    if commit.abandoned:
+        return ABANDONED_TOKEN[1]
+    return PATCHSET_TOKENS.get(PatchsetStatus(commit.patchset_status), ("-", "not on Gerrit"))[1]
+
+
 def status_legend() -> str:
     """What each status column token means, for a command's ``--help`` epilog."""
     lines = ["status columns:"]

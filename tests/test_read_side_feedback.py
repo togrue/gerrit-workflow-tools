@@ -160,11 +160,11 @@ def test_log_help_explains_every_status_token_it_can_print(stack_repo: Path, mon
     assert "examples:" in out and "ger log origin/main..HEAD" in out
 
 
-def _commented_head(repo: Path) -> tuple[ChangeStore, str]:
+def _commented_head(repo: Path, **head: Any) -> tuple[ChangeStore, str]:
     """The stack on Gerrit; HEAD's change has a patchset-level comment from an hour ago and an inline one."""
     git("config", "ger.stopPattern", "^nothing-matches$", cwd=repo)
     rows = stack_rows_mb_to_head(repo)
-    store = _store(repo, [{}, {}, {}, {"unresolved_comment_count": 2, "submittable": False}])
+    store = _store(repo, [{}, {}, {}, {"unresolved_comment_count": 2, "submittable": False, **head}])
     triplet = f"testproj~main~{rows[-1].change_id}"
     hour_ago = (datetime.now(timezone.utc) - timedelta(minutes=61)).strftime("%Y-%m-%d %H:%M:%S.000000000")
     alice = {"username": "alice", "name": "Alice"}
@@ -209,3 +209,21 @@ def test_show_ai_says_how_to_reply_to_each_comment(stack_repo: Path, monkeypatch
     assert "Reply with `ger reply ps0level_0001`" in out
     assert "Reply with `ger reply inline_0002`" in out
     assert "**alice** · PS1 · 1h ago" in out
+
+
+def test_show_ai_carries_the_facts_of_the_text_view_under_nested_headings(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from gerrit_workflow_tools.cli_show import main as show_main
+
+    reviewers = {"REVIEWER": [{"username": "bob", "_account_id": 2}], "CC": [{"username": "carol", "_account_id": 3}]}
+    store, _triplet = _commented_head(stack_repo, private=True, work_in_progress=True, reviewers=reviewers)
+    code, out, err = run_cli(stack_repo, show_main, ["HEAD", "--ai"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    lines = out.splitlines()
+    assert "- Patchset: pushed: Gerrit's current patchset" in lines
+    assert "- Change is work in progress and private" in lines
+    assert "- Reviewers: bob (cc: carol)" in lines
+    section = lines.index("### Unresolved comments")
+    threads = [line for line in lines[section:] if line.startswith("#")]
+    assert threads[1:] == ["#### Patchset-level comment", "#### `calc.py:3`"]

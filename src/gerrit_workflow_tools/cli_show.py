@@ -315,7 +315,10 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
             )
         else:
             if out_fmt == "markdown":
-                for line in commit_markdown(commit, chains=chains, ci_contents=ci_contents, comments=args.comments):
+                markdown = commit_markdown(
+                    commit, chains=chains, ci_contents=ci_contents, comments=args.comments, blocked_by=item.blocked_by
+                )
+                for line in markdown:
                     print(line)
                 print()
                 continue

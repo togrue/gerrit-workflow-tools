@@ -64,7 +64,7 @@ def _with_meta(label: str, comment: InlineComment) -> str:
 
 
 # Gerrit's names for what is not a file, as a person reads them.
-_SPECIAL_PATHS = {
+SPECIAL_PATHS = {
     "/PATCHSET_LEVEL": "Patchset-level comment",
     "/COMMIT_MSG": "Commit message",
     "/MERGE_LIST": "Merge list",
@@ -77,8 +77,8 @@ def chain_location(chain: CommentChain) -> str:
     Gerrit's special paths are named in words: ``Patchset-level comment``, ``Commit message:12``.
     """
     if chain.path == "/PATCHSET_LEVEL":
-        return _SPECIAL_PATHS[chain.path]
-    path = _SPECIAL_PATHS.get(chain.path) or printable_path(chain.path)
+        return SPECIAL_PATHS[chain.path]
+    path = SPECIAL_PATHS.get(chain.path) or printable_path(chain.path)
     if chain.start_line is not None and chain.start_line != chain.line:
         return f"{path}:{chain.start_line}-{chain.line}"
     if chain.line is not None:

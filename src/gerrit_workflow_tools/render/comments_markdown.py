@@ -6,6 +6,7 @@ from gerrit_workflow_tools.core.comment_chains import CommentSelection
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain
 from gerrit_workflow_tools.core.suggested_edits import SuggestedEdit
 from gerrit_workflow_tools.render.comments import (
+    SPECIAL_PATHS,
     anchor_suffix,
     chain_context_lines,
     chain_location,
@@ -29,7 +30,8 @@ def format_comment_chain_markdown(
 ) -> list[str]:
     """Return Markdown lines for one comment chain (full bodies, no ANSI)."""
     loc = chain_location(chain)
-    heading = f"`{loc}`{anchor_suffix(chain)}"
+    # A file is code-spanned; Gerrit's special paths read as words.
+    heading = f"{loc if chain.path in SPECIAL_PATHS else f'`{loc}`'}{anchor_suffix(chain)}"
     if chain.resolved:
         heading = f"{heading} (resolved)"
     lines: list[str] = [f"{'#' * level} {heading}"]
@@ -99,7 +101,7 @@ def format_unresolved_section_markdown(
         out.append("### Unresolved comments")
         out.append("")
         for i, chain in enumerate(unresolved):
-            out.extend(format_comment_chain_markdown(chain, gerrit_url))
+            out.extend(format_comment_chain_markdown(chain, gerrit_url, level=4))
             if i < len(unresolved) - 1:
                 out.append("")
     if resolved:
@@ -108,7 +110,7 @@ def format_unresolved_section_markdown(
         out.append("### Resolved comments")
         out.append("")
         for i, chain in enumerate(resolved):
-            out.extend(format_comment_chain_markdown(chain, gerrit_url))
+            out.extend(format_comment_chain_markdown(chain, gerrit_url, level=4))
             if i < len(resolved) - 1:
                 out.append("")
     return out
