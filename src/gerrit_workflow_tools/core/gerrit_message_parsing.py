@@ -1,7 +1,7 @@
 """Parse Gerrit change messages and extract CI URLs.
 
 Built-in parsers recognise Jenkins Gerrit trigger messages (``Build Started``,
-``Build Failed``, ``No Builds Executed``) and Gerrit patch-set upload lines.
+``Build Failed``, ``Build Unstable``, ``No Builds Executed``) and Gerrit patch-set upload lines.
 Custom parsers can be registered via ``.ger/ci/registry.py`` — see
 ``docu/gerrit-ci-strategies.md``.
 """
@@ -13,23 +13,25 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Literal
 
-from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
+from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline, CiVerdict
 
 
 GerritMessageKind = Literal[
     "patch_set_upload",
     "build_started",
     "build_failed",
+    "build_unstable",
     "no_builds",
     "unknown",
 ]
 
 # Jenkins job build URL (supports nested ``/job/…/job/…/<n>/`` paths).
 _JENKINS_BUILD_URL_RE = re.compile(
-    r"(https?://\S+?/job/(?:\S+?/)+\d+)/?(?:\s*:\s*FAILURE)?",
+    r"(https?://\S+?/job/(?:\S+?/)+\d+)/?(?:\s*:\s*(?:FAILURE|UNSTABLE))?",
     re.IGNORECASE,
 )
 _BUILD_FAILED_RE = re.compile(r"Build\s+Failed", re.IGNORECASE)
+_BUILD_UNSTABLE_RE = re.compile(r"Build\s+Unstable", re.IGNORECASE)
 _BUILD_STARTED_RE = re.compile(r"Build\s+Started", re.IGNORECASE)
 _NO_BUILDS_RE = re.compile(r"No\s+Builds\s+Executed", re.IGNORECASE)
 _UPLOADED_PS_RE = re.compile(r"Uploaded\s+patch\s+set\s+(\d+)", re.IGNORECASE)
@@ -47,6 +49,17 @@ class GerritMessageParseResult:
     patch_set: int | None = None
     build_url: str | None = None
     label_vote: str | None = None
+
+    @property
+    def verdict(self) -> CiVerdict | None:
+        """The failure a ``Build Failed`` / ``Build Unstable`` message reports; ``None`` for any other."""
+        return _VERDICTS.get(self.kind)
+
+
+_VERDICTS: dict[GerritMessageKind, CiVerdict] = {
+    "build_failed": CiVerdict.FAILED,
+    "build_unstable": CiVerdict.UNSTABLE,
+}
 
 
 def jenkins_job_url_to_console(url: str) -> str:
@@ -82,9 +95,10 @@ def parse_change_message(msg: Mapping[str, Any]) -> GerritMessageParseResult:
     patch_set = int(header.group(1)) if header else _revision_number(msg)
     label_vote = header.group(2) if header and header.group(2) else None
 
-    if _BUILD_FAILED_RE.search(text):
+    failed = _BUILD_FAILED_RE.search(text)
+    if failed or _BUILD_UNSTABLE_RE.search(text):
         return GerritMessageParseResult(
-            kind="build_failed",
+            kind="build_failed" if failed else "build_unstable",
             patch_set=patch_set,
             build_url=jenkins_build_url_from_text(text),
             label_vote=label_vote,
@@ -144,12 +158,12 @@ def ci_links_from_build_failed_messages(
     *,
     current_revision_number: int | None = None,
 ) -> list[CiLink]:
-    """Extract Jenkins console links from ``Build Failed`` change messages."""
+    """Extract Jenkins console links from ``Build Failed`` and ``Build Unstable`` change messages."""
 
     candidates: list[tuple[tuple[int, str], CiLink]] = []
     for msg in messages:
         parsed = parse_change_message(msg)
-        if parsed.kind != "build_failed" or not parsed.build_url:
+        if parsed.verdict is None or not parsed.build_url:
             continue
         rev = _message_revision(msg, parsed)
         if current_revision_number is not None and rev != current_revision_number:
@@ -162,6 +176,7 @@ def ci_links_from_build_failed_messages(
                     url=jenkins_job_url_to_console(parsed.build_url),
                     source="message",
                     origin_url=parsed.build_url,
+                    verdict=parsed.verdict,
                 ),
             )
         )
@@ -172,7 +187,7 @@ def ci_links_from_build_failed_messages(
 
 
 def _build_message_state(parsed: GerritMessageParseResult) -> str:
-    if parsed.kind == "build_failed":
+    if parsed.verdict is not None:
         return "FAILED"
     if parsed.kind == "build_started":
         vote = (parsed.label_vote or "").lower()
@@ -205,7 +220,7 @@ def ci_pipelines_from_build_messages(
     items: list[tuple[tuple[int, str], int | None, CiPipeline]] = []
     for msg in messages:
         parsed = parse_change_message(msg)
-        if parsed.kind not in ("build_failed", "build_started") or not parsed.build_url:
+        if (parsed.verdict is None and parsed.kind != "build_started") or not parsed.build_url:
             continue
         rev = _message_revision(msg, parsed)
         state = _build_message_state(parsed)
@@ -221,6 +236,7 @@ def ci_pipelines_from_build_messages(
                     state=state,
                     url=jenkins_job_url_to_console(parsed.build_url),
                     outdated=outdated,
+                    verdict=parsed.verdict,
                 ),
             )
         )

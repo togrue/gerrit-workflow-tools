@@ -143,7 +143,7 @@ The outcome when a push will not run: an empty ready range, a rebase check that 
 _Avoid_: push error, nothing to push
 
 **CI link**:
-A useful URL for a failed build (often a Jenkins console), after a project-specific transform. Shown by `ger log -v` and in JSON as `ci_links`. Distinct from raw Checks **names** (`ci_failures`).
+A useful URL for a failed build (often a Jenkins console), after a project-specific transform. Shown by `ger log -v` and in JSON as `ci_links`. Distinct from raw Checks **names** (`ci_failures`). Carries the build's **verdict** (`CiVerdict`): `failed`, or `unstable` (the build ran and marked itself unstable: failed tests, a quality gate). Both are failures everywhere: attention, `ger ci`, the CI view.
 _Avoid_: build URL (unqualified), CI failure (the name alone)
 
 **CI strategy**:

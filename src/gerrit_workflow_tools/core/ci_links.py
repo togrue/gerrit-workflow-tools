@@ -11,12 +11,22 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Literal
 
 
 CiLinkSource = Literal["checks", "message"]
 
 CiStrategy = Callable[..., list["CiLink"]]
+
+
+class CiVerdict(str, Enum):
+    """What the build behind a CI link reported. Every verdict is a failure for attention and ``ger ci``."""
+
+    FAILED = "failed"
+    """The build failed (Jenkins ``Build Failed``, a ``FAILED`` Checks row)."""
+    UNSTABLE = "unstable"
+    """The build ran but marked itself unstable (Jenkins ``Build Unstable``: failed tests, quality gates)."""
 
 
 @dataclass(frozen=True)
@@ -29,6 +39,8 @@ class CiLink:
     origin_url: str | None = field(default=None, compare=False)
     """The URL as the CI message or Checks row gave it, when :attr:`url` was derived from it (a
     Jenkins build URL turned into its console page). What to quote when naming the build."""
+    verdict: CiVerdict = CiVerdict.FAILED
+    """What the build reported; a custom strategy that does not say is taken as ``failed``."""
 
     @property
     def build_url(self) -> str:
@@ -42,8 +54,11 @@ class CiPipeline:
 
     label: str
     state: str
+    """The Checks state (``FAILED``, ``SUCCESSFUL``, ``RUNNING``, …); an unstable build is ``FAILED``."""
     url: str | None = None
     outdated: bool = False
+    verdict: CiVerdict | None = None
+    """For a failed build: which failure (:class:`CiVerdict`); ``None`` when the state says no more."""
 
 
 def failed_check_names(checks: Sequence[Mapping[str, Any]]) -> list[str]:
