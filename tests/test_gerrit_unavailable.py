@@ -20,7 +20,8 @@ from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_push import main as push_main
 from gerrit_workflow_tools.cli_show import main as show_main
 from gerrit_workflow_tools.core.gerrit import http_rest
-from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth, HttpGerritRest
+from gerrit_workflow_tools.core.gerrit.credentials import GerritAuth
+from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
 from gerrit_workflow_tools.core.gerrit.rest import GerritUnavailableError
 from gerrit_workflow_tools.core.git_run import git
 from tests.conftest import json_stdout, run_cli

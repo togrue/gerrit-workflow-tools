@@ -14,7 +14,8 @@ from gerrit_workflow_tools.core.gerrit.cache import DEFAULT_CHANGE_TRUST_WINDOW_
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.changes import ChangeApi
 from gerrit_workflow_tools.core.gerrit.comments import CommentApi
-from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest, gerrit_auth_from_settings
+from gerrit_workflow_tools.core.gerrit.credentials import gerrit_auth_from_settings
+from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritRest,

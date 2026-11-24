@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import base64
 import json
 import logging
 import socket
 import time
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
@@ -16,6 +14,7 @@ from urllib.request import Request
 
 from gerrit_workflow_tools.core.call_trace import gerrit_request_label_from_url, record_call
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit.credentials import GerritAuth, gerrit_auth_from_settings
 from gerrit_workflow_tools.core.gerrit.rest import (
     LOG_QUERY_OPTIONS,
     GerritApiError,
@@ -84,28 +83,6 @@ def _why_unreachable(error: OSError) -> str:
     if isinstance(reason, OSError) and reason.strerror:
         return reason.strerror
     return str(reason)
-
-
-@dataclass(frozen=True)
-class GerritAuth:
-    """Resolved HTTP Basic credentials for one Gerrit host."""
-
-    user: str
-    secret: str
-
-    def header(self) -> str:
-        """Return the ``Authorization`` header value."""
-        token = base64.b64encode(f"{self.user}:{self.secret}".encode()).decode()
-        return f"Basic {token}"
-
-
-def gerrit_auth_from_settings(settings: Settings) -> GerritAuth | None:
-    """Read ``ger.user`` plus ``ger.token``/``ger.password``, or ``None`` when unset."""
-    user = settings.gerrit_user
-    secret = settings.gerrit_token or settings.gerrit_password
-    if not user or secret is None:
-        return None
-    return GerritAuth(user=user, secret=secret)
 
 
 class HttpGerritRest:
