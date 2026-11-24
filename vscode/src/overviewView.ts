@@ -180,7 +180,8 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
     }
     item.tooltip = new vscode.MarkdownString(lines.join("\n\n"));
     const top = chainTop(chain);
-    item.contextValue = changeRowContext({ kind: single ? "change" : "chain", url: Boolean(chain.top.url), local: Boolean(top?.local_sha) });
+    const toReview = section.name === "to-review";
+    item.contextValue = changeRowContext({ kind: single ? "change" : "chain", url: Boolean(chain.top.url), local: Boolean(top?.local_sha), toReview });
     return item;
   }
 

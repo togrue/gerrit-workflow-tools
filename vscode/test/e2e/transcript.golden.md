@@ -14,7 +14,7 @@ chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [g
 chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
 chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
 chains | To review — 1 chain
-chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url]
+chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 stack  | Cleanup after experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
@@ -62,7 +62,7 @@ status bar message: $(check) All activity marked as seen
 
 ```
 picker: Sort review chains — "Applies to both sections"
-    By chain state — current
+    By chain state — current · What needs you most comes first
     By last activity, newest first
     By last activity, oldest first
     → picked "By last activity, oldest first"
@@ -80,7 +80,7 @@ status bar message: $(check) Chains sorted by last activity, oldest first
 
 ```
 picker: Sort review chains — "Applies to both sections"
-    By chain state
+    By chain state · What needs you most comes first
     By last activity, newest first
     By last activity, oldest first — current
     → picked "By chain state"
@@ -172,7 +172,7 @@ progress (notification): Collecting comments and CI findings
 dialog (info): The comments and CI findings of 900: Add retry to the uploader, as a brief for the agent.  [Copy to Clipboard] [Check Out to Work On] [Cancel]
     detail: This change is not checked out here, so the agent starts on your current branch and can only read the brief: its comments and CI findings. To have it amend the change, check it out to work on it first, then hand the commit over. Nothing is pushed or published.
     → pressed "Copy to Clipboard"
-clipboard: 13 lines, starting "## <sha> — Add retry to the uploader"
+clipboard: 16 lines, starting "## <sha> — Add retry to the uploader"
 notification (info): Copied. Paste it into your agent, or set `ger.agentCommand` to start the agent from here.
 --- on screen:
 + editor | Preview ger-brief-<id>.md (webview)
@@ -282,7 +282,7 @@ notification (info): No review checkout is open here.
 - chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
 - chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
 - chains | To review — 1 chain
-- chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url]
+- chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 - stack  | Cleanup after experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 - stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
@@ -336,7 +336,7 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 + chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
 + chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
 + chains | To review — 1 chain
-+ chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url]
++ chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 + stack  | Cleanup after experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
@@ -505,7 +505,7 @@ progress (notification): Collecting comments and CI findings
 dialog (info): 2 commits: 1 comment and 2 CI findings for the agent. 1 comment kept for you.  [Copy to Clipboard] [Cancel]
     detail: The agent amends commits and writes draft replies. Nothing is pushed or published: you review what it did and push it yourself.
     → pressed "Copy to Clipboard"
-clipboard: 73 lines, starting "# Address the review feedback on this stack"
+clipboard: 74 lines, starting "# Address the review feedback on this stack"
 notification (info): Copied. Paste it into your agent, or set `ger.agentCommand` to start the agent from here.
 --- on screen:
 + editor | Preview ger-runbook-<id>.md (webview)
@@ -1227,15 +1227,15 @@ notification (warning): Still out of date: fake ger: down for this test
 - stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci bad]
 ```
 
-## Meanwhile: ger serve restarts as a ger whose API is 2.0, while the extension needs 1.0
+## Meanwhile: ger serve restarts as a ger whose API is 2.0, while the extension needs 1.1
 
-**Expect:** The views refuse it rather than break on it: Local stack and the Change view say ger speaks API 2.0 and the extension needs 1.0, and that the extension is what to update, with a button to install the ger that matches it; the status bar shows a warning.
+**Expect:** The views refuse it rather than break on it: Local stack and the Change view say ger speaks API 2.0 and the extension needs 1.1, and that the extension is what to update, with a button to install the ger that matches it; the status bar shows a warning.
 
 ```
 + status bar | $(warning) Gerrit
 + state  | incompatible
 + events | (not said)
-+ stack  | ger serve speaks API 2.0, the extension needs 1.0: update the extension, or install the ger release that matches it.
++ stack  | ger serve speaks API 2.0, the extension needs 1.1: update the extension, or install the ger release that matches it.
 - status bar | $(error) CI failed: 102
 - state  | ready
 - events | live
@@ -1247,12 +1247,12 @@ notification (warning): Still out of date: fake ger: down for this test
 - chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
 - chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
 - chains | To review — 1 chain
-- chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url]
+- chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 - stack  | test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
-+ change | ger serve speaks API 2.0, the extension needs 1.0: update the extension, or install the ger release that matches it.
++ change | ger serve speaks API 2.0, the extension needs 1.1: update the extension, or install the ger release that matches it.
 - change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 - change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | Commit message — test! temporary experiment  (editable)
@@ -1280,7 +1280,7 @@ status bar message: $(check) Refreshed from Gerrit
 + chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
 + chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
 + chains | To review — 1 chain
-+ chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url]
++ chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 + stack  | test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 + stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
@@ -1299,9 +1299,9 @@ status bar message: $(check) Refreshed from Gerrit
 - status bar | $(warning) Gerrit
 - state  | incompatible
 - events | (not said)
-- stack  | ger serve speaks API 2.0, the extension needs 1.0: update the extension, or install the ger release that matches it.
+- stack  | ger serve speaks API 2.0, the extension needs 1.1: update the extension, or install the ger release that matches it.
 - change | title: Change 102
-- change | ger serve speaks API 2.0, the extension needs 1.0: update the extension, or install the ger release that matches it.
+- change | ger serve speaks API 2.0, the extension needs 1.1: update the extension, or install the ger release that matches it.
 ```
 
 ## Meanwhile: a reviewer comments on change 900 on Gerrit, and its event stream says so
@@ -1312,9 +1312,9 @@ status bar message: $(check) Refreshed from Gerrit
 + status bar | $(error) CI failed: 102  $(bell-dot) 1
 - status bar | $(error) CI failed: 102
 + chains | To review — 1 chain · 1 with comments
-+ chains |   Add retry to the uploader — ● new activity · alice · 1 change · V+1 💬2 · waiting <age> · active <age> ago  [ger.change.url]
++ chains |   Add retry to the uploader — ● new activity · alice · 1 change · V+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 - chains | To review — 1 chain
-- chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url]
+- chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 ```
 
 ## Meanwhile: you commit in the terminal, with no click and no focus change
@@ -2578,10 +2578,140 @@ change | Select a change in Review chains or a commit in Local stack to see its 
 change | (the commit shown is none)
 ```
 
+## 97. Click "Add retry to the uploader" under To review
+
+**Expect:** The Change view shows change 900, Alice's; its title bar offers Vote and Publish.
+
+```
+(nothing said or done outside the views)
+--- on screen:
++ status bar | $(error) CI failed: 102
+- status bar | $(error) CI failed: 102  $(bell-dot) 1
++ chains |   Add retry to the uploader — alice · 1 change · V+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.toreview]
+- chains |   Add retry to the uploader — ● new activity · alice · 1 change · V+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.toreview]
++ change | title: Change 900
++ change | Waiting for your review, unresolved comments — V+1 💬2
++ change | Commit message — Add retry to the uploader  (read-only)
++ change | Showing — Patchset 1 (current) · Against its base commit
++ change | Files — 1 · +1 −0
++ change |   uploader.txt — added +1 −0
++ change | Comments — 2 unresolved of 2
++ change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
++ change |   And cap the delay. — uploader.txt:1 · Bob Architect  [open]
+- change | title: (nothing shown)
+- change | Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.
+```
+
+## 98. "+" on line 1 of uploader.txt in the diff › Save Draft
+
+**Expect:** The draft is saved on Gerrit and shows as yours in the Change view. Only you see it until it is published, and as it is not your change, ger push would not publish it: the notification offers Vote and Publish.
+
+```
+status bar message: $(check) Draft saved on Gerrit, visible only to you. Publish it with ger push.
+--- on screen:
++ change | Comments — 2 unresolved of 2 · 1 of yours, not published
+- change | Comments — 2 unresolved of 2
++ change |   Cap the retries at 5? — your draft · uploader.txt:1  [yours]
+```
+
+## 99. Change › Vote and Publish… › Escape
+
+**Expect:** A picker offers the votes Gerrit lets you give on 900, each with what the project says it means, opening on Code-Review +1, and your draft without a vote. Escape sends nothing.
+
+```
+progress (notification): Reading your drafts
+picker: Vote on 900 "Add retry to the uploader" — "1 draft of yours goes out with it"
+    $(thumbsup) Code-Review +2 — Looks good to me, approved
+    $(thumbsup) Code-Review +1 — Looks good to me, but someone else must approve  (opens here)
+    $(circle-large-outline) Code-Review 0 — No score
+    $(thumbsdown) Code-Review -1 — I would prefer this is not submitted as is
+    $(thumbsdown) Code-Review -2 — This shall not be submitted
+    $(comment) Publish drafts only, no vote — 1 draft
+    → escaped
+--- on screen:
+(no change)
+```
+
+## 100. Change › Vote and Publish… › Code-Review +1 › type "Thanks!" › Publish
+
+**Expect:** After the vote, an optional message; then one dialog lists what goes out (Code-Review +1, the draft at uploader.txt:1, the message, on change 900) and says it cannot be taken back. Publish sends it; a notification says what was published, the draft shows as published in the Change view and the vote on 900's row.
+
+```
+progress (notification): Reading your drafts
+picker: Vote on 900 "Add retry to the uploader" — "1 draft of yours goes out with it"
+    $(thumbsup) Code-Review +2 — Looks good to me, approved
+    $(thumbsup) Code-Review +1 — Looks good to me, but someone else must approve  (opens here)
+    $(circle-large-outline) Code-Review 0 — No score
+    $(thumbsdown) Code-Review -1 — I would prefer this is not submitted as is
+    $(thumbsdown) Code-Review -2 — This shall not be submitted
+    $(comment) Publish drafts only, no vote — 1 draft
+    → picked "$(thumbsup) Code-Review +1"
+input box: Message on change 900 (optional)
+    prompt: Posted with it as the change message. Leave it empty for none; Escape cancels.
+    placeholder: Looks good to me
+    → typed "Thanks!" and pressed Enter
+dialog (info): Publish on change 900?  [Publish] [Cancel]
+    detail: Code-Review +1 · 1 draft · message "Thanks!"
+
+900 Add retry to the uploader
+  uploader.txt:1  "Cap the retries at 5?"
+
+Everyone on the change sees it at once; it cannot be taken back.
+    → pressed "Publish"
+progress (notification): Publishing on 900
+notification (info): Published Code-Review +1 and 1 draft on change 900.
+--- on screen:
++ chains |   Add retry to the uploader — alice · 1 change · V+1 CR+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.toreview]
+- chains |   Add retry to the uploader — alice · 1 change · V+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.toreview]
++ change | Waiting for your review, unresolved comments — V+1 CR+1 💬2
+- change | Waiting for your review, unresolved comments — V+1 💬2
++ change | Comments — 3 unresolved of 3
+- change | Comments — 2 unresolved of 2 · 1 of yours, not published
++ change |   Cap the retries at 5? — uploader.txt:1  [open]
+- change |   Cap the retries at 5? — your draft · uploader.txt:1  [yours]
+```
+
+## 101. Inline Vote and Publish… on the To review row of 900 › Code-Review +2 › no message › Cancel
+
+**Expect:** The row's button votes on its chain (here only 900): the same picker and message, and the dialog. Cancelled, nothing is sent.
+
+```
+progress (notification): Reading your drafts
+picker: Vote on 900 "Add retry to the uploader" — "You have no drafts here: only the vote and a message go out"
+    $(thumbsup) Code-Review +2
+    $(thumbsup) Code-Review +1  (opens here)
+    $(circle-large-outline) Code-Review 0
+    $(thumbsdown) Code-Review -1
+    $(thumbsdown) Code-Review -2
+    → picked "$(thumbsup) Code-Review +2"
+input box: Message on each change (optional)
+    prompt: Posted with it as the change message. Leave it empty for none; Escape cancels.
+    placeholder: Looks good to me
+    → typed "" and pressed Enter
+dialog (info): Publish on change 900?  [Publish] [Cancel]
+    detail: Code-Review +2 · no drafts
+
+Everyone on the change sees it at once; it cannot be taken back.
+    → cancelled
+--- on screen:
+(no change)
+```
+
+## 102. Command palette › ger: Publish Drafts…, with no drafts left on 900
+
+**Expect:** It says there are no drafts of yours on 900 to publish, and asks nothing.
+
+```
+progress (notification): Reading your drafts
+notification (info): You have no drafts on 900 to publish.
+--- on screen:
+(no change)
+```
+
 ## At the end
 
 ```
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(error) CI failed: 102
 state  | ready
 events | live
 chains | CI failed on 102: Refactor parser init
@@ -2592,13 +2722,21 @@ chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.cha
 chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
 chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
 chains | To review — 1 chain · 1 with comments
-chains |   Add retry to the uploader — ● new activity · alice · 1 change · V+1 💬2 · waiting <age> · active <age> ago  [ger.change.url]
+chains |   Add retry to the uploader — alice · 1 change · V+1 CR+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
-change | title: (nothing shown)
-change | Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.
+change | title: Change 900
+change | Waiting for your review, unresolved comments — V+1 CR+1 💬2
+change | Commit message — Add retry to the uploader  (read-only)
+change | Showing — Patchset 1 (current) · Against its base commit
+change | Files — 1 · +1 −0
+change |   uploader.txt — added +1 −0
+change | Comments — 3 unresolved of 3
+change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
+change |   And cap the delay. — uploader.txt:1 · Bob Architect  [open]
+change |   Cap the retries at 5? — uploader.txt:1  [open]
 editor | e.txt (file, line 2)
 ```

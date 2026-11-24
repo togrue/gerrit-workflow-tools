@@ -4,7 +4,7 @@
 
 import type * as vscode from "vscode";
 
-import type { Level, MessageOptions, TerminalOptions, Ui } from "../../src/ui";
+import type { Level, MessageOptions, PickOptions, TerminalOptions, Ui } from "../../src/ui";
 
 /** How the scripted user answers the next prompt. Nothing queued: they dismiss it. */
 export type Answer = { button: string } | { pick: string } | { type: string } | { save: string } | { closeUnsaved: true } | { dismiss: true };
@@ -73,10 +73,11 @@ export class ScriptedUi implements Ui {
     return Promise.resolve(pressed);
   }
 
-  pick<T extends vscode.QuickPickItem>(items: T[], options: vscode.QuickPickOptions): Thenable<T | undefined> {
+  pick<T extends vscode.QuickPickItem>(items: T[], options: PickOptions<T>): Thenable<T | undefined> {
     this.say(`picker: ${options.title ?? ""}${options.placeHolder ? ` — "${options.placeHolder}"` : ""}`);
     for (const item of items) {
-      this.say(`    ${item.label}${item.description ? ` — ${item.description}` : ""}`);
+      const focus = item === options.active ? "  (opens here)" : "";
+      this.say(`    ${item.label}${item.description ? ` — ${item.description}` : ""}${item.detail ? ` · ${item.detail}` : ""}${focus}`);
     }
     const answer = this.next("pick");
     const wanted = answer && "pick" in answer ? answer.pick : undefined;

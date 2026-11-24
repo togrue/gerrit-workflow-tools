@@ -2,7 +2,8 @@
 // regexes, so the strings are one scheme, built in one place and checked against the menus by
 // test/package.test.ts (which also needs to know every value a row can have). No `vscode` import.
 //
-//   ger.change|chain [.url] [.local]    a change or a chain in Review chains; .local: it is a commit of your stack
+//   ger.change|chain [.url] [.local] [.toreview]   a change or a chain in Review chains; .local: it is a
+//                                                  commit of your stack; .toreview: it waits on your review
 //
 // Local stack and Change are webviews: their rows carry a context object instead (media/stack.js,
 // `webview/context` in package.json), and their buttons send messages.
@@ -13,10 +14,12 @@ export interface ChangeRow {
   url: boolean;
   /** A commit of the local stack: its commit is in this checkout. */
   local: boolean;
+  /** Under *To review*: you vote on it. */
+  toReview?: boolean;
 }
 
-export function changeRowContext({ kind, url, local }: ChangeRow): string {
-  return `ger.${kind}${url ? ".url" : ""}${local ? ".local" : ""}`;
+export function changeRowContext({ kind, url, local, toReview }: ChangeRow): string {
+  return `ger.${kind}${url ? ".url" : ""}${local ? ".local" : ""}${toReview ? ".toreview" : ""}`;
 }
 
 /** Every contextValue the views can produce. */
@@ -26,7 +29,9 @@ export function allRowContexts(): string[] {
   for (const kind of ["change", "chain"] as const) {
     for (const url of bools) {
       for (const local of bools) {
-        all.push(changeRowContext({ kind, url, local }));
+        for (const toReview of bools) {
+          all.push(changeRowContext({ kind, url, local, toReview }));
+        }
       }
     }
   }

@@ -26,6 +26,7 @@ import { waitsForYou } from "./state";
 import { statusBar } from "./statusBar";
 import { Ui, feedback, ui, useUi } from "./ui";
 import { setUpstream } from "./upstream";
+import { voteAndPublish } from "./vote";
 import { staticView } from "./webview";
 import { RepoChoice, chooseRepo, gitDirs, repoNote } from "./workspace";
 
@@ -183,6 +184,22 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     feedback(`Copied ${values.length === 1 ? `${noun} ${values[0].slice(0, 12)}…` : `${values.length} ${noun}s`}`);
   };
 
+  // Vote and Publish is the reviewer's: offered in the Change view for a change on Gerrit that is not yours.
+  context.subscriptions.push(
+    changeView.onDidLoad(() => {
+      const shown = changeView.target ? changeView.shown : undefined;
+      void vscode.commands.executeCommand("setContext", "ger.changeOnGerrit", Boolean(shown?.pushed));
+      void vscode.commands.executeCommand("setContext", "ger.changeVotable", Boolean(shown?.pushed) && shown?.own === false);
+    }),
+  );
+  /** What was published shows at once: Review chains (it may leave *To review*), the change and its threads. */
+  const afterVote = async () => {
+    await model.refresh({ fromGerrit: true });
+    await changeView.open();
+  };
+  /** A chain row of Review chains votes on its whole chain. */
+  const isChainRow = (arg: unknown) => (arg as { kind?: unknown } | undefined)?.kind === "chain";
+
   const setHold = async (arg: unknown, held: boolean) => {
     const chain = threadOf(arg);
     if (chain) {
@@ -243,6 +260,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg)),
     "ger.setUpstream": (upstream?: unknown) => setUpstream(model, typeof upstream === "string" ? upstream : undefined),
     "ger.reviewDone": () => leaveReview(model),
+    "ger.vote": (arg: unknown) => voteAndPublish(model, targetOf(arg), { chain: isChainRow(arg), after: afterVote }),
+    "ger.publishDrafts": (arg: unknown) => voteAndPublish(model, targetOf(arg), { draftsOnly: true, after: afterVote }),
     "ger.push": () => push(model),
     "ger.rebase.continue": () => rebaseStep(model, "continue"),
     "ger.rebase.abort": () => rebaseStep(model, "abort"),

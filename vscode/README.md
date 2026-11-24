@@ -202,7 +202,7 @@ The commits above your upstream, newest first. One row per commit:
   diff of the change has focus; anywhere else they stay VS Code's own next / previous comment thread, which only
   walks the open file. For a local commit they also appear as comment threads in the
   editor. Reply, or reply "Done" and resolve — saved as **drafts** on Gerrit, published later by
-  `ger push` or `ger review --vote`. A reply box has **Save** and **Cancel**, and Gerrit's **Resolved**
+  `ger push` or *Vote and Publish…* (`ger review --vote`). A reply box has **Save** and **Cancel**, and Gerrit's **Resolved**
   checkbox: by the box in the Change view; in an editor thread a toggle in the thread's header
   (VS Code empties the reply box on any button beside it), its label saying what Save will do. It
   starts where the comment stands, and with your draft there already it changes that draft at once.
@@ -225,6 +225,16 @@ The commits above your upstream, newest first. One row per commit:
   of its chain). Findings this change **introduced** are
   on top with a flame; findings that already fail on its parent are dimmed. Click a finding to
   jump to its file and line.
+- **Vote and Publish…** (check icon in the Change view's title bar for someone else's change, and
+  on a *To review* row, where it takes the row's whole chain): `ger review --vote`. A picker offers
+  the votes Gerrit lets you give there, each with what the project says it means, opening on
+  Code-Review +1, and your drafts without a vote. Then an optional message, then one dialog listing
+  everything that goes out: the vote, each draft (`path:line` and its first words), the message,
+  on which changes, and the changes of a chain that do not take the vote. Publish sends it; a
+  notification says what went out and the views refresh, so the chain leaves *To review* when
+  Gerrit says so. Should the change get a new patchset meanwhile, nothing is sent and **Look
+  Again** starts over on what is there now. **Publish Drafts…** (the Change view's `…` menu, the
+  palette) sends your drafts without a vote: `ger reply --publish`.
 - **Review Change** (eye icon, changes that are not in your stack): `ger review`
   fetches the change into the review worktree and offers to open that worktree in a new window; your
   own stack is not touched. When the git config key `ger.reviewCheckout` says `branch`, it switches
@@ -483,6 +493,7 @@ printed.
 | `src/diffTabs.ts`, `src/staleDiffs.ts` | `ger-file:` documents and the diff tabs of them: opening one, knowing it again, marking it stale or closing it once its right side is no longer the commit its title names, unmarking it once it is again (the rule is pure, unit-tested); your files' repository paths; saving before a rebase continues. |
 | `src/changeLoad.ts` | Which change the Change view shows and what of it has come: drawn at once from the clicked row, filled in answer by answer, a stale answer dropped. Pure, unit-tested. |
 | `src/review.ts` | Review Change, Check Out to Work On, Leave Review Checkout, Edit Commit Here. |
+| `src/vote.ts`, `src/voteText.ts` | Vote and Publish, Publish Drafts: the questions, around `GET /vote` and `POST /vote`; their words (pure, unit-tested). |
 | `src/upstream.ts` | Giving the branch an upstream. |
 | `src/agent.ts` | Handing a runbook to a coding agent. |
 | `src/config.ts`, `src/launch.ts`, `src/commandLine.ts` | The `ger.*` settings; how ger is started, as a process or in a terminal; installing ger, and the warning when its version is not the extension's. |

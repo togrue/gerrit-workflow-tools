@@ -36,7 +36,7 @@ Status words: **ships**, **partial** (see the linked spec), **gap** (nothing doe
 | Read a reviewer's suggested edit (Gerrit fix suggestion or ```` ```suggestion ```` block) | `ger show` (`suggested_edits` in `--json`) | in the comment, editor thread and *Change* view | `tests/test_suggested_edits.py`, `tests/test_serve.py` | partial: shown, not applied |
 | Comment on a line or range | `ger comment PATH:LINE -m MSG` | "+" in the editor gutter, *Save Draft* | `tests/test_comment.py` | ships |
 | Reply to a chain | `ger reply CHAIN -m MSG`, `--done` | *Reply as Draft…*, *Reply Done and Resolve as Draft* | `tests/test_reply.py` | ships |
-| Send comments and vote | `ger review --vote +1 -m MSG`; the whole chain: `ger review --vote +1 --chain`; drafts without a vote: `ger reply --publish CHANGEISH` | runs in the terminal; served as `GET /vote`, `POST /vote` | `tests/test_review.py`, `tests/test_serve_vote.py` | ships |
+| Send comments and vote | `ger review --vote +1 -m MSG`; the whole chain: `ger review --vote +1 --chain`; drafts without a vote: `ger reply --publish CHANGEISH` | *Vote and Publish…* (the *Change* view's title bar, a *To review* row: its whole chain), *Publish Drafts…* (`GET /vote`, `POST /vote`) | `tests/test_review.py`, `tests/test_serve_vote.py` | ships |
 | Leave the review | `ger review --done` | *Leave Review Checkout* | `tests/test_review.py` | ships |
 | An agent reviews: at most Code-Review+1, and says what it would really give | `GER_NO_PUBLISH=1` stops publishing altogether | — | — | **gap**: no agent vote policy in core |
 
@@ -95,6 +95,8 @@ A **gap** names the work that would close it.
 | `ger.checkout` | `ger checkout CHANGEISH` | runs in a terminal, as it may ask to update an existing branch |
 | `ger.stack.edit` | `ger edit REV` | |
 | `ger.reviewDone` | `ger review --done` | |
+| `ger.vote` | `ger review --vote +1 --change CHANGEISH -m MSG`; a *To review* chain row: `ger review --vote +1 --chain --change CHANGEISH` | the votes on offer and what each means are Gerrit's; one confirmation lists what goes out |
+| `ger.publishDrafts` | `ger reply --publish CHANGEISH` | your drafts on the change, no vote |
 | `ger.push` | `ger push` | |
 | `ger.rebase.continue` | `ger rebase --continue` | the button on the *Local stack* banner, also offered when you push during a rebase |
 | `ger.rebase.abort` | `ger rebase --abort` | |
