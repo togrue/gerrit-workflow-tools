@@ -21,6 +21,7 @@ Quoted strings (``"..."`` / ``'...'``) are accepted as topic values.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -133,38 +134,20 @@ def tokenize(buf: str) -> tuple[list[Token], list[Diagnostic]]:
     """
     tokens: list[Token] = []
     diags: list[Diagnostic] = []
-    i = 0
-    n = len(buf)
-    while i < n:
-        ch = buf[i]
-        if ch.isspace():
-            i += 1
+    for match in _SEGMENT.finditer(buf):
+        text, start, end = match.group(), match.start(), match.end()
+        if text[0] not in ('"', "'"):
+            tokens.append(Token(text, start, end))
             continue
-        if ch in ('"', "'"):
-            quote = ch
-            start = i
-            i += 1
-            text_chars: list[str] = []
-            closed = False
-            while i < n:
-                if buf[i] == quote:
-                    closed = True
-                    i += 1
-                    break
-                text_chars.append(buf[i])
-                i += 1
-            end = i
-            tokens.append(Token("".join(text_chars), start, end, quoted=True))
-            if not closed:
-                diags.append(Diagnostic("error", f"Unclosed {quote} quote", start, end))
-            continue
-        start = i
-        text_chars = []
-        while i < n and not buf[i].isspace() and buf[i] not in ('"', "'"):
-            text_chars.append(buf[i])
-            i += 1
-        tokens.append(Token("".join(text_chars), start, i, quoted=False))
+        closed = len(text) > 1 and text[-1] == text[0]
+        tokens.append(Token(text[1 : -1 if closed else None], start, end, quoted=True))
+        if not closed:
+            diags.append(Diagnostic("error", f"Unclosed {text[0]} quote", start, end))
     return tokens, diags
+
+
+_SEGMENT = re.compile(r""""[^"]*"?|'[^']*'?|[^\s"']+""")
+"""A quoted run up to its closing quote (or the end of the line), or a run of anything but space and quotes."""
 
 
 def _split_reviewers(raw: str, base_offset: int, spans: list[Span]) -> list[str]:
