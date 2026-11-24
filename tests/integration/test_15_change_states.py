@@ -170,7 +170,7 @@ def test_a_push_gerrit_rejects_exits_nonzero_with_gerrits_reason(
     _amend_top(repo, "after abandon\n")
     code, _out, err = run_ger(repo, ger_push_main, ["--yes", "--no-rebase-check"], monkeypatch)
     assert code != 0
-    assert f"targets abandoned change {number}" in err
+    assert f"would be a new patch set of abandoned change {number}, which Gerrit refuses" in err
     assert f"/+/{number} closed" in err and "[remote rejected]" in err
 
     # No permission to upload for review: Gerrit's own words reach the user.
