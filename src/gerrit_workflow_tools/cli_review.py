@@ -265,7 +265,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
     _check_args(p, args)
-    run, _ = init_cli_runtime(args, gerrit=gerrit)
+    run = init_cli_runtime(args, gerrit=gerrit)
     try:
         return _act(args, p, run)
     except ReviewRefusal as refusal:

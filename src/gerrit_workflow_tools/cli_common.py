@@ -40,7 +40,6 @@ from gerrit_workflow_tools.render.style import (
     init_color_mode,
     init_hyperlink_mode,
 )
-from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 from gerrit_workflow_tools.upstream_interactive import ask_for_needed_upstream
 
 
@@ -354,8 +353,8 @@ def refresh_requested() -> bool:
 
 def init_cli_runtime(
     args: argparse.Namespace, *, repository: bool = True, gerrit: GerritRest | None = None
-) -> tuple[RunContext, SummaryHighlighter]:
-    """Configure logging/color from parsed *args*; return the **run context** and the summary highlighter.
+) -> RunContext:
+    """Configure logging/color from parsed *args*; return the **run context**.
 
     Commands without ``--debug-log`` or ``--color`` get logging off and color on ``auto``.
     Outside a git repository a command that needs one (*repository*, the default) fails here,
@@ -380,4 +379,4 @@ def init_cli_runtime(
         raise GitError("not a git repository; run ger inside a clone")
     run = RunContext.open(cwd, settings=settings, gerrit=gerrit, refresh=refresh_requested())
     settle_registry_trust(run, confirm=confirm if may_prompt(args) else None)
-    return run, build_summary_highlighter(settings)
+    return run

@@ -42,7 +42,7 @@ from gerrit_workflow_tools.render.show_json import commit_json_payload
 from gerrit_workflow_tools.render.show_markdown import commit_markdown
 from gerrit_workflow_tools.render.style import ANSI_DIM, ANSI_YELLOW, color_text, format_link
 from gerrit_workflow_tools.render.wrap import wrap_lines
-from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
+from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, run_summary_highlighter
 from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
 
@@ -225,7 +225,8 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
 ) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
-    run, summary_highlighter = init_cli_runtime(args, gerrit=gerrit)
+    run = init_cli_runtime(args, gerrit=gerrit)
+    summary_highlighter = run_summary_highlighter(run)
     cwd, settings = run.cwd, run.settings
     out_fmt = output_format(args)
     verbose_level = int(args.verbose)
@@ -283,13 +284,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
             pass
         else:
             snap = get_stack_snapshot(cwd, branch, first_parent=True, settings=settings)
-            summary_highlighter = build_summary_highlighter(
-                settings,
-                root=run.repo.root,
-                commits=list(snap.commits),
-                project=stack.project,
-                web_base=settings.gerrit_web_url,
-            )
+            summary_highlighter = run_summary_highlighter(run, commits=list(snap.commits), project=stack.project)
 
     json_payloads: list[dict[str, object]] = []
     multi = len(targets) > 1

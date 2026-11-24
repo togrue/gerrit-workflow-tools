@@ -10,6 +10,7 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.stack_context import stack_project
 from gerrit_workflow_tools.core.git_state import repo_toplevel
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot
 from gerrit_workflow_tools.render.style import ANSI_RED, ANSI_YELLOW, color_text, is_color_enabled
 
@@ -75,6 +76,20 @@ def build_summary_highlighter(
             warning_re = None
 
     return SummaryHighlighter(blocked_shas=blocked, warning_re=warning_re)
+
+
+def run_summary_highlighter(
+    run: RunContext, *, commits: list[Commit] | None = None, project: str = ""
+) -> SummaryHighlighter:
+    """The run's highlighter: its warning pattern, and the ready boundary of *commits* when given."""
+    settings = run.settings
+    return build_summary_highlighter(
+        settings,
+        root=run.repo.root if commits else None,
+        commits=commits,
+        project=project,
+        web_base=settings.gerrit_web_url,
+    )
 
 
 def branch_summary_highlighter(

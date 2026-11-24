@@ -336,7 +336,7 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     parser = _build_arg_parser()
     args = parser.parse_args(argv)
-    run, _summary_highlighter = init_cli_runtime(args, gerrit=gerrit)
+    run = init_cli_runtime(args, gerrit=gerrit)
     cwd, settings = run.cwd, run.settings
     logger.debug(
         "gpush cwd=%s branch=%s dry_run=%s yes=%s all=%s until=%s i=%s remote_policy=%s "

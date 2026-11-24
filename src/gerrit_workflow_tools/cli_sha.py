@@ -130,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
 def _run(argv: list[str] | None) -> int:  # pylint: disable=too-many-branches,too-many-locals
     ap = _build_parser()
     args = ap.parse_args(argv)
-    run, _summary_highlighter = init_cli_runtime(args)
+    run = init_cli_runtime(args)
     cwd, settings = run.cwd, run.settings
 
     if args.json_ and (args.short or args.subject):

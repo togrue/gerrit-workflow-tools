@@ -21,7 +21,7 @@ def test_a_command_run_shares_one_settings_snapshot_and_service(
     monkeypatch.delenv(REFRESH_ENV, raising=False)
     store = ChangeStore()
 
-    run, _ = init_cli_runtime(argparse.Namespace(), gerrit=store)
+    run = init_cli_runtime(argparse.Namespace(), gerrit=store)
 
     assert run.cwd.samefile(stack_repo)
     assert run.gerrit.settings is run.settings
@@ -33,7 +33,7 @@ def test_ger_refresh_reaches_the_run_through_the_entry_point(stack_repo: Path, m
     monkeypatch.chdir(stack_repo)
     monkeypatch.setenv(REFRESH_ENV, "1")
 
-    run, _ = init_cli_runtime(argparse.Namespace(), gerrit=ChangeStore())
+    run = init_cli_runtime(argparse.Namespace(), gerrit=ChangeStore())
 
     assert run.gerrit.refresh is True
 

@@ -249,7 +249,7 @@ def _run_interactive_stack_rebase(
     """Shared implementation for ``ger edit`` and ``ger reword``."""
     p = _build_parser(prog=prog, description=description, default_action=default_action)
     args = p.parse_args(argv)
-    run, _summary_highlighter = init_cli_runtime(args, gerrit=gerrit)
+    run = init_cli_runtime(args, gerrit=gerrit)
     cwd, settings = run.cwd, run.settings
     _validate_targeting_args(p, args)
 

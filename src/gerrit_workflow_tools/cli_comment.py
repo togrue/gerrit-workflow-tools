@@ -191,7 +191,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
     message = _check_args(p, args)
-    run, _ = init_cli_runtime(args, gerrit=gerrit)
+    run = init_cli_runtime(args, gerrit=gerrit)
     cwd = run.cwd
     by_id = args.discard is not None or args.edit is not None
     service = _service(run, local_only=args.note or args.local or by_id)

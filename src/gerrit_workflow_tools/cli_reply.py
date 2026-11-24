@@ -372,7 +372,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     else:
         message, unresolved = _message_and_flag(p, args)
         comment_id, change = _chain_ref(p, args)
-    run, _ = init_cli_runtime(args, gerrit=gerrit)
+    run = init_cli_runtime(args, gerrit=gerrit)
     cwd, settings = run.cwd, run.settings
     branch = args.branch or run.repo.working_branch
     searches_stack = change is None and not (args.publish and args.targets)

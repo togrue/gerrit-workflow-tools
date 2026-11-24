@@ -114,7 +114,7 @@ def _start(
     has, so it can tell "not in a git checkout" from a crash without reading stderr.
     """
     try:
-        run, _highlighter = init_cli_runtime(args, gerrit=gerrit)
+        run = init_cli_runtime(args, gerrit=gerrit)
         cwd, settings = run.cwd, run.settings
         top = repo_toplevel(cwd)
         if top is None:

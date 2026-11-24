@@ -137,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def _run(argv: list[str] | None) -> int:
     args = _build_parser().parse_args(argv)
-    run, _summary_highlighter = init_cli_runtime(args)
+    run = init_cli_runtime(args)
     cwd, settings = run.cwd, run.settings
 
     input_arg = args.rev_or_range or "HEAD"

@@ -41,7 +41,7 @@ from gerrit_workflow_tools.render.style import (
     color_text,
     format_link,
 )
-from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
+from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, run_summary_highlighter
 
 
 _EMPTY = {TO_REVIEW: "(nothing to review)", OUTGOING: "(no open chains of yours)"}
@@ -258,7 +258,8 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    run, highlighter = init_cli_runtime(args, repository=False, gerrit=gerrit)
+    run = init_cli_runtime(args, repository=False, gerrit=gerrit)
+    highlighter = run_summary_highlighter(run)
     cwd, settings = run.cwd, run.settings
     service = run.gerrit
     projects = project_scope(cwd, settings, projects=list(args.project), all_projects=bool(args.all_projects))

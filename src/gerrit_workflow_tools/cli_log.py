@@ -48,7 +48,7 @@ from gerrit_workflow_tools.render.style import (
     is_hyperlink_enabled,
     visible_len,
 )
-from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
+from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, run_summary_highlighter
 
 
 logger = logging.getLogger(__name__)
@@ -288,7 +288,7 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint: disable=too-many-locals
     parser = _build_parser()
     args = parser.parse_args(argv)
-    run, summary_highlighter = init_cli_runtime(args, gerrit=gerrit)
+    run = init_cli_runtime(args, gerrit=gerrit)
     settings = run.settings
 
     gdef = settings.log_defaults
@@ -321,13 +321,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     commits = stack_view.commits
     notes_by_sha = stack_view.notes_by_sha
     stack = run.repo.shown_stack
-    summary_highlighter = build_summary_highlighter(
-        settings,
-        root=run.repo.root,
-        commits=stack_view.rows,
-        project=stack.project,
-        web_base=settings.gerrit_web_url,
-    )
+    summary_highlighter = run_summary_highlighter(run, commits=stack_view.rows, project=stack.project)
     for commit in commits:
         print_note(notes_by_sha.get(commit.sha))
 

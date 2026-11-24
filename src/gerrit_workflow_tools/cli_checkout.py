@@ -140,7 +140,7 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     args = _build_parser().parse_args(argv)
-    run, _ = init_cli_runtime(args, gerrit=gerrit)
+    run = init_cli_runtime(args, gerrit=gerrit)
     cwd, settings = run.cwd, run.settings
     if refusal := rebase_refusal(cwd):
         raise UsageError(refusal)

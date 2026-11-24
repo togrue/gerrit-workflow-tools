@@ -137,7 +137,7 @@ def _emit_markdown(commit: LogCommit, contents: list[CiContent], *, warnings: bo
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp | None) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
-    run, _summary_highlighter = init_cli_runtime(args, gerrit=gerrit)
+    run = init_cli_runtime(args, gerrit=gerrit)
     cwd, settings = run.cwd, run.settings
     out_fmt = output_format(args)
     branch = args.branch or run.repo.working_branch
