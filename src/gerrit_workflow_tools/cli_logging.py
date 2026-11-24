@@ -14,6 +14,15 @@ _CONFIGURED = False
 _DEBUG_LOG_ENABLED = False
 
 
+class _Formatter(logging.Formatter):
+    """Diagnostics carry level and logger; a notice for the user (``extra={"notice": True}``) is one plain line."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        if getattr(record, "notice", False):
+            return f"warning: {record.getMessage()}"
+        return super().format(record)
+
+
 def configure_logging(verbosity: int | bool) -> None:
     """Set package log level based on debug logging enablement.
 
@@ -30,7 +39,7 @@ def configure_logging(verbosity: int | bool) -> None:
     _LOG.setLevel(level)
     if not _CONFIGURED:
         h = logging.StreamHandler(sys.stderr)
-        h.setFormatter(logging.Formatter("%(levelname)s: %(name)s: %(message)s"))
+        h.setFormatter(_Formatter("%(levelname)s: %(name)s: %(message)s"))
         _LOG.addHandler(h)
         _LOG.propagate = False
         _CONFIGURED = True

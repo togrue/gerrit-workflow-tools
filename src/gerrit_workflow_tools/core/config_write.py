@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from gerrit_workflow_tools.core.config_keys import ConfigScope, legacy_key
+from gerrit_workflow_tools.core.config_keys import ConfigScope, current_key, legacy_key
 from gerrit_workflow_tools.core.git_run import git
 
 
@@ -84,3 +84,41 @@ def set_last_attention_change_id(
 ) -> None:
     """Write or clear repo-local ``ger.lastAttentionChangeId`` and ``…At`` for lazy adopt."""
     _write_stamped(cwd, "ger.lastAttentionChangeId", change_id, touched_at)
+
+
+@dataclass(frozen=True)
+class MovedKey:
+    """One old key name :func:`migrate_legacy_keys` moved to its ``ger`` name."""
+
+    old: str
+    new: str
+    scope: ConfigScope
+    dropped: bool
+    """The new name was set already at that scope: it wins, so the old one was only removed."""
+
+
+def migrate_legacy_keys(cwd: Path | str | None) -> list[MovedKey]:
+    """Move every old key name (:data:`~gerrit_workflow_tools.core.config_keys.LEGACY_KEYS`, the
+    ``branch.<name>.gerrit*`` ones) to its ``ger`` name, in local and global config.
+
+    Every value moves (a multi-valued key keeps them all) unless the new name is set at that scope,
+    which then wins. System config and ``git -c`` are not written.
+    """
+    moved: list[MovedKey] = []
+    for scope in (ConfigScope.LOCAL, ConfigScope.GLOBAL):
+        flag = scope.flag or ""
+        listed = git("config", flag, "--name-only", "--list", cwd=cwd, check=False)
+        if listed.returncode != 0:  # no repository for --local, or no global file
+            continue
+        for old in dict.fromkeys(listed.stdout.split()):
+            new = current_key(old)
+            if new is None:
+                continue
+            dropped = git("config", flag, "--get-all", new, cwd=cwd, check=False).returncode == 0
+            if not dropped:
+                values = git("config", flag, "-z", "--get-all", old, cwd=cwd).stdout.split("\0")[:-1]
+                for value in values:
+                    git("config", flag, "--add", new, value, cwd=cwd)
+            git("config", flag, "--unset-all", old, cwd=cwd, check=False)
+            moved.append(MovedKey(legacy_key(new) or old, new, scope, dropped))
+    return moved

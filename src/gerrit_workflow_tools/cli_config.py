@@ -21,7 +21,7 @@ from gerrit_workflow_tools.core.config_editor_file import (
     render_config_editor_text,
 )
 from gerrit_workflow_tools.core.config_form import resolve_config_form
-from gerrit_workflow_tools.core.config_write import apply_config_write
+from gerrit_workflow_tools.core.config_write import apply_config_write, migrate_legacy_keys
 from gerrit_workflow_tools.core.git_editor import run_git_editor
 from gerrit_workflow_tools.core.usage import UsageError
 
@@ -35,6 +35,12 @@ def _build_parser() -> argparse.ArgumentParser:
             "Uncomment a line to set it (local); comment it out to unset. "
             "Delete all content and save to abort."
         ),
+    )
+    parser.add_argument(
+        "--migrate",
+        action="store_true",
+        help="Move every old key name (gerrit.*, inbox.*, branch.<name>.gerrit*) to its ger.* name, "
+        "in local and global config, and exit. Needs no terminal.",
     )
     add_color_args(parser)
     add_verbose_and_debug_log_args(parser, debug_log_help="Log git config reads to stderr.")
@@ -62,6 +68,17 @@ def _run(argv: list[str] | None) -> int:
     args = _build_parser().parse_args(argv)
     run = init_cli_runtime(args, repository=False)
     cwd, settings = run.cwd, run.settings
+    if args.migrate:
+        moved = migrate_legacy_keys(cwd)
+        for key in moved:
+            how = "removed; the new name was set already" if key.dropped else f"-> {key.new}"
+            print(f"{key.old} {how} ({key.scope.value})")
+        print(
+            f"moved {len(moved)} key{'' if len(moved) == 1 else 's'}"
+            if moved
+            else "nothing to migrate: no old key names"
+        )
+        return int(ExitCode.OK)
     if not _stream_is_tty(sys.stdin) or not _stream_is_tty(sys.stdout):
         raise UsageError("ger config requires an interactive terminal")
 

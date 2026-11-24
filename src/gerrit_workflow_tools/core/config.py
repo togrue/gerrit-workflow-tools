@@ -29,7 +29,8 @@ from gerrit_workflow_tools.core.config_keys import (
     ConfigScope,
     canonical_cfg_key,
     legacy_key,
-    legacy_key_warning,
+    legacy_keys_standing_in,
+    legacy_keys_warning,
 )
 from gerrit_workflow_tools.core.git_run import git
 
@@ -134,9 +135,11 @@ class Settings:
         old_canon = canonical_cfg_key(old) if old else canon
         if old is None or self._value(canon) is not None or self._value(old_canon) is None:
             return canon
-        if old_canon not in self._warned:
-            self._warned.add(old_canon)
-            logger.warning("%s", legacy_key_warning(old, key, self.scopes.get(old_canon)))
+        if not self._warned:
+            standing_in = legacy_keys_standing_in(self.values, self.scopes)
+            self._warned.update(standing_in)
+            # A notice for the user, not a diagnostic: shown as one plain line (cli_logging).
+            logger.warning("%s", legacy_keys_warning(standing_in), extra={"notice": True})
         return old_canon
 
     def get(self, key: str) -> str | None:

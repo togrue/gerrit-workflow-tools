@@ -41,11 +41,7 @@ def test_an_old_key_answers_and_warns_once_with_the_command_that_moves_it(caplog
         assert settings.gerrit_web_url == "https://g.example"
         assert settings.scope("ger.webUrl") is ConfigScope.GLOBAL
         assert settings.get("ger.webUrl") == "https://g.example"
-    assert _warnings(caplog) == [
-        "git config key gerrit.webUrl is deprecated; move it with: "
-        'git config --global ger.webUrl "$(git config --global gerrit.webUrl)" '
-        "&& git config --global --unset gerrit.webUrl"
-    ]
+    assert _warnings(caplog) == ["old git config key gerrit.webUrl: run ger config --migrate"]
 
 
 def test_the_new_key_wins_and_silences_the_old_one(caplog: pytest.LogCaptureFixture) -> None:
@@ -70,8 +66,11 @@ def test_every_renamed_family_falls_back(caplog: pytest.LogCaptureFixture) -> No
         assert settings.inbox_limit == 7
         assert settings.branch_gerrit_target("Feature") == "dev"
         assert settings.branch_gerrit_reviewers("Feature") == "alice"
-    assert len(_warnings(caplog)) == 4
-    assert "git config key inbox.limit is deprecated; use ger.inboxLimit" in _warnings(caplog)
+    # One line for them all, once: the keys on disk move with one command; a `git -c` one is renamed.
+    assert _warnings(caplog) == [
+        "old git config keys gerrit.push.remotePolicy, branch.Feature.gerritTarget, "
+        "branch.Feature.gerritReviewers: run ger config --migrate; rename git -c inbox.limit -> ger.inboxLimit"
+    ]
 
 
 def test_legacy_names_are_the_documented_ones() -> None:
@@ -108,3 +107,53 @@ def test_recent_upstreams_move_to_the_new_key_on_the_next_write(stack_repo: Path
         git("config", "--global", "--get-all", "gerrit.recentUpstreamAbbrev", cwd=stack_repo, check=False).stdout == ""
     )
     assert set(read_recent_upstream_abbrevs(stack_repo)) == {"origin/main", "origin/old"}
+
+
+def test_ger_config_migrate_moves_every_old_key_without_a_terminal(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from gerrit_workflow_tools.cli_config import main as config_main
+    from tests.conftest import run_cli
+
+    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    git("config", "--global", "--add", "gerrit.recentUpstreamAbbrev", "origin/a", cwd=stack_repo)
+    git("config", "--global", "--add", "gerrit.recentUpstreamAbbrev", "origin/b", cwd=stack_repo)
+    git("config", "branch.feature.gerritTarget", "dev", cwd=stack_repo)
+    git("config", "ger.project", "new", cwd=stack_repo)
+    git("config", "gerrit.project", "old", cwd=stack_repo)
+    git("config", "--global", "gerrit.user", "alice", cwd=stack_repo)
+    code, out, err = run_cli(stack_repo, config_main, ["--migrate"], monkeypatch)
+    assert code == 0, err
+    *moved, total = out.splitlines()
+    assert total == "moved 5 keys"
+    assert set(moved) == {
+        "gerrit.webUrl -> ger.webUrl (local)",
+        "gerrit.recentUpstreamAbbrev -> ger.recentUpstreamAbbrev (global)",
+        "branch.feature.gerritTarget -> branch.feature.gerTarget (local)",
+        "gerrit.project removed; the new name was set already (local)",
+        "gerrit.user -> ger.user (global)",
+    }
+    settings = Settings.from_cwd(stack_repo)
+    with caplog.at_level(logging.WARNING, logger="gerrit_workflow_tools.core.config"):
+        assert (settings.gerrit_web_url, settings.gerrit_project, settings.get("ger.user")) == (
+            "https://g.example",
+            "new",
+            "alice",
+        )
+        assert settings.branch_gerrit_target("feature") == "dev"
+    assert _warnings(caplog) == []
+    assert read_recent_upstream_abbrevs(stack_repo) == ["origin/a", "origin/b"]
+    code, out, _err = run_cli(stack_repo, config_main, ["--migrate"], monkeypatch)
+    assert (code, out.strip()) == (0, "nothing to migrate: no old key names")
+
+
+def test_the_notice_prints_as_one_plain_line_and_diagnostics_keep_their_prefix() -> None:
+    from gerrit_workflow_tools.cli_logging import configure_logging
+
+    configure_logging(False)
+    [handler] = logging.getLogger("gerrit_workflow_tools").handlers
+    notice = logging.LogRecord("gerrit_workflow_tools.core.config", logging.WARNING, "", 0, "old key", None, None)
+    notice.notice = True
+    plain = logging.LogRecord("gerrit_workflow_tools.core.git_run", logging.WARNING, "", 0, "odd", None, None)
+    assert handler.format(notice) == "warning: old key"
+    assert handler.format(plain) == "WARNING: gerrit_workflow_tools.core.git_run: odd"

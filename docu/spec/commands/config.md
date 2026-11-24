@@ -4,7 +4,7 @@
 |--|--|
 | **Status** | Implemented |
 | **Module** | `src/gerrit_workflow_tools/cli_config.py` |
-| **Requires** | Interactive terminal (stdin and stdout are TTYs) |
+| **Requires** | Interactive terminal (stdin and stdout are TTYs), except `--migrate` |
 
 Opens ger's git config settings in your git editor as a temporary `key=value` file (same shape as `git config --list`). Save and close to apply; delete all content to abort.
 
@@ -16,9 +16,12 @@ Credentials (`ger.token`, `ger.password`) are not included — use [`ger setup`]
 
 ```
 ger config
+ger config --migrate
 ```
 
 Shared `--color`, `--hyperlinks`, and `--debug-log` flags apply.
+
+`--migrate` moves every old key name (`gerrit.*`, `inbox.*`, `branch.<name>.gerrit*`) to its `ger.*` name in local and global config, prints one line per key (`gerrit.project -> ger.project (local)`, or `… removed; the new name was set already` when that wins) and `moved N keys`, and exits `0`; with none, `nothing to migrate: no old key names`. It needs no terminal and opens no editor. It is the command the old-key warning names ([Renamed keys](../../Configuration.md#renamed-keys-gerrit-inbox-branchnamegerrit)).
 
 Non-interactive environments print an error and exit `2` (`USAGE`), as every command does that needs a terminal it does not have.
 

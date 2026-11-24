@@ -171,9 +171,19 @@ Older versions read their settings from three prefixes. Each such key now lives 
 | `branch.<name>.gerritTarget` | `branch.<name>.gerTarget` |
 
 The new key is read first. When only the old one is set, it still answers, and the command
-prints one warning line per key naming the `git config` commands that move it (at the scope
-where it is set). `ger setup` and `ger config` write only new keys and remove the old name
-at the scope they write. The one table lives in `core/config.py` (`LEGACY_KEYS`).
+prints one line for all of them, once:
+
+```text
+warning: old git config keys gerrit.project, gerrit.remote: run ger config --migrate
+```
+
+`ger config --migrate` moves every old key name at local and global scope to its new name,
+every value of a multi-valued one, and prints each move; where the new name is set already
+it wins and the old one is only removed. It needs no terminal. A `git -c` old key has
+nothing on disk to move, so the line says `rename git -c inbox.limit -> ger.inboxLimit`.
+`ger setup` and `ger config` write only new keys and remove the old name at the scope they
+write. The one table lives in `core/config_keys.py` (`LEGACY_KEYS`; `current_key` reads it
+backwards, `config_write.migrate_legacy_keys` moves).
 
 ---
 

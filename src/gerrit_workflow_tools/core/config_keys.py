@@ -90,12 +90,51 @@ def legacy_key(key: str) -> str | None:
     return None
 
 
-def legacy_key_warning(old: str, new: str, scope: ConfigScope | None) -> str:
-    """One line naming the ``git config`` commands that move *old* to *new* at *scope*."""
-    if scope is None or scope.flag is None:  # `git -c`: nothing on disk to move
-        return f"git config key {old} is deprecated; use {new}"
-    git_config = f"git config {scope.flag}"
-    return (
-        f"git config key {old} is deprecated; move it with: "
-        f'{git_config} {new} "$({git_config} {old})" && {git_config} --unset {old}'
-    )
+_CURRENT_BY_OLD_CANON = {canonical_cfg_key(old): new for new, old in LEGACY_KEYS.items()}
+_CURRENT_BRANCH_KEYS = {old.lower(): new for new, old in _LEGACY_BRANCH_KEYS.items()}
+
+
+def current_key(old: str) -> str | None:
+    """The ``ger`` name of a key whose old name is *old* (as git lists it, or as written), or ``None``."""
+    new = _CURRENT_BY_OLD_CANON.get(canonical_cfg_key(old))
+    if new is not None:
+        return new
+    head, _, tail = old.rpartition(".")
+    if head.startswith("branch.") and tail.lower() in _CURRENT_BRANCH_KEYS:
+        return f"{head}.{_CURRENT_BRANCH_KEYS[tail.lower()]}"
+    return None
+
+
+MIGRATE_COMMAND = "ger config --migrate"
+
+
+def legacy_keys_standing_in(
+    values: Mapping[str, str], scopes: Mapping[str, ConfigScope]
+) -> dict[str, ConfigScope | None]:
+    """Every old key name *values* (canonical keys, as git lists them) answer from because the new
+    name is unset or blank: the old name as written, with its scope."""
+
+    def is_set(canon: str) -> bool:
+        return bool(values.get(canon, "").strip())
+
+    found: dict[str, ConfigScope | None] = {}
+    for canon in values:
+        new = current_key(canon)
+        if new is not None and is_set(canon) and not is_set(canonical_cfg_key(new)):
+            found[legacy_key(new) or canon] = scopes.get(canon)
+    return found
+
+
+def legacy_keys_warning(moves: Mapping[str, ConfigScope | None]) -> str:
+    """One line for the old key names a snapshot still answers from (old name -> its scope).
+
+    Names on disk are moved by one command; a ``git -c`` one has nothing on disk to move.
+    """
+    on_disk = [old for old, scope in moves.items() if scope is not None and scope.flag is not None]
+    on_command_line = [f"{old} -> {current_key(old)}" for old in moves if old not in on_disk]
+    parts = []
+    if on_disk:
+        parts.append(f"old git config key{'s' if len(on_disk) > 1 else ''} {', '.join(on_disk)}: run {MIGRATE_COMMAND}")
+    if on_command_line:
+        parts.append(f"rename git -c {', '.join(on_command_line)}")
+    return "; ".join(parts)
