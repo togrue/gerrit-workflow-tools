@@ -81,7 +81,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         metavar="ACCOUNTS",
         help=(
             "Comma-separated Gerrit reviewer accounts (repeat for more; overwrites branch gerReviewers). "
-            "Appended as ref options %%r=…"
+            "Appended as ref options (%%r=…)."
         ),
     )
     parser.add_argument(

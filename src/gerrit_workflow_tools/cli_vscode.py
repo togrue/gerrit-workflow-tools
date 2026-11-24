@@ -28,7 +28,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "match. Run it again after updating ger to update the extension."
         ),
     )
-    parser.add_argument("action", choices=["install"], help="install: install or update the extension in your editor.")
+    parser.add_argument("action", choices=["install"], help="Install or update the extension in your editor (install).")
     parser.add_argument(
         "--editor",
         metavar="COMMAND",

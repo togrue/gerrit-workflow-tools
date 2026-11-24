@@ -608,11 +608,6 @@ def test_help_text_style() -> None:
     _check(
         "help text off the house style",
         found,
-        {
-            "log --url: RST markup (``code`` or **bold**)": "backlog 4",
-            "log --verbose: RST markup (``code`` or **bold**)": "backlog 4",
-            "push --reviewers: no final period": "backlog 4",
-            "vscode action: starts lower case": "backlog 4",
-        },
+        {},
         "Sentence case, end with a period, `single backticks` at most (cli_args.py docstring).",
     )

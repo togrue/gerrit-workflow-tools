@@ -71,8 +71,8 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="url",
         help=(
             "Include each change's Gerrit web URL in text output (JSON always includes gerrit_url). "
-            "When OSC 8 hyperlinks are on, a compact ``Open in gerrit`` link is shown by default. "
-            "Otherwise default: ``ger.logShowUrl``."
+            "When OSC 8 hyperlinks are on, a compact 'Open in gerrit' link is shown by default. "
+            "Otherwise default: ger.logShowUrl."
         ),
     )
     add_on_off_arg(
@@ -84,9 +84,9 @@ def _build_parser() -> argparse.ArgumentParser:
         parser,
         verbose_count=True,
         verbose_help=(
-            "Add indented CI pipeline lines below each commit (``-vv`` also shows Change-Id). "
+            "Add indented CI pipeline lines below each commit (-vv also shows Change-Id). "
             "The primary line layout is unchanged. "
-            "Does not enable diagnostic logging; use ``--debug-log`` for that."
+            "Does not enable diagnostic logging; use --debug-log for that."
         ),
     )
     add_follow_merges_args(parser)
