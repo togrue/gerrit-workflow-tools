@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.ci_links import CiPipeline
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
@@ -28,6 +30,7 @@ from gerrit_workflow_tools.render.style import (
     format_link,
     is_color_enabled,
     is_hyperlink_enabled,
+    truncate,
     visible_len,
 )
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
@@ -37,6 +40,9 @@ from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 _STATUS_SHA_COL_WIDTH = 8
 
 _DETAIL_LABEL_WIDTH = len("Change-Id:")
+
+# A subject cut to fit the terminal keeps at least this much, even if the row then wraps.
+MIN_SUBJECT_WIDTH = 20
 
 _PATCHSET_COLOR: dict[str, str] = {
     "a": ANSI_DIM,
@@ -357,3 +363,25 @@ def oneline_line(
             return f"{body}{' ' * pad}{url_text}"
         return f"{body}  {url_text}"
     return body
+
+
+def fit_subjects(commits: list[LogCommit], width: int, *, show_url: bool) -> list[LogCommit]:
+    """*commits* with each subject cut (``…``) so its row, hints and URL included, fits *width* columns.
+
+    Hints line up in one column and URLs in another, so a row leaves room for the widest of each.
+    A row without hints may use theirs.
+    """
+    if not commits:
+        return commits
+    prefix = max(visible_len(primary_line_prefix(c)) for c in commits)
+    hints = max((visible_len(attention_suffix(c)) + 2 for c in commits if attention_tokens(c)), default=0)
+    url = max(
+        (visible_len(format_link(c.gerrit_url)) + 2 for c in commits if show_url and c.gerrit_url),
+        default=0,
+    )
+    fitted: list[LogCommit] = []
+    for commit in commits:
+        room = max(width - prefix - url - (hints if attention_tokens(commit) else 0), MIN_SUBJECT_WIDTH)
+        cut = truncate(commit.summary, room)
+        fitted.append(replace(commit, summary=cut) if cut != commit.summary else commit)
+    return fitted

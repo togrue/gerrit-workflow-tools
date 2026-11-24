@@ -23,8 +23,15 @@ from gerrit_workflow_tools.core.annotated_stack import load_stack_overview, reso
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.render.ai_text import stack_ai_lines
 from gerrit_workflow_tools.render.show_json import log_commit_json, rebase_json, rebase_steps, upstream_json
-from gerrit_workflow_tools.render.stack_log import RowOptions, next_steps, rebase_note, row_lines, summary_line
-from gerrit_workflow_tools.render.style import ANSI_DIM, color_text, is_hyperlink_enabled
+from gerrit_workflow_tools.render.stack_log import (
+    RowOptions,
+    footer_lines,
+    next_steps,
+    rebase_note,
+    row_lines,
+    summary_line,
+)
+from gerrit_workflow_tools.render.style import is_hyperlink_enabled, terminal_width
 from gerrit_workflow_tools.summary_highlight import run_summary_highlighter
 
 
@@ -157,13 +164,14 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         )
         print("\n".join(lines))
     else:
-        options = RowOptions(verbose_level=verbose_level, show_url=show_url, show_change_id=show_change_id)
+        width = terminal_width()
+        options = RowOptions(verbose_level, show_url, show_change_id, width)
         for line in row_lines(commits, options, summary_highlighter=summary_highlighter, blocked=blocked):
             print(line)
         print()
-        print(summary_line(commits, overview.ready))
-        for line in next_steps(commits, moved):
-            print(color_text(line, ANSI_DIM))
+        print(summary_line(commits, overview.ready, width=width))
+        for line in footer_lines(next_steps(commits, moved), width=width):
+            print(line)
     if stack_view.gerrit_unavailable is not None:
         raise stack_view.gerrit_unavailable
     return int(ExitCode.OK)

@@ -50,7 +50,9 @@ Columns: patchset token (`p`/`n`/`o`/`-`), Verified, Code-Review, comment marker
 
 **Summary example:** `summary: ready 2/6 · CI 1 · comments 1 · on-gerrit 4`
 
-Below the summary, dim **next lines** (`cli_log.next_steps`) name the ger command for a state the stack is in: the upstream moved on after a fetch (`origin/main has 1 new commit; rebase onto it with `ger rebase origin/main``; when a commit would stop that rebase, `; "Refactor parser init" would conflict in a.txt` or `; "Refactor parser init" would become empty: its change is already upstream`; and `; 1 commit is already upstream and dropped` for what the rebase leaves out: previewed without touching the worktree, as `GET /stack` serves it), WIP changes on Gerrit (`ger push --ready`), a merged commit (`ger rebase --onto-remote --drop-merged-equivalent`; once the upstream moved on, the one line above names the rebase instead, `ger rebase origin/main --drop-merged-equivalent`, its `argv`), a **diverged** or outdated change (`ger checkout change:<n> --update`), and what `chain blocked` means (a change below is not submittable yet). One line per state, none when there is nothing to do.
+Below the summary, dim **next lines** (`render/stack_log.py` `next_steps`) name the ger command for a state the stack is in: the upstream moved on after a fetch (`origin/main has 1 new commit; rebase onto it with `ger rebase origin/main``; when a commit would stop that rebase, `; "Refactor parser init" would conflict in a.txt` or `; "Refactor parser init" would become empty: its change is already upstream`; and `; 1 commit is already upstream and dropped` for what the rebase leaves out: previewed without touching the worktree, as `GET /stack` serves it), WIP changes on Gerrit (`ger push --ready`), a merged commit (`ger rebase --onto-remote --drop-merged-equivalent`; once the upstream moved on, the one line above names the rebase instead, `ger rebase origin/main --drop-merged-equivalent`, its `argv`), a **diverged** or outdated change (`ger checkout change:<n> --update`), and what `chain blocked` means (a change below is not submittable yet). One line per state, none when there is nothing to do.
+
+**Terminal width.** When stdout is a terminal, each row is fitted to its width: the subject is cut with `…` so the row, its hints (and URL) included, fits; hints and URLs keep their aligned columns, and a subject keeps at least 20 characters even if the row then wraps. The summary breaks between its parts and the closing lines wrap at word boundaries (a `` `command` `` is never broken). Piped output and `--ai` are never cut.
 
 Subject highlighting uses `ger.stopPattern` / `ger.warningPattern` when color is on.
 
@@ -111,7 +113,7 @@ stack: testproj, branch main, 6 commits, ger push sends 1-2
 chain blocked: a change below is not submittable yet (votes, CI, comments); it clears when that one is
 ```
 
-The first line names the project, the push branch, the commit count and which commits `ger push` sends (those below the **ready boundary**). Each commit line is numbered oldest first: short SHA, subject, then only the facts that have a value: `change N`, `merged`, the votes cast (`V+1`, `CR+2`: the text view's tokens), and the text view's trailing hints, with the failed Checks named after `build failed`. The `next:` lines (`cli_log.next_steps`) close it.
+The first line names the project, the push branch, the commit count and which commits `ger push` sends (those below the **ready boundary**). Each commit line is numbered oldest first: short SHA, subject, then only the facts that have a value: `change N`, `merged`, the votes cast (`V+1`, `CR+2`: the text view's tokens), and the text view's trailing hints, with the failed Checks named after `build failed`. The `next:` lines (`next_steps`) close it.
 
 ---
 

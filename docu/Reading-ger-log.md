@@ -40,6 +40,8 @@ m3n4o5p6 -                # WIP: experiment              # not-pushed
 
 When the terminal supports OSC 8 hyperlinks (`--hyperlinks auto`, or `--hyperlinks always`), a clickable `Open in gerrit` appears at the end of the primary line. The label is short enough to keep on by default. Without hyperlinks, the raw address appears only with `--url` or `ger.logShowUrl`. JSON still includes the full `gerrit_url`. Use `--hyperlinks never` to keep a copyable URL (with `--url`) or to omit the link.
 
+On a terminal, each row fits its width: a subject too long for it is cut with `…` so the row, its `# …` hints included, stays on one line; the `next:` lines below the summary wrap between words, never inside a `` `command` ``. Piped output (`ger log | grep …`) is never cut.
+
 With `--show-change-id` (or `-vv`), the full Change-Id appears on an indented continuation line below the commit — never truncated, and never on the primary line.
 
 ---

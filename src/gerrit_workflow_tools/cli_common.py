@@ -40,6 +40,7 @@ from gerrit_workflow_tools.render.style import (
     ensure_utf8_stdio,
     init_color_mode,
     init_hyperlink_mode,
+    init_terminal_width,
 )
 from gerrit_workflow_tools.upstream_interactive import ask_for_needed_upstream
 
@@ -376,6 +377,7 @@ def init_cli_runtime(
     plain = getattr(args, "format_", None) == "ai"  # Text for a model, Markdown or not: no colour, no links.
     init_color_mode(color="never" if plain else getattr(args, "color", "auto"))
     init_hyperlink_mode(hyperlinks="never" if plain else getattr(args, "hyperlinks", "auto"))
+    init_terminal_width(plain=plain)
     settings = Settings.from_cwd(cwd)
     _MAY_ASK_FOR_UPSTREAM.set(may_prompt(args) and not getattr(args, "dry_run", False))
     if repository and not settings.in_repository:

@@ -13,6 +13,7 @@ from gerrit_workflow_tools.render.commit_row import (
     attention_column,
     continuation_indent,
     continuation_lines,
+    fit_subjects,
     oneline_body,
     oneline_line,
 )
@@ -27,6 +28,7 @@ from gerrit_workflow_tools.render.style import (
     color_text,
     visible_len,
 )
+from gerrit_workflow_tools.render.wrap import wrap_hanging
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 
@@ -41,6 +43,8 @@ class RowOptions:
     verbose_level: int = 0
     show_url: bool = False
     show_change_id: bool = False
+    width: int | None = None
+    """The terminal's columns: each subject is cut to fit its row in them. ``None``: nothing is cut."""
 
 
 # ---------------------------------------------------------------------------
@@ -68,8 +72,8 @@ def _build_summary(commits: list[LogCommit]) -> dict[str, int]:
     return counts
 
 
-def summary_line(commits: list[LogCommit], ready_n: int) -> str:
-    """Single-line summary: ``summary: ready N/M · …`` with optional ANSI styling."""
+def summary_line(commits: list[LogCommit], ready_n: int, *, width: int | None = None) -> str:
+    """``summary: ready N/M · …`` with optional ANSI styling; broken between stats to fit *width*."""
     summary = _build_summary(commits)
     stats = [color_stat("ready ", f"{ready_n}/{len(commits)}", ANSI_GREEN)]
     for label, count, color in (
@@ -80,7 +84,29 @@ def summary_line(commits: list[LogCommit], ready_n: int) -> str:
     ):
         if count:
             stats.append(color_stat(label, count, color))
-    return f"{color_text('summary:', f'{ANSI_BOLD}{ANSI_CYAN}')} {color_text(' · ', ANSI_DIM).join(stats)}"
+    return _pack(color_text("summary:", f"{ANSI_BOLD}{ANSI_CYAN}"), stats, width=width)
+
+
+def _pack(head: str, items: list[str], *, width: int | None) -> str:
+    """``head item · item · …``, a new line (indented under the first item) where the next would not fit."""
+    sep = color_text(" · ", ANSI_DIM)
+    indent = visible_len(head) + 1
+    lines = [f"{head} {items[0]}"] if items else [head]
+    for item in items[1:]:
+        if width and visible_len(lines[-1]) + visible_len(sep) + visible_len(item) > width:
+            lines.append(" " * indent + item)
+        else:
+            lines[-1] += sep + item
+    return "\n".join(lines)
+
+
+def footer_lines(lines: list[str], *, width: int | None) -> list[str]:
+    """The ``next:`` and other closing lines, dim; wrapped at word boundaries to fit *width*."""
+    out: list[str] = []
+    for line in lines:
+        parts = wrap_hanging(line, width, indent=6 if line.startswith("next: ") else 2) if width else [line]
+        out.extend(color_text(part, ANSI_DIM) for part in parts)
+    return out
 
 
 def next_steps(commits: list[LogCommit], upstream: UpstreamMoved | None = None) -> list[str]:
@@ -136,6 +162,8 @@ def row_lines(
     blocked: frozenset[str] = frozenset(),
 ) -> list[str]:
     """The rows of ``ger log``, with a plain-text line where the ready boundary falls."""
+    if options.width:
+        visible = fit_subjects(visible, options.width, show_url=options.show_url)
     attn_col = attention_column(visible, summary_highlighter=summary_highlighter)
     url_start = (
         _url_start_visible(visible, summary_highlighter=summary_highlighter, attn_col=attn_col)
