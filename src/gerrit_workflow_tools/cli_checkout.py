@@ -147,14 +147,10 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     service = run.gerrit
     change = resolve_change(service, cwd, args.changeish)
     print_resolution_note(change.resolution)
-    try:
-        plan = plan_checkout(cwd, change, args.patchset, settings=settings, branch=args.branch)
-        update = True if args.update is None and (args.yes or assume_yes()) else args.update
-        action = choose_action(plan, update=update, force=args.force) or _ask_update(plan)
-        result = apply_checkout(cwd, plan, action, settings=settings)
-    except CheckoutRefusal as refusal:
-        print(f"error: {refusal}", file=sys.stderr)
-        return int(ExitCode.REFUSED)
+    plan = plan_checkout(cwd, change, args.patchset, settings=settings, branch=args.branch)
+    update = True if args.update is None and (args.yes or assume_yes()) else args.update
+    action = choose_action(plan, update=update, force=args.force) or _ask_update(plan)
+    result = apply_checkout(cwd, plan, action, settings=settings)
     _report(plan, result, change.view.url(service.web_base))
     return int(ExitCode.OK)
 

@@ -27,9 +27,10 @@ from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnav
 from gerrit_workflow_tools.core.review_checkout import BRANCH_PREFIX, refuse_own_edits
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_commits, read_commit_rows
 from gerrit_workflow_tools.core.upstream import track_remote_branch
+from gerrit_workflow_tools.core.usage import Refusal
 
 
-class CheckoutRefusal(RuntimeError):
+class CheckoutRefusal(Refusal):
     """ger will not go on without the user's decision: their commits or branches are in the way (exit 1)."""
 
 

@@ -477,7 +477,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/run_context.py` | The **run context**: `RunContext` (the repository and the Gerrit service of one command run or one request; `run.cwd`, `run.settings`, `run.worktree` and `run.stack` read through them) |
 | `core/repository.py` | The repository a run works in, each answer read once for the run: `Repository` (its `worktree`, `working_branch`, `stack_branch`, `root` and **stack context**, `stack`) |
 | `core/votes.py` | The vote grammar (`CR+1`, `V=-1`): `parse_votes` for every command that votes |
-| `core/usage.py` | `UsageError`: the command cannot run as asked (bad input, or a state it refuses to start from), exit `USAGE` |
+| `core/usage.py` | `UsageError`: the command cannot run as asked (bad input, or a state it refuses to start from), exit `USAGE`; `Refusal`: ger will not go on without the user's decision (`ReviewRefusal`, `CheckoutRefusal`, `ReorderRefusal`), exit `REFUSED`, HTTP 409 |
 | `core/git_run.py` | Running git: the subprocess wrapper (`git`, `git_out`, `commit_sha_or_none`, `GitError`) |
 | `core/config.py` | `Settings`: one `git config --list --show-scope` snapshot (values + winning scope) |
 | `core/config_keys.py` | The git config keys ger owns: `ConfigScope`, how git spells a key, built-in defaults, and `LEGACY_KEYS` (the `gerrit.*` / `inbox.*` names before `ger.*`) |

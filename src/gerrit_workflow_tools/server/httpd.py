@@ -20,8 +20,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from gerrit_workflow_tools.cli_common import ExitCode, failure_exit
 from gerrit_workflow_tools.core.call_trace import format_call_trace_summary, reset_call_trace
-from gerrit_workflow_tools.core.reorder import ReorderRefusal
-from gerrit_workflow_tools.core.review_checkout import ReviewChainEndError, ReviewRefusal, ReviewUsageError
+from gerrit_workflow_tools.core.review_checkout import ReviewChainEndError
 from gerrit_workflow_tools.server.api import GerApi
 from gerrit_workflow_tools.server.request import BadRequest, NoRoute
 from gerrit_workflow_tools.server.views import error_json
@@ -43,15 +42,14 @@ _STATUS_BY_EXIT = {
     ExitCode.MISSING_CHANGE_ID: 422,
     ExitCode.DUPLICATE_CHANGE_ID: 422,
     ExitCode.NO_EDIT_ATTENTION: 404,
+    ExitCode.REFUSED: 409,
 }
 
-# Failures the commands map themselves, next to their prompts: (status, code).
+# Failures of the transport, and the end of a review chain, which the service names apart
+# from the CLI's exit: (status, code).
 _OWN_FAILURES: tuple[tuple[type[BaseException], int, str], ...] = (
     (BadRequest, 400, "USAGE"),
     (NoRoute, 404, "NOT_FOUND"),
-    (ReviewUsageError, 400, "USAGE"),
-    (ReviewRefusal, 409, "REFUSED"),
-    (ReorderRefusal, 409, "REFUSED"),
     (ReviewChainEndError, 404, "NOT_FOUND"),
 )
 

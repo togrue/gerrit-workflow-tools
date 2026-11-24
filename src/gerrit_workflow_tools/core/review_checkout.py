@@ -18,7 +18,7 @@ from gerrit_workflow_tools.core.git_state import checked_out_branch_name, git_di
 from gerrit_workflow_tools.core.rewrite_refusal import submodule_refusal
 from gerrit_workflow_tools.core.tracked_changes import tracked_changes
 from gerrit_workflow_tools.core.upstream import track_remote_branch
-from gerrit_workflow_tools.core.usage import UsageError
+from gerrit_workflow_tools.core.usage import Refusal, UsageError
 
 
 ReviewMode = Literal["worktree", "branch"]
@@ -26,11 +26,11 @@ BRANCH_PREFIX = "change-"
 _STATE_FILE = ("ger", "review.json")
 
 
-class ReviewRefusal(RuntimeError):
+class ReviewRefusal(Refusal):
     """ger will not go on without the user: their edits or commits are in the way (exit 1)."""
 
 
-class ReviewUsageError(ValueError):
+class ReviewUsageError(UsageError):
     """The review cannot do what was asked, whatever the user does next (exit 2)."""
 
 

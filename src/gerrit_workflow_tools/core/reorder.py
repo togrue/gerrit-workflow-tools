@@ -34,6 +34,7 @@ from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnav
 from gerrit_workflow_tools.core.rewrite_refusal import submodule_refusal, uncommitted_changes_refusal
 from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot, pinned_count, rewrite_base
 from gerrit_workflow_tools.core.tracked_changes import tracked_changes
+from gerrit_workflow_tools.core.usage import Refusal
 
 
 TODO_ENV = "GER_REORDER_TODO"
@@ -52,7 +53,7 @@ _TODO_WORD: dict[StepAction, str] = {
 }
 
 
-class ReorderRefusal(RuntimeError):
+class ReorderRefusal(Refusal):
     """The stack was left as it was: the request, the worktree, or a conflict stands in the way."""
 
     reason: str | None = None

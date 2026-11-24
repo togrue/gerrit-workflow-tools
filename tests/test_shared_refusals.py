@@ -15,18 +15,21 @@ from pathlib import Path
 import pytest
 
 from gerrit_workflow_tools.cli_changeid import main as change_id_main
-from gerrit_workflow_tools.cli_common import ExitCode
+from gerrit_workflow_tools.cli_common import ExitCode, run_cli_command
 from gerrit_workflow_tools.cli_edit import main as edit_main, main_reword
 from gerrit_workflow_tools.cli_fix import main as fix_main
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_push import main as push_main
 from gerrit_workflow_tools.cli_rebase import main as rebase_main
 from gerrit_workflow_tools.cli_show import main as show_main
+from gerrit_workflow_tools.core.change_checkout import CheckoutRefusal
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.reorder import ReorderRefusal, StackStep, UncommittedChanges, rewrite_stack
+from gerrit_workflow_tools.core.review_checkout import ReviewChainEndError, ReviewRefusal, ReviewUsageError
 from gerrit_workflow_tools.core.rewrite_refusal import history_rewrite_refusal
 from gerrit_workflow_tools.core.stack import get_stack_snapshot
+from gerrit_workflow_tools.server.httpd import failure_response
 from tests.change_store import ChangeStore
 from tests.conftest import run_cli
 from tests.helpers import add_submodule
@@ -351,3 +354,26 @@ def test_a_rebase_stopped_on_a_conflict_says_how_on_and_nothing_commits_or_pushe
         code, _out, push_err = run_cli(stack_repo, push_main, argv, monkeypatch, gerrit=ChangeStore({}))
         assert code == ExitCode.USAGE
         assert "a rebase is in progress, and 'feature' still points at the commits from before it" in push_err
+
+
+@pytest.mark.parametrize(
+    ("error", "code", "status", "name"),
+    [
+        (ReviewRefusal("in the way"), ExitCode.REFUSED, 409, "REFUSED"),
+        (CheckoutRefusal("in the way"), ExitCode.REFUSED, 409, "REFUSED"),
+        (ReorderRefusal("in the way"), ExitCode.REFUSED, 409, "REFUSED"),
+        (ReviewUsageError("in the way"), ExitCode.USAGE, 400, "USAGE"),
+        # The CLI loops on it like an attention walk; the service calls it a missing change.
+        (ReviewChainEndError("in the way"), ExitCode.NO_EDIT_ATTENTION, 404, "NOT_FOUND"),
+    ],
+)
+def test_a_core_refusal_exits_and_answers_the_same_from_every_command(
+    error: Exception, code: ExitCode, status: int, name: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def body() -> int:
+        raise error
+
+    assert run_cli_command(body) == code
+    assert capsys.readouterr().err == "error: in the way\n"
+    answer_status, body_json = failure_response(error)
+    assert (answer_status, body_json["error"]["code"], body_json["error"]["message"]) == (status, name, "in the way")

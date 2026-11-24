@@ -32,9 +32,7 @@ from gerrit_workflow_tools.core.gerrit_patchset import resolve_patchset
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.review_checkout import (
     CheckoutOptions,
-    ReviewChainEndError,
     ReviewMode,
-    ReviewRefusal,
     ReviewState,
     ReviewUsageError,
     close_review,
@@ -265,18 +263,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
     _check_args(p, args)
-    run = init_cli_runtime(args, gerrit=gerrit)
-    try:
-        return _act(args, p, run)
-    except ReviewRefusal as refusal:
-        print(f"error: {refusal}", file=sys.stderr)
-        return int(ExitCode.REFUSED)
-    except ReviewUsageError as error:
-        print(f"error: {error}", file=sys.stderr)
-        return int(ExitCode.USAGE)
-    except ReviewChainEndError as end:
-        print(f"error: {end}", file=sys.stderr)
-        return int(ExitCode.NO_EDIT_ATTENTION)
+    return _act(args, p, init_cli_runtime(args, gerrit=gerrit))
 
 
 def _act(args: argparse.Namespace, p: argparse.ArgumentParser, run: RunContext) -> int:

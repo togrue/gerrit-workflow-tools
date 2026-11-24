@@ -31,9 +31,10 @@ from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeAmbiguousError, ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError
+from gerrit_workflow_tools.core.review_checkout import ReviewChainEndError
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.upstream import NeedsUpstreamError
-from gerrit_workflow_tools.core.usage import UsageError
+from gerrit_workflow_tools.core.usage import Refusal, UsageError
 from gerrit_workflow_tools.registry_trust_prompt import settle_registry_trust
 from gerrit_workflow_tools.render.style import (
     ensure_utf8_stdio,
@@ -99,9 +100,11 @@ _FAILURE_EXITS: tuple[tuple[type[BaseException], ExitCode, str], ...] = (
     (GerritApiError, ExitCode.GERRIT, "gerrit error"),
     (ConfigError, ExitCode.CONFIG, "error"),
     (UsageError, ExitCode.USAGE, "error"),
+    (Refusal, ExitCode.REFUSED, "error"),
     (UnknownRevisionError, ExitCode.NOT_FOUND, "error"),
     # A walk with nowhere left to go: reported without an "error:" prefix, since scripts loop on it.
     (NoEditAttentionError, ExitCode.NO_EDIT_ATTENTION, ""),
+    (ReviewChainEndError, ExitCode.NO_EDIT_ATTENTION, "error"),
     (CiContentError, ExitCode.CI_CONTENT, "ci error"),
     (GitError, ExitCode.GIT, "error"),
 )
