@@ -16,7 +16,7 @@ export function editCommit(model: Model, target: ChangeTarget | undefined): void
   }
   runInTerminal(model.repo, ["edit", target.rev]);
   // It runs in the terminal: say what to do once it stopped, not that it already has.
-  feedback(`ger edit runs in the ger terminal: once the rebase stops at "${target.title}", amend it, then git rebase --continue`, { icon: "terminal", milliseconds: 12000 });
+  feedback(`ger edit runs in the ger terminal: once the rebase stops at "${target.title}", amend it, then ger rebase --continue`, { icon: "terminal", milliseconds: 12000 });
 }
 
 /**

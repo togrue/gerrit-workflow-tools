@@ -463,7 +463,7 @@ type Conflicts = (lower: string, upper: string) => MoveConflict | undefined;
 /** Why the stack cannot be rewritten as it is; null when it can. */
 export function frozen(stack: Stack): string | null {
   if (stack.rebase_in_progress) {
-    return "A rebase is in progress: finish it (git rebase --continue) or abort it (git rebase --abort) before you move commits.";
+    return "A rebase is in progress: finish it (Continue) or abort it (Abort) before you move commits.";
   }
   return null;
 }

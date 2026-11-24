@@ -19,7 +19,7 @@ ger inbox                   -> chains waiting on you, each named by its top chan
 ger review 1235 --bottom    -> the chain's lowest open change (1234) checked out in the review worktree, its diff staged
   ...read it in the IDE; ger comment src/app.py:42 -m "..."...
 ger review --next           -> the next change up the chain
-ger review --vote +1        -> "Publish 3 draft(s) and Code-Review+1 on 1235? [y/N]"
+ger review --vote +1        -> "Publish 3 drafts and Code-Review+1 on 1235? [y/N]"
 ger review --vote +1 --chain  -> the same for every change of the chain, in one go
 ger review --done           -> back to how things were
 ```
@@ -33,7 +33,7 @@ ger review CHANGEISH [--patchset N | --bottom] [--stage | --no-stage] [--in-work
 ger review (--next | --prev) [--stage | --no-stage] [--force] [--json | --ai]
 ger review (--stage | --unstage) [--json | --ai]
 ger review --status [--json | --ai]
-ger review --vote [LABEL]+N ... [--chain | --change CHANGEISH ...] [-m MSG] [--dry-run] [-y] [--json | --ai]
+ger review --vote [LABEL]+N ... [--chain | --change CHANGEISH ...] [-m MSG | -F FILE] [--dry-run] [-y] [--json | --ai]
 ger review --done [--force] [--json | --ai]
 ```
 
@@ -111,7 +111,7 @@ What it votes on:
 
 Before anything is sent, the changes are read from Gerrit in one light query (one read per `--change`), and your drafts with one `has:draft` query over them; a change's chains are fetched only when it holds drafts. A vote Gerrit does not let you give on a change (outside its `permitted_labels`, when the change data has them) is named with what you may give: `change 2142 does not take Code-Review+3 (you may give -2, -1, 0, +1, +2)`. With `--chain`, such a change is skipped and listed as `skipped change N "subject": …`; when no change takes the vote, the command exits `2`, also under `--dry-run`.
 
-One REST call per change publishes **all your drafts on it** (every patchset, as the web UI's *Send* does), the votes, and the `-m` message. Before it, ger lists each change with its drafts and the votes, then the message (`  message: …`), and asks `Publish N draft(s) and Code-Review+1 on 2141, 2142? [y/N]`. Each change sent prints `published N draft(s) and Code-Review+1 on <number>`, and a vote on the change under review ends with what is left: `next: ger review --next · ger review --done` (after `--chain`: `next: ger review --done`). With several changes the message line says it goes to each: `  message (on each of 5 changes): …`. `-y` skips the question and is required without a terminal: without one (or with `--json` / `--ai`) it exits `2` with the message `ger reply --publish` gives, `no prompt to answer (non-interactive, --json or --ai): pass -y to publish` (`cli_common.confirm_publish`). `--dry-run` only lists.
+One REST call per change publishes **all your drafts on it** (every patchset, as the web UI's *Send* does), the votes, and the message (`-m`, repeatable, or `-F FILE`, the shared message group). Before it, ger lists each change with its drafts and the votes, then the message (`  message: …`), and asks `Publish 2 drafts and Code-Review+1 on 2141, 2142? [y/N]`. Each change sent prints `published 1 draft and Code-Review+1 on <number>`, and a vote on the change under review ends with what is left: `next: ger review --next · ger review --done` (after `--chain`: `next: ger review --done`). With several changes the message line says it goes to each: `  message (on each of 5 changes): …`. `-y` skips the question and is required without a terminal: without one (or with `--json` / `--ai`) it exits `2` with the message `ger reply --publish` gives, `no prompt to answer (non-interactive, --json or --ai): pass -y to publish` (`cli_common.confirm_publish`). `--dry-run` only lists.
 
 You vote on the patchset you reviewed. When Gerrit's current patchset of the change under review is newer, `ger review --vote` exits `1` and says so, and you run `ger review` again to see the new patchset first.
 

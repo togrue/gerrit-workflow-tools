@@ -15,6 +15,7 @@ from gerrit_workflow_tools.cli_args import (
     add_message_args,
     add_output_format_args,
     add_verbose_and_debug_log_args,
+    add_vote_arg,
     add_yes_arg,
     read_message,
 )
@@ -31,7 +32,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import InlineComment, gerri
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import UsageError
-from gerrit_workflow_tools.core.votes import VOTE_HELP, parse_votes
+from gerrit_workflow_tools.core.votes import parse_votes
 from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.comments import (
     chain_location,
@@ -100,9 +101,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="With --publish: publish no drafts, only the -m message and --vote votes (a note on a named change).",
     )
-    publish.add_argument(
-        "--vote", action="append", default=None, metavar="LABEL=N", help=f"With --publish: {VOTE_HELP}"
-    )
+    add_vote_arg(publish, scope="--publish")
     add_dry_run_arg(publish, scope="--publish")
     add_yes_arg(publish, scope="--publish")
     add_output_format_args(p)

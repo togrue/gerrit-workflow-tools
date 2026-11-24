@@ -222,7 +222,7 @@ status bar message: $(check) Copied SHA <sha>…
 
 ```
 terminal "ger": runs `ger edit <sha>`
-status bar message: $(terminal) ger edit runs in the ger terminal: once the rebase stops at "103: Cleanup after experiment", amend it, then git rebase --continue
+status bar message: $(terminal) ger edit runs in the ger terminal: once the rebase stops at "103: Cleanup after experiment", amend it, then ger rebase --continue
 --- on screen:
 (no change)
 ```
@@ -864,7 +864,7 @@ status bar message: $(check) Draft saved on Gerrit, visible only to you: your ne
 
 ```
 terminal "ger": runs `ger edit <sha>`
-status bar message: $(terminal) ger edit runs in the ger terminal: once the rebase stops at "Extract command routing", amend it, then git rebase --continue
+status bar message: $(terminal) ger edit runs in the ger terminal: once the rebase stops at "Extract command routing", amend it, then ger rebase --continue
 --- on screen:
 (no change)
 ```
@@ -1893,7 +1893,7 @@ change | (the commit shown is only on the branch as it was before)
 
 ```
 dialog (warning): Finish the rebase first  [Abort] [Cancel]
-    detail: A rebase is in progress, and 'feature' still points at the commits from before it; finish it (`git rebase --continue`) or `git rebase --abort`, then push.
+    detail: A rebase is in progress, and 'feature' still points at the commits from before it; finish it (`ger rebase --continue`) or `ger rebase --abort`, then push.
     → pressed "Abort"
 terminal "ger": runs `ger rebase --abort`
 status bar message: $(terminal) ger rebase --abort runs in the ger terminal: the branch goes back to where it was before the rebase
@@ -2186,7 +2186,7 @@ dialog (warning): Save e.txt first? ger rebase --continue then says what it stil
     → pressed "Save All"
 terminal "ger": runs `ger rebase --continue`
 status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
-ger terminal | error: you have unstaged changes to e.txt; amend them in (`git commit --amend -a`) or `git stash` them, then continue
+ger terminal | error: you have unstaged changes to e.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`
 ger terminal | (exit 2)
 (no change)
 --- shown now:

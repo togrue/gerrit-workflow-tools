@@ -13,16 +13,7 @@ from contextvars import ContextVar
 from enum import IntEnum
 from pathlib import Path
 
-# The `as` names are re-exported for cli_review.py only, until it imports them from cli_args
-# (test_argument_groups_come_from_cli_args tracks it). Import them from cli_args.
-from gerrit_workflow_tools.cli_args import (
-    add_change_option as add_change_option,
-    add_color_args as add_color_args,
-    add_output_format_args as add_output_format_args,
-    add_verbose_and_debug_log_args as add_verbose_and_debug_log_args,
-    changeish_help as changeish_help,
-    output_format,
-)
+from gerrit_workflow_tools.cli_args import output_format
 from gerrit_workflow_tools.cli_logging import configure_logging
 from gerrit_workflow_tools.cli_terminal import assume_yes, confirm, stdin_is_terminal
 from gerrit_workflow_tools.core.attention import NoEditAttentionError

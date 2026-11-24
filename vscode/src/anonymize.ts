@@ -230,7 +230,7 @@ const STACK: Shape = {
       squash: KEEP,
     },
   ],
-  frozen: ours(["A rebase is in progress: finish it (git rebase --continue) or abort it (git rebase --abort) before you move commits."]),
+  frozen: ours(["A rebase is in progress: finish it (Continue) or abort it (Abort) before you move commits."]),
   /** How many rows can move. */
   movable: KEEP,
 };

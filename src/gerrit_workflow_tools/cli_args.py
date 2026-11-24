@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.core.changeish import as_change_only
+from gerrit_workflow_tools.core.votes import VOTE_HELP
 
 
 HELP_JSON = "Write machine-readable JSON to stdout."
@@ -66,6 +67,11 @@ def add_yes_arg(parser: argparse.ArgumentParser | argparse._ArgumentGroup, *, sc
 def add_dry_run_arg(parser: argparse.ArgumentParser | argparse._ArgumentGroup, *, scope: str | None = None) -> None:
     """Register ``--dry-run``: show what the command would send, and send nothing."""
     parser.add_argument("--dry-run", action="store_true", help=_scoped(HELP_DRY_RUN, scope))
+
+
+def add_vote_arg(parser: argparse.ArgumentParser | argparse._ArgumentGroup, *, scope: str | None = None) -> None:
+    """Register ``--vote LABEL=N`` (repeatable): the votes the command publishes; *scope* as for :func:`add_yes_arg`."""
+    parser.add_argument("--vote", action="append", default=None, metavar="LABEL=N", help=_scoped(VOTE_HELP, scope))
 
 
 def add_patchset_arg(parser: argparse.ArgumentParser | argparse._ArgumentGroup) -> None:
@@ -184,7 +190,6 @@ def add_color_args(parser: argparse.ArgumentParser) -> None:
 def add_verbose_and_debug_log_args(
     parser: argparse.ArgumentParser,
     *,
-    debug_log_help: str | None = None,
     verbose_help: str | None = None,
     verbose_count: bool = False,
     refresh: bool = True,
@@ -194,10 +199,7 @@ def add_verbose_and_debug_log_args(
     Pass *verbose_help* when a command uses ``--verbose`` for richer output. Without it
     ``-v`` does nothing, so it is accepted (scripts may pass it) but not advertised: no help
     line, no completion. With *verbose_count*, ``-v`` may be repeated (e.g. ``-vv``);
-    ``args.verbose`` is an ``int`` (0 when omitted).
-
-    ``--debug-log`` says the same everywhere. *debug_log_help* is left for ``cli_review.py`` only,
-    until it drops it (``test_a_flag_means_one_thing`` tracks it); then it goes.
+    ``args.verbose`` is an ``int`` (0 when omitted). ``--debug-log`` says the same everywhere.
     """
     v_help = verbose_help or argparse.SUPPRESS
     parser.add_argument(
@@ -210,7 +212,7 @@ def add_verbose_and_debug_log_args(
     parser.add_argument(
         "--debug-log",
         action="store_true",
-        help=debug_log_help or HELP_DEBUG_LOG,
+        help=HELP_DEBUG_LOG,
     )
     if refresh:
         # `ger --refresh <command>` works anywhere on the line (cli_ger takes it out before the command's
