@@ -511,7 +511,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/review_target.py` | The review chain a review walks: `related_chain_numbers` |
 | `core/change_checkout.py` | Checking a change out to work on it: the **local version** (`find_local_versions`), what to do with it (`plan_checkout`, `choose_action`), and doing it (`apply_checkout`, rebasing the commits above an updated version) |
 | `core/review_checkout.py` | Review checkout: the review worktree, `change-<number>` branches, staging, review state, walking a chain |
-| `core/comment_chains.py` | Inline comment threads, resolved and unresolved |
+| `core/comment_chains.py` | Inline comment threads, resolved and unresolved; how a chain is named (`ChainRef`: id, id prefix, `PATH:LINE`, URL) |
 | `core/suggested_edits.py` | A comment's suggested edits: Gerrit fix suggestions and ```` ```suggestion ```` blocks of its text, in one shape |
 | `core/comment_anchor.py` | Where a new comment sits: the LOCATION grammar, its check against a commit, the anchored text |
 | `core/anchor_mapping.py` | Re-anchoring: where a local comment's anchor lands on another version of its file, moved or outdated (ADR-0011) |

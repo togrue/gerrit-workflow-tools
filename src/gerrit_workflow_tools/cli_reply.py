@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import unquote
 
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
@@ -25,6 +23,7 @@ from gerrit_workflow_tools.cli_common import (
 )
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.changeish import as_change_only
+from gerrit_workflow_tools.core.comment_chains import ChainRef, ChainRefError, find_chains, parse_chain_ref
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeAmbiguousError
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, ChainMatch, DraftReply, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
@@ -44,7 +43,6 @@ from gerrit_workflow_tools.render.comments import (
 from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
 
-_COMMENT_URL_RE = re.compile(r"/comment/([^/?#]+)")
 _DONE = "Done"
 
 
@@ -70,7 +68,8 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="*",
         metavar="CHAIN",
         help=(
-            "Any comment id in the chain (from ger show --json), or the comment's Gerrit URL. "
+            "The chain to answer: PATH:LINE (the one open chain there), any comment id in it or a unique "
+            "prefix of one (ger show --json), or the comment's Gerrit URL. "
             "With --publish: the changes whose drafts to publish (default: the local stack): a change "
             "number, commit, Change-Id, change:<n>, triplet or URL."
         ),
@@ -141,19 +140,17 @@ def _message_and_flag(p: argparse.ArgumentParser, args: argparse.Namespace) -> t
     return message, False if args.resolve else True if args.unresolve else None
 
 
-def _chain_ref(p: argparse.ArgumentParser, args: argparse.Namespace) -> tuple[str, str | None]:
-    """``(comment id, changeish or None)`` from CHAIN and ``--change``."""
+def _chain_ref(p: argparse.ArgumentParser, args: argparse.Namespace) -> tuple[ChainRef, str | None]:
+    """The chain CHAIN names, and the changeish to look on (``--change``, or a comment URL's change)."""
     if len(args.targets) != 1:
         p.error("name exactly one CHAIN to answer (or use --publish)")
-    chain = args.targets[0]
-    if "://" not in chain:
-        return chain.strip(), args.change
-    match = _COMMENT_URL_RE.search(chain)
-    if match is None:
-        p.error(f"not a comment URL (no /comment/<id>/): {chain}")
-    if args.change is not None:
+    try:
+        ref = parse_chain_ref(args.targets[0])
+    except ChainRefError as error:
+        p.error(str(error))
+    if ref.url is not None and args.change is not None:
         p.error("a comment URL already names its change; drop --change")
-    return unquote(match.group(1)), chain
+    return ref, ref.url or args.change
 
 
 def _check_publish_args(p: argparse.ArgumentParser, args: argparse.Namespace) -> None:
@@ -195,17 +192,30 @@ def _gerrit_changes(
     return list(found.values()), (", ".join(revs) if revs else "the local stack" if stack else "HEAD")
 
 
+def _chain_line(match: ChainMatch) -> str:
+    """One chain for a list in an error: its id, where it is, its first words."""
+    words = first_line(match.chain.comments[0].message) if match.chain.comments else ""
+    words = words if len(words) <= 40 else f"{words[:39]}…"
+    return f"  {match.chain.root_id}  {chain_location(match.chain)}  {words}"
+
+
 def _find(
-    service: GerritService, cwd: Path, comment_id: str, *, change: str | None, branch: str | None
+    service: GerritService, cwd: Path, ref: ChainRef, *, change: str | None, branch: str | None
 ) -> tuple[ChainMatch, str | None]:
-    """The one chain holding *comment_id*, and the web URL of its change."""
+    """The one chain *ref* names, and the web URL of its change. Not one: say which there are."""
     changes, where = _gerrit_changes(service, cwd, [change] if change else [], branch=branch)
-    matches = service.comments.find_chain({c.key: c.freshness for c in changes}, comment_id)
-    if not matches:
-        raise ChangeResolutionError(f"no comment {comment_id} on {where} ({len(changes)} change(s) on Gerrit searched)")
+    chains = service.comments.chains_on({c.key: c.freshness for c in changes})
+    matches = find_chains(chains, ref, lambda match: match.chain)
     if len(matches) > 1:
-        names = ", ".join(m.change for m in matches)
-        raise ChangeAmbiguousError(f"comment {comment_id} is on several changes: {names}", alternatives=[])
+        listed = "\n".join(_chain_line(m) for m in matches)
+        raise ChangeAmbiguousError(
+            f"{ref.raw} names {len(matches)} comment chains; give one id:\n{listed}", alternatives=[]
+        )
+    if not matches:
+        open_chains = [m for m in chains if not m.chain.resolved]
+        listed = "\n".join(_chain_line(m) for m in open_chains)
+        hint = f"; open chains (id, place, first words):\n{listed}" if open_chains else "; it has no open chains"
+        raise ChangeResolutionError(f"no comment {ref.raw} on {where}{hint}")
     return matches[0], next(c.url for c in changes if c.key == matches[0].change)
 
 
@@ -332,12 +342,12 @@ def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> 
 def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
-    message, unresolved, comment_id, change = "", None, "", None
+    message, unresolved, ref, change = "", None, ChainRef(""), None
     if args.publish:
         _check_publish_args(p, args)
     else:
         message, unresolved = _message_and_flag(p, args)
-        comment_id, change = _chain_ref(p, args)
+        ref, change = _chain_ref(p, args)
     run = init_cli_runtime(args, gerrit=gerrit)
     cwd, settings = run.cwd, run.settings
     branch = args.branch or run.repo.working_branch
@@ -348,7 +358,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     service = run.gerrit
     if args.publish:
         return _publish(args, p, service, cwd, branch)
-    match, change_url = _find(service, cwd, comment_id, change=change, branch=branch)
+    match, change_url = _find(service, cwd, ref, change=change, branch=branch)
     url = gerrit_inline_comment_url(change_url, match.chain.root_id)
     if args.discard:
         removed = service.comments.discard_reply(match.change, match.chain)

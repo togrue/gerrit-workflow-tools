@@ -77,6 +77,8 @@ A change named by `--change` that has no local commit gets a Gerrit draft on its
 
 `--discard ID` deletes one of your comments by id: a note or local draft from the local store, else your Gerrit draft with that id on the target change. Its text is printed, so nothing is lost silently. An unknown id exits `3`.
 
+For `--edit` and `--discard`, `ID` may also be the comment's Gerrit URL, as `ger comment` and `ger reply` print it: the URL names the change too, so no `--change` is needed (giving both exits `2`). It is read as `ger reply` reads a `CHAIN` (`comment_chains.parse_chain_ref`).
+
 ---
 
 ## The local comment store

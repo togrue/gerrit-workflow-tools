@@ -17,6 +17,7 @@ from gerrit_workflow_tools.cli_common import (
     run_cli_command,
 )
 from gerrit_workflow_tools.core.comment_anchor import CommentLocation, LocationError
+from gerrit_workflow_tools.core.comment_chains import ChainRefError, parse_chain_ref
 from gerrit_workflow_tools.core.comment_target import (
     CommentTarget,
     local_target,
@@ -73,9 +74,14 @@ def _build_parser() -> argparse.ArgumentParser:
     local.add_argument("--note", action="store_true", help="A note: local and private, never uploaded.")
     local.add_argument("--local", action="store_true", help="A local draft, even on a patchset Gerrit has.")
     p.add_argument(
-        "--edit", metavar="ID", default=None, help="Give your unpublished comment with this id a new message instead."
+        "--edit",
+        metavar="ID",
+        default=None,
+        help="Give your unpublished comment with this id (or its Gerrit URL) a new message instead.",
     )
-    p.add_argument("--discard", metavar="ID", default=None, help="Delete your comment with this id instead.")
+    p.add_argument(
+        "--discard", metavar="ID", default=None, help="Delete your comment with this id (or its Gerrit URL) instead."
+    )
     add_output_format_args(p)
     add_color_args(p)
     add_verbose_and_debug_log_args(p, debug_log_help="Log Gerrit calls to stderr.")
@@ -100,6 +106,19 @@ def _check_args(p: argparse.ArgumentParser, args: argparse.Namespace) -> str:
     if not message:
         p.error("the comment is empty")
     return message
+
+
+def _comment_id(p: argparse.ArgumentParser, args: argparse.Namespace, raw: str) -> str:
+    """The id ``--edit`` / ``--discard`` names; a comment URL names its change too (``args.change``)."""
+    try:
+        ref = parse_chain_ref(raw)
+    except ChainRefError as error:
+        p.error(str(error))
+    if ref.url is not None:
+        if args.change is not None:
+            p.error("a comment URL already names its change; drop --change")
+        args.change = ref.url
+    return ref.comment_id.strip()
 
 
 def _located(p: argparse.ArgumentParser, cwd: Path, raw: str, target: CommentTarget) -> CommentLocation:
@@ -191,16 +210,17 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     p = _build_parser()
     args = p.parse_args(argv)
     message = _check_args(p, args)
+    by_id = args.discard if args.discard is not None else args.edit
+    comment_id = _comment_id(p, args, by_id) if by_id is not None else ""
     run = init_cli_runtime(args, gerrit=gerrit)
     cwd = run.cwd
-    by_id = args.discard is not None or args.edit is not None
-    service = _service(run, local_only=args.note or args.local or by_id)
+    service = _service(run, local_only=args.note or args.local or by_id is not None)
     target = _target(args, run, service)
     if args.discard is not None:
-        _discard(cwd, service, target, args.discard.strip(), as_json=args.json_)
+        _discard(cwd, service, target, comment_id, as_json=args.json_)
         return int(ExitCode.OK)
     if args.edit is not None:
-        _edit(cwd, service, target, args.edit.strip(), message, resolved=args.resolved, as_json=args.json_)
+        _edit(cwd, service, target, comment_id, message, resolved=args.resolved, as_json=args.json_)
         return int(ExitCode.OK)
     location = _located(p, cwd, args.location, target)
     written = write_comment(

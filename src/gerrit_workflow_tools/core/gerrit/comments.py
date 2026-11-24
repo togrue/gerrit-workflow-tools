@@ -8,7 +8,13 @@ from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Any, Literal
 
-from gerrit_workflow_tools.core.comment_chains import CommentSelection, collect_comment_chains
+from gerrit_workflow_tools.core.comment_chains import (
+    ChainRef,
+    CommentSelection,
+    collect_comment_chains,
+    find_chains,
+    parse_chain_ref,
+)
 from gerrit_workflow_tools.core.gerrit.cache_rows import comments_context_key
 from gerrit_workflow_tools.core.gerrit.rest import parallel_map, printable_path
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
@@ -133,21 +139,23 @@ class CommentApi:
         narrowed = {key: [chain for chain in drafted(chains) if ids(chain) & wanted] for key, chains in pending.items()}
         return {key: chains for key, chains in narrowed.items() if chains}
 
-    def find_chain(self, changes: Mapping[str, str | None], comment_id: str) -> list[ChainMatch]:
-        """Chains that contain *comment_id*, among *changes* (REST key -> freshness token).
+    def chains_on(self, changes: Mapping[str, str | None]) -> list[ChainMatch]:
+        """Every chain, published and draft, on *changes* (REST key -> freshness token)."""
 
-        Any comment in a chain names the whole chain, root or reply, published or draft.
-        """
-
-        def matches(change: str, freshness: str | None) -> list[ChainMatch]:
-            chains = self._chains(change, change_updated=freshness, comments="all")
+        def on(change: str, freshness: str | None) -> list[ChainMatch]:
             return [
-                ChainMatch(change, chain) for chain in chains if any(c.comment_id == comment_id for c in chain.comments)
+                ChainMatch(change, chain) for chain in self._chains(change, change_updated=freshness, comments="all")
             ]
 
         keyed = {self._key(change): freshness for change, freshness in changes.items()}
-        found = parallel_map(partial(matches, change, freshness) for change, freshness in keyed.items())
+        found = parallel_map(partial(on, change, freshness) for change, freshness in keyed.items())
         return [match for per_change in found for match in per_change]
+
+    def find_chain(self, changes: Mapping[str, str | None], ref: str | ChainRef) -> list[ChainMatch]:
+        """Chains among *changes* that *ref* names (:func:`find_chains`): any comment id in a chain
+        names the whole chain, root or reply, published or draft; so do ``PATH:LINE`` and an id prefix."""
+        wanted = parse_chain_ref(ref) if isinstance(ref, str) else ref
+        return find_chains(self.chains_on(changes), wanted, lambda match: match.chain)
 
     def save_reply(self, change_id: str, chain: CommentChain, message: str, *, unresolved: bool | None) -> DraftReply:
         """Write your reply to *chain* as a draft; update the draft you already have there.

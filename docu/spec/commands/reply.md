@@ -66,12 +66,16 @@ ger reply --publish [REV ...] [--only ID ... | --keep-drafts] [--vote LABEL=N ..
 
 | Form | Example | Change comes from |
 |------|---------|-------------------|
+| Place | `calc/trig.py:7` | `--change`, else a lookup across the local stack |
 | Comment id | `9f8e7d6c` | `--change`, else a lookup across the local stack |
+| Comment id prefix | `a1b2` (four characters at least) | `--change`, else a lookup across the local stack |
 | Comment URL | `https://host/c/proj/+/123/comment/a1b2c3d4_5e6f7a8b/` | The URL. Giving `--change` as well exits `2` |
 
-Any comment in the chain names the whole chain, whether it is the root or a reply. That way an id copied from any line of `ger show --json` works.
+Any comment in the chain names the whole chain, whether it is the root or a reply. That way an id copied from any line of `ger show --json` works. A full id is matched first. `PATH:LINE` is the place `ger show` prints a chain at: it names the unresolved chain there (a range chain covers its lines), or, with none unresolved, the chains there; `PATH` may be the tail of the chain's path. Last, a unique prefix of any comment id. The matching is `comment_chains.find_chains`, shared with `ger serve`.
 
-**Without `--change`**, the id is looked up in the comment chains of every change in the local stack (`upstream_tip..HEAD`). These are the same comment fetches `ger show --stack` makes, served from the follow-up cache. Writes go to the stack's triplet, never to a bare Change-Id that could name several branches. On a detached HEAD with no branch to take a stack from, only HEAD's change is searched. One match is used. No match exits `3`, and the message names the changes it searched. More than one match exits `4` and lists the candidates. Comment ids are UUIDs, so this should only happen on corrupt data.
+When nothing matches, the error lists the open chains it searched, one per line (`  <root id>  <path:line>  <first words>`), so the next attempt can name one. When a place or prefix names several chains, it exits `4` and lists them the same way.
+
+**Without `--change`**, the id is looked up in the comment chains of every change in the local stack (`upstream_tip..HEAD`). These are the same comment fetches `ger show --stack` makes, served from the follow-up cache. Writes go to the stack's triplet, never to a bare Change-Id that could name several branches. On a detached HEAD with no branch to take a stack from, only HEAD's change is searched. One match is used. No match exits `3`, and the message names where it searched and lists the open chains there. More than one match exits `4` and lists the candidates.
 
 **With `--change`**, the full changeish grammar applies ([change-and-commit-identifiers.md](../change-and-commit-identifiers.md)), and only that change is searched. This is how you reply on a change that is not in your local stack, for example one you are reviewing.
 
@@ -252,7 +256,7 @@ Shared table: [exit-codes.md](../exit-codes.md). No new codes.
 | `1` | Publish declined, or non-TTY without `-y` |
 | `2` | Empty message, conflicting flags, `CHAIN` with `--publish`, a comment URL together with `--change`, no `CHAIN` without a TTY, publishing while `GER_NO_PUBLISH` is set |
 | `3` | Chain or change not found; `--discard` with no draft |
-| `4` | Comment id matched more than one change; ambiguous changeish |
+| `4` | `CHAIN` named more than one chain (a place with several open chains, a shared prefix); ambiguous changeish |
 | `5` | Gerrit rejected a write, including a partial publish |
 | `6` | Missing `ger.webUrl` or credentials |
 

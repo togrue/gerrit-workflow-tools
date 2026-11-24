@@ -190,3 +190,25 @@ def test_edit_gives_your_draft_a_new_message_where_it_is(stack_repo: Path, monke
     assert _comment(stack_repo, store, ["--edit", "nope", "-m", "x"], monkeypatch)[0] == ExitCode.NOT_FOUND
     assert _comment(stack_repo, store, ["--edit", draft_id], monkeypatch)[0] == ExitCode.USAGE
     assert _comment(stack_repo, store, ["--edit", draft_id, "d.txt:1", "-m", "x"], monkeypatch)[0] == ExitCode.USAGE
+
+
+def test_edit_and_discard_take_the_comment_url_and_its_change(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The URL ger prints names the comment and its change, not HEAD's: no --change needed."""
+    git("config", "ger.webUrl", WEB, cwd=stack_repo)
+    details = build_details_by_change_id(stack_rows_mb_to_head(stack_repo))
+    store, first = ChangeStore(details, web_base=WEB), next(iter(details))
+    number = store.get_change(first)["_number"]
+    _code, out, _ = _comment(
+        stack_repo, store, ["a.txt:1", "-m", "why?", "--change", str(number), "--json"], monkeypatch
+    )
+    draft_id = json_stdout(out)["id"]
+    url = f"{WEB}/c/testproj/+/{number}/comment/{draft_id}/"
+    code, out, err = _comment(stack_repo, store, ["--edit", url, "-m", "why so?"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert 'updated draft on a.txt:1: "why so?"' in out
+    code, out, err = _comment(stack_repo, store, ["--discard", url], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert _drafts(store, first) == []
+    assert _comment(stack_repo, store, ["--discard", url, "--change", str(number)], monkeypatch)[0] == ExitCode.USAGE

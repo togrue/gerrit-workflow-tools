@@ -6,7 +6,11 @@ resolving ``in_reply_to`` links to find thread roots.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+import re
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
+from urllib.parse import unquote
 
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, ContextLine, InlineComment
 from gerrit_workflow_tools.core.suggested_edits import suggested_edits_from_raw
@@ -208,3 +212,80 @@ def collect_comment_chains(
     """
 
     return select_chains(build_comment_chains(file_map, drafts), comments)
+
+
+_COMMENT_URL_RE = re.compile(r"/comment/([^/?#]+)")
+_PATH_LINE_RE = re.compile(r"^(?P<path>.+):(?P<line>\d+)$")
+_MIN_ID_PREFIX = 4
+_T = TypeVar("_T")
+
+
+@dataclass(frozen=True)
+class ChainRef:
+    """How a comment chain is named: any comment id in it or a unique prefix of one, ``PATH:LINE``
+    (the one unresolved chain there), or the comment's Gerrit URL, which also names its change."""
+
+    raw: str
+    url: str | None = None
+    """The comment URL as given: a changeish for its change."""
+    path: str | None = None
+    line: int | None = None
+
+    @property
+    def comment_id(self) -> str:
+        """The id or id prefix it names; for ``PATH:LINE``, the text as written."""
+        if self.url is not None:
+            match = _COMMENT_URL_RE.search(self.url)
+            return unquote(match.group(1)) if match else ""
+        return self.raw
+
+
+class ChainRefError(ValueError):
+    """Text that cannot name a comment chain: a URL without ``/comment/<id>``."""
+
+
+def parse_chain_ref(raw: str) -> ChainRef:
+    """Read *raw* as a :class:`ChainRef`. Raises :class:`ChainRefError` for a URL that names no comment."""
+    text = raw.strip()
+    if "://" in text:
+        if _COMMENT_URL_RE.search(text) is None:
+            raise ChainRefError(f"not a comment URL (no /comment/<id>/): {text}")
+        return ChainRef(text, url=text)
+    located = _PATH_LINE_RE.fullmatch(text)
+    if located:
+        return ChainRef(text, path=located["path"], line=int(located["line"]))
+    return ChainRef(text)
+
+
+def _sits_at(chain: CommentChain, path: str, line: int) -> bool:
+    on_path = chain.path == path or chain.path.endswith(f"/{path}")
+    if not on_path or chain.line is None:
+        return False
+    return (chain.start_line or chain.line) <= line <= chain.line
+
+
+def find_chains(candidates: Sequence[_T], ref: ChainRef, chain_of: Callable[[_T], CommentChain]) -> list[_T]:
+    """The *candidates* whose chain *ref* names, each candidate holding one chain (``chain_of``).
+
+    A comment id names its chain exactly. Else ``PATH:LINE`` names the unresolved chains there, or
+    every chain there when none is unresolved. Else a unique id prefix (four characters at
+    least): the chains holding a comment whose id starts with it. More than one is for the
+    caller to report as ambiguous; none, as not found.
+    """
+    wanted = ref.comment_id
+
+    def ids(item: _T) -> list[str]:
+        return [c.comment_id for c in chain_of(item).comments if c.comment_id]
+
+    exact = [item for item in candidates if wanted in ids(item)]
+    if exact or ref.url is not None:
+        return exact
+    if ref.path is not None and ref.line is not None:
+        path, line = ref.path, ref.line
+        there = [item for item in candidates if _sits_at(chain_of(item), path, line)]
+        open_there = [item for item in there if not chain_of(item).resolved]
+        if there:
+            return open_there or there
+    if len(wanted) < _MIN_ID_PREFIX:
+        return []
+    return [item for item in candidates if any(i.startswith(wanted) for i in ids(item))]

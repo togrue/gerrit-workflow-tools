@@ -154,11 +154,41 @@ def test_comment_url_names_its_change(web_stack_repo: Path, monkeypatch: pytest.
     assert len(_drafts(store, key)) == 1
 
 
-def test_unknown_comment_is_not_found(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unknown_comment_is_not_found_and_the_open_chains_are_listed(
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     store, _key = _store_with_open_chain(web_stack_repo)
     code, _out, err = run_cli(web_stack_repo, reply_main, ["nope", "--done"], monkeypatch, gerrit=store)
     assert code == ExitCode.NOT_FOUND
-    assert "no comment nope on the local stack" in err
+    assert "no comment nope on the local stack; open chains (id, place, first words):" in err
+    assert "  c-root  f.py:3  rename n" in err
+
+
+@pytest.mark.parametrize("chain", ["f.py:3", "c-ro", "c-root"])
+def test_a_chain_is_named_by_its_place_an_id_prefix_or_its_id(
+    chain: str, web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What ger show prints (PATH:LINE) and what a human can type (a short id) both answer the chain."""
+    store, key = _store_with_open_chain(web_stack_repo)
+    code, _out, err = run_cli(web_stack_repo, reply_main, [chain, "--done"], monkeypatch, gerrit=store)
+    assert code == ExitCode.OK, err
+    (draft,) = _drafts(store, key)
+    assert draft["in_reply_to"] == "c-root"
+
+
+def test_a_place_with_two_open_chains_is_ambiguous_and_lists_them(
+    web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, key = _store_with_open_chain(web_stack_repo)
+    other = _comment("d-root", "and this", unresolved=True, updated="2024-01-01 11:00:00")
+    resolved = _comment("e-root", "old news", unresolved=False, updated="2024-01-01 09:00:00")
+    root = _comment("c-root", "rename n", unresolved=True, updated="2024-01-01 10:00:00")
+    store.set_comments(key, {"f.py": [root, other, resolved]})
+    code, _out, err = run_cli(web_stack_repo, reply_main, ["f.py:3", "--done"], monkeypatch, gerrit=store)
+    assert code == ExitCode.AMBIGUOUS
+    assert "f.py:3 names 2 comment chains; give one id:" in err
+    assert "c-root  f.py:3  rename n" in err and "d-root  f.py:3  and this" in err and "e-root" not in err
+    assert _drafts(store, key) == []
 
 
 def test_discard_removes_your_draft(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
