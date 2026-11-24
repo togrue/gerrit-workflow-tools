@@ -37,7 +37,6 @@ def _build_parser() -> argparse.ArgumentParser:
     add_color_args(p)
     add_verbose_and_debug_log_args(
         p,
-        debug_log_help="Log resolution diagnostics to stderr.",
     )
     return p
 

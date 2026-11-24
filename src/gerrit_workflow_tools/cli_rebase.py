@@ -105,7 +105,6 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     add_verbose_and_debug_log_args(
         p,
-        debug_log_help="Log git commands and enricher steps to stderr.",
     )
     return p
 

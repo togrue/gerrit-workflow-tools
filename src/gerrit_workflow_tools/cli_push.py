@@ -121,7 +121,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     add_verbose_and_debug_log_args(
         parser,
-        debug_log_help="Log git commands and push steps to stderr.",
     )
     parser.add_argument(
         "until",

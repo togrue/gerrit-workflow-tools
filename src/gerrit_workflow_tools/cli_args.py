@@ -28,10 +28,7 @@ HELP_REFRESH = (
     "Ask Gerrit again instead of serving what the cache holds (its trust window), and refetch CI logs. "
     "Same as `ger --refresh <command>`."
 )
-HELP_DEBUG_LOG = (
-    "Log diagnostics to stderr (git commands, outcomes, resolved refs/URLs, decisions, Gerrit API "
-    "response bodies, and a high-level request timing summary)."
-)
+HELP_DEBUG_LOG = "Log diagnostics to stderr: git commands, Gerrit calls and responses, decisions, and their timing."
 
 
 def add_message_args(parser: argparse.ArgumentParser) -> argparse._ArgumentGroup:
@@ -147,6 +144,9 @@ def add_verbose_and_debug_log_args(
     ``-v`` does nothing, so it is accepted (scripts may pass it) but not advertised: no help
     line, no completion. With *verbose_count*, ``-v`` may be repeated (e.g. ``-vv``);
     ``args.verbose`` is an ``int`` (0 when omitted).
+
+    ``--debug-log`` says the same everywhere. *debug_log_help* is left for ``cli_review.py`` only,
+    until it drops it (``test_a_flag_means_one_thing`` tracks it); then it goes.
     """
     v_help = verbose_help or argparse.SUPPRESS
     parser.add_argument(

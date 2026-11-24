@@ -541,7 +541,7 @@ def test_a_flag_means_one_thing() -> None:
         "review --next": "the next change in the review chain, not the next edit-attention commit",
         # Debt: one concept, several definitions.
         "--branch": "backlog 4",
-        "--debug-log": "backlog 4",
+        "review --debug-log": "backlog 4",
         "--dry-run": "backlog 4",
         "--message": "backlog 4",
         "--patchset": "backlog 4",

@@ -46,7 +46,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Stop when stdin closes, so the service ends with the process that started it.",
     )
-    add_verbose_and_debug_log_args(p, debug_log_help="Log requests, git and Gerrit calls to stderr.")
+    add_verbose_and_debug_log_args(p)
     return p
 
 

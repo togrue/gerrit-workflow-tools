@@ -130,7 +130,6 @@ def _build_parser(*, prog: str, description: str, default_action: Literal["edit"
     ).description = "The new message for a reword, without an editor; a message without a Change-Id keeps the commit's."
     add_verbose_and_debug_log_args(
         p,
-        debug_log_help="Log git commands and rebase sequence editor steps to stderr.",
     )
     return p
 

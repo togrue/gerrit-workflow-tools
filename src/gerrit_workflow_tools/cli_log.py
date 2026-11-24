@@ -81,7 +81,6 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     add_verbose_and_debug_log_args(
         parser,
-        debug_log_help="Log git commands to stderr.",
         verbose_count=True,
         verbose_help=(
             "Add indented CI pipeline lines below each commit (``-vv`` also shows Change-Id). "

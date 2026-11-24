@@ -76,7 +76,6 @@ The status columns are those of ger log (see ger log --help).""",
     add_verbose_and_debug_log_args(
         p,
         verbose_help="Also print the last lines of each log after its findings.",
-        debug_log_help="Log Gerrit resolution and CI fetches to stderr.",
     )
     return p
 

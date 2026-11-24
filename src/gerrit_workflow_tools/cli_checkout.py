@@ -80,7 +80,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Answer the update question with yes, as --update does (GER_ASSUME_YES=1 too).",
     )
     add_color_args(p)
-    add_verbose_and_debug_log_args(p, debug_log_help="Log git and Gerrit calls to stderr.")
+    add_verbose_and_debug_log_args(p)
     return p
 
 

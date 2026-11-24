@@ -112,7 +112,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Bypass pre-commit and commit-msg hooks (passed through to git commit).",
     )
     add_output_format_args(p)
-    add_verbose_and_debug_log_args(p, debug_log_help="Log resolution steps to stderr.")
+    add_verbose_and_debug_log_args(p)
     return p
 
 

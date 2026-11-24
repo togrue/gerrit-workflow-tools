@@ -84,7 +84,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     add_output_format_args(p)
     add_color_args(p)
-    add_verbose_and_debug_log_args(p, debug_log_help="Log Gerrit calls to stderr.")
+    add_verbose_and_debug_log_args(p)
     return p
 
 
