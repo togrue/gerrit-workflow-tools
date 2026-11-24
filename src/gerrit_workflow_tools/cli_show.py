@@ -10,8 +10,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_args import (
+    add_branch_arg,
     add_color_args,
     add_output_format_args,
+    add_stack_arg,
     add_verbose_and_debug_log_args,
     changeish_help,
     output_format,
@@ -93,18 +95,9 @@ The status columns are those of ger log (see ger log --help).""",
         metavar="REV",
         help=changeish_help("A commit or change, or an A..B / A...B range of them (default: HEAD)"),
     )
-    p.add_argument(
-        "--stack",
-        action="store_true",
-        help="Include all commits in the local stack (upstream_tip..HEAD).",
-    )
+    add_stack_arg(p)
     add_attention_query_args(p)
-    p.add_argument(
-        "--branch",
-        metavar="NAME",
-        default=None,
-        help="Use the specified local branch for stack/upstream context (default: working branch).",
-    )
+    add_branch_arg(p)
     p.add_argument(
         "--comments",
         choices=COMMENT_SELECTIONS,

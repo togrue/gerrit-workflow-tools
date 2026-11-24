@@ -6,7 +6,12 @@ import argparse
 import logging
 import sys
 
-from gerrit_workflow_tools.cli_args import add_color_args, add_follow_merges_args, add_verbose_and_debug_log_args
+from gerrit_workflow_tools.cli_args import (
+    add_branch_arg,
+    add_color_args,
+    add_follow_merges_args,
+    add_verbose_and_debug_log_args,
+)
 from gerrit_workflow_tools.cli_attention import resolve_in_stack
 from gerrit_workflow_tools.cli_common import init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.cli_terminal import assume_yes, confirm, stdin_is_terminal
@@ -41,12 +46,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
             "cannot be used with --yes)."
         ),
     )
-    parser.add_argument(
-        "--branch",
-        metavar="NAME",
-        default=None,
-        help="Push the specified local branch instead of the current branch.",
-    )
+    add_branch_arg(parser)
     parser.add_argument("--dry-run", action="store_true", help="Print actions only; do not push.")
     parser.add_argument(
         "--no-rebase-check",

@@ -31,6 +31,21 @@ HELP_REFRESH = (
 HELP_DEBUG_LOG = "Log diagnostics to stderr: git commands, Gerrit calls and responses, decisions, and their timing."
 
 
+HELP_BRANCH = "Work on local branch NAME: its local stack and upstream (default: the working branch)."
+
+
+def add_branch_arg(parser: argparse.ArgumentParser | argparse._ArgumentGroup) -> None:
+    """Register ``--branch NAME``: the local branch whose **local stack** the command works on."""
+    parser.add_argument("--branch", metavar="NAME", default=None, help=HELP_BRANCH)
+
+
+def add_stack_arg(parser: argparse.ArgumentParser | argparse._ArgumentGroup) -> None:
+    """Register ``--stack``: every commit of the **local stack**, instead of the revisions named."""
+    parser.add_argument(
+        "--stack", action="store_true", help="Include all commits in the local stack (upstream_tip..HEAD)."
+    )
+
+
 def add_message_args(parser: argparse.ArgumentParser) -> argparse._ArgumentGroup:
     """Register ``-m``/``--message`` (repeatable) and ``-F``/``--file`` as a "message" group.
 

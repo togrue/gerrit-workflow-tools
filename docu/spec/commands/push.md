@@ -42,7 +42,7 @@ When `REV` is given, it is resolved as a **changeish** the way `ger edit`, `ger 
 | `--ready` | Magic ref `%ready`: mark the changes ready for review again, the way back from `--wip`. Mutually exclusive with `--wip`. The interactive options line cannot say it, so a typed line keeps it unless the line asks for `wip`; the status line shows `WIP: no (--ready)` |
 | `--private` | Magic ref `%private` |
 | `--no-private` | Magic ref `%remove-private`: make the changes public again, the way back from `--private`. Mutually exclusive with `--private`. As with `--ready`, a typed options line keeps it unless the line asks for `private`; the status line shows `Private: no (--no-private)` |
-| `--branch NAME` | Push a different local branch than current |
+| `--branch NAME` | Work on local branch NAME: its local stack and upstream (default: the working branch) |
 | `--no-rebase-check` | Skip fetch/linear-on-remote check (`ger.pushRemotePolicy`) |
 | `--color`, `--debug-log` | Standard CLI helpers. `-v` is accepted and does nothing, so it is not shown in help or completion |
 | `--follow-merges` | Include merge commits in stack range |

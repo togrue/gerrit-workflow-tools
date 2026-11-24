@@ -8,6 +8,7 @@ import sys
 from dataclasses import dataclass
 
 from gerrit_workflow_tools.cli_args import (
+    add_branch_arg,
     add_change_option,
     add_color_args,
     add_output_format_args,
@@ -71,12 +72,7 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     add_change_option(p, "Look for CHAIN on this change only (default: every change in the local stack).")
-    p.add_argument(
-        "--branch",
-        metavar="NAME",
-        default=None,
-        help="Local branch whose stack to search (default: working branch).",
-    )
+    add_branch_arg(p)
     text = p.add_argument_group("message")
     text.add_argument("-m", "--message", action="append", default=None, help="Message; repeat for paragraphs.")
     text.add_argument("-F", "--file", metavar="FILE", default=None, help="Read the message from FILE ('-': stdin).")

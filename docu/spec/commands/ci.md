@@ -26,7 +26,7 @@ Targets resolve exactly as in [`ger show`](show.md): each `CHANGEISH` is a chang
 | Option | Description |
 |--------|-------------|
 | `--stack` | Include the local stack (`upstream_tip..HEAD`); prompts for a missing upstream like `ger show --stack` |
-| `--branch NAME` | Branch for stack/upstream context (default: working branch) |
+| `--branch NAME` | Work on local branch NAME: its local stack and upstream (default: the working branch) |
 | `-v` / `--verbose` | After each link's findings, print the last 60 log lines |
 | `--full` | After each link's findings, print the whole log (for searching the raw text) |
 | `--warnings` | List the warnings below the errors, not just their count. JSON always has them |

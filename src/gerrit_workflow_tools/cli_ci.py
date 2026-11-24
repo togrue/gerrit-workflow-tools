@@ -7,8 +7,10 @@ import json
 import sys
 
 from gerrit_workflow_tools.cli_args import (
+    add_branch_arg,
     add_color_args,
     add_output_format_args,
+    add_stack_arg,
     add_verbose_and_debug_log_args,
     output_format,
 )
@@ -54,13 +56,8 @@ The status columns are those of ger log (see ger log --help).""",
         metavar="CHANGEISH",
         help="Changeish, or A..B / A...B range with changeish endpoints (default: HEAD unless --stack).",
     )
-    p.add_argument("--stack", action="store_true", help="Include all commits in the local stack (upstream_tip..HEAD).")
-    p.add_argument(
-        "--branch",
-        metavar="NAME",
-        default=None,
-        help="Use the specified local branch for stack/upstream context (default: working branch).",
-    )
+    add_stack_arg(p)
+    add_branch_arg(p)
     p.add_argument(
         "--full",
         action="store_true",
