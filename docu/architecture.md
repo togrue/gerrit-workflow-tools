@@ -259,7 +259,7 @@ sequenceDiagram
 
 **Shared pipeline:** `GerritService.fetch_gerrit_data` is the local-stack enrichment entry point used by `ger log`, `ger show`, and the rebase enricher. `GerritService.fetch_review_chains` is the query-driven sibling used by `ger inbox` — it must not resolve stack context.
 
-**Annotated stack:** `core/annotated_stack.py` composes the local stack, the overlay and attention. `annotate(rows, service=…, cwd=…)` serves callers that already have rows (`ger log`, `ger show`, the rebase enricher); `load_annotated_stack(run, rev_range, …)` serves callers that start from a revision range (`ger log`, `ger edit --first-attention-commit`); with none it loads the run's local stack, the **rebasing stack** while a rebase is underway (`AnnotatedStack.rebase`), which `ger log` and `GET /stack` both show. It neither prints nor prompts.
+**Annotated stack:** `core/annotated_stack.py` composes the local stack, the overlay and attention. `annotate(rows, service=…, cwd=…)` serves callers that already have rows (`ger log`, `ger show`, the rebase enricher); `load_annotated_stack(run, rev_range, …)` serves callers that start from a revision range (`ger log`, `ger edit --first-attention-commit`); with none it loads the run's local stack, the **rebasing stack** while a rebase is underway (`AnnotatedStack.rebase`), which `ger log` and `GET /stack` both show. `load_stack_overview` is that answer whole (`StackOverview`): the annotated stack with the ready boundary's verdict (`blocked`, `ready`), the rebase underway and how far the upstream moved, each computed once; `ger log` and `GET /stack` both take it. It neither prints nor prompts.
 
 **Fetch ≠ identity:** the overlay batch-loads with compact `project:P (change:I1 OR …)` queries (no `branch:` in the query). Client-side aliasing binds each requested target-branch triplet to the matching `ChangeInfo` row; other-branch duplicates stay cached under their own ids and are ignored for overlay status. Multi-branch **resolution notes** for `ger log` are derived from the local cache, with no per-Change-Id re-query.
 
@@ -497,7 +497,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/stack.py` | Local stack: `Commit` (the one commit-row type), `get_stack_snapshot` (the one stack loader), `read_commit_rows`, `read_commit_meta`, `read_rewrite_rows`, ranges, merge-base |
 | `core/ready_calc.py` | Ready boundary and push range |
 | `core/ready_strategy.py` | Loading ready-boundary strategies from `.ger/ready/` |
-| `core/annotated_stack.py` | Annotated stack: local stack + Gerrit overlay + attention |
+| `core/annotated_stack.py` | Annotated stack: local stack + Gerrit overlay + attention; the stack overview `ger log` and `GET /stack` answer from (`load_stack_overview`) |
 | `core/gerrit_change_status.py` | `LogCommit`, patchset status |
 | `core/code_facts.py` | What the repository knows about the code an overlay compares (`CodeFacts`, `read_code_facts`: one git batch) and merged equivalence (`merged_equivalent`) |
 | `core/attention.py` | Attention: reason names, `determine_attention()`, `ci_failed()`, chain-blocking, edit attention |
@@ -648,7 +648,7 @@ contract between engine and shell is worth keeping clean.
 1. **Operations live in core.** Every user-visible operation is one core function from a
    request dataclass to a result dataclass. A command is *parse → call → render text*; an
    endpoint is *parse → call → serialise*. Neither composes an answer from several core
-   modules, as `server/views.py`, `cli_log.py` and `cli_show.py` do today.
+   modules, as `server/views.py` and `cli_show.py` still do today (`ger log` and `GET /stack` share `load_stack_overview`).
 2. **One contract, generated.** `--json` and HTTP serialise the same result types. The
    TypeScript types of `vscode/` are generated from them, not mirrored by hand. The contract
    is not presentation: the JSON builders (`render/show_json.py`, `render/review_json.py`,

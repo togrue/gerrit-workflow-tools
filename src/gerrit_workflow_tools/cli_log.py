@@ -19,14 +19,13 @@ from gerrit_workflow_tools.cli_common import (
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_notes import print_note
-from gerrit_workflow_tools.core.annotated_stack import load_annotated_stack, resolve_rev_range
+from gerrit_workflow_tools.core.annotated_stack import load_stack_overview, resolve_rev_range
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
-from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
-from gerrit_workflow_tools.core.rebase_state import RebaseProgress, RebaseStop, rebase_progress
+from gerrit_workflow_tools.core.rebase_state import RebaseProgress, RebaseStop
 from gerrit_workflow_tools.core.rebasing_stack import RebaseStep, RebasingStack
-from gerrit_workflow_tools.core.upstream_moved import UpstreamMoved, merged_same, upstream_moved
+from gerrit_workflow_tools.core.upstream_moved import UpstreamMoved
 from gerrit_workflow_tools.render.ai_text import stack_ai_lines
 from gerrit_workflow_tools.render.commit_row import (
     attention_column,
@@ -300,28 +299,20 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     if not require_stack_upstream(run, rev_range, interactive=may_prompt(args)):
         return int(ExitCode.REFUSED)
 
-    stack_view = load_annotated_stack(
+    overview = load_stack_overview(
         run, args.rev_range and rev_range, first_parent=not args.follow_merges, fetch_ci_pipelines=verbose_level >= 1
     )
+    stack_view, progress, moved, blocked = overview.view, overview.progress, overview.moved, overview.blocked
     if not stack_view.commits:
         print("(no commits in range)")
         return int(ExitCode.OK)
 
-    progress = (
-        stack_view.rebase.rebase
-        if stack_view.rebase
-        else rebase_progress(run.cwd, repo_dir=run.worktree.repository_dir)
-    )
     if progress is not None:
         print_note(_rebase_note(progress, stack_view.rebase))
-    # The default stack only, and not during a rebase: that one is finished first.
-    on_stack = args.rev_range is None and progress is None
-    merged, branch = merged_same(stack_view.commits), run.repo.working_branch
-    moved = upstream_moved(run.cwd, branch, stack_view.rows, settings=settings, merged=merged) if on_stack else None
     commits = stack_view.commits
     notes_by_sha = stack_view.notes_by_sha
     stack = run.repo.shown_stack
-    summary_highlighter = run_summary_highlighter(run, commits=stack_view.rows, project=stack.project)
+    summary_highlighter = run_summary_highlighter(run, blocked=blocked)
     for commit in commits:
         print_note(notes_by_sha.get(commit.sha))
 
@@ -354,19 +345,13 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
             raise stack_view.gerrit_unavailable
         return int(ExitCode.OK)
 
-    # The same boundary `ger push` stops at, so the two commands cannot disagree.
-    blocked = blocked_shas_for_stack(
-        run.repo.root,
-        project=stack.project,
-        commits=stack_view.rows,
-        stop_pattern=settings.stop_pattern,
-        settings=settings,
-        web_base=settings.gerrit_web_url,
-    )
     if out_fmt == "ai":
-        ready = len(commits) - len(blocked)
         lines = stack_ai_lines(
-            commits, project=stack.project, branch=stack.push_branch, ready=ready, next_lines=next_steps(commits, moved)
+            commits,
+            project=stack.project,
+            branch=stack.push_branch,
+            ready=overview.ready,
+            next_lines=next_steps(commits, moved),
         )
         print("\n".join(lines))
     else:
@@ -379,7 +364,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
             blocked=blocked,
         )
         print()
-        print(_format_summary_dashboard_line(_build_summary(commits), len(commits) - len(blocked), len(commits)))
+        print(_format_summary_dashboard_line(_build_summary(commits), overview.ready, len(commits)))
         for line in next_steps(commits, moved):
             print(color_text(line, ANSI_DIM))
     if stack_view.gerrit_unavailable is not None:

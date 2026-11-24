@@ -67,22 +67,34 @@ def build_summary_highlighter(
             web_base=web_base,
         )
 
-    warning_re: re.Pattern[str] | None = None
-    warning = settings.warning_pattern
-    if warning:
-        try:
-            warning_re = re.compile(warning, re.IGNORECASE)
-        except re.error:
-            warning_re = None
+    return SummaryHighlighter(blocked_shas=blocked, warning_re=_warning_re(settings))
 
-    return SummaryHighlighter(blocked_shas=blocked, warning_re=warning_re)
+
+def _warning_re(settings: Settings) -> re.Pattern[str] | None:
+    """``ger.warningPattern`` compiled, or ``None`` when unset or not a valid regex."""
+    warning = settings.warning_pattern
+    if not warning:
+        return None
+    try:
+        return re.compile(warning, re.IGNORECASE)
+    except re.error:
+        return None
 
 
 def run_summary_highlighter(
-    run: RunContext, *, commits: list[Commit] | None = None, project: str = ""
+    run: RunContext,
+    *,
+    commits: list[Commit] | None = None,
+    project: str = "",
+    blocked: frozenset[str] | None = None,
 ) -> SummaryHighlighter:
-    """The run's highlighter: its warning pattern, and the ready boundary of *commits* when given."""
+    """The run's highlighter: its warning pattern, and the ready boundary of *commits* when given.
+
+    *blocked* is that boundary's verdict when the caller already has it (``StackOverview.blocked``).
+    """
     settings = run.settings
+    if blocked is not None:
+        return SummaryHighlighter(blocked_shas=blocked, warning_re=_warning_re(settings))
     return build_summary_highlighter(
         settings,
         root=run.repo.root if commits else None,

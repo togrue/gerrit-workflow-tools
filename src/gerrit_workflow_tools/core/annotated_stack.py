@@ -10,6 +10,9 @@ Two entry points, because only some callers start from a revision range:
 * :func:`load_annotated_stack` resolves a range first, and additionally derives multi-branch
   resolution notes from the local cache.
 
+:func:`load_stack_overview` adds what ``ger log`` and ``GET /stack`` say about the stack as a
+whole, each computed once: the ready boundary, the rebase underway, how far the upstream moved.
+
 Nothing here prompts or prints. Revision ranges may reference an ``@{upstream}`` that is not
 configured; :func:`branches_needing_upstream` reports which branches those are, and the
 caller decides whether to prompt, fail, or carry on.
@@ -29,10 +32,12 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritUnavailableError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus, local_log_commit
 from gerrit_workflow_tools.core.git_run import GitError, git
-from gerrit_workflow_tools.core.rebase_state import rebase_progress
+from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
+from gerrit_workflow_tools.core.rebase_state import RebaseProgress, rebase_progress
 from gerrit_workflow_tools.core.rebasing_stack import RebasingStack, load_rebasing_stack
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, upstream_tracking_tip_and_display
+from gerrit_workflow_tools.core.upstream_moved import UpstreamMoved, merged_same, upstream_moved
 
 
 _UPSTREAM_TOKEN_RE = re.compile(r"(?P<branch>[^\s@]+)?@\{upstream\}")
@@ -249,3 +254,55 @@ def load_annotated_stack(
     if annotated.gerrit_unavailable is not None or not overlay:
         return annotated
     return replace(annotated, notes_by_sha=_multi_branch_notes(service, rows, cwd))
+
+
+@dataclass(frozen=True)
+class StackOverview:
+    """The **annotated stack** with what is said about it as a whole: ``ger log``'s answer, and ``GET /stack``'s."""
+
+    view: AnnotatedStack
+    blocked: frozenset[str]
+    """The commits the **ready boundary** holds back: it and everything above. Empty without commits."""
+    progress: RebaseProgress | None
+    """The rebase underway, or ``None``."""
+    moved: UpstreamMoved | None
+    """How far the upstream moved past the local stack; ``None`` for a revision range, during a
+    rebase (that one is finished first), or without an upstream."""
+
+    @property
+    def ready(self) -> int:
+        """How many commits ``ger push`` sends: those below the ready boundary."""
+        return len(self.view.commits) - len(self.blocked)
+
+
+def load_stack_overview(
+    run: RunContext,
+    rev_range: str | None = None,
+    *,
+    first_parent: bool = True,
+    fetch_ci_pipelines: bool = False,
+) -> StackOverview:
+    """:func:`load_annotated_stack`, with the ready boundary ``ger push`` stops at, the rebase and the upstream."""
+    view = load_annotated_stack(run, rev_range, first_parent=first_parent, fetch_ci_pipelines=fetch_ci_pipelines)
+    settings = run.settings
+    blocked = (
+        blocked_shas_for_stack(
+            run.repo.root,
+            project=run.repo.shown_stack.project,
+            commits=view.rows,
+            stop_pattern=settings.stop_pattern,
+            settings=settings,
+            web_base=settings.gerrit_web_url,
+        )
+        if view.rows
+        else frozenset[str]()
+    )
+    progress = view.rebase.rebase if view.rebase else rebase_progress(run.cwd, repo_dir=run.worktree.repository_dir)
+    on_stack = rev_range is None and progress is None
+    branch = run.repo.working_branch
+    moved = (
+        upstream_moved(run.cwd, branch, view.rows, settings=settings, merged=merged_same(view.commits))
+        if on_stack
+        else None
+    )
+    return StackOverview(view, blocked, progress, moved)

@@ -14,7 +14,7 @@ from typing import Any, TypeVar, cast
 from gerrit_workflow_tools import __version__
 from gerrit_workflow_tools.cli_common import failure_exit
 from gerrit_workflow_tools.core.agent_runbook import load_holds, plan_runbook
-from gerrit_workflow_tools.core.annotated_stack import load_annotated_stack
+from gerrit_workflow_tools.core.annotated_stack import load_stack_overview
 from gerrit_workflow_tools.core.attention import Attention, commit_needs_edit_attention
 from gerrit_workflow_tools.core.ci_content import introduced_fingerprints
 from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS
@@ -26,8 +26,7 @@ from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_s
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.inbox import RebaseHeadline, load_inbox, pick_headline, project_scope, section_summary
 from gerrit_workflow_tools.core.push_checks import push_blocked
-from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
-from gerrit_workflow_tools.core.rebase_state import rebase_progress, rebase_underway
+from gerrit_workflow_tools.core.rebase_state import rebase_underway
 from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_conflicts
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import find_review
@@ -40,7 +39,6 @@ from gerrit_workflow_tools.core.stack import (
     rewrite_base,
 )
 from gerrit_workflow_tools.core.upstream import branch_has_upstream, upstream_choice
-from gerrit_workflow_tools.core.upstream_moved import merged_same, upstream_moved
 from gerrit_workflow_tools.render.agent_runbook import runbook_json
 from gerrit_workflow_tools.render.review_json import chain_json, headline_json, iso_utc, review_state_json
 from gerrit_workflow_tools.render.show_json import (
@@ -94,23 +92,11 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
 
 def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline | None]:
     """:func:`stack`, and the rebase underway as the headline it makes: ``None`` without one."""
-    cwd, settings = ctx.cwd, ctx.settings
-    view = load_annotated_stack(ctx.run, None, fetch_ci_pipelines=req.flag("pipelines"))
+    cwd = ctx.cwd
+    overview = load_stack_overview(ctx.run, fetch_ci_pipelines=req.flag("pipelines"))
+    view, blocked, progress = overview.view, overview.blocked, overview.progress
     context = ctx.run.repo.shown_stack
-    blocked = (
-        blocked_shas_for_stack(
-            ctx.run.repo.root,
-            project=context.project,
-            commits=view.rows,
-            stop_pattern=settings.stop_pattern,
-            settings=settings,
-            web_base=settings.gerrit_web_url,
-        )
-        if view.rows
-        else frozenset()
-    )
     head = commit_sha_or_none(cwd, "HEAD")
-    progress = view.rebase.rebase if view.rebase else rebase_progress(cwd, repo_dir=ctx.run.worktree.repository_dir)
     steps = rebase_steps(view)
     merges = merge_commits(cwd, [c.sha for c in view.commits])
     pinned = pinned_below([c.sha for c in view.commits], merges)
@@ -132,10 +118,6 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
         for index, c in enumerate(view.commits)
     ]
     underway = rebase_underway(ctx.run.worktree.repository_dir)
-    # During a rebase that one is finished first: nothing is said about rebasing onto the upstream.
-    branch = ctx.run.repo.working_branch
-    merged = merged_same(view.commits)
-    moved = None if underway else upstream_moved(cwd, branch, view.rows, settings=settings, merged=merged)
     stopped_at = next((c for c, step in zip(view.commits, steps, strict=True) if step == "current"), None)
     rebase = RebaseHeadline(progress.stop, stopped_at) if progress else None
     answer = {
@@ -143,7 +125,7 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
         "head": head,
         "rebase_in_progress": underway,
         "rebase": rebase_json(view, progress),
-        "upstream": upstream_json(moved),
+        "upstream": upstream_json(overview.moved),
         "push_blocked": _push_blocked_json(ctx),
         "stack": {
             "project": context.project,
@@ -152,7 +134,7 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
         },
         "summary": {
             "commits": len(commits),
-            "ready": len(commits) - len(blocked),
+            "ready": overview.ready,
             "attention": sum(1 for c in view.commits if c.attention_reasons),
             "needs_edit": sum(1 for c in view.commits if commit_needs_edit_attention(c)),
             "not_on_gerrit": sum(1 for c in view.commits if _NOT_ON_GERRIT.intersection(c.attention_reasons)),

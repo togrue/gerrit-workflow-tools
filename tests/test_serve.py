@@ -131,6 +131,35 @@ def test_stack_is_the_annotated_stack_with_the_ready_boundary(stack_repo: Path) 
     assert [c["code_change"] for c in stack["commits"]] == [None] * 4, "only a commit ahead of Gerrit has one"
 
 
+def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Both answer from one stack overview: the keys each has today, and the same commits and boundary."""
+    store, _keys, rows = _gerrit(stack_repo)
+    code, out, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+    log = json_stdout(out)
+    stack = _get(GerApi(stack_repo, gerrit=store), "/stack")
+    assert code == ExitCode.OK
+    assert list(log) == ["stack", "rebase", "upstream", "commits"]
+    assert list(stack) == [
+        *("branch", "head", "rebase_in_progress", "rebase", "upstream", "push_blocked", "stack", "summary", "commits")
+    ]
+    assert list(stack["summary"]) == ["commits", "ready", "attention", "needs_edit", "not_on_gerrit"]
+    shared = [
+        *("sha", "change_id", "summary", "pushed", "patchset_status", "verified", "code_review"),
+        *("comments_unresolved", "ci_failures", "ci_links", "ci_pipelines", "gerrit_url", "number"),
+        *("last_pushed_votes", "code_change", "submittable", "votes", "reviewers", "work_in_progress"),
+        *("private", "attention_reasons", "severity", "change_status", "merged_equivalent"),
+    ]
+    assert list(log["commits"][0]) == [*shared, "abandoned", "rebase"]
+    assert list(stack["commits"][0]) == [
+        *shared,
+        *("short_sha", "abandoned", "diverged", "merge", "pinned", "rebase", "updated", "is_head", "held_back"),
+        "needs_edit",
+    ]
+    assert (log["stack"], log["upstream"], log["rebase"]) == (stack["stack"], stack["upstream"], stack["rebase"])
+    assert [c["sha"] for c in log["commits"]] == [c["sha"] for c in stack["commits"]] == [r.sha for r in rows]
+    assert [c["held_back"] for c in stack["commits"]] == [False, False, True, True]
+
+
 def test_stack_says_how_far_the_upstream_moved_and_what_rebasing_onto_it_would_meet(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
