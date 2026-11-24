@@ -11,13 +11,14 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain
+from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit
 from gerrit_workflow_tools.core.gerrit_patchset import resolve_change
 from gerrit_workflow_tools.core.review_checkout import ReviewState, ReviewUsageError, chain_numbers, find_review
 from gerrit_workflow_tools.core.usage import Refusal, UsageError
@@ -30,6 +31,19 @@ def related_chain_numbers(service: GerritService, key: str, patch_set: int | str
         return chain_numbers(service.rest.get_related(key, patch_set))
     except GerritApiError:
         return []
+
+
+DraftsPublishedBy = Literal["push", "vote"]
+
+
+def drafts_published_by(commit: LogCommit, *, is_local: bool, me: int | None) -> DraftsPublishedBy | None:
+    """What publishes your drafts on *commit*'s change: ``push`` for your own commit of the local stack
+    (``ger push`` publishes the drafts on the changes it sends), else ``vote`` (``ger review --vote``,
+    ``ger reply --publish``). ``None`` when it is not on Gerrit: nothing there to publish.
+    """
+    if not commit.pushed:
+        return None
+    return "push" if is_local and me is not None and commit.owner_account_id == me else "vote"
 
 
 @dataclass(frozen=True)

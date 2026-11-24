@@ -381,6 +381,12 @@ Each commit also says what a new comment on it becomes by default, in `new_comme
 when Gerrit has that very commit as a patchset (or the change is only on Gerrit), else
 `local-draft` — never pushed, or rewritten here since. A `note` is always possible.
 
+Each commit says whose change it is and what publishes your drafts on it: `own` (you own the
+change; `null` when it is not on Gerrit or Gerrit will not say who you are) and
+`drafts_published_by`: `push` for your own commit of the local stack (`ger push` publishes the
+drafts on the changes it sends), `vote` for any other change on Gerrit (`ger review --vote`,
+`POST /vote`), `null` when it is not on Gerrit.
+
 | Parameter | Meaning |
 |-----------|---------|
 | `rev` | A changeish. Repeatable. |

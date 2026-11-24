@@ -30,7 +30,7 @@ from gerrit_workflow_tools.core.rebase_state import rebase_underway
 from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_conflicts
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import find_review
-from gerrit_workflow_tools.core.review_target import related_chain_numbers
+from gerrit_workflow_tools.core.review_target import drafts_published_by, related_chain_numbers
 from gerrit_workflow_tools.core.stack import (
     get_stack_snapshot,
     merge_commits,
@@ -301,6 +301,7 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
     is_chain = req.flag("ci") and (req.flag("stack") or req.flag("chain"))
     introduced = introduced_fingerprints([item.ci_verdict_contents for item in shown]) if is_chain else None
     holds = load_holds(ctx.cwd)
+    me = ctx.service.self_account_id() if any(item.commit.pushed for item in shown) else None
     commits = []
     for index, item in enumerate(shown):
         payload = commit_json_payload(
@@ -312,6 +313,8 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
         )
         payload["short_sha"] = item.commit.short_sha
         payload["new_comment"] = new_comment_state(item.commit, is_local=item.target.is_local_commit)
+        payload["own"] = item.commit.owner_account_id == me if item.commit.pushed and me is not None else None
+        payload["drafts_published_by"] = drafts_published_by(item.commit, is_local=item.target.is_local_commit, me=me)
         served_chains = cast(list[dict[str, Any]], payload["comment_chains"])
         for chain_payload, chain in zip(served_chains, item.chains, strict=True):
             chain_payload["held"] = chain_payload["root_id"] in holds

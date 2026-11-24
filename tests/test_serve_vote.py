@@ -180,3 +180,20 @@ def test_a_vote_the_change_does_not_take_and_the_publish_guard_are_refused(
     with pytest.raises(UsageError, match="publishing is blocked: GER_NO_PUBLISH"):
         _post(api, {"change": 102, "votes": {"Code-Review": 1}, "patch_sets": {"102": 1}})
     assert store.calls_to("publish_drafts") == []
+
+
+def test_show_says_someone_elses_change_is_published_by_a_vote(stack_repo: Path) -> None:
+    store, _keys = _bobs(stack_repo)
+    bobs = _show(GerApi(stack_repo, gerrit=store), "change:102")
+    assert (bobs["own"], bobs["drafts_published_by"]) == (False, "vote")
+
+
+def test_show_says_your_own_commit_is_published_by_your_push(stack_repo: Path) -> None:
+    mine, _keys, _rows = _gerrit(stack_repo)
+    local = _show(GerApi(stack_repo, gerrit=mine), "HEAD")
+    assert (local["own"], local["drafts_published_by"]) == (True, "push")
+
+
+def _show(api: GerApi, rev: str) -> dict[str, Any]:
+    [commit] = api.handle("GET", f"{V1}/show", {"rev": [rev]})["commits"]
+    return commit
