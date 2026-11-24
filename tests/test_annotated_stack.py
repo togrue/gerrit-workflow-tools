@@ -23,7 +23,7 @@ from tests.cli_gerrit_mocks import build_details_by_change_id, change_info_for_s
 
 
 def _configure(repo: Path) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
+    git("config", "ger.webUrl", "https://g.example", cwd=repo)
 
 
 def _service(repo: Path, store: ChangeStore) -> GerritService:

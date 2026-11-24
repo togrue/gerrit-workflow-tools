@@ -31,7 +31,7 @@ Unit tests (`pytest` with default config) **ignore** this directory; run integra
 
 ### Writing a test here
 
-Build on `integration_helpers.py` (`prepare_topic_repo`, `push_sibling_changes`, `ger_push`, `ger_json`, `log_commits_by_change_id`, `current_patchset`, `assert_gerrit_agrees` and `related_changes` for a pushed chain, REST actions such as `submit_change`, `publish_web_edit`, `rebase_change_on_gerrit`), `repo_builder.py` and `gerrit_seed.py` rather than copying setup. Every clone gets its own `gerrit.webUrl`, user and token from the fixtures; never rely on global git configuration. A module-scoped fixture that runs `ger` must set its own `XDG_CACHE_HOME` (the per-test one does not exist yet), as `test_14_cross_branch_siblings.py` and `test_17_gerrit_failures.py` do. After changing state on Gerrit over REST, call `force_zero_change_trust_window(monkeypatch)` so `ger` does not answer from its cache.
+Build on `integration_helpers.py` (`prepare_topic_repo`, `push_sibling_changes`, `ger_push`, `ger_json`, `log_commits_by_change_id`, `current_patchset`, `assert_gerrit_agrees` and `related_changes` for a pushed chain, REST actions such as `submit_change`, `publish_web_edit`, `rebase_change_on_gerrit`), `repo_builder.py` and `gerrit_seed.py` rather than copying setup. Every clone gets its own `ger.webUrl`, user and token from the fixtures; never rely on global git configuration. A module-scoped fixture that runs `ger` must set its own `XDG_CACHE_HOME` (the per-test one does not exist yet), as `test_14_cross_branch_siblings.py` and `test_17_gerrit_failures.py` do. After changing state on Gerrit over REST, call `force_zero_change_trust_window(monkeypatch)` so `ger` does not answer from its cache.
 
 ## Prerequisites
 

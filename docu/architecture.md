@@ -133,7 +133,7 @@ per-host Gerrit cache, so they give the same answers. Details:
 Enforced by [`tests/test_architecture.py`](../tests/test_architecture.py), which runs in the pre-commit hook:
 
 - `core/` imports only `core/`, and never prints or prompts.
-- The substrate (`core/git_run.py`, `core/config.py`, `core/config_write.py`, `core/call_trace.py`, `core/changeish.py`, `core/change_id.py`) imports nothing above itself.
+- The substrate (`core/git_run.py`, `core/config.py`, `core/config_keys.py`, `core/config_write.py`, `core/call_trace.py`, `core/changeish.py`, `core/change_id.py`) imports nothing above itself.
 - `render/` does not import `cli_*`.
 - A command module is imported only by `cli_ger.py` and `bash_completion_generator.py`.
 - No module imports another module's `_private` name.
@@ -190,7 +190,7 @@ flowchart LR
   git --> repo
 ```
 
-`config.py` holds **settings only**. A command builds one immutable `Settings` at its entry point (`init_cli_runtime`, or `Settings.from_cwd(cwd)`) from a single `git config --list --show-scope`, then passes it down; there is no process-wide cache and nothing to invalidate. Values answer with `get`; the winning file scope answers with `scope` (`local` / `global` / …). Keys like `gerrit.webUrl`, `gerrit.remote`, `branch.*.gerritTarget`, and `gerrit.stopPattern` drive downstream behavior. See [Configuration.md](Configuration.md).
+`config.py` holds **settings only**. A command builds one immutable `Settings` at its entry point (`init_cli_runtime`, or `Settings.from_cwd(cwd)`) from a single `git config --list --show-scope`, then passes it down; there is no process-wide cache and nothing to invalidate. Values answer with `get`; the winning file scope answers with `scope` (`local` / `global` / …). A key that moved to `ger.*` falls back to its old name (`config_keys.LEGACY_KEYS`) and logs one deprecation warning per key. Keys like `ger.webUrl`, `ger.remote`, `branch.*.gerTarget`, and `ger.stopPattern` drive downstream behavior. See [Configuration.md](Configuration.md).
 
 `git_state.py` answers what the repository currently looks like — branch, HEAD, upstream, and the Gerrit push destination; `rebase_state.py`, one step above it, answers whether a rebase is underway and what that means for the next command. It may read settings; `config.py` never queries repository state, so the dependency runs one way.
 
@@ -382,7 +382,7 @@ flowchart LR
 | `HttpGerritRest` | Talks to a real Gerrit over HTTP; credentials resolved at construction |
 | `ChangeStore` (`tests/change_store.py`) | Answers from ChangeInfo payloads, with stateful writes. Test-only — nothing in `src/` constructs one |
 
-Commands take a `gerrit` keyword argument and pass it to `init_cli_runtime`; the run context's `gerrit` is the command's one service, and core functions that ask Gerrit take the run. `RunContext.open` is the single construction path: the rebase enricher, a process of its own, opens its run the same way. The service builds its `HttpGerritRest` and opens its cache on first use, so work that never asks Gerrit (a purely local `resolve_stack_changeish`) never needs `gerrit.webUrl`. Deliberate exceptions: `cli_fetch_api.py` (GETs a raw path from the real server by purpose) and `reviewer_catalog.py` (background worker in the push prompt, [ADR-0006](adr/0006-push-prompt-gerrit-io-is-background.md)).
+Commands take a `gerrit` keyword argument and pass it to `init_cli_runtime`; the run context's `gerrit` is the command's one service, and core functions that ask Gerrit take the run. `RunContext.open` is the single construction path: the rebase enricher, a process of its own, opens its run the same way. The service builds its `HttpGerritRest` and opens its cache on first use, so work that never asks Gerrit (a purely local `resolve_stack_changeish`) never needs `ger.webUrl`. Deliberate exceptions: `cli_fetch_api.py` (GETs a raw path from the real server by purpose) and `reviewer_catalog.py` (background worker in the push prompt, [ADR-0006](adr/0006-push-prompt-gerrit-io-is-background.md)).
 
 ---
 
@@ -480,6 +480,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/usage.py` | `UsageError`: the command cannot run as asked (bad input, or a state it refuses to start from), exit `USAGE` |
 | `core/git_run.py` | Running git: the subprocess wrapper (`git`, `git_out`, `commit_sha_or_none`, `GitError`) |
 | `core/config.py` | `Settings`: one `git config --list --show-scope` snapshot (values + winning scope) |
+| `core/config_keys.py` | The git config keys ger owns: `ConfigScope`, how git spells a key, built-in defaults, and `LEGACY_KEYS` (the `gerrit.*` / `inbox.*` names before `ger.*`) |
 | `core/config_write.py` | Write helpers for branch / attention-cursor git config keys |
 | `core/config_form.py` | Editable settings catalog for `ger config`: sections, defaults, resolution |
 | `core/config_editor_file.py` | Temp-file key=value render/parse/diff for `ger config` |
@@ -534,7 +535,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/ci_http.py` | `CiHttp`: the HTTP seam CI content providers fetch through; `UrllibCiHttp`, CI credential headers |
 | `core/http_connect.py` | Opening connections to a host with several addresses: `connect` races them and remembers the one that answered, `urlopen` uses it and follows a redirect to another origin without the credentials |
 | `core/ger_registry.py` | The shared two-tier loader for `.ger/<domain>/` extension registries; the local tier only when trusted. Imports a registry and its helpers only from its `RegistrySource`, never from disk or bytecode |
-| `core/registry_trust.py` | Whether a project-local registry may run: `gerrit.scriptsDir` from uncloned config, or a trusted digest of its code (`record_trust`, `untrusted_local_registries`); `RegistrySource` (`read_registry_source`: a registry's sources, read once, what is hashed is what runs); `source_digest` |
+| `core/registry_trust.py` | Whether a project-local registry may run: `ger.scriptsDir` from uncloned config, or a trusted digest of its code (`record_trust`, `untrusted_local_registries`); `RegistrySource` (`read_registry_source`: a registry's sources, read once, what is hashed is what runs); `source_digest` |
 | `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes; `load_shown_commits` (overlay, comment chains and CI content per target; a change that waits on your review leads with that) |
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |
 | `core/commit_diff.py` | What one commit changed: `commit_diff` (files against the first parent), `diff_between` and `file_text` |

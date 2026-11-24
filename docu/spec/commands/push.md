@@ -4,9 +4,9 @@
 |--|--|
 | **Status** | Implemented |
 | **Module** | `cli_push.py` prompts and prints; `core/push.py` prepares, revises, and executes |
-| **Requires** | Gerrit mode: target resolution, Change-Ids; attribute preview / REST strategies need `gerrit.webUrl` + credentials |
+| **Requires** | Gerrit mode: target resolution, Change-Ids; attribute preview / REST strategies need `ger.webUrl` + credentials |
 
-Push the **ready prefix** of the local stack to Gerrit (`refs/for/<target>`), or run plain **`git push`** in **vanilla** mode when upstream is not on `gerrit.remote`.
+Push the **ready prefix** of the local stack to Gerrit (`refs/for/<target>`), or run plain **`git push`** in **vanilla** mode when upstream is not on `ger.remote`.
 
 ---
 
@@ -43,7 +43,7 @@ When `REV` is given, it is resolved as a **changeish** the way `ger edit`, `ger 
 | `--private` | Magic ref `%private` |
 | `--no-private` | Magic ref `%remove-private`: make the changes public again, the way back from `--private`. Mutually exclusive with `--private`. As with `--ready`, a typed options line keeps it unless the line asks for `private`; the status line shows `Private: no (--no-private)` |
 | `--branch NAME` | Push a different local branch than current |
-| `--no-rebase-check` | Skip fetch/linear-on-remote check (`gerrit.push.remotePolicy`) |
+| `--no-rebase-check` | Skip fetch/linear-on-remote check (`ger.pushRemotePolicy`) |
 | `--color`, `--debug-log` | Standard CLI helpers. `-v` is accepted and does nothing, so it is not shown in help or completion |
 | `--follow-merges` | Include merge commits in stack range |
 
@@ -53,10 +53,10 @@ When `REV` is given, it is resolved as a **changeish** the way `ger edit`, `ger 
 
 | Mode | When | Behavior |
 |------|------|----------|
-| **Gerrit** | `branch.*.gerritTarget` set, **or** upstream remote == `gerrit.remote` | Ready range (stop pattern + Change-Id) → `git push <tip>:refs/for/<target>[%options]` |
+| **Gerrit** | `branch.*.gerTarget` set, **or** upstream remote == `ger.remote` | Ready range (stop pattern + Change-Id) → `git push <tip>:refs/for/<target>[%options]` |
 | **Vanilla** | Upstream on another remote | Plain `git push`; Gerrit-specific flags ignored (warning printed) |
 
-No upstream and no `gerritTarget` → error; set upstream (e.g. `git branch --set-upstream-to=<remote>/<branch>`) or `branch.<name>.gerritTarget`. On a TTY, every command that needs the upstream asks for it ([SPEC § A missing upstream](../../SPEC.md#a-missing-upstream)); `ger push` asks before its preview, and not under `--dry-run` or `-y`.
+No upstream and no `gerTarget` → error; set upstream (e.g. `git branch --set-upstream-to=<remote>/<branch>`) or `branch.<name>.gerTarget`. On a TTY, every command that needs the upstream asks for it ([SPEC § A missing upstream](../../SPEC.md#a-missing-upstream)); `ger push` asks before its preview, and not under `--dry-run` or `-y`.
 
 ---
 
@@ -96,7 +96,7 @@ Interactive push line (`push_input_prompt`) can set strategy keywords; see modul
 
 The interactive prompt (the confirmation line, `-i`, and confirm-loop `r`) persists recent lines under
 `$XDG_CACHE_HOME/ger/<host>/push_options_history/<project-safe>.txt`, keyed by
-`gerrit.webUrl` host and `gerrit.project` (see
+`ger.webUrl` host and `ger.project` (see
 [ADR-0005](../../adr/0005-push-options-history-is-host-and-project-scoped.md)).
 
 - Cap: 20 entries per (host, project), newest first, exact-line dedupe.
@@ -113,7 +113,7 @@ The interactive prompt (the confirmation line, `-i`, and confirm-loop `r`) persi
 - Missing host/project identity: no read/write of history.
 - Initial line: empty for the confirmation line. `-i` and confirm-loop `r` start with
   `r=…` from `--reviewers`, else `.ger/reviewers` / host registry, else
-  `branch.*.gerritReviewers`.
+  `branch.*.gerReviewers`.
 
 ---
 
@@ -124,7 +124,7 @@ The interactive prompt (the confirmation line, `-i`, and confirm-loop `r`) persi
 0. No rebase underway: the branch ref moves only when a rebase finishes, so mid-rebase `ger push` would send the stack as it was before the rebase. It refuses with exit `2` (`USAGE`) — `--dry-run` too, since the push it previews would not run — and says to finish (`git rebase --continue`) or `git rebase --abort` first. A `git am` underway refuses the same way, with its own reason: the branch moves with each patch it applies, so a push would send it half applied (`git am --continue` or `git am --abort`).
 1. Target ref resolves locally (fetch if needed).
 2. Ready boundary: stop pattern / ready strategy (unless `--all`), tightened by the first missing/malformed/duplicate Change-Id (always, including with `--all`).
-3. Optional: `gerrit.push.remotePolicy` linearity check (unless `--no-rebase-check`).
+3. Optional: `ger.pushRemotePolicy` linearity check (unless `--no-rebase-check`).
 4. With credentials, what Gerrit already holds: abandoned changes, commits that already are the current patchset or an older one (outdated, not sent), and your drafts on the pushed changes (one `has:draft` query, then a drafts GET only where it found some). Best effort: a failed lookup finds nothing.
 5. No **diverged** change: when a commit is new to its open change (`newer`) and that change's current patchset is a commit this repository never had, the push would replace somebody's upload with a commit not built on it. It refuses (exit `1`) and names the commit, the change and patchset, and the two ways on: merge it in with `ger checkout change:<n> --update`, or `--force`. Nor a commit sent above an **outdated** one: Gerrit would chain its new patch set on the old patch set below, not on the current one (the relation chain shows it NOT CURRENT, and the stack lacks the web edit). It refuses the same way: `` error: <sha> would be built on patchset 1 of change N; Gerrit has patchset 2. Take it first (`ger checkout change:N --update`), or push anyway with --force ``. With `--force` the tip goes up as asked, and the outdated commit below still gets no patch set.
 
@@ -134,9 +134,9 @@ The interactive prompt (the confirmation line, `-i`, and confirm-loop `r`) persi
 
 Prints: pushable commits, ready-boundary notice when a blocking commit exists (`Stopped at commit … because …`), confirm status line, and `git push …`. Prompt, on a terminal: the push-options input line (`Push options (Enter pushes, Up: history, Ctrl-C cancels):`). Enter on the empty line pushes with the options the status line shows (no reviewers unless `--reviewers`/config gave some); a typed line (`r=alice,bob topic=x wip …`, with completion and history) sets them first; Ctrl-C / Ctrl-D cancels (exit `0`). Without a terminal on stdout, the question is `Do you want to push these commits? [Y/n/r]:`. A push that sends no commit and only sets options over REST asks `Set these on Gerrit? [Y/n/r]:` instead (see above). No prompt with `--dry-run` / `-y` / non-TTY without `-y`, nor when the push would change nothing on Gerrit (see above).
 
-**Drafts.** When you have drafts on changes the push updates, the push-options input line is the same one, and the `publish-drafts` keyword decides: with it the push adds Gerrit's `publish-comments` push option, without it the drafts stay. The line starts as `publish-drafts` and the status line shows `Drafts publish N`, so Enter pushes and publishes; delete the keyword (or type `-publish-drafts`) to keep them. With `gerrit.pushPublishDrafts = false` the line starts empty and the status line shows `Drafts keep N`; `--publish-comments` starts it with `publish-drafts` either way. Without a terminal on stdout the question is `Push and publish N draft(s)? [Y/n/p/r]` instead: yes publishes, `p` pushes and keeps them. Whenever the push does not publish, it sends `no-publish-comments`, so an account preference that publishes on push cannot publish them behind your back. Drafts on commits Gerrit already has (no new patchset) cannot be published by a push; the preview names them (`drafts on … stay drafts`). Details: [reply.md](reply.md#publishing-with-ger-push).
+**Drafts.** When you have drafts on changes the push updates, the push-options input line is the same one, and the `publish-drafts` keyword decides: with it the push adds Gerrit's `publish-comments` push option, without it the drafts stay. The line starts as `publish-drafts` and the status line shows `Drafts publish N`, so Enter pushes and publishes; delete the keyword (or type `-publish-drafts`) to keep them. With `ger.pushPublishDrafts = false` the line starts empty and the status line shows `Drafts keep N`; `--publish-comments` starts it with `publish-drafts` either way. Without a terminal on stdout the question is `Push and publish N draft(s)? [Y/n/p/r]` instead: yes publishes, `p` pushes and keeps them. Whenever the push does not publish, it sends `no-publish-comments`, so an account preference that publishes on push cannot publish them behind your back. Drafts on commits Gerrit already has (no new patchset) cannot be published by a push; the preview names them (`drafts on … stay drafts`). Details: [reply.md](reply.md#publishing-with-ger-push).
 
-After success, optional `lastPush/<branch>` marker (`gerrit.lastPushedBranch`, default on).
+After success, optional `lastPush/<branch>` marker (`ger.lastPushedBranch`, default on).
 
 ---
 
@@ -159,17 +159,17 @@ After success, optional `lastPush/<branch>` marker (`gerrit.lastPushedBranch`, d
 
 | Key | Effect |
 |-----|--------|
-| `gerrit.remote` | Gerrit remote name (default `origin`) |
-| `gerrit.pushShowAttributes` | Reviewer/wip/private preview |
-| `gerrit.lastPushedBranch` | Local `lastPush/<branch>` after push |
-| `gerrit.push.remotePolicy` | Remote tip linearity |
-| `branch.*.gerritTarget`, `gerritReviewers` | Destination & default reviewers |
-| `gerrit.stopPattern` | Ready boundary (single regex; see [Configuration.md](../../Configuration.md)) |
+| `ger.remote` | Gerrit remote name (default `origin`) |
+| `ger.pushShowAttributes` | Reviewer/wip/private preview |
+| `ger.lastPushedBranch` | Local `lastPush/<branch>` after push |
+| `ger.pushRemotePolicy` | Remote tip linearity |
+| `branch.*.gerTarget`, `gerReviewers` | Destination & default reviewers |
+| `ger.stopPattern` | Ready boundary (single regex; see [Configuration.md](../../Configuration.md)) |
 
 ---
 
 ## See also
 
 - [change-and-commit-identifiers.md](../change-and-commit-identifiers.md) — changeish grammar and resolution contract
-- [Configuration.md](../../Configuration.md) — `branch.*.gerritTarget`, `gerritReviewers`
+- [Configuration.md](../../Configuration.md) — `branch.*.gerTarget`, `gerReviewers`
 - [`ger change-id`](sha-change-id.md#ger-change-id)

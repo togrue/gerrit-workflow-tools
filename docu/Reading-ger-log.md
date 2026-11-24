@@ -38,7 +38,7 @@ i9j0k1l2 p  v-1 cr+1 com  # Handle timeout                 # build failed, 1 unr
 m3n4o5p6 -       com      # WIP: experiment                # not-pushed
 ```
 
-When the terminal supports OSC 8 hyperlinks (`--hyperlinks auto`, or `--hyperlinks always`), a clickable `Open in gerrit` appears at the end of the primary line. The label is short enough to keep on by default. Without hyperlinks, the raw address appears only with `--url` or `gerrit.logShowUrl`. JSON still includes the full `gerrit_url`. Use `--hyperlinks never` to keep a copyable URL (with `--url`) or to omit the link.
+When the terminal supports OSC 8 hyperlinks (`--hyperlinks auto`, or `--hyperlinks always`), a clickable `Open in gerrit` appears at the end of the primary line. The label is short enough to keep on by default. Without hyperlinks, the raw address appears only with `--url` or `ger.logShowUrl`. JSON still includes the full `gerrit_url`. Use `--hyperlinks never` to keep a copyable URL (with `--url`) or to omit the link.
 
 With `--show-change-id` (or `-vv`), the full Change-Id appears on an indented continuation line below the commit — never truncated, and never on the primary line.
 
@@ -135,8 +135,8 @@ These correspond to `attention_reasons` in `--json` output (e.g. `missing-change
 
 When color is enabled, commit subjects may be highlighted:
 
-- **Stop pattern** (`gerrit.stopPattern`) — marks the ready-boundary tail (commits excluded from default push)
-- **Warning pattern** (`gerrit.warningPattern`) — flags WIP-like or single-word subjects
+- **Stop pattern** (`ger.stopPattern`) — marks the ready-boundary tail (commits excluded from default push)
+- **Warning pattern** (`ger.warningPattern`) — flags WIP-like or single-word subjects
 
 Abandoned changes show a struck-through subject.
 

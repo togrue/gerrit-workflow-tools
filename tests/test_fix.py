@@ -96,7 +96,7 @@ def test_ger_fix_numeric_change_uses_gerrit_revision(web_stack_repo: Path, monke
 
 
 def test_ger_fix_change_id_needs_no_gerrit_config(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A Change-Id is matched against the local stack, so gerrit.webUrl is irrelevant (ADR-0003).
+    """A Change-Id is matched against the local stack, so ger.webUrl is irrelevant (ADR-0003).
 
     It used to be a CONFIG error: resolution went through Gerrit even though the answer was
     always a local commit."""
@@ -104,7 +104,7 @@ def test_ger_fix_change_id_needs_no_gerrit_config(stack_repo: Path, monkeypatch:
     code, _out, err = run_cli(stack_repo, ger_fix_main, [cid], monkeypatch)
     assert code == ExitCode.NOT_FOUND
     assert "no commit in the local stack has that Change-Id" in err
-    assert "gerrit.webUrl" not in err
+    assert "ger.webUrl" not in err
 
 
 def test_ger_fix_change_not_on_stack_is_an_error(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -215,7 +215,7 @@ def test_fix_hint_folds_the_fixup_and_ger_edit_never_folds_it_behind_your_back(
     from gerrit_workflow_tools.cli_edit import main as edit_main
     from gerrit_workflow_tools.cli_rebase import main as rebase_main
 
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    git("config", "ger.webUrl", "https://g.example", cwd=stack_repo)
     git("config", "rebase.autosquash", "true", cwd=stack_repo)
     monkeypatch.setenv("GIT_EDITOR", "true")
     target = git_out("log", "-1", "--format=%s", "HEAD~2", cwd=stack_repo)

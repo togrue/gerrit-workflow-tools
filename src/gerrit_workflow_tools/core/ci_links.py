@@ -1,6 +1,6 @@
 """CI failure names and transformed build links for ``ger log``.
 
-Strategies live under ``<gerrit.scriptsDir>/ci/`` (default ``.ger/ci/``) or the
+Strategies live under ``<ger.scriptsDir>/ci/`` (default ``.ger/ci/``) or the
 per-host cache directory, and return :class:`CiLink` rows. When no registry
 matches, a built-in Jenkins message parser is used (see
 ``docu/gerrit-ci-strategies.md``). Core prefers Checks-derived links over

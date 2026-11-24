@@ -2,7 +2,7 @@
 
 Copy the domain directories you need into a Gerrit-backed clone as
 `.ger/<domain>/` (or into `~/.config/ger/<host>/<domain>/` for a
-host-wide install). Edit `STRATEGIES` keys to match `gerrit.project`.
+host-wide install). Edit `STRATEGIES` keys to match `ger.project`.
 
 Built-in Jenkins / Checks behaviour needs **no** registry. Use these
 examples only when you customize link discovery or log parsing.

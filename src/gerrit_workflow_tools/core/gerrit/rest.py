@@ -303,9 +303,9 @@ def resolve_gerrit_web_base(settings: Settings) -> str:
     """
     Gerrit HTTPS base for the REST API and web links.
 
-    Requires ``gerrit.webUrl`` in git config (no inference from remotes). Every REST call
+    Requires ``ger.webUrl`` in git config (no inference from remotes). Every REST call
     carries Basic-auth credentials, so a non-``https`` URL is refused unless
-    ``gerrit.allowInsecureHttp`` is set.
+    ``ger.allowInsecureHttp`` is set.
     """
     override = settings.gerrit_web_url
     if override:
@@ -313,15 +313,15 @@ def resolve_gerrit_web_base(settings: Settings) -> str:
         scheme = urlsplit(base).scheme.lower()
         if scheme != "https" and not (scheme == "http" and settings.gerrit_allow_insecure_http):
             raise ConfigError(
-                f"gerrit.webUrl must use https:// (got {base!r}): credentials go with every request. "
+                f"ger.webUrl must use https:// (got {base!r}): credentials go with every request. "
                 "For a local test Gerrit on plain http, opt in with "
-                "`git config gerrit.allowInsecureHttp true`"
+                "`git config ger.allowInsecureHttp true`"
             )
-        logger.debug("resolve_gerrit_web_base: gerrit.webUrl -> %s", base)
+        logger.debug("resolve_gerrit_web_base: ger.webUrl -> %s", base)
         return base
     raise ConfigError(
-        "gerrit.webUrl is not set; configure the Gerrit HTTPS base, e.g. "
-        "`git config gerrit.webUrl https://gerrit.example.com`"
+        "ger.webUrl is not set; configure the Gerrit HTTPS base, e.g. "
+        "`git config ger.webUrl https://gerrit.example.com`"
     )
 
 

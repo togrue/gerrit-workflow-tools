@@ -2,11 +2,11 @@
 
 Copy this directory into a consumer repo as ``.ger/ci/`` only when the
 built-in Jenkins console links / Jenkins content provider are not enough.
-Adjust ``STRATEGIES`` keys to match ``gerrit.project``.
+Adjust ``STRATEGIES`` keys to match ``ger.project``.
 
 Two independent seams live here:
 
-1. ``STRATEGIES`` — keyed by ``gerrit.project``; discover / rewrite **CI links**.
+1. ``STRATEGIES`` — keyed by ``ger.project``; discover / rewrite **CI links**.
 2. ``CONTENT_PROVIDERS`` — matched by URL host/pattern; fetch + parse **CI content**.
 
 See ``docu/gerrit-ci-strategies.md`` and ``docu/spec/ci-content.md``.
@@ -55,7 +55,7 @@ def extract_ci_links(
 
 
 STRATEGIES = {
-    # Exact ``gerrit.project`` keys. For many repos sharing one prefix, export
+    # Exact ``ger.project`` keys. For many repos sharing one prefix, export
     # ``get_strategy(project) -> callable | None`` instead (see Configuration.md).
     "example/project": extract_ci_links,
 }
@@ -67,7 +67,7 @@ STRATEGIES = {
 class BuildsProvider:
     """Fetch a plain-text log from ``builds.example.org`` and extract findings.
 
-    Matched by URL host, not by ``gerrit.project``. Tried before the built-in
+    Matched by URL host, not by ``ger.project``. Tried before the built-in
     Jenkins provider. Set ``ger.ciCredential.builds.example.org`` when the host
     needs auth (``user:token`` → HTTP Basic; anything else → Bearer).
     """

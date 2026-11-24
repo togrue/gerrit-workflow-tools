@@ -43,7 +43,7 @@ The branch a command works on: the checked-out branch; while a rebase is underwa
 _Avoid_: current branch (that is only the checked-out one)
 
 **Repository state**:
-What the repository looks like right now — branch, detached HEAD, in-progress rebase, upstream, remote-tracking refs, the Gerrit push destination. Answered by running git, not by reading **Settings**, though interpreting the answer may consult them (e.g. whether the upstream's remote is `gerrit.remote`). The dependency runs one way: **Settings** never asks about **repository state**.
+What the repository looks like right now — branch, detached HEAD, in-progress rebase, upstream, remote-tracking refs, the Gerrit push destination. Answered by running git, not by reading **Settings**, though interpreting the answer may consult them (e.g. whether the upstream's remote is `ger.remote`). The dependency runs one way: **Settings** never asks about **repository state**.
 _Avoid_: git config (for these), environment, context
 
 ### Identity
@@ -147,7 +147,7 @@ A useful URL for a failed build (often a Jenkins console), after a project-speci
 _Avoid_: build URL (unqualified), CI failure (the name alone)
 
 **CI strategy**:
-Callable (built-in or under ``.ger/ci/registry.py``, keyed by ``gerrit.project``) that turns Checks rows and/or change messages into **CI links**. Built-in parsing covers common Jenkins Gerrit trigger messages; override per project when needed.
+Callable (built-in or under ``.ger/ci/registry.py``, keyed by ``ger.project``) that turns Checks rows and/or change messages into **CI links**. Built-in parsing covers common Jenkins Gerrit trigger messages; override per project when needed.
 _Avoid_: CI plugin, hook script, config regex
 
 **CI content provider**:
@@ -173,7 +173,7 @@ Where `ger review` checks a change out: the **review worktree** (one reusable wo
 _Avoid_: review clone, sandbox
 
 **Local version**:
-A commit carrying a change's **Change-Id** on a local branch, above `gerrit.remote` — your copy of the change. It *is* a patchset (Gerrit has its commit), is *another* patchset (pushed once, since updated), or holds edits Gerrit never had. `ger checkout` switches to it, updates it, or refuses to overwrite it accordingly. A branch pushing to another **target branch** holds a cherry-pick, not a local version.
+A commit carrying a change's **Change-Id** on a local branch, above `ger.remote` — your copy of the change. It *is* a patchset (Gerrit has its commit), is *another* patchset (pushed once, since updated), or holds edits Gerrit never had. `ger checkout` switches to it, updates it, or refuses to overwrite it accordingly. A branch pushing to another **target branch** holds a cherry-pick, not a local version.
 _Avoid_: local copy, local change, working copy
 
 **Staged review**:
@@ -265,6 +265,6 @@ It has meant the HTTP object, the layered service, and the CLI caller. Resolutio
 >
 > **Maintainer:** That's an unbounded **trust window**, not a different Gerrit. Same **GerritRest**, cache served without the freshness probe.
 >
-> **Dev:** Last thing — I set `gerrit.stopPattern` halfway through a run and nothing changed.
+> **Dev:** Last thing — I set `ger.stopPattern` halfway through a run and nothing changed.
 >
 > **Maintainer:** **Settings** are a snapshot taken at the entry point. A write after that is invisible by design — otherwise a command could see two different configurations while it runs. Re-run it.

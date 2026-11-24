@@ -8,7 +8,7 @@
 
 Opens ger's git config settings in your git editor as a temporary `key=value` file (same shape as `git config --list`). Save and close to apply; delete all content to abort.
 
-Credentials (`gerrit.token`, `gerrit.password`) are not included — use [`ger setup`](setup.md).
+Credentials (`ger.token`, `ger.password`) are not included — use [`ger setup`](setup.md).
 
 ---
 
@@ -49,6 +49,8 @@ Editor: `GIT_EDITOR` → `core.editor` → `VISUAL` → `EDITOR` → `vi`. GUI e
 | Change a global value | `git config --global` |
 | Comment out a stored key | `git config --unset` at that scope |
 | Leave an active line unchanged (including an explicit stored default) | no write |
+
+Every write also removes the key's old name (`gerrit.*`, `inbox.*`, `branch.<name>.gerrit*`) at that scope, so a commented-out key does not come back under its old name. A key stored only under its old name shows its value and scope like any other.
 
 Empty file after the editor exits → abort (`REFUSED`). Parse errors → usage exit `2` with line numbers. Every catalog key must appear exactly once (active or commented).
 

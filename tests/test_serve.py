@@ -1007,7 +1007,7 @@ def test_a_checkout_without_gerrit_settings_answers_config(tmp_path: Path) -> No
         GerApi(tmp_path).handle("GET", f"{V1}/overview")
     status, body = failure_response(raised.value)
     assert (status, body["error"]["code"]) == (500, "CONFIG")
-    assert "gerrit.webUrl" in body["error"]["message"]
+    assert "ger.webUrl" in body["error"]["message"]
 
 
 # --- Upstream and new comments -----------------------------------------------------

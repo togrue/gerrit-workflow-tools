@@ -7,7 +7,7 @@ and/or **change messages** posted by CI bots.
 ## Built-in behaviour
 
 When no `.ger/ci/registry.py` (or global cache-dir registry) matches
-`gerrit.project`, **ger** uses a built-in strategy that:
+`ger.project`, **ger** uses a built-in strategy that:
 
 1. Reads failed **Checks** rows and rewrites their `url` fields to `…/console`.
 2. If Checks produce no links, scans change messages for Jenkins **Build Failed**
@@ -40,7 +40,7 @@ strategies that follow the same shape get this for free. Do not call
 | Custom URL shape or non-Jenkins CI | Add `.ger/ci/registry.py` (see below) |
 
 Registry paths and tier resolution: [Configuration.md](Configuration.md#extension-scripts-ger-and-configger).
-Use `STRATEGIES` keyed by exact `gerrit.project`. For prefix matching across many
+Use `STRATEGIES` keyed by exact `ger.project`. For prefix matching across many
 repos, `get_strategy(project)` is also supported (one factory, same signature).
 
 Copy [`example/hooks/ci/`](../example/hooks/ci/) only when you need customization —
@@ -86,7 +86,7 @@ Parsing helpers in `gerrit_workflow_tools.core.gerrit_message_parsing`:
 
 Match your bot's format with regex or structured `tag` values, then map to the
 pipeline URL your team uses. The registry runs only for matching
-`gerrit.project` keys.
+`ger.project` keys.
 
 ---
 
@@ -95,7 +95,7 @@ pipeline URL your team uses. The registry runs only for matching
 **CI links** stop at the URL. [`ger ci`](spec/commands/ci.md) and `ger show --ci` go one hop
 further: a **CI content provider** fetches what the link points at and extracts **CI findings**
 (design: [spec/ci-content.md](spec/ci-content.md)). Providers are matched by URL host/pattern,
-not by `gerrit.project`, so they live beside link strategies in the same `registry.py`:
+not by `ger.project`, so they live beside link strategies in the same `registry.py`:
 
 ```python
 from gerrit_workflow_tools.core.ci_content import CiFetched

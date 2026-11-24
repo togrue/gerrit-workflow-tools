@@ -4,7 +4,7 @@
 |--|--|
 | **Status** | **First slice** — the endpoints below; no push, vote or publish over HTTP. Gerrit's event stream is followed when it can be |
 | **Module** | `src/gerrit_workflow_tools/cli_serve.py`, `src/gerrit_workflow_tools/server/` |
-| **Requires** | A git worktree, `gerrit.webUrl`, credentials |
+| **Requires** | A git worktree, `ger.webUrl`, credentials |
 | **Client** | The VS Code extension in [`vscode/`](../../../vscode/README.md) |
 
 A local HTTP service over the same core the commands use, so an editor can show review state
@@ -38,7 +38,7 @@ When it cannot serve, that line is the reason instead, in the shape of a request
 ```
 
 A client tells these from a crash (no JSON line at all) without reading stderr. A missing
-`gerrit.webUrl` is not one of them: the service starts, and its requests fail with `CONFIG`
+`ger.webUrl` is not one of them: the service starts, and its requests fail with `CONFIG`
 until it is set (`ger setup`).
 
 | Option | Meaning |
@@ -81,9 +81,9 @@ service behaves exactly as without it: same answers, same Gerrit calls, no faile
 **Configuration** ([Configuration.md](../../Configuration.md#ger-serve--gereventstream)):
 `ger.eventStream` is `auto` (the default), `on` or `off`. `ger.eventStreamHost`,
 `ger.eventStreamPort` and `ger.eventStreamUser` override where it connects. Otherwise: the
-`gerrit.remote` URL when it is an ssh URL (`ssh://user@host:29418/…`, `user@host:…`; without
-a port, ssh's own config decides), else the host of `gerrit.webUrl` on port 29418 as
-`gerrit.user`. Nothing is asked over the network to find out. The settings are read once,
+`ger.remote` URL when it is an ssh URL (`ssh://user@host:29418/…`, `user@host:…`; without
+a port, ssh's own config decides), else the host of `ger.webUrl` on port 29418 as
+`ger.user`. Nothing is asked over the network to find out. The settings are read once,
 when the service starts.
 
 **ssh never prompts.** It runs with `-T`, `BatchMode=yes`, `ConnectTimeout=10` and
@@ -117,8 +117,8 @@ It is applied under the lock requests run under, so a request that read Gerrit j
 the event cannot store its answer after the event dropped it.
 
 Then the **activity sequence** goes up, when the event concerns this repository: the change
-was cached here, it is in the repository's Gerrit project or in `inbox.projects`, or it names
-you (owner, author, reviewer … with `gerrit.user` or the ssh user as username). It also goes
+was cached here, it is in the repository's Gerrit project or in `ger.inboxProjects`, or it names
+you (owner, author, reviewer … with `ger.user` or the ssh user as username). It also goes
 up when a branch of those projects moves (`ref-updated` on `refs/heads/…`), when Gerrit says
 it dropped events (`dropped-output`), and when the stream becomes live, stops being live or
 turns out unavailable — a client then switches between following and polling. Every other
@@ -216,7 +216,7 @@ Everything the first screen needs, in one call.
   commits. `text` says it: `Rebase stopped at 102: Refactor parser init`, `Conflict in 103: …`.
 - `local` — the answer of `GET /stack`.
 - `projects` — the Gerrit projects both sections are narrowed to: the repository's own
-  (from `gerrit.project` or the remote URL), as `ger inbox` does inside a clone. `all=1` drops
+  (from `ger.project` or the remote URL), as `ger inbox` does inside a clone. `all=1` drops
   the filter and the list is empty: every project on the host.
 - `generated`, `host`.
 
@@ -404,7 +404,7 @@ build logs and its comments to the answer.
 
 The files a change touched against its first parent: `commit`, `base`, `subject`,
 `local_commit` and `files` (`path`, `status`, `old_path`, `insertions`, `deletions`). A change
-that is not in the repository is fetched from `gerrit.remote` first.
+that is not in the repository is fetched from `ger.remote` first.
 
 With `since=reviewed` the answer is the **review delta** instead: the current patchset against
 the newest one you posted a vote or comment on. `since=<n>` compares with patchset `n`. The

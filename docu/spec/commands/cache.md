@@ -4,7 +4,7 @@
 |--|--|
 | **Status** | Implemented |
 | **Module** | `src/gerrit_workflow_tools/cli_cache.py` |
-| **Requires** | `gerrit.webUrl` (host key for cache path) |
+| **Requires** | `ger.webUrl` (host key for cache path) |
 
 Inspect or clear the **local SQLite Gerrit API cache** (`core/gerrit/cache.py`) and the **CI content** store beside it (`core/ci_content_store.py`).
 

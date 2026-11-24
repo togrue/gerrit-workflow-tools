@@ -40,7 +40,7 @@ def parse_project_name_from_remote_url(remote_url: str) -> str | None:
 
 
 def resolve_gerrit_project_name(cwd: Path | str | None, *, settings: Settings) -> str | None:
-    """Resolve project name for this repo, preferring ``gerrit.project``."""
+    """Resolve project name for this repo, preferring ``ger.project``."""
     override = settings.gerrit_project
     if override:
         return override

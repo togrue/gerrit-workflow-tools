@@ -4,7 +4,7 @@
 |--|--|
 | **Status** | **Implemented** |
 | **Module** | `cli_review.py`; checkout and review state in `core/review_checkout.py`; votes on `CommentApi` in `core/gerrit/comments.py`; the chain from `GerritRest.get_related` |
-| **Requires** | A git repository, `gerrit.webUrl`, credentials |
+| **Requires** | A git repository, `ger.webUrl`, credentials |
 
 Review someone else's change in your editor. `ger review` checks the change out, shows *what this commit changed* to every git tool you already use, walks up and down its review chain, and publishes your comments with your vote.
 
@@ -55,7 +55,7 @@ Two **review checkout** modes, set by `ger.reviewCheckout`:
 
 ### The branch
 
-The change is fetched from `gerrit.remote` by its `refs/changes/…` ref and checked out on a branch named **`change-<number>`**. The branch's upstream is set to the change's target branch on `gerrit.remote` when that remote-tracking ref exists. That makes the review chain below the change the **local stack** there: `ger log` and `ger show --stack` work as they do on your own branches.
+The change is fetched from `ger.remote` by its `refs/changes/…` ref and checked out on a branch named **`change-<number>`**. The branch's upstream is set to the change's target branch on `ger.remote` when that remote-tracking ref exists. That makes the review chain below the change the **local stack** there: `ger log` and `ger show --stack` work as they do on your own branches.
 
 A `change-<number>` branch that already exists is moved to the fetched patchset, unless it has commits the patchset does not have (you started reworking it). Then `ger review` exits `1` and names them; `--force` moves the branch anyway, and the old tip is printed.
 

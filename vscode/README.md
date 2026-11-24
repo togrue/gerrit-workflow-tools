@@ -282,7 +282,7 @@ per change. Configure it with the git keys `ger.eventStream` (`auto`, `on`, `off
 `ger.eventStreamHost` / `Port` / `User`:
 [docu/Configuration.md](../docu/Configuration.md#ger-serve--gereventstream).
 
-These are VS Code settings. How ger itself behaves (`ger.reviewCheckout`, `gerrit.webUrl` and
+These are VS Code settings. How ger itself behaves (`ger.reviewCheckout`, `ger.webUrl` and
 the rest) is git configuration, the same for the extension and the command line: see
 [docu/Configuration.md](../docu/Configuration.md).
 
@@ -305,7 +305,7 @@ Without ger: install [`ger-vscode.vsix`](https://github.com/togrue/gerrit-workfl
 ## Requirements
 
 `ger` on the `PATH` (or `ger.executable` set), and a repository where `ger log` works:
-`gerrit.webUrl`, credentials (`ger setup`) and an upstream for the branch.
+`ger.webUrl`, credentials (`ger setup`) and an upstream for the branch.
 
 The folder can be the checkout, a folder inside it, or a worktree. The extension starts with the editor (after startup has finished), so the status bar item is there for a sub-folder of a checkout too; without a git checkout it starts nothing. With several workspace
 folders, the first one in a git checkout is used; the log and the status bar tooltip name it.

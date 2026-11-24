@@ -1,6 +1,6 @@
 """Editable settings catalog for ``ger config``: sections, defaults, and resolution.
 
-Credentials (``gerrit.token`` / ``gerrit.password``) stay on ``ger setup``, not this form.
+Credentials (``ger.token`` / ``ger.password``) stay on ``ger setup``, not this form.
 Temp-file render/parse lives in :mod:`gerrit_workflow_tools.core.config_editor_file`.
 """
 
@@ -9,14 +9,18 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from enum import Enum
 
-from gerrit_workflow_tools.core.config import SHOW_AFTER_EDIT_KEY, ConfigScope, Settings
+from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.config_keys import (
+    DEFAULT_STOP_PATTERN,
+    DEFAULT_WARNING_PATTERN,
+    REMOTE_POLICIES,
+    SHOW_AFTER_EDIT_KEY,
+    TRUTHY,
+    ConfigScope,
+)
 
 
-_TRUTHY = frozenset({"1", "true", "yes", "on"})
 _BOOL_CHOICES = ("true", "false")
-_DEFAULT_STOP_PATTERN = r"^(?:dropme!|todo\b|test!|wip\b)"
-_DEFAULT_WARNING_PATTERN = r"(?:^[^\s]+$|(?i:\b(?:wip|todo)\b))"
-_REMOTE_POLICY_CHOICES = ("ignore-not-rebased", "warn-not-rebased", "error-not-rebased")
 
 SECTION_TITLES: tuple[str, ...] = (
     "General",
@@ -86,51 +90,51 @@ def _bool(key: str, section: str, description: str, *, default: str) -> SettingS
 
 
 SETTING_SPECS: tuple[SettingSpec, ...] = (
-    _spec("gerrit.remote", "General", "Remote name used for git push to Gerrit.", SettingKind.TEXT, "origin"),
+    _spec("ger.remote", "General", "Remote name used for git push to Gerrit.", SettingKind.TEXT, "origin"),
     _spec(
-        "gerrit.webUrl",
+        "ger.webUrl",
         "General",
         "HTTPS base URL of the Gerrit instance. Required for API commands.",
         SettingKind.TEXT,
         "",
     ),
     _bool(
-        "gerrit.allowInsecureHttp",
+        "ger.allowInsecureHttp",
         "General",
         "Accept an http:// webUrl; credentials then travel in cleartext. Only for a local test Gerrit.",
         default="false",
     ),
-    _spec("gerrit.user", "General", "Username for HTTP Basic auth to the REST API.", SettingKind.TEXT, ""),
+    _spec("ger.user", "General", "Username for HTTP Basic auth to the REST API.", SettingKind.TEXT, ""),
     _spec(
-        "gerrit.project",
+        "ger.project",
         "General",
         "Gerrit project name. When unset, parsed from the remote URL.",
         SettingKind.TEXT,
         "",
     ),
     _spec(
-        "gerrit.scriptsDir",
+        "ger.scriptsDir",
         "General",
         "Project-local root for extension registries. Relative paths resolve from the repository toplevel.",
         SettingKind.TEXT,
         ".ger",
     ),
     _spec(
-        "gerrit.stopPattern",
+        "ger.stopPattern",
         "General",
         "Regex matched against the commit subject. The first match starts the non-pushable tail.",
         SettingKind.TEXT,
-        _DEFAULT_STOP_PATTERN,
+        DEFAULT_STOP_PATTERN,
     ),
     _spec(
-        "gerrit.warningPattern",
+        "ger.warningPattern",
         "General",
         "Regex for warning highlighting in log, push, show, and inbox.",
         SettingKind.TEXT,
-        _DEFAULT_WARNING_PATTERN,
+        DEFAULT_WARNING_PATTERN,
     ),
     _spec(
-        "gerrit.wrapWidth",
+        "ger.wrapWidth",
         "ger show",
         "Max visible width for commit-message lines and comment text. Values below 1 use the default.",
         SettingKind.INT,
@@ -143,52 +147,52 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         default="false",
     ),
     _bool(
-        "gerrit.logShowUrl",
+        "ger.logShowUrl",
         "ger log",
         "Include Gerrit URLs in text output even when hyperlinks are off.",
         default="false",
     ),
     _bool(
-        "gerrit.logShowChangeId",
+        "ger.logShowChangeId",
         "ger log",
         "Append the Change-Id on each text line. -vv still shows it when this is off.",
         default="false",
     ),
     _bool(
-        "gerrit.pushShowAttributes",
+        "ger.pushShowAttributes",
         "ger push",
         "Include reviewer, WIP, and private preview on the push preview.",
         default="false",
     ),
     _bool(
-        "gerrit.pushPublishDrafts",
+        "ger.pushPublishDrafts",
         "ger push",
         "With drafts on the pushed changes, start the push options line with publish-drafts.",
         default="true",
     ),
     _bool(
-        "gerrit.lastPushedBranch",
+        "ger.lastPushedBranch",
         "ger push",
         "After a successful push, move local branch lastPush/<branch> to the pushed commit.",
         default="true",
     ),
     _spec(
-        "gerrit.push.remotePolicy",
+        "ger.pushRemotePolicy",
         "ger push",
         "How to treat a branch that is not linear on the fetched target tip.",
         SettingKind.CHOICE,
         "ignore-not-rebased",
-        _REMOTE_POLICY_CHOICES,
+        REMOTE_POLICIES,
     ),
     _spec(
-        "branch.{branch}.gerritTarget",
+        "branch.{branch}.gerTarget",
         "ger push",
         "Destination branch for this working branch. When unset, inferred from upstream.",
         SettingKind.TEXT,
         "",
     ),
     _spec(
-        "branch.{branch}.gerritReviewers",
+        "branch.{branch}.gerReviewers",
         "ger push",
         "Comma-separated accounts merged into ger push ref options.",
         SettingKind.TEXT,
@@ -211,24 +215,26 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     ),
     _bool("ger.reviewStage", "ger review", "Stage the reviewed change's diff (HEAD at its parent).", default="true"),
     _bool(
-        "inbox.requireVerified",
+        "ger.inboxRequireVerified",
         "ger inbox",
         "Require label:<verifiedLabel>+1 on the to-review query.",
         default="true",
     ),
-    _spec("inbox.verifiedLabel", "ger inbox", "CI label name used by the verified gate.", SettingKind.TEXT, "Verified"),
     _spec(
-        "inbox.projects",
+        "ger.inboxVerifiedLabel", "ger inbox", "CI label name used by the verified gate.", SettingKind.TEXT, "Verified"
+    ),
+    _spec(
+        "ger.inboxProjects",
         "ger inbox",
         "Default project list, comma-separated. Unset means every project on the host.",
         SettingKind.TEXT,
         "",
     ),
-    _spec("inbox.toReviewQuery", "ger inbox", "Replace the to-review query entirely.", SettingKind.TEXT, ""),
-    _spec("inbox.limit", "ger inbox", "Default result limit, a positive integer.", SettingKind.INT, ""),
-    _bool("gerrit.rebaseOntoRemote", "ger rebase", "Default for ger rebase --onto-remote.", default="false"),
+    _spec("ger.inboxToReviewQuery", "ger inbox", "Replace the to-review query entirely.", SettingKind.TEXT, ""),
+    _spec("ger.inboxLimit", "ger inbox", "Default result limit, a positive integer.", SettingKind.INT, ""),
+    _bool("ger.rebaseOntoRemote", "ger rebase", "Default for ger rebase --onto-remote.", default="false"),
     _bool(
-        "gerrit.rebaseDropMergedEquivalent",
+        "ger.rebaseDropMergedEquivalent",
         "ger rebase",
         "Default for ger rebase --drop-merged-equivalent.",
         default="false",
@@ -258,7 +264,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     _spec(
         "ger.eventStreamHost",
         "ger serve",
-        "ssh host of Gerrit. Empty: from the remote or gerrit.webUrl.",
+        "ssh host of Gerrit. Empty: from the remote or ger.webUrl.",
         SettingKind.TEXT,
         "",
     ),
@@ -272,7 +278,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
     _spec(
         "ger.eventStreamUser",
         "ger serve",
-        "ssh user on Gerrit. Empty: from the remote, else gerrit.user.",
+        "ssh user on Gerrit. Empty: from the remote, else ger.user.",
         SettingKind.TEXT,
         "",
     ),
@@ -289,7 +295,7 @@ def _concrete_key(spec: SettingSpec, branch: str | None) -> str | None:
 
 def canonical_bool(raw: str) -> str:
     """Normalize a git-config truthy spelling to ``true`` or ``false``."""
-    return "true" if raw.strip().lower() in _TRUTHY else "false"
+    return "true" if raw.strip().lower() in TRUTHY else "false"
 
 
 def _display_value(spec: SettingSpec, stored: str | None) -> str:

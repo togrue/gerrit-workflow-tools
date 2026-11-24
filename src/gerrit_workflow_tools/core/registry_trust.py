@@ -3,7 +3,7 @@
 A registry in the work tree is code that arrives with a checkout or a clone, so ger does not run
 it just because it is there (git does not clone hooks for the same reason). It runs when either:
 
-1. **The scripts dir is configured where a checkout cannot write.** ``gerrit.scriptsDir`` is set in
+1. **The scripts dir is configured where a checkout cannot write.** ``ger.scriptsDir`` is set in
    the repository's own git config (local or worktree scope, or ``git -c``), which is never cloned;
    or it is set in global or system config and names a directory outside the work tree.
 2. **The user trusted these exact contents.** The :attr:`RegistrySource.digest` of the registry
@@ -26,7 +26,8 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
-from gerrit_workflow_tools.core.config import ConfigError, ConfigScope, Settings
+from gerrit_workflow_tools.core.config import ConfigError, Settings
+from gerrit_workflow_tools.core.config_keys import ConfigScope
 from gerrit_workflow_tools.core.gerrit.paths import xdg_config_home
 
 
@@ -35,7 +36,7 @@ logger = logging.getLogger(__name__)
 EXTENSION_DOMAINS = ("ci", "ready", "attention", "reviewers")
 """Every ``<scriptsDir>/<domain>/`` a command may load a registry from."""
 
-SCRIPTS_DIR_KEY = "gerrit.scriptsDir"
+SCRIPTS_DIR_KEY = "ger.scriptsDir"
 
 _UNCLONED_SCOPES = (ConfigScope.LOCAL, ConfigScope.WORKTREE, ConfigScope.COMMAND)
 _STORE_VERSION = 1
@@ -119,7 +120,7 @@ def read_registry_source(domain_dir: Path) -> RegistrySource:
 
 
 def resolve_scripts_root(root: Path | None, scripts_dir: str) -> Path | None:
-    """Resolve ``gerrit.scriptsDir`` to an absolute path (may not exist yet).
+    """Resolve ``ger.scriptsDir`` to an absolute path (may not exist yet).
 
     A relative directory is relative to *root*, the repository's top level; there is none
     outside a work tree.
@@ -158,7 +159,7 @@ class LocalRegistry:
 
 
 def scripts_dir_configured(root: Path | None, settings: Settings) -> bool:
-    """Whether ``gerrit.scriptsDir`` comes from config a checkout cannot write (see module doc, rule 1)."""
+    """Whether ``ger.scriptsDir`` comes from config a checkout cannot write (see module doc, rule 1)."""
     scope = settings.scope(SCRIPTS_DIR_KEY)
     if scope in _UNCLONED_SCOPES:
         return True

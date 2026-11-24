@@ -47,7 +47,7 @@ class _DownGerrit:
 
 
 def _configure(repo: Path) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
+    git("config", "ger.webUrl", "https://g.example", cwd=repo)
 
 
 @pytest.mark.parametrize(("main_fn", "argv"), [(log_main, []), (show_main, ["HEAD"])])
@@ -119,7 +119,7 @@ def test_show_change_number_with_rejected_credentials_is_not_not_found(
         ),
         (
             HTTPError("https://g.example:8081/a/changes/", 401, "Unauthorized", {}, None),  # type: ignore[arg-type]
-            "Gerrit at g.example:8081 rejected the credentials (HTTP 401); check gerrit.user and gerrit.token, "
+            "Gerrit at g.example:8081 rejected the credentials (HTTP 401); check ger.user and ger.token, "
             "or run `ger setup`",
         ),
     ],

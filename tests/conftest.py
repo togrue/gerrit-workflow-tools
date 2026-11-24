@@ -23,7 +23,7 @@ from tests.fixtures import (
 )
 
 
-# ``gerrit.webUrl`` of the ``web_stack_repo`` fixture.
+# ``ger.webUrl`` of the ``web_stack_repo`` fixture.
 WEB_STACK_REPO_URL = "https://g.example"
 
 # Test repositories are thrown away, so git need not flush them to disk: on a real disk
@@ -75,7 +75,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
     The stub global file supplies only ``user.*`` so ``git commit`` works without per-call
     ``GIT_AUTHOR_*`` env. Production uses full ``git config --list`` (standard precedence);
-    without this, tests would pick up the developer's ``gerrit.*`` keys and become flaky.
+    without this, tests would pick up the developer's ``ger.*`` keys and become flaky.
 
     The stub lives in a directory of this process: two runs at once (two worktrees, two agents)
     must not read each other's writes. Each test then gets its own copy of it
@@ -163,7 +163,7 @@ def _configured_stack_repo_template(
     configure_gerrit_target(repo, "main")
     # A relative self-remote remains valid after the template is copied.
     git("remote", "set-url", "origin", ".", cwd=repo)
-    git("config", "gerrit.project", "testproj", cwd=repo)
+    git("config", "ger.project", "testproj", cwd=repo)
     finalize_git_template(repo)
     return repo
 
@@ -175,7 +175,7 @@ def _web_stack_repo_template(
 ) -> Path:
     root = tmp_path_factory.mktemp("tpl_stack_web")
     repo = _copy_git_repo(_configured_stack_repo_template, root / "repo")
-    git("config", "gerrit.webUrl", WEB_STACK_REPO_URL, cwd=repo)
+    git("config", "ger.webUrl", WEB_STACK_REPO_URL, cwd=repo)
     return repo
 
 
@@ -196,7 +196,7 @@ def _dup_repo_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
     configure_gerrit_target(repo, "main")
     # A relative self-remote remains valid after the template is copied.
     git("remote", "set-url", "origin", ".", cwd=repo)
-    git("config", "gerrit.project", "testproj", cwd=repo)
+    git("config", "ger.project", "testproj", cwd=repo)
     finalize_git_template(repo)
     return repo
 
@@ -229,7 +229,7 @@ def stack_repo(tmp_path: Path, _configured_stack_repo_template: Path) -> Path:
 
 @pytest.fixture
 def web_stack_repo(tmp_path: Path, _web_stack_repo_template: Path) -> Path:
-    """``stack_repo`` with ``gerrit.webUrl`` set to :data:`WEB_STACK_REPO_URL`."""
+    """``stack_repo`` with ``ger.webUrl`` set to :data:`WEB_STACK_REPO_URL`."""
     return _copy_git_repo(_web_stack_repo_template, tmp_path / "stack")
 
 

@@ -25,7 +25,7 @@ from tests.helpers import write_rebase_head
 
 
 def _configure_repo(repo: Path) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
+    git("config", "ger.webUrl", "https://g.example", cwd=repo)
 
 
 def test_gedit_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

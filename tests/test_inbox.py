@@ -242,7 +242,7 @@ def test_build_to_review_query_folds_verified_and_projects() -> None:
     assert build_to_review_query(default, projects=[], include_unready=False) == TO_REVIEW_QUERY
     with_project = build_to_review_query(default, projects=["foo"], include_unready=False)
     assert with_project.endswith("project:foo")
-    custom = Settings.from_map({"inbox.toReviewQuery": "reviewer:self is:open"})
+    custom = Settings.from_map({"ger.inboxToReviewQuery": "reviewer:self is:open"})
     assert build_to_review_query(custom, projects=[], include_unready=False) == "reviewer:self is:open"
 
 
@@ -548,7 +548,7 @@ def test_scope_inside_a_clone_is_its_project(tmp_path: Path) -> None:
 
 def test_scope_outside_a_clone_is_the_configured_projects(tmp_path: Path) -> None:
     assert project_scope(tmp_path, Settings.from_map({})) == []
-    assert project_scope(tmp_path, Settings.from_map({"inbox.projects": "a,b"})) == ["a", "b"]
+    assert project_scope(tmp_path, Settings.from_map({"ger.inboxProjects": "a,b"})) == ["a", "b"]
 
 
 def _mine(number: int, project: str) -> dict[str, Any]:

@@ -39,7 +39,7 @@ def test_ger_refresh_reaches_the_run_through_the_entry_point(stack_repo: Path, m
 
 
 def test_opening_a_run_asks_nothing_of_gerrit(tmp_path: Path) -> None:
-    """A run outside any Gerrit configuration opens; only asking Gerrit would need gerrit.webUrl."""
+    """A run outside any Gerrit configuration opens; only asking Gerrit would need ger.webUrl."""
     run = RunContext.open(tmp_path)
 
     assert run.gerrit.configured is False
@@ -68,7 +68,7 @@ def test_a_new_run_sees_what_an_earlier_one_changed(stack_repo: Path) -> None:
     before = RunContext.open(stack_repo, gerrit=ChangeStore())
     target = before.stack.target_branch
     branch = checked_out_branch_name(stack_repo)
-    git("config", f"branch.{branch}.gerritTarget", "elsewhere", cwd=stack_repo)
+    git("config", f"branch.{branch}.gerTarget", "elsewhere", cwd=stack_repo)
 
     after = RunContext.open(stack_repo, gerrit=ChangeStore())
 

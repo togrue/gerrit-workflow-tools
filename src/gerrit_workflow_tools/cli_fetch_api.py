@@ -16,8 +16,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="ger fetch-api",
         description=(
-            "GET a Gerrit REST path under /a/ using gerrit.webUrl and HTTP Basic auth "
-            "(gerrit.user with gerrit.token or gerrit.password)."
+            "GET a Gerrit REST path under /a/ using ger.webUrl and HTTP Basic auth "
+            "(ger.user with ger.token or ger.password)."
         ),
     )
     p.add_argument(

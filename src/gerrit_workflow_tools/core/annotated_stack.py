@@ -191,7 +191,7 @@ def _multi_branch_notes(
 
 
 def _project(service: GerritService) -> str:
-    """The run's project, else ``gerrit.project`` when the stack has no context to give one."""
+    """The run's project, else ``ger.project`` when the stack has no context to give one."""
     try:
         return service.stack_context().project
     except ChangeResolutionError:
@@ -232,7 +232,7 @@ def load_annotated_stack(
 
     Returns an empty stack when the range holds no commits — deciding whether that is an
     error is the caller's business. Raises :class:`GitError` for git failures and
-    :class:`ValueError` when ``gerrit.webUrl`` is unset. A Gerrit that cannot be asked at all
+    :class:`ValueError` when ``ger.webUrl`` is unset. A Gerrit that cannot be asked at all
     does not raise: see :attr:`AnnotatedStack.gerrit_unavailable`.
     """
     cwd, service = run.cwd, run.gerrit

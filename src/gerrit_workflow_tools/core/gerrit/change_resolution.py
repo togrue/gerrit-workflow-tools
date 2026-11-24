@@ -372,7 +372,7 @@ def resolve_stack_changeish(
     The single entry point for ``ger fix``, ``ger edit``, ``ger reword`` and ``ger rebase``.
 
     *service* is only asked when *ref* names a change Gerrit has to look up; a purely local
-    resolution never builds its client, so ``gerrit.webUrl`` stays irrelevant to it. The stack
+    resolution never builds its client, so ``ger.webUrl`` stays irrelevant to it. The stack
     is *branch*'s, by default the working branch of the service's run.
     """
     return resolve_to_stack_sha(

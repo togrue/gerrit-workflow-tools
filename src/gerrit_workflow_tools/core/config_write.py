@@ -11,15 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from gerrit_workflow_tools.core.config import ConfigScope
+from gerrit_workflow_tools.core.config_keys import ConfigScope, legacy_key
 from gerrit_workflow_tools.core.git_run import git
-
-
-_SCOPE_FLAG = {
-    ConfigScope.LOCAL: "--local",
-    ConfigScope.GLOBAL: "--global",
-    ConfigScope.WORKTREE: "--worktree",
-}
 
 
 @dataclass(frozen=True)
@@ -40,14 +33,21 @@ def set_branch_config(
 ) -> None:
     """Write branch-scoped Gerrit settings via ``git config``."""
     if gerrit_reviewers is not None:
-        git("config", f"branch.{branch}.gerritReviewers", gerrit_reviewers, cwd=cwd)
+        git("config", f"branch.{branch}.gerReviewers", gerrit_reviewers, cwd=cwd)
 
 
 def apply_config_write(cwd: Path | str | None, write: ConfigWrite) -> None:
-    """Apply one scoped set/unset from the ``ger config`` editor."""
-    flag = _SCOPE_FLAG.get(write.scope)
+    """Apply one scoped set/unset (``ger config``, ``ger setup``).
+
+    The key's pre-``ger.*`` name is removed at the same scope either way: a set moves it
+    to the new name, and an unset must not let the old name answer in its place.
+    """
+    flag = None if write.scope is ConfigScope.SYSTEM else write.scope.flag
     if flag is None:
         raise ValueError(f"cannot write {write.key} at scope {write.scope.value}")
+    old = legacy_key(write.key)
+    if old is not None:
+        git("config", flag, "--unset-all", old, cwd=cwd, check=False)
     if write.action == "unset":
         git("config", flag, "--unset-all", write.key, cwd=cwd, check=False)
         return

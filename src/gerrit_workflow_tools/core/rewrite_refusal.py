@@ -132,7 +132,7 @@ def closed_change_refusal(
 
     Git alone cannot tell: a change submitted since the last ``git fetch`` is still on the local
     stack. So Gerrit is asked, with at most one request (:meth:`ChangeApi.on_push_branch`; none
-    while the cache is inside its trust window). When it cannot be asked (no ``gerrit.webUrl``,
+    while the cache is inside its trust window). When it cannot be asked (no ``ger.webUrl``,
     no credentials, unreachable, no stack context), the git-only check stands: ``None``.
 
     *statuses* is what Gerrit already said of the change in this run (an attention walk overlays

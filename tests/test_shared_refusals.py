@@ -33,7 +33,7 @@ from tests.helpers import add_submodule
 
 
 def _configure(repo: Path) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
+    git("config", "ger.webUrl", "https://g.example", cwd=repo)
 
 
 @pytest.mark.parametrize(
@@ -263,7 +263,7 @@ def test_errors_come_after_what_the_command_printed(stack_repo: Path, monkeypatc
 def test_log_and_push_agree_on_an_unsquashed_fixup(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """One classification: the commit ``ger push`` stops at is the one ``ger log`` names, in the same words."""
     _configure(stack_repo)
-    git("config", "gerrit.stopPattern", "^nomatch$", cwd=stack_repo)
+    git("config", "ger.stopPattern", "^nomatch$", cwd=stack_repo)
     git("commit", "--allow-empty", "-q", "-m", "fixup! whatever", cwd=stack_repo)
 
     _code, log_out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore({}))
@@ -282,7 +282,7 @@ def test_log_push_and_change_id_agree_on_an_invalid_change_id(
 ) -> None:
     """A garbage footer is *invalid*, not missing: ``ger log`` says so in the words push and change-id use."""
     _configure(stack_repo)
-    git("config", "gerrit.stopPattern", "^nomatch$", cwd=stack_repo)
+    git("config", "ger.stopPattern", "^nomatch$", cwd=stack_repo)
     git("commit", "--allow-empty", "-q", "--no-verify", "-m", "garbage footer\n\nChange-Id: Ibad", cwd=stack_repo)
 
     _code, log_out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore({}))

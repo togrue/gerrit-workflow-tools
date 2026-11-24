@@ -107,7 +107,7 @@ def build_to_review_query(
 
 def to_review_needs_you_as_reviewer(settings: Settings) -> bool:
     """Whether a change must list you as a reviewer to match the *to review* query: true of the
-    built-in queries (``reviewer:self``), not of a custom ``inbox.toReviewQuery``, which may
+    built-in queries (``reviewer:self``), not of a custom ``ger.inboxToReviewQuery``, which may
     select changes any other way.
     """
     return not settings.inbox_to_review_query
@@ -119,7 +119,7 @@ def waiting_on_your_review(service: GerritService, numbers: Collection[int]) -> 
     ``--unready``. One query; none for no *numbers*.
 
     The Change view asks it, so that a change listed under *to review* says so there too. The list
-    is narrower (the clone's project, ``inbox.limit``): a change of another project, or beyond the
+    is narrower (the clone's project, ``ger.inboxLimit``): a change of another project, or beyond the
     limit, waits on you without being listed.
     """
     if not numbers:
@@ -140,7 +140,7 @@ def project_scope(
     """The Gerrit projects the inbox is narrowed to; empty means every project on the host.
 
     Projects named explicitly win. Otherwise ``all_projects`` asks for the whole host; inside a
-    clone it is the clone's own project; outside one, ``inbox.projects``.
+    clone it is the clone's own project; outside one, ``ger.inboxProjects``.
     """
     if projects:
         return list(projects)
@@ -199,7 +199,7 @@ def load_inbox(
     chains). A section not wanted is not asked for.
 
     Both are narrowed to :func:`project_scope` of the service's directory. *To review* keeps the
-    inbox order (longest unreviewed first) and honours *limit*, else ``ger.inbox.limit``.
+    inbox order (longest unreviewed first) and honours *limit*, else ``ger.inboxLimit``.
     *Outgoing* puts what you must act on first, then the latest activity.
     """
     settings = service.settings

@@ -4,7 +4,7 @@
 |--|--|
 | **Status** | Implemented |
 | **Module** | `src/gerrit_workflow_tools/cli_edit.py` |
-| **Requires** | Git; attention targeting needs `gerrit.webUrl` + credentials, as does a `change:<n>` / URL / `q:` target |
+| **Requires** | Git; attention targeting needs `ger.webUrl` + credentials, as does a `change:<n>` / URL / `q:` target |
 
 Interactive rebase to **edit**, **reword**, or **drop** one commit in the current stack (by SHA or Change-Id), including an **attention walk** over edit-attention commits (unresolved comments or CI failed).
 

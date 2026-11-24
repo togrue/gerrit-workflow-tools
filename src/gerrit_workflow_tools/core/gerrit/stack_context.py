@@ -20,7 +20,7 @@ class ChangeResolutionError(RuntimeError):
 
 
 class NoDestinationBranchError(NeedsUpstreamError, ChangeResolutionError):
-    """The stack has no Gerrit destination because its branch has no upstream (and no ``gerritTarget``)."""
+    """The stack has no Gerrit destination because its branch has no upstream (and no ``gerTarget``)."""
 
 
 @dataclass(frozen=True)
@@ -47,7 +47,7 @@ def _stack_branch_name(cwd: Path | str | None, branch: str | None, *, settings: 
 
 
 def stack_project(cwd: Path | str | None, branch: str | None = None, *, settings: Settings) -> str:
-    """The stack context's project, else ``gerrit.project`` (for work that needs no push destination)."""
+    """The stack context's project, else ``ger.project`` (for work that needs no push destination)."""
     try:
         return resolve_stack_context(cwd, branch, settings=settings).project
     except Exception:  # pylint: disable=broad-exception-caught
@@ -64,8 +64,7 @@ def resolve_stack_context(cwd: Path | str | None, branch: str | None = None, *, 
     if not project:
         remote = settings.gerrit_remote
         raise ChangeResolutionError(
-            f"cannot resolve Gerrit project name; set `gerrit.project` or configure remote `{remote}` "
-            "with a parseable URL"
+            f"cannot resolve Gerrit project name; set `ger.project` or configure remote `{remote}` with a parseable URL"
         )
 
     target = effective_gerrit_destination_branch(cwd, branch_name, settings=settings)
@@ -73,9 +72,9 @@ def resolve_stack_context(cwd: Path | str | None, branch: str | None = None, *, 
         remote = settings.gerrit_remote
         message = (
             f"No Gerrit destination branch for branch {branch_name!r}. "
-            f"Set upstream to a branch on `{remote}` (`gerrit.remote`), "
+            f"Set upstream to a branch on `{remote}` (`ger.remote`), "
             f"e.g. `git branch --set-upstream-to={remote}/<branch>`, "
-            f"or configure `branch.{branch_name}.gerritTarget`."
+            f"or configure `branch.{branch_name}.gerTarget`."
         )
         if branch_name != "HEAD" and not branch_has_upstream(cwd, branch_name):
             raise NoDestinationBranchError(message, branch=branch_name)

@@ -68,8 +68,7 @@ def credential_error(strategy: ReviewerStrategy, reviewers: Sequence[str], setti
         return None
     if not gerrit_credentials_configured(settings):
         return (
-            "error: lazy/overwrite reviewer strategies need Gerrit REST; set gerrit.user and "
-            "gerrit.token (or gerrit.password)"
+            "error: lazy/overwrite reviewer strategies need Gerrit REST; set ger.user and ger.token (or ger.password)"
         )
     try:
         resolve_gerrit_web_base(settings)
@@ -89,8 +88,7 @@ def push_marks(run: RunContext, rows: Sequence[Commit]) -> dict[str, PushMark]:
     resolve_gerrit_web_base(settings)
     if not gerrit_credentials_configured(settings):
         raise ConfigError(
-            "Gerrit credentials are not configured; set gerrit.user and "
-            "gerrit.token (or gerrit.password) for REST access."
+            "Gerrit credentials are not configured; set ger.user and ger.token (or ger.password) for REST access."
         )
     by_triplet = run.gerrit.changes.get_payloads(list(triplets.values()))
     marks: dict[str, PushMark] = {}

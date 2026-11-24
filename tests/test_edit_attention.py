@@ -73,8 +73,8 @@ def test_first_attention_commit_ignores_merged_side_branches(merged_side_branch_
     merge parent is not in the stack ger log shows, so edit must not select it either.
     """
     repo = merged_side_branch_repo
-    git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
-    git("config", "gerrit.project", "testproj", cwd=repo)
+    git("config", "ger.webUrl", "https://g.example", cwd=repo)
+    git("config", "ger.project", "testproj", cwd=repo)
 
     # Only the side-branch commits need attention; nothing on the first-parent chain does.
     side_cids = ["I" + "2" * 40, "I" + "3" * 40]
@@ -99,8 +99,8 @@ def test_follow_merges_would_have_found_the_side_branch_commit(merged_side_branc
     payloads failed to signal attention.
     """
     repo = merged_side_branch_repo
-    git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
-    git("config", "gerrit.project", "testproj", cwd=repo)
+    git("config", "ger.webUrl", "https://g.example", cwd=repo)
+    git("config", "ger.project", "testproj", cwd=repo)
 
     cid = "I" + "2" * 40
     payload = change_info_for_sha("0" * 40, cid, number=200, unresolved_comment_count=3)

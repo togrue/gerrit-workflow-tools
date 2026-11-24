@@ -115,7 +115,7 @@ def _enrich_todo(text: str, run: RunContext) -> str:  # pylint: disable=too-many
     """Rewrite rebase todo lines with Gerrit status annotations.
 
     Returns the original *text* unchanged if the run's service reaches no Gerrit (no
-    ``gerrit.webUrl`` and no client supplied). Raises on Gerrit API errors so the caller
+    ``ger.webUrl`` and no client supplied). Raises on Gerrit API errors so the caller
     can attach a diagnostic comment and fall back gracefully.
     """
     if not run.gerrit.configured:

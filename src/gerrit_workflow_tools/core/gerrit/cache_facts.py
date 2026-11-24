@@ -68,7 +68,7 @@ class RememberedFacts:
         self._set_host_fact(f"{_CAPABILITY_PREFIX}{name}", value)
 
     def account_id(self, user: str, *, ttl_seconds: int = DEFAULT_CAPABILITY_TTL_SECONDS) -> int | None:
-        """The account id Gerrit gave *user* (the configured ``gerrit.user``), or ``None`` when unknown or stale."""
+        """The account id Gerrit gave *user* (the configured ``ger.user``), or ``None`` when unknown or stale."""
         value = self._host_fact(f"{_ACCOUNT_PREFIX}{user}", ttl_seconds)
         return value if isinstance(value, int) and not isinstance(value, bool) else None
 

@@ -125,7 +125,7 @@ class ReviewerCatalog:
         if not _gerrit_creds_configured(settings):
             return cls(
                 client=None,
-                status_note="Gerrit reviewer validation unavailable (missing gerrit.user + token/password).",
+                status_note="Gerrit reviewer validation unavailable (missing ger.user + token/password).",
                 candidates=reviewer_seeds,
                 change_ref=None,
             )
@@ -134,7 +134,7 @@ class ReviewerCatalog:
         except ValueError:
             return cls(
                 client=None,
-                status_note="Gerrit reviewer validation unavailable (missing gerrit.webUrl).",
+                status_note="Gerrit reviewer validation unavailable (missing ger.webUrl).",
                 candidates=reviewer_seeds,
                 change_ref=None,
             )

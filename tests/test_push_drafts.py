@@ -205,7 +205,7 @@ def test_options_line_with_other_options_and_publish_drafts(stack_repo: Path, mo
 def test_config_off_starts_the_line_without_publish_drafts(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store, _rows, keys = _pushed(stack_repo)
     _with_draft(store, keys[0])
-    git("config", "gerrit.pushPublishDrafts", "false", cwd=stack_repo)
+    git("config", "ger.pushPublishDrafts", "false", cwd=stack_repo)
     calls = _line_answers(monkeypatch, None)
     code, out, _err, refspec = _run_push(stack_repo, monkeypatch, [], store)
     assert code == ExitCode.OK
@@ -217,7 +217,7 @@ def test_config_off_starts_the_line_without_publish_drafts(stack_repo: Path, mon
 def test_config_off_still_publishes_when_typed(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store, _rows, keys = _pushed(stack_repo)
     _with_draft(store, keys[0])
-    git("config", "gerrit.pushPublishDrafts", "false", cwd=stack_repo)
+    git("config", "ger.pushPublishDrafts", "false", cwd=stack_repo)
     _line_answers(monkeypatch, "publish-drafts")
     code, _out, _err, refspec = _run_push(stack_repo, monkeypatch, [], store)
     assert code == ExitCode.OK
@@ -230,7 +230,7 @@ def test_publish_comments_flag_starts_the_line_with_publish_drafts(
 ) -> None:
     store, _rows, keys = _pushed(stack_repo)
     _with_draft(store, keys[0])
-    git("config", "gerrit.pushPublishDrafts", "false", cwd=stack_repo)
+    git("config", "ger.pushPublishDrafts", "false", cwd=stack_repo)
     calls = _line_answers(monkeypatch, None)
     code, _out, _err, refspec = _run_push(stack_repo, monkeypatch, ["--publish-comments"], store)
     assert code == ExitCode.OK

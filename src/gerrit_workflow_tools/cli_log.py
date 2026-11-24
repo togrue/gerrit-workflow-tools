@@ -149,13 +149,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Include each change's Gerrit web URL in text output (JSON always includes gerrit_url). "
             "When OSC 8 hyperlinks are on, a compact ``Open in gerrit`` link is shown by default. "
-            "Otherwise default: ``gerrit.logShowUrl``."
+            "Otherwise default: ``ger.logShowUrl``."
         ),
     )
     parser.add_argument(
         "--show-change-id",
         action="store_true",
-        help="Show full Change-Id on an indented continuation line. Default: ``gerrit.logShowChangeId``.",
+        help="Show full Change-Id on an indented continuation line. Default: ``ger.logShowChangeId``.",
     )
     add_verbose_and_debug_log_args(
         parser,

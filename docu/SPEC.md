@@ -121,4 +121,4 @@ Specified but not registered in `cli_ger.py` yet. Move a row into the registry a
 - **Config reference:** [Configuration.md](Configuration.md)
 - **Reading `ger log`:** [Reading-ger-log.md](Reading-ger-log.md)
 
-Branch-local keys (`branch.*.gerritTarget`, `gerritReviewers`) are documented in [Configuration.md](Configuration.md#branch-local-branchname); set them with `git config`.
+Branch-local keys (`branch.*.gerTarget`, `gerReviewers`) are documented in [Configuration.md](Configuration.md#branch-local-branchname); set them with `git config`.

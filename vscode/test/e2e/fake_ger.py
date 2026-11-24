@@ -51,8 +51,8 @@ def make_repo(path: Path) -> None:
     make_stack_repo(path)
     configure_gerrit_target(path, "main")
     git("remote", "set-url", "origin", ".", cwd=path)
-    git("config", "gerrit.project", "testproj", cwd=path)
-    git("config", "gerrit.webUrl", WEB, cwd=path)
+    git("config", "ger.project", "testproj", cwd=path)
+    git("config", "ger.webUrl", WEB, cwd=path)
     # run.ts keeps your global git config out, so the repository brings its own identity.
     git("config", "user.name", "Test", cwd=path)
     git("config", "user.email", "test@example.com", cwd=path)

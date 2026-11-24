@@ -44,7 +44,7 @@ class Gerrit:
 
 @pytest.fixture
 def gerrit(stack_repo: Path, tmp_path: Path) -> Gerrit:
-    git("config", "gerrit.webUrl", WEB, cwd=stack_repo)
+    git("config", "ger.webUrl", WEB, cwd=stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows)
     store = ChangeStore(details, web_base=WEB)
@@ -392,7 +392,7 @@ def test_moving_to_an_older_patchset_says_moved(
 def test_a_patchset_ref_the_remote_does_not_serve_says_what_is_likely_wrong(
     private: bool, stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """git's own words, then one line: a private change's ref needs a signed-in remote; else check gerrit.remote."""
+    """git's own words, then one line: a private change's ref needs a signed-in remote; else check ger.remote."""
     _fresh_clone(stack_repo)
     git("update-ref", "-d", changes_ref(102, 1), cwd=gerrit.remote)
     gerrit.store.set_private(gerrit.keys[2], private)
@@ -402,7 +402,7 @@ def test_a_patchset_ref_the_remote_does_not_serve_says_what_is_likely_wrong(
     assert code == ExitCode.GIT
     first, hint = err.strip().splitlines()[-2:]
     assert first.startswith("error: git fetch") and f"couldn't find remote ref {changes_ref(102, 1)}" in first
-    generic = f"remote 'origin' does not have {changes_ref(102, 1)}: check that gerrit.remote names the Gerrit server"
+    generic = f"remote 'origin' does not have {changes_ref(102, 1)}: check that ger.remote names the Gerrit server"
     private_hint = "change 102 is private: Gerrit does not serve a private change's refs to remote 'origin'"
     assert hint.startswith(private_hint if private else generic)
 

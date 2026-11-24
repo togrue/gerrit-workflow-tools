@@ -4,7 +4,7 @@
 |--|--|
 | **Status** | Implemented |
 | **Modules** | `cli_sha.py`, `cli_changeid.py` |
-| **Requires** | Git; `--first-attention` / `--next-attention` need `gerrit.webUrl` + credentials |
+| **Requires** | Git; `--first-attention` / `--next-attention` need `ger.webUrl` + credentials |
 
 Plumbing between Change-Ids and commit SHAs. Plain Change-Id lookup is local only; attention targeting uses the annotated stack (Gerrit).
 

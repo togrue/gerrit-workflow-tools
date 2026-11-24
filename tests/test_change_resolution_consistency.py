@@ -104,7 +104,7 @@ def test_not_found_reads_the_same_in_every_command(
 
 
 def _configure_web(repo: Path) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
+    git("config", "ger.webUrl", "https://g.example", cwd=repo)
 
 
 def _mock_dual_branch_details(
@@ -135,7 +135,7 @@ def _mock_dual_branch_details(
 
 def _configure_dev_gerrit_target(repo: Path) -> None:
     """Point stack context at Gerrit destination branch ``dev``."""
-    git("config", "branch.feature.gerritTarget", "dev", cwd=repo)
+    git("config", "branch.feature.gerTarget", "dev", cwd=repo)
     main_sha = git_out("rev-parse", "main", cwd=repo).strip()
     git("update-ref", "refs/remotes/origin/dev", main_sha, cwd=repo)
 
@@ -263,7 +263,7 @@ def test_log_resolution_notes_do_not_requery_per_change_id(
 
 
 def test_log_on_dev_target_uses_dev_triplet_not_main(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """``ger log --json`` with ``branch.*.gerritTarget=dev`` overlays the dev-branch change."""
+    """``ger log --json`` with ``branch.*.gerTarget=dev`` overlays the dev-branch change."""
     _configure_dev_gerrit_target(web_stack_repo)
     sha = git_out("rev-parse", "HEAD~2", cwd=web_stack_repo)
     cid = _cid("2")
@@ -435,8 +435,8 @@ def test_a_bare_number_names_a_change_wherever_only_a_change_fits(
         "checkout": cli_checkout.main,
     }
     _configure_web(stack_repo)
-    git("config", "gerrit.user", "u", cwd=stack_repo)
-    git("config", "gerrit.token", "t", cwd=stack_repo)
+    git("config", "ger.user", "u", cwd=stack_repo)
+    git("config", "ger.token", "t", cwd=stack_repo)
     code, _out, err = run_cli(stack_repo, mains[command], argv, monkeypatch, gerrit=ChangeStore({}))
     assert code == ExitCode.NOT_FOUND, err
     assert err.strip() == "error: cannot resolve 'change:99999': Gerrit has no such change"

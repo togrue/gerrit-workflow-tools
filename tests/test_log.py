@@ -41,7 +41,7 @@ from tests.helpers import force_zero_change_trust_window, write_rebase_head
 
 
 def _configure_repo(repo: Path) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
+    git("config", "ger.webUrl", "https://g.example", cwd=repo)
 
 
 def test_log_help(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -84,8 +84,8 @@ def test_log_default_text_contains_commit_lines_and_summary(
 def test_log_highlights_warning_pattern_in_summary(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     rows = stack_rows_mb_to_head(web_stack_repo)
     first_subject = rows[0].subject
-    git("config", "gerrit.stopPattern", r"^does-not-match$", cwd=web_stack_repo)
-    git("config", "gerrit.warningPattern", first_subject, cwd=web_stack_repo)
+    git("config", "ger.stopPattern", r"^does-not-match$", cwd=web_stack_repo)
+    git("config", "ger.warningPattern", first_subject, cwd=web_stack_repo)
     details = build_details_by_change_id(rows)
     code, out, err = run_cli(web_stack_repo, log_main, ["--color", "always"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
@@ -318,7 +318,7 @@ def test_log_missing_upstream_never_prompts_for_machine_output(
 def test_log_missing_gerrit_url(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "gerrit_workflow_tools.core.gerrit.http_rest.resolve_gerrit_web_base",
-        lambda _cwd: (_ for _ in ()).throw(ConfigError("missing gerrit.webUrl")),
+        lambda _cwd: (_ for _ in ()).throw(ConfigError("missing ger.webUrl")),
     )
     code, _out, err = run_cli(stack_repo, log_main, [], monkeypatch)
     assert code == ExitCode.CONFIG
@@ -490,7 +490,7 @@ def test_log_file_redirect_encodes_unicode(
 
 
 def test_log_config_default_show_url(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    git("config", "gerrit.logShowUrl", "true", cwd=web_stack_repo)
+    git("config", "ger.logShowUrl", "true", cwd=web_stack_repo)
     rows = stack_rows_mb_to_head(web_stack_repo)
     details = build_details_by_change_id(rows)
     code, out, err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=ChangeStore(details))
@@ -807,7 +807,7 @@ def test_log_and_show_report_wip_and_private(stack_repo: Path, monkeypatch: pyte
 def test_log_ready_count_agrees_with_the_push_boundary(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     git("commit", "--allow-empty", "-m", "no change id", cwd=stack_repo)
     git("commit", "--allow-empty", "-m", "no change id either", cwd=stack_repo)
-    git("config", "gerrit.stopPattern", "^nothing-matches$", cwd=stack_repo)
+    git("config", "ger.stopPattern", "^nothing-matches$", cwd=stack_repo)
     rows = commits_in_range(stack_repo, "main..feature")
     ready = compute_ready(stack_repo, stop_pattern="^nothing-matches$")
     store = ChangeStore(build_details_by_change_id(rows))
@@ -861,7 +861,7 @@ def test_log_says_what_to_run_next_for_a_blocked_chain(stack_repo: Path, monkeyp
     from tests.change_store import ChangeStore
     from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 
-    git("config", "gerrit.webUrl", "https://g.example", cwd=stack_repo)
+    git("config", "ger.webUrl", "https://g.example", cwd=stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows, per_index_overrides=[{"cr": 1, "submittable": False}])
     _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore(details))

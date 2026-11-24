@@ -24,7 +24,7 @@ CONSOLE = f"{JENKINS}/console"
 
 def _store(repo: Path, *, failed: bool = True) -> ChangeStore:
     """Every stack change on Gerrit; HEAD's Verified -1 with a Jenkins ``Build Failed`` message."""
-    git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
+    git("config", "ger.webUrl", "https://g.example", cwd=repo)
     rows = stack_rows_mb_to_head(repo)
     head = git_out("rev-parse", "HEAD", cwd=repo)
     overrides = [{"verified": -1 if failed and r.sha == head else 1} for r in rows]

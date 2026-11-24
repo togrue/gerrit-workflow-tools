@@ -16,7 +16,8 @@ from pathlib import Path
 import pytest
 
 from gerrit_workflow_tools.cli_log import main as log_main
-from gerrit_workflow_tools.core.config import ConfigScope, Settings
+from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.config_keys import ConfigScope
 from gerrit_workflow_tools.core.ger_registry import (
     RegistryLoadError,
     clear_extension_registry_cache,
@@ -70,7 +71,7 @@ def test_a_registry_in_the_work_tree_does_not_run_untrusted(stack_repo: Path, tm
 def test_scripts_dir_in_the_repositorys_own_config_trusts_it(stack_repo: Path, tmp_path: Path) -> None:
     marker = tmp_path / "ran"
     _plant_registry(stack_repo, marker)
-    git("config", "gerrit.scriptsDir", ".ger", cwd=stack_repo)
+    git("config", "ger.scriptsDir", ".ger", cwd=stack_repo)
 
     assert _resolve(stack_repo, Settings.from_cwd(stack_repo)) is not None
     assert marker.exists()
@@ -82,13 +83,13 @@ def test_scripts_dir_from_global_config_trusts_only_a_directory_outside_the_work
 ) -> None:
     marker = tmp_path / "ran"
     _plant_registry(stack_repo, marker)
-    inside = Settings.from_map({"gerrit.scriptsDir": ".ger"}, scopes={"gerrit.scriptsDir": scope})
+    inside = Settings.from_map({"ger.scriptsDir": ".ger"}, scopes={"ger.scriptsDir": scope})
     assert _resolve(stack_repo, inside) is None
     assert not marker.exists()
 
     outside = tmp_path / "scripts"
     _plant_registry(outside, marker)
-    settings = Settings.from_map({"gerrit.scriptsDir": str(outside / ".ger")}, scopes={"gerrit.scriptsDir": scope})
+    settings = Settings.from_map({"ger.scriptsDir": str(outside / ".ger")}, scopes={"ger.scriptsDir": scope})
     assert _resolve(stack_repo, settings) is not None
     assert marker.exists()
 
@@ -253,7 +254,7 @@ def test_ger_log_without_a_terminal_warns_and_does_not_run_it(
 
     assert code in (0, 1), err
     assert f"not running untrusted {d / 'registry.py'}" in err
-    assert "git config gerrit.scriptsDir" in err
+    assert "git config ger.scriptsDir" in err
     assert not marker.exists()
 
 

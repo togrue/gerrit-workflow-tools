@@ -27,15 +27,15 @@ def test_ger_config_refuses_a_non_tty(stack_repo: Path, monkeypatch: pytest.Monk
 def test_ger_config_applies_editor_changes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def _fake_editor(path: Path, cwd, *, settings=None, env_overrides=()) -> int:
         text = Path(path).read_text(encoding="utf-8")
-        Path(path).write_text(text.replace("# gerrit.remote=origin", "gerrit.remote=upstream"), encoding="utf-8")
+        Path(path).write_text(text.replace("# ger.remote=origin", "ger.remote=upstream"), encoding="utf-8")
         return 0
 
     monkeypatch.setattr("gerrit_workflow_tools.cli_config._stream_is_tty", lambda _stream: True)
     monkeypatch.setattr("gerrit_workflow_tools.cli_config.run_git_editor", _fake_editor)
     code, out, err = run_cli(stack_repo, ger_main, ["config"], monkeypatch)
     assert code == 0, err
-    assert "set gerrit.remote=upstream" in out
-    assert git("config", "--local", "--get", "gerrit.remote", cwd=stack_repo).stdout.strip() == "upstream"
+    assert "set ger.remote=upstream" in out
+    assert git("config", "--local", "--get", "ger.remote", cwd=stack_repo).stdout.strip() == "upstream"
 
 
 def test_ger_config_empty_file_aborts(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -48,4 +48,4 @@ def test_ger_config_empty_file_aborts(stack_repo: Path, monkeypatch: pytest.Monk
     code, _out, err = run_cli(stack_repo, ger_main, ["config"], monkeypatch)
     assert code == 1
     assert "Aborted" in err
-    assert git("config", "--local", "--get", "gerrit.remote", cwd=stack_repo, check=False).returncode != 0
+    assert git("config", "--local", "--get", "ger.remote", cwd=stack_repo, check=False).returncode != 0

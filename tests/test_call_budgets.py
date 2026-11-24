@@ -64,7 +64,7 @@ def _assert_log_git_budget(run: MagicMock) -> None:
 
 
 def _configure_web(repo: Path) -> None:
-    git("config", "gerrit.webUrl", "https://g.example", cwd=repo)
+    git("config", "ger.webUrl", "https://g.example", cwd=repo)
 
 
 @contextmanager
@@ -91,7 +91,7 @@ def _make_linear_stack(root: Path, n: int) -> Path:
     git("remote", "add", "origin", repo.as_uri(), cwd=repo)
     git("update-ref", "refs/remotes/origin/main", "main", cwd=repo)
     configure_gerrit_target(repo, "main")
-    git("config", "gerrit.project", "testproj", cwd=repo, check=False)
+    git("config", "ger.project", "testproj", cwd=repo, check=False)
     _configure_web(repo)
     return repo
 

@@ -4,7 +4,7 @@
 |--|--|
 | **Status** | Implemented |
 | **Module** | `src/gerrit_workflow_tools/cli_resolve.py` |
-| **Requires** | `gerrit.webUrl`, credentials (when resolving Gerrit-side identifiers) |
+| **Requires** | `ger.webUrl`, credentials (when resolving Gerrit-side identifiers) |
 
 Side-effect-free resolver: report what a **changeish** maps to in the current repo and on Gerrit. Useful for debugging ambiguity and for automation pre-flight checks.
 
@@ -69,7 +69,7 @@ Prints only the `resolution` object ([§5](../change-and-commit-identifiers.md#5
 | `3` | Not found: the changeish resolves to nothing, or names an address that cannot be right |
 | `4` | Ambiguous — multiple matches survived narrowing; re-run with a triplet or `change:` number |
 | `5` | Gerrit answered badly or not at all (HTTP, auth, unreachable); never reported as `3` |
-| `6` | Required git configuration missing (`gerrit.webUrl`, credentials) |
+| `6` | Required git configuration missing (`ger.webUrl`, credentials) |
 
 ---
 

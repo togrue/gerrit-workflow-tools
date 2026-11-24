@@ -77,7 +77,7 @@ class ExitCode(IntEnum):
     GERRIT = 5
     """Gerrit answered badly, or not at all: HTTP, auth, unreachable."""
     CONFIG = 6
-    """Required git configuration is missing (``gerrit.webUrl``, credentials)."""
+    """Required git configuration is missing (``ger.webUrl``, credentials)."""
     GIT = 7
     """A git command failed."""
     DUPLICATE_CHANGE_ID = 8

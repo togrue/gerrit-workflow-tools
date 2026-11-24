@@ -8,6 +8,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from gerrit_workflow_tools.cli_common import init_cli_runtime, run_cli_command
+from gerrit_workflow_tools.core.config_keys import ConfigScope, legacy_key
+from gerrit_workflow_tools.core.config_write import ConfigWrite, apply_config_write
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.upstream_interactive import prompt_toolkit_can_run
 from gerrit_workflow_tools.core.usage import UsageError
@@ -15,17 +17,17 @@ from gerrit_workflow_tools.core.usage import UsageError
 
 _PROMPTS: tuple[tuple[str, str, str], ...] = (
     (
-        "gerrit.webUrl",
+        "ger.webUrl",
         "webUrl",
         "The web URL used to access your Gerrit instance (e.g. https://gerrit.your.domain/).",
     ),
     (
-        "gerrit.user",
+        "ger.user",
         "user",
         "Your Gerrit username.",
     ),
     (
-        "gerrit.token",
+        "ger.token",
         "token",
         "An HTTP token for the Gerrit REST API (see your user settings in the Gerrit web UI).",
     ),
@@ -33,23 +35,24 @@ _PROMPTS: tuple[tuple[str, str, str], ...] = (
 
 
 def _git_config_get(*, global_config: bool, key: str, cwd: Path | None) -> str | None:
-    args: list[str] = ["config"]
-    if global_config:
-        args.append("--global")
-    args.extend(["--get", key])
-    p = git(*args, cwd=cwd, check=False)
-    if p.returncode != 0:
-        return None
-    value = (p.stdout or "").strip()
-    return value or None
+    """*key* at the setup scope, else its pre-``ger.*`` name, so a re-run offers the old value."""
+    for name in (key, legacy_key(key)):
+        if name is None:
+            continue
+        args: list[str] = ["config"]
+        if global_config:
+            args.append("--global")
+        args.extend(["--get", name])
+        p = git(*args, cwd=cwd, check=False)
+        value = (p.stdout or "").strip() if p.returncode == 0 else ""
+        if value:
+            return value
+    return None
 
 
 def _git_config_set(*, global_config: bool, key: str, value: str, cwd: Path | None) -> None:
-    args: list[str] = ["config"]
-    if global_config:
-        args.append("--global")
-    args.extend([key, value])
-    git(*args, cwd=cwd)
+    scope = ConfigScope.GLOBAL if global_config else ConfigScope.LOCAL
+    apply_config_write(cwd, ConfigWrite(key, "set", value, scope))
 
 
 def _normalize_web_url(raw: str) -> str:
@@ -100,9 +103,9 @@ def _run_interactive_setup(*, global_config: bool, cwd: Path | None) -> int:
     if not prompt_toolkit_can_run():
         print(
             "Set git config manually, e.g.:\n"
-            "  git config --global gerrit.webUrl https://gerrit.example.com\n"
-            "  git config --global gerrit.user YOUR_USER\n"
-            "  git config --global gerrit.token YOUR_TOKEN",
+            "  git config --global ger.webUrl https://gerrit.example.com\n"
+            "  git config --global ger.user YOUR_USER\n"
+            "  git config --global ger.token YOUR_TOKEN",
             file=sys.stderr,
         )
         raise UsageError("ger setup requires an interactive terminal")
@@ -114,9 +117,9 @@ def _run_interactive_setup(*, global_config: bool, cwd: Path | None) -> int:
     from prompt_toolkit import PromptSession
 
     session: PromptSession[str] = PromptSession()
-    existing_web = _git_config_get(global_config=global_config, key="gerrit.webUrl", cwd=cwd)
-    existing_user = _git_config_get(global_config=global_config, key="gerrit.user", cwd=cwd)
-    existing_token = _git_config_get(global_config=global_config, key="gerrit.token", cwd=cwd)
+    existing_web = _git_config_get(global_config=global_config, key="ger.webUrl", cwd=cwd)
+    existing_user = _git_config_get(global_config=global_config, key="ger.user", cwd=cwd)
+    existing_token = _git_config_get(global_config=global_config, key="ger.token", cwd=cwd)
 
     web_url = _prompt_value(
         session,
@@ -158,12 +161,12 @@ def _run_interactive_setup(*, global_config: bool, cwd: Path | None) -> int:
         print("error: token is required.", file=sys.stderr)
         return 1
 
-    _git_config_set(global_config=global_config, key="gerrit.webUrl", value=web_url, cwd=cwd)
-    _git_config_set(global_config=global_config, key="gerrit.user", value=user, cwd=cwd)
-    _git_config_set(global_config=global_config, key="gerrit.token", value=token, cwd=cwd)
+    _git_config_set(global_config=global_config, key="ger.webUrl", value=web_url, cwd=cwd)
+    _git_config_set(global_config=global_config, key="ger.user", value=user, cwd=cwd)
+    _git_config_set(global_config=global_config, key="ger.token", value=token, cwd=cwd)
 
     print(
-        f"\nConfigured ({scope}): gerrit.webUrl={web_url!r}, gerrit.user={user!r}, gerrit.token=<set>",
+        f"\nConfigured ({scope}): ger.webUrl={web_url!r}, ger.user={user!r}, ger.token=<set>",
         file=sys.stderr,
     )
     return 0
@@ -173,7 +176,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ger setup",
         description=(
-            "Interactively configure gerrit.webUrl, gerrit.user, and gerrit.token "
+            "Interactively configure ger.webUrl, ger.user, and ger.token "
             "in git config (required for Gerrit REST API commands)."
         ),
     )

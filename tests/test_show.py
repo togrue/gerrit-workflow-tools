@@ -961,8 +961,8 @@ def test_gshow_highlights_warning_pattern_on_summary_line(
     sha = git_out("rev-parse", "HEAD", cwd=web_stack_repo)
     subj = git_out("log", "-1", "--format=%s", cwd=web_stack_repo)
     cid = head_change_id(web_stack_repo)
-    git("config", "gerrit.stopPattern", r"^does-not-match$", cwd=web_stack_repo)
-    git("config", "gerrit.warningPattern", subj, cwd=web_stack_repo)
+    git("config", "ger.stopPattern", r"^does-not-match$", cwd=web_stack_repo)
+    git("config", "ger.warningPattern", subj, cwd=web_stack_repo)
     detail = change_info_for_sha(sha, cid, number=91)
     details = {str(detail["id"]): detail}
     code, out, err = run_cli(
