@@ -339,7 +339,7 @@ def test_a_change_id_on_two_other_branches_is_ambiguous_and_lists_them(
     cid = _same_change_id_on_two_branches(stack_repo, gerrit)
     code, _, err = _checkout(stack_repo, gerrit, [cid], monkeypatch)
     assert code == ExitCode.AMBIGUOUS
-    assert f"change:200 (testproj~release~{cid}" in err and f"change:201 (testproj~stable~{cid}" in err
+    assert f"c200 (testproj~release~{cid}" in err and f"c201 (testproj~stable~{cid}" in err
     assert _on(stack_repo)[0] == "feature"
 
     code, out, err = _checkout(stack_repo, gerrit, [f"testproj~stable~{cid}"], monkeypatch)

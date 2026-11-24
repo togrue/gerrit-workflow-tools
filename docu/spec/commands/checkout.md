@@ -18,7 +18,7 @@ Check a Gerrit change out to work on it: rework a change of yours on another mac
 ger checkout CHANGEISH [--patchset N] [-b NAME] [--update | --no-update] [--force] [-y]
 ```
 
-`CHANGEISH` takes the full changeish grammar ([change-and-commit-identifiers.md](../change-and-commit-identifiers.md)): a change number, `change:N`, a Gerrit URL, a triplet, a `refs/changes/…` ref, a Change-Id. A bare number is a change number here, not a git revision, as in `ger review`. A Change-Id that exists on several target branches is narrowed to your push branch with a resolution note; when that leaves more than one, or none on your push branch and several elsewhere, `ger checkout` exits `4` and lists each candidate as `change:N (triplet, status)`, so you can name one.
+`CHANGEISH` takes the full changeish grammar ([change-and-commit-identifiers.md](../change-and-commit-identifiers.md)): a change number, `change:N`, `cN`, `#N`, a Gerrit URL, a triplet, a `refs/changes/…` ref, a Change-Id. A bare number is a change number here, not a git revision, as in `ger review`. A Change-Id that exists on several target branches is narrowed to your push branch with a resolution note; when that leaves more than one, or none on your push branch and several elsewhere, `ger checkout` exits `4` and lists each candidate as `cN (triplet, status)`, so you can name one.
 
 The current patchset is checked out unless the changeish names one (a `refs/changes/…` ref) or `--patchset N` does.
 

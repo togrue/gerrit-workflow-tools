@@ -65,7 +65,7 @@ Another Gerrit change with the same **Change-Id** on a different branch — a ch
 _Avoid_: twin, duplicate (for a change on another branch)
 
 **Changeish**:
-Any input that might name a commit or a Gerrit change: a git rev, **Change-Id**, **triplet**, `change:N`, `refs/changes/…` ref, Gerrit URL, or `q:` query. Resolution classifies it before acting on it.
+Any input that might name a commit or a Gerrit change: a git rev, **Change-Id**, **triplet**, `change:N` (also `cN`, `#N`), `refs/changes/…` ref, Gerrit URL, or `q:` query. Resolution classifies it before acting on it.
 _Avoid_: ref, target, identifier
 
 **Resolution note**:

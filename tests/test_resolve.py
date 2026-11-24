@@ -68,7 +68,7 @@ def test_resolve_git_rev_with_gerrit_footer(web_stack_repo: Path, monkeypatch: p
     code, out, err = run_cli(web_stack_repo, resolve_main, ["HEAD"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     assert f"local SHA: {sha}" in out
-    assert "Gerrit change: #104" in out
+    assert "Gerrit change: c104" in out
     assert str(ch["id"]) in out
 
 
@@ -81,7 +81,7 @@ def test_resolve_change_id_narrowed(stack_repo: Path, monkeypatch: pytest.Monkey
     _configure_resolve_repo(stack_repo)
     code, out, err = run_cli(stack_repo, resolve_main, [cid], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
-    assert "Gerrit change: #120045" in out
+    assert "Gerrit change: c120045" in out
     assert "note:" in err
     assert "119870" in err
 
@@ -94,7 +94,7 @@ def test_resolve_triplet(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) 
     details = {triplet: ch}
     code, out, err = run_cli(web_stack_repo, resolve_main, [triplet], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
-    assert f"Gerrit change: #120002 {triplet}" in out
+    assert f"Gerrit change: c120002 {triplet}" in out
 
 
 def test_resolve_change_number(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -104,7 +104,7 @@ def test_resolve_change_number(web_stack_repo: Path, monkeypatch: pytest.MonkeyP
     details = {str(ch["id"]): ch}
     code, out, err = run_cli(web_stack_repo, resolve_main, ["change:120003"], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
-    assert "Gerrit change: #120003" in out
+    assert "Gerrit change: c120003" in out
 
 
 def test_resolve_change_ref(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -115,7 +115,7 @@ def test_resolve_change_ref(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatc
     ref = "refs/changes/04/120004/1"
     code, out, err = run_cli(web_stack_repo, resolve_main, [ref], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
-    assert "Gerrit change: #120004" in out
+    assert "Gerrit change: c120004" in out
 
 
 def test_resolve_url(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -126,7 +126,7 @@ def test_resolve_url(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> N
     url = "https://g.example/c/testproj/+/120005"
     code, out, err = run_cli(web_stack_repo, resolve_main, [url], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
-    assert "Gerrit change: #120005" in out
+    assert "Gerrit change: c120005" in out
 
 
 @pytest.mark.parametrize(
@@ -176,7 +176,7 @@ def test_resolve_query(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) ->
     store.stub_query("status:open", [ch])
     code, out, err = run_cli(web_stack_repo, resolve_main, ["q:status:open"], monkeypatch, gerrit=store)
     assert code == 0, err
-    assert "Gerrit change: #120006" in out
+    assert "Gerrit change: c120006" in out
 
 
 def test_resolve_json_shape(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -74,10 +74,10 @@ _NO_ID = "I" + "0" * 40
         ("push", [_NO_ID], f"cannot resolve '{_NO_ID}': no commit in the local stack has that Change-Id"),
         ("push", ["change:99999"], "cannot resolve 'change:99999': Gerrit has no such change"),
         ("sha", [_NO_ID], f"cannot resolve '{_NO_ID}': no commit has that Change-Id"),
-        ("show", ["99999"], "cannot resolve '99999': no commit by that name; did you mean change:99999?"),
-        ("fix", ["99999"], "cannot resolve '99999': no commit by that name; did you mean change:99999?"),
-        ("edit", ["99999"], "cannot resolve '99999': no commit by that name; did you mean change:99999?"),
-        ("push", ["99999"], "cannot resolve '99999': no commit by that name; did you mean change:99999?"),
+        ("show", ["99999"], "cannot resolve '99999': no commit by that name, and Gerrit has no such change"),
+        ("fix", ["99999"], "cannot resolve '99999': no commit by that name, and Gerrit has no such change"),
+        ("edit", ["99999"], "cannot resolve '99999': no commit by that name, and Gerrit has no such change"),
+        ("push", ["99999"], "cannot resolve '99999': no commit by that name, and Gerrit has no such change"),
     ],
 )
 def test_not_found_reads_the_same_in_every_command(
@@ -163,7 +163,7 @@ def test_resolve_and_show_json_agree_on_narrowed_change_id(
     assert "119900" in err_s
 
 
-@pytest.mark.parametrize("form", ["change-id", "change-number", "triplet"])
+@pytest.mark.parametrize("form", ["change-id", "change-number", "short", "hash", "bare", "triplet"])
 def test_resolve_and_show_agree_on_the_local_commit_of_a_stack_change(
     form: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -180,6 +180,9 @@ def test_resolve_and_show_agree_on_the_local_commit_of_a_stack_change(
     changeish = {
         "change-id": row.change_id,
         "change-number": f"change:{info['_number']}",
+        "short": f"c{info['_number']}",  # how ger prints a change: a commit first, else the change
+        "hash": f"#{info['_number']}",
+        "bare": str(info["_number"]),
         "triplet": build_triplet("testproj", "main", row.change_id),
     }[form]
 
@@ -192,7 +195,7 @@ def test_resolve_and_show_agree_on_the_local_commit_of_a_stack_change(
     assert resolve_block["local_sha"] == row.sha
 
 
-@pytest.mark.parametrize("form", ["change-id", "change-number", "triplet"])
+@pytest.mark.parametrize("form", ["change-id", "change-number", "short", "hash", "bare", "triplet"])
 def test_push_and_edit_take_rev_as_the_same_stack_changeish(
     form: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -211,6 +214,9 @@ def test_push_and_edit_take_rev_as_the_same_stack_changeish(
     changeish = {
         "change-id": row.change_id,
         "change-number": f"change:{info['_number']}",
+        "short": f"c{info['_number']}",  # how ger prints a change: a commit first, else the change
+        "hash": f"#{info['_number']}",
+        "bare": str(info["_number"]),
         "triplet": build_triplet("testproj", "main", row.change_id),
     }[form]
 
@@ -640,3 +646,17 @@ def test_push_prompt_completes_reviewers_on_the_push_branch_change(
     refs = [str(call.args[0]) for call in store.calls_to("suggest_change_reviewers")]
     assert refs and all(ref not in on_main for ref in refs), refs
     assert {store.get_change(ref)["_number"] for ref in refs} <= set(on_main.values())
+
+
+@pytest.mark.parametrize("main_fn", [gshow_main, resolve_main])
+def test_a_commit_named_like_a_change_wins_and_the_note_says_how_to_name_the_change(
+    main_fn: Callable[..., int], stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``c7`` is a branch here: a git revision first (spec §2.2), with a note naming the change."""
+    _configure_web(stack_repo)
+    git("branch", "c7", "HEAD~1", cwd=stack_repo)
+    sha = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
+    code, out, err = run_cli(stack_repo, main_fn, ["--json", "c7"], monkeypatch, gerrit=ChangeStore({}))
+    assert code == 0, err
+    assert json_stdout(out)["resolution"]["local_sha"] == sha
+    assert f"note: 'c7' is commit {sha[:7]}" in err and "write change:7" in err

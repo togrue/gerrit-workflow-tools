@@ -225,7 +225,7 @@ def add_follow_merges_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
-_CHANGEISH_FORMS = "Change-Id (I…), change:<n>, triplet, refs/changes/… ref or Gerrit URL"
+_CHANGEISH_FORMS = "Change-Id (I…), change:<n> (or c<n>, '#<n>'), triplet, refs/changes/… ref or Gerrit URL"
 
 
 def changeish_help(what: str, *, change_only: bool = False) -> str:
@@ -236,7 +236,7 @@ def changeish_help(what: str, *, change_only: bool = False) -> str:
     """
     if change_only:
         return f"{what}: a change number, {_CHANGEISH_FORMS}."
-    return f"{what}: a git revision (a bare number too: write change:<n> for a change), {_CHANGEISH_FORMS}."
+    return f"{what}: a git revision (<n> and c<n> too, else the change), {_CHANGEISH_FORMS}."
 
 
 def add_change_option(parser: argparse.ArgumentParser | argparse._ArgumentGroup, help_text: str) -> None:

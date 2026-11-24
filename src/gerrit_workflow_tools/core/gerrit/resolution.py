@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
-from gerrit_workflow_tools.core.changeish import ChangeishKind
+from gerrit_workflow_tools.core.changeish import ChangeishKind, change_label
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, build_triplet
 from gerrit_workflow_tools.core.stack import abbreviated_sha
 
@@ -22,8 +22,8 @@ class ChangeAmbiguousError(ChangeResolutionError):
     """Multiple Gerrit changes matched after narrowing."""
 
     def __init__(self, message: str, *, alternatives: list[SelectedChange]) -> None:
-        listed = ", ".join(f"change:{alt.number} ({alt.triplet}, {alt.status})" for alt in alternatives)
-        super().__init__(f"{message}: {listed}. Name one by its change: number or triplet" if listed else message)
+        listed = ", ".join(f"{change_label(alt.number)} ({alt.triplet}, {alt.status})" for alt in alternatives)
+        super().__init__(f"{message}: {listed}. Name one by its number or triplet" if listed else message)
         self.alternatives = alternatives
 
 
@@ -101,6 +101,9 @@ class Resolution:
     alternatives: list[SelectedChange] = field(default_factory=list)
     local_sha: str | None = None
     local_sibling: LocalSibling | None = None
+    shadowed_change: bool = False
+    """The input is written like a change number (``2050``, ``c2050``) and named a commit, which
+    wins (spec §2.2); the note says how to name the change instead."""
 
     def to_json_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -120,10 +123,15 @@ class Resolution:
         return out
 
 
+def shadowed_change_note(raw: str, sha: str) -> str:
+    """One line: *raw* named commit *sha*, though it is also written like a change number."""
+    return f"note: {raw!r} is commit {abbreviated_sha(sha)} here; for the Gerrit change write change:{raw.lstrip('cC')}"
+
+
 def local_sibling_note(sibling: LocalSibling, *, branch: str, number: int | None = None) -> str:
     """One line: the change named on *branch* is not the one the **local stack** commit pushes to."""
-    named = f"change #{number}" if number is not None else "that change"
-    as_change = f" (#{sibling.number})" if sibling.number is not None else ""
+    named = f"change {change_label(number)}" if number is not None else "that change"
+    as_change = f" ({change_label(sibling.number)})" if sibling.number is not None else ""
     return (
         f"note: {named} is on {branch!r}; local stack commit {abbreviated_sha(sibling.sha)} carries the same "
         f"Change-Id but targets {sibling.branch!r}{as_change}."
@@ -140,10 +148,12 @@ def format_local_sibling_note(resolution: Resolution) -> str | None:
 
 def format_resolution_note(resolution: Resolution) -> str | None:
     """Return a one-line stderr transparency note when narrowing occurred."""
+    if resolution.shadowed_change and resolution.local_sha is not None:
+        return shadowed_change_note(resolution.input, resolution.local_sha)
     if not resolution.ambiguous or resolution.selected is None:
         if resolution.selected is None and resolution.alternatives:
             alts = resolution.alternatives
-            branches = ", ".join(f"{alt.branch} #{alt.number}" for alt in alts)
+            branches = ", ".join(f"{alt.branch} {change_label(alt.number)}" for alt in alts)
             return (
                 f"note: Change-Id matches {len(alts)} change(s) on other branch(es) "
                 f"({branches}); absent on your push target."
@@ -153,16 +163,16 @@ def format_resolution_note(resolution: Resolution) -> str | None:
     selected = resolution.selected
     all_matches = [selected, *resolution.alternatives]
     total = len(all_matches)
-    branches = ", ".join(f"{alt.branch} #{alt.number}" for alt in all_matches)
+    branches = ", ".join(f"{alt.branch} {change_label(alt.number)}" for alt in all_matches)
     reason = resolution.selected_reason
     if reason == "target-branch":
-        detail = f"using #{selected.number} on {selected.branch!r} (your push target)"
+        detail = f"using {change_label(selected.number)} on {selected.branch!r} (your push target)"
     elif reason == "prefer-open":
-        detail = f"using open change #{selected.number} on {selected.branch!r}"
+        detail = f"using open change {change_label(selected.number)} on {selected.branch!r}"
     elif reason == "branch-mismatch":
-        detail = f"using #{selected.number} on {selected.branch!r} (not your push target)"
+        detail = f"using {change_label(selected.number)} on {selected.branch!r} (not your push target)"
     else:
-        detail = f"using #{selected.number} on {selected.branch!r}"
+        detail = f"using {change_label(selected.number)} on {selected.branch!r}"
 
     return (
         f"note: Change-Id {selected.change_id} matches {total} change(s) (branches: {branches}); "

@@ -133,22 +133,20 @@ def test_cli_ger_dispatches_fix(stack_repo: Path, monkeypatch: pytest.MonkeyPatc
     assert subj.startswith("fixup! ")
 
 
-def test_ger_fix_bare_integer_is_git_revision_not_change_number(
-    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Bare digits resolve as a git revision, not a Gerrit change number (spec §2.2)."""
+def test_ger_fix_bare_integer_names_a_commit_before_a_change(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A commit by that name wins over the change number (spec §2.2), and Gerrit is not asked."""
 
     def _gerrit_must_not_run(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("Gerrit must not be consulted for a bare integer changeish")
+        raise AssertionError("Gerrit must not be consulted when the number names a commit")
 
     # The service builds its client on first use, so this trips on any attempt to ask Gerrit.
     monkeypatch.setattr("gerrit_workflow_tools.core.gerrit.service.HttpGerritRest", _gerrit_must_not_run)
-
+    git("tag", "4242", "HEAD", cwd=stack_repo)
     (stack_repo / "a.txt").write_text("bare int\n", encoding="utf-8")
     git("add", "a.txt", cwd=stack_repo)
-    code, _out, err = run_cli(stack_repo, ger_fix_main, ["42424242"], monkeypatch)
-    assert code != 0
-    assert "cannot resolve '42424242': no commit by that name; did you mean change:42424242?" in err
+    code, _out, err = run_cli(stack_repo, ger_fix_main, ["4242"], monkeypatch)
+    assert code == 0, err
+    assert "note: '4242' is commit" in err and "for the Gerrit change write change:4242" in err
 
 
 def test_ger_fix_json_includes_resolution_for_change_id(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

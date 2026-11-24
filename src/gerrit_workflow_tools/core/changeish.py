@@ -115,7 +115,9 @@ class Changeish:
     branch: str | None = None
     number: str | None = None
     """Digits for ``change-ref`` and ``url``. For ``change-number`` this is whatever followed
-    the prefix, digits or not — validating it is the caller's job, as it always was."""
+    the prefix, digits or not — validating it is the caller's job, as it always was. For a
+    ``git-rev`` written like a change number (``2050``, ``c2050``), the change it names when no
+    commit has that name (:meth:`as_change`)."""
     query: str | None = None
     rev: str | None = None
     patchset: int | None = None
@@ -127,6 +129,16 @@ class Changeish:
         if self.kind != "triplet":
             return None
         return f"{self.project}~{self.branch}~{self.change_id}"
+
+    def as_change(self) -> Changeish | None:
+        """This git rev read as the change number it is also written as, else ``None``.
+
+        ``2050`` and ``c2050`` (how ``ger`` prints a change) are git revisions first: a commit by
+        that name wins. Naming no commit, they name change 2050. ``rev:2050`` never does.
+        """
+        if self.kind != "git-rev" or self.number is None:
+            return None
+        return Changeish(raw=self.raw, kind="change-number", number=self.number)
 
     def as_batch_ref(self) -> str | None:
         """Read this as a batch/cache key, or ``None`` when it is not one.
@@ -143,22 +155,27 @@ class Changeish:
         return None
 
 
-_INBOX_NUMBER_RE = re.compile(r"^[cC](\d+)$")
+# How a change number may be written besides `change:N`: `c2050` (how ger prints one), `#2050`
+# (how Gerrit's UI and many tools print one) and the bare number.
+_SHORT_NUMBER_RE = re.compile(r"^[cC](\d+)$")
+_HASH_NUMBER_RE = re.compile(r"^#(\d+)$")
+
+
+def change_label(number: int | str) -> str:
+    """How ``ger`` prints a Gerrit change number: ``c2050``. Every changeish argument takes it back."""
+    return f"c{number}"
 
 
 def as_change_only(raw: str) -> str:
     """*raw* as written for an argument that can only name a Gerrit change.
 
     Where the argument cannot be a commit (``--change``, ``ger review CHANGEISH``), a bare
-    number is that change, and so is ``ger inbox``'s ``c<n>`` token: both become
-    ``change:<n>``. Everything else is returned unchanged for :func:`parse`. Arguments that
-    may be a commit keep the git-revision-first rule; see :func:`unresolved_rev_message`.
+    number is that change, and so is ``c<n>``: both become ``change:<n>`` without asking git.
+    Everything else is returned unchanged for :func:`parse`. Arguments that may be a commit
+    read those as a commit first; see :meth:`Changeish.as_change`.
     """
-    s = raw.strip()
-    if _DIGITS_RE.fullmatch(s):
-        return f"change:{s}"
-    inbox = _INBOX_NUMBER_RE.fullmatch(s)
-    return f"change:{inbox[1]}" if inbox else s
+    change = parse(raw).as_change()
+    return f"change:{change.number}" if change is not None else raw.strip()
 
 
 def address_problem(parsed: Changeish, *, web_base: str | None) -> str | None:
@@ -196,8 +213,16 @@ def unresolved_rev_message(rev: str) -> str:
 
 
 def unresolved_change_message(raw: str) -> str:
-    """What to tell the user when *raw*, read as a Gerrit change, names none on Gerrit."""
-    missing = "no Gerrit change has that Change-Id" if is_change_id(raw) else "Gerrit has no such change"
+    """What to tell the user when *raw*, read as a Gerrit change, names none on Gerrit.
+
+    A number that was a git revision first (``2050``, ``c2050``) names neither: both are said.
+    """
+    if is_change_id(raw):
+        missing = "no Gerrit change has that Change-Id"
+    elif parse(raw).as_change() is not None:
+        missing = "no commit by that name, and Gerrit has no such change"
+    else:
+        missing = "Gerrit has no such change"
     return f"cannot resolve {raw!r}: {missing}"
 
 
@@ -217,7 +242,8 @@ def parse(s: str) -> Changeish:
     """Parse *s* into a :class:`Changeish`. Total — anything unrecognized is a ``git-rev``.
 
     Classification order matters: explicit prefixes win over shape, so ``rev:120045`` is a git
-    rev and ``change:120045`` a change number, whatever the digits look like.
+    rev and ``change:120045`` and ``#120045`` a change number, whatever the digits look like.
+    ``120045`` and ``c120045`` are git revs that fall back to the change (:meth:`Changeish.as_change`).
     """
     raw = s.strip()
     lower = raw.lower()
@@ -227,6 +253,10 @@ def parse(s: str) -> Changeish:
 
     if lower.startswith(_CHANGE_NUMBER_PREFIXES):
         return Changeish(raw=raw, kind="change-number", number=raw.split(":", 1)[1])
+
+    hashed = _HASH_NUMBER_RE.fullmatch(raw)
+    if hashed:
+        return Changeish(raw=raw, kind="change-number", number=hashed[1])
 
     if lower.startswith(_QUERY_PREFIX):
         return Changeish(raw=raw, kind="query", query=_strip_prefix(raw, _QUERY_PREFIX))
@@ -247,4 +277,6 @@ def parse(s: str) -> Changeish:
     if is_change_id(raw):
         return Changeish(raw=raw, kind="change-id", change_id=raw)
 
-    return Changeish(raw=raw, kind="git-rev", rev=raw)
+    short = _SHORT_NUMBER_RE.fullmatch(raw)
+    number = raw if _DIGITS_RE.fullmatch(raw) else short[1] if short else None
+    return Changeish(raw=raw, kind="git-rev", rev=raw, number=number)

@@ -15,7 +15,7 @@ from gerrit_workflow_tools.cli_common import (
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_notes import print_resolution_note
-from gerrit_workflow_tools.core.changeish import unresolved_change_message
+from gerrit_workflow_tools.core.changeish import change_label, unresolved_change_message
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     ChangeResolutionError,
     Resolution,
@@ -49,7 +49,7 @@ def _print_text_resolution(resolution: Resolution) -> None:
         print(f"local SHA: {resolution.local_sha}")
     if resolution.selected is not None:
         sel = resolution.selected
-        print(f"Gerrit change: #{sel.number} {sel.triplet} (branch {sel.branch}, status {sel.status})")
+        print(f"Gerrit change: {change_label(sel.number)} {sel.triplet} (branch {sel.branch}, status {sel.status})")
     elif resolution.local_sha is None:
         print("(no local commit or Gerrit change resolved)")
 

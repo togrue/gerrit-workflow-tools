@@ -29,6 +29,7 @@ from gerrit_workflow_tools.core.gerrit.resolution import (
     format_local_sibling_note,
     format_resolution_note,
     local_sibling_note,
+    shadowed_change_note,
 )
 from gerrit_workflow_tools.core.gerrit.rest import (
     LIGHT_QUERY_OPTIONS,
@@ -84,6 +85,16 @@ def local_commit_sha(cwd: Path | str | None, rev: str) -> str:
     if sha is None:
         raise ChangeResolutionError(unresolved_rev_message(rev))
     return sha
+
+
+def commit_or_change(cwd: Path | str | None, parsed: Changeish) -> tuple[Changeish, str | None]:
+    """*parsed* and the commit it names; a git rev written like a change number (``2050``,
+    ``c2050``) that names no commit becomes that change, with no commit (spec §2.2)."""
+    if parsed.kind != "git-rev":
+        return parsed, None
+    change, rev = parsed.as_change(), parsed.rev or parsed.raw
+    sha = local_commit_sha(cwd, rev) if change is None else commit_sha_or_none(cwd, rev)
+    return (parsed, sha) if sha is not None or change is None else (change, None)
 
 
 def _fetch_change_row(get_change: Callable[[str], dict[str, Any]], change_key: str, raw: str) -> dict[str, Any]:
@@ -207,14 +218,15 @@ def _resolve_on_gerrit(
     changes: ChangeApi | None,
 ) -> Resolution:
     """:func:`resolve_changeish` before the local stack is searched for a Gerrit-side changeish."""
-    parsed = parse_changeish(ref)
+    parsed, sha = commit_or_change(cwd, parse_changeish(ref))
     resolution = Resolution(input=parsed.raw, kind=parsed.kind)
 
     # A git rev and a bare Change-Id both go through Change-Id narrowing; they differ only in
     # where the Change-Id comes from. Everything else addresses one change directly.
     change_id = parsed.change_id
-    if parsed.kind == "git-rev":
-        resolution.local_sha = local_commit_sha(cwd, parsed.rev or parsed.raw)
+    if sha is not None:
+        resolution.local_sha = sha
+        resolution.shadowed_change = parsed.as_change() is not None
         # The commit row, not just its message: `ger show` reads that very row next, from git's cache.
         change_id = extract_valid_change_id(read_commit_rows(cwd, "-1", resolution.local_sha)[0].body)
         if not change_id:
@@ -299,14 +311,14 @@ def resolve_to_stack_sha(
     *stack* is the local stack when the caller has loaded it already; else it is loaded here,
     and only on the paths that need it.
     """
-    parsed = parse_changeish(ref)
+    parsed, sha = commit_or_change(cwd, parse_changeish(ref))
 
     def local_stack() -> StackSnapshot:
         return stack if stack is not None else get_stack_snapshot(cwd, branch, settings=settings)
 
-    if parsed.kind == "git-rev":
-        sha = local_commit_sha(cwd, parsed.raw)
-        return _stack_commit(local_stack, parsed.raw, sha, require_in_stack=require_in_stack)
+    if sha is not None:
+        found = _stack_commit(local_stack, parsed.raw, sha, require_in_stack=require_in_stack)
+        return replace(found, note=shadowed_change_note(parsed.raw, sha) if parsed.as_change() else None)
 
     if parsed.kind == "change-ref":
         # A refs/changes ref you already have is just a git ref. Asking Gerrit to translate a

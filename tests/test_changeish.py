@@ -33,6 +33,8 @@ CHANGE_ID_UPPER = "I" + ("A" * 40)
         ("myproject~main~" + CHANGE_ID, "triplet"),
         ("change:120045", "change-number"),
         ("cl:120045", "change-number"),
+        ("#120045", "change-number"),
+        ("c120045", "git-rev"),
         ("refs/changes/45/120045/3", "change-ref"),
         ("https://gerrit.example.com/c/myproject/+/120045", "url"),
         ("q:status:open", "query"),
@@ -40,6 +42,17 @@ CHANGE_ID_UPPER = "I" + ("A" * 40)
 )
 def test_parse_classifies(value: str, expected: str) -> None:
     assert parse(value).kind == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "number"),
+    [("120045", "120045"), ("c120045", "120045"), ("C7", "7"), ("rev:120045", None), ("cafe12", None), ("HEAD", None)],
+)
+def test_a_git_rev_written_like_a_change_number_falls_back_to_that_change(value: str, number: str | None) -> None:
+    """``2050`` and ``c2050`` are commits first, the change when no commit has that name."""
+    change = parse(value).as_change()
+    assert (change.number if change else None) == number
+    assert change is None or change.kind == "change-number"
 
 
 def test_parse_is_total_on_empty_input() -> None:
@@ -172,6 +185,7 @@ def test_parse_round_trips_through_raw() -> None:
         ("c692", "change:692"),
         ("C692", "change:692"),
         ("change:692", "change:692"),
+        ("#692", "#692"),
         ("I" + "a" * 40, "I" + "a" * 40),
         ("cafe12", "cafe12"),
         ("https://g/c/p/+/692", "https://g/c/p/+/692"),

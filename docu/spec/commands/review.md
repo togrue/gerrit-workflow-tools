@@ -36,7 +36,7 @@ ger review --vote LABEL=N ... [-m MSG] [--dry-run] [-y] [--json | --ai]
 ger review --done [--force] [--json | --ai]
 ```
 
-`CHANGEISH` takes the full changeish grammar ([change-and-commit-identifiers.md](../change-and-commit-identifiers.md)): a Gerrit URL, a triplet, `change:N`. A bare number is a change number here, not a git revision. A URL that names a patchset picks that patchset; so does `--patchset`. Otherwise the current patchset.
+`CHANGEISH` takes the full changeish grammar ([change-and-commit-identifiers.md](../change-and-commit-identifiers.md)): a Gerrit URL, a triplet, `change:N`, `cN`, `#N`. A bare number is a change number here, not a git revision. A URL that names a patchset picks that patchset; so does `--patchset`. Otherwise the current patchset.
 
 ---
 

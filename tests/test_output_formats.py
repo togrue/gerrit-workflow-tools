@@ -109,7 +109,7 @@ def test_short_output_with_ai_is_the_human_text_without_colour(
     assert not is_color_enabled() and not is_hyperlink_enabled()
     _code, human, _err = run_cli(stack_repo, resolve_main, ["--color", "never", "HEAD"], monkeypatch, gerrit=store)
     assert ai == human
-    assert "Gerrit change: #103" in ai
+    assert "Gerrit change: c103" in ai
 
 
 def test_show_ai_turns_colour_off_on_stderr_too(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

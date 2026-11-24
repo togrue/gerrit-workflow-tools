@@ -196,8 +196,8 @@ def test_narrowing_two_open_on_target_raises(stack_repo: Path) -> None:
     nums = {alt.number for alt in exc.value.alternatives}
     assert nums == {120045, 120046}
     # The message lists them, so the next invocation can name one exactly (spec §3.1 step 3).
-    assert "change:120045 (" in str(exc.value) and "change:120046 (" in str(exc.value)
-    assert "Name one by its change: number or triplet" in str(exc.value)
+    assert "c120045 (" in str(exc.value) and "c120046 (" in str(exc.value)
+    assert "Name one by its number or triplet" in str(exc.value)
 
 
 def test_change_id_only_on_other_branch_is_absent(stack_repo: Path) -> None:

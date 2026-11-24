@@ -140,14 +140,15 @@ def test_http_rest_names_a_down_or_refusing_gerrit(
 def test_unresolvable_revision_reads_the_same_in_every_command(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A bare number is a git rev by design; every command says so the same way, and hints."""
+    """A bare number is a git rev first, then a change number; every command says so the same way."""
     from gerrit_workflow_tools.cli_edit import main_reword
     from gerrit_workflow_tools.cli_fix import main as fix_main
     from gerrit_workflow_tools.cli_rebase import main as rebase_main
     from gerrit_workflow_tools.cli_resolve import main as resolve_main
+    from tests.change_store import ChangeStore
 
     _configure(stack_repo)
-    expected = "error: cannot resolve '801': no commit by that name; did you mean change:801?"
+    expected = "error: cannot resolve '801': no commit by that name, and Gerrit has no such change"
     for main_fn, argv in (
         (show_main, ["801"]),
         (edit_main, ["801"]),
@@ -155,11 +156,14 @@ def test_unresolvable_revision_reads_the_same_in_every_command(
         (fix_main, ["801"]),
         (rebase_main, ["801"]),
         (resolve_main, ["801"]),
-        (log_main, ["801"]),
         (push_main, ["--dry-run", "801"]),
     ):
-        code, _out, err = run_cli(stack_repo, main_fn, argv, monkeypatch)
+        code, _out, err = run_cli(stack_repo, main_fn, argv, monkeypatch, gerrit=ChangeStore({}))
         assert (code, err.strip()) == (ExitCode.NOT_FOUND, expected), main_fn.__module__
+    # A revision range is git's alone: no change to fall back to, so the hint stays.
+    code, _out, err = run_cli(stack_repo, log_main, ["801"], monkeypatch)
+    hint = "error: cannot resolve '801': no commit by that name; did you mean change:801?"
+    assert (code, err.strip()) == (ExitCode.NOT_FOUND, hint)
 
 
 def test_a_change_id_lookalike_says_what_a_change_id_is(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -52,7 +52,7 @@ no local commit, exactly as it does today for a Change-Id-only argument).
 | **Git revision** | `HEAD`, `HEAD~2`, `a1b2c3d`, `feature/x`, `origin/main` | no (default) | local commit |
 | **Change-Id** | `I8f3c…` (`I` + 40 hex) | no (self-identifying) | Gerrit change(s) by footer id |
 | **Triplet** | `myproject~main~I8f3c…` | no (contains `~`) | exactly one Gerrit change |
-| **Change number** | `change:120045` | **yes** — `change:` | exactly one Gerrit change |
+| **Change number** | `change:120045`, `#120045`; `c120045`, `120045` when no commit has that name | `change:` or `#`; none for `c120045` / `120045` | exactly one Gerrit change |
 | **Change ref** | `refs/changes/45/120045/3` | no (namespaced) | one Gerrit patch set |
 | **Gerrit URL** | `https://gerrit.example.com/c/myproject/+/120045` | no (has scheme) | one Gerrit change |
 | **Raw query** | `q:topic:my-feature status:open` | **yes** — `q:` | Gerrit change(s) via search |
@@ -60,8 +60,16 @@ no local commit, exactly as it does today for a Change-Id-only argument).
 The prefixes exist for exactly one reason: **to stop a Gerrit change number from
 being confused with an abbreviated git SHA.** `120045` is a perfectly valid short
 SHA *and* a plausible change number. Rather than guess, `ger` treats a bare token
-as a **git revision first** and requires an explicit prefix to mean "this is a
-Gerrit change number / query". See [§2.2](#22-disambiguation-rules).
+as a **git revision first**, and the change number only when no commit has that name;
+an explicit prefix means "this is a Gerrit change number / query" whatever git has.
+See [§2.2](#22-disambiguation-rules).
+
+### 1.1.1 How ger prints a change: `c120045`
+
+Every human output `ger` prints names a change as `c120045`: the inbox rows, the resolution
+and sibling notes, `ger resolve`, the candidates of an ambiguity error. It is short enough for a
+dense row and is accepted back by every command that takes a changeish (`change_label` in
+`core/changeish.py` writes it). `--json` keeps the plain number.
 
 ### 1.2 Prefix scheme (recommended)
 
@@ -69,6 +77,8 @@ Gerrit change number / query". See [§2.2](#22-disambiguation-rules).
 |--------|---------|-------|
 | `change:<n>` | Gerrit change number | Canonical. Mirrors Gerrit's own query language, so it reads naturally and is familiar to AI models trained on Gerrit docs. |
 | `cl:<n>` | alias for `change:<n>` | Short form for interactive use ("changelist"). Optional. |
+| `#<n>` | alias for `change:<n>` | How Gerrit's UI and many tools print a change. Quote it in a shell: an unquoted `#` starts a comment. |
+| `c<n>` (no colon) | `change:<n>` unless a commit has that name | How `ger` prints a change ([§1.1.1](#111-how-ger-prints-a-change-c120045)). |
 | `q:<query>` | Raw Gerrit search | Power/agent use. Must resolve to a single change unless the command is inherently multi-result. |
 | `rev:<gitrev>` / `git:<gitrev>` | Force git interpretation | Escape hatch for the rare case where a ref name collides with a prefix or looks like a Change-Id. |
 
@@ -102,16 +112,20 @@ it as follows.
 
 ### 2.2 Disambiguation rules
 
-- A **bare integer** (`120045`) is a **git revision**, never a change number, wherever the
+- A **bare integer** (`120045`) and `c120045` are a **git revision first** wherever the
   argument names a commit first: `ger show`, `ger edit`, `ger reword`, `ger fix`, `ger rebase`,
-  `ger push`, `ger resolve`, `ger ci`. To mean the change, write `change:120045`. When no
-  commit has that name, every command says so the same way and points there: `cannot resolve
-  '120045': no commit by that name; did you mean change:120045?` (exit `3`). An `I…` token
+  `ger push`, `ger resolve`, `ger ci`. When no commit has that name, they name change 120045
+  (`Changeish.as_change`, applied once by `change_resolution.commit_or_change`). When a commit
+  has that name, the commit wins and a note says how to name the change instead: `note:
+  'c120045' is commit 1a2b3c4 here; for the Gerrit change write change:120045`. When neither
+  exists, every command says so the same way: `cannot resolve '120045': no commit by that name,
+  and Gerrit has no such change` (exit `3`). A revision range (`ger log A..B`) is git's alone
+  and keeps the hint `…; did you mean change:120045?`. An `I…` token
   that is not a valid Change-Id gets `…, and no Change-Id either (I plus 40 hex digits)`.
 - Where the argument can only ever be a Gerrit change — `ger checkout CHANGEISH`,
   `ger review CHANGEISH` and every `--change` option (`ger comment`, `ger reply`,
   `ger review --vote`) — a bare integer **is** the change number: nobody checks out or
-  reviews a commit by an all-digit SHA. `ger inbox`'s `c<n>` token is accepted there too. One
+  reviews a commit by an all-digit SHA, and neither is `c<n>`: git is not asked. One
   rule decides it, `changeish.as_change_only`: `gerrit_patchset.resolve_change` applies it to
   the positionals, `cli_common.add_change_option` to every `--change`.
   Every command's help says which of the two its argument is, from one shared wording
@@ -174,7 +188,7 @@ matches **more than one** open Gerrit change:
 2. **Announce the guess.** Print a one-line, dimmed transparency note to stderr
    (and include it structured in `--json`), e.g.:
 
-   > `note: Change-Id I8f3c… matches 2 changes (branches: main #120045, release-2.1 #119870); using #120045 on 'main' (your push target). Override with a triplet or change: number.`
+   > `note: Change-Id I8f3c… matches 2 changes (branches: main c120045, release-2.1 c119870); using c120045 on 'main' (your push target). Override with a triplet or change: number.`
 
 3. **Still ambiguous?** If more than one match remains *on the target branch*
    (rare — e.g. an abandoned change plus a new one), prefer **open/active** over
@@ -182,7 +196,7 @@ matches **more than one** open Gerrit change:
    candidates** (each with its number and triplet) so the next invocation can be
    exact. This is a resolution error (exit code for ambiguity), not a silent pick:
 
-   > `error: ambiguous Change-Id: matches changes on other branches (not 'main'): change:120045 (proj~release-2.1~I8f3c…, NEW), change:119870 (proj~release-2.0~I8f3c…, NEW). Name one by its change: number or triplet`
+   > `error: ambiguous Change-Id: matches changes on other branches (not 'main'): c120045 (proj~release-2.1~I8f3c…, NEW), c119870 (proj~release-2.0~I8f3c…, NEW). Name one by its number or triplet`
 4. **None on the target branch?** If the Change-Id matches only changes on *other*
    branches:
    - **Read-only overlay** commands (`ger log`, `ger show HEAD`) treat the local
