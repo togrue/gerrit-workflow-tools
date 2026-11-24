@@ -13,10 +13,8 @@ from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_output_format_args,
     add_verbose_and_debug_log_args,
-    assume_yes,
-    confirm,
+    confirm_publish,
     init_cli_runtime,
-    may_prompt,
     read_message,
     run_cli_command,
 )
@@ -262,15 +260,6 @@ def _emit_discard(match: ChainMatch, removed: InlineComment, url: str | None, *,
     print(f'discarded draft on {chain_location(match.chain)}: "{first_line(removed.message)}"')
 
 
-def _confirmed(args: argparse.Namespace, what: str) -> bool:
-    """Whether to go ahead: ``-y``, or a yes at a prompt. JSON output and no terminal never prompt."""
-    if args.yes or assume_yes():
-        return True
-    if not may_prompt(args):
-        raise UsageError("no prompt to answer (non-interactive, --json or --ai): pass -y to publish")
-    return confirm(f"Publish {what}?", default=False)
-
-
 def _publish(args: argparse.Namespace, run: RunContext, branch: str | None) -> int:
     """List what goes out on the targets, confirm, and post it change by change.
 
@@ -303,7 +292,7 @@ def _publish(args: argparse.Namespace, run: RunContext, branch: str | None) -> i
             print(f"no drafts to publish on {where}")
     count = sum(len(drafts_in(chains)) for chains in with_drafts.values())
     what = f"{count} draft(s){f' and {extras}' if extras else ''} on {len(posts)} change(s)"
-    if posts and not args.dry_run and not _confirmed(args, what):
+    if posts and not args.dry_run and not confirm_publish(args, what):
         return int(ExitCode.REFUSED)
 
     failed = False

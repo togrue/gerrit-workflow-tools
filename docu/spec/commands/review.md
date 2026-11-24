@@ -98,7 +98,7 @@ At either end of the chain, `ger review` exits `10`, the code scripts already lo
 
 `--vote LABEL=N` (also `LABEL+N`, `LABEL-N`) votes on the change being reviewed, or on `--change CHANGEISH`. `CR` is short for `Code-Review` and `V` for `Verified`. Several `--vote`s may be given.
 
-One REST call publishes **all your drafts on the change** (every patchset, as the web UI's *Send* does), the votes, and the `-m` message. Before it, ger lists the drafts and the votes and asks `Publish N drafts and Code-Review+1 on <change>? [y/N]`. `-y` skips the question and is required without a terminal. `--dry-run` only lists.
+One REST call publishes **all your drafts on the change** (every patchset, as the web UI's *Send* does), the votes, and the `-m` message. Before it, ger lists the drafts and the votes and asks `Publish N drafts and Code-Review+1 on <change>? [y/N]`. `-y` skips the question and is required without a terminal: without one (or with `--json` / `--ai`) it exits `2` with the message `ger reply --publish` gives, `no prompt to answer (non-interactive, --json or --ai): pass -y to publish` (`cli_common.confirm_publish`). `--dry-run` only lists.
 
 You vote on the patchset you reviewed. When Gerrit's current patchset is newer, `ger review --vote` exits `1` and says so, and you run `ger review` again to see the new patchset first.
 
@@ -145,7 +145,7 @@ When you have reviewed an older patchset of the change (posted a vote, comment o
 |------|------|
 | `0` | Done |
 | `1` | A `change-<number>` branch has your commits; Gerrit's patchset is newer than the one you voted on; the user declined |
-| `2` | Bad usage; the worktree holds your edits; no review going on for `--next`, `--prev`, `--stage`, `--vote`; staging a root commit; `GER_NO_PUBLISH` with `--vote` |
+| `2` | Bad usage; `--vote` without a terminal and without `-y`; the worktree holds your edits; no review going on for `--next`, `--prev`, `--stage`, `--vote`; staging a root commit; `GER_NO_PUBLISH` with `--vote` |
 | `3` | The changeish or patchset resolves to nothing |
 | `5` | Gerrit failed |
 | `7` | A git command failed (fetch, worktree, switch) |

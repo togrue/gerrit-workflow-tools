@@ -22,6 +22,7 @@ from tests.conftest import json_stdout, run_cli
 
 
 WEB = "https://g.example"
+_NO_PROMPT = "no prompt to answer (non-interactive, --json or --ai): pass -y to publish"
 
 
 @pytest.fixture
@@ -234,8 +235,16 @@ def test_vote_publishes_your_drafts_with_the_votes(
 def test_vote_asks_first_and_never_publishes_without_yes_off_a_terminal(
     stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Without a terminal and without -y: exit 2 and the words of ger reply --publish (cli_common.confirm_publish)."""
     store, _keys, _shas = gerrit
     _review(stack_repo, store, ["102"], monkeypatch)
+    worktree = _worktree(stack_repo)
+    run_cli(worktree, comment_main, ["c.txt:1", "-m", "nit"], monkeypatch, gerrit=store)
+    code, _out, err = _review(stack_repo, store, ["--vote", "CR+2"], monkeypatch)
+    reply = run_cli(worktree, reply_main, ["--publish", "--vote", "CR+2"], monkeypatch, gerrit=store)
+    assert (code, err.strip()) == (reply[0], reply[2].strip()) == (ExitCode.USAGE, f"error: {_NO_PROMPT}")
+    monkeypatch.setattr("gerrit_workflow_tools.cli_common.stdin_is_terminal", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _prompt: "n")
     assert _review(stack_repo, store, ["--vote", "CR+2"], monkeypatch)[0] == ExitCode.REFUSED
     assert _review(stack_repo, store, ["--vote", "CR+2", "--dry-run"], monkeypatch)[0] == ExitCode.OK
     monkeypatch.setenv("GER_NO_PUBLISH", "1")

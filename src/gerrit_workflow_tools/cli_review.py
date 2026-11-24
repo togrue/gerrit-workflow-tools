@@ -15,9 +15,8 @@ from gerrit_workflow_tools.cli_common import (
     add_output_format_args,
     add_verbose_and_debug_log_args,
     ask_choice,
-    assume_yes,
     changeish_help,
-    confirm,
+    confirm_publish,
     init_cli_runtime,
     may_prompt,
     run_cli_command,
@@ -239,12 +238,8 @@ def _vote(args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritS
         print("\n".join(format_pending_drafts(f"change {number}: {count} draft(s), {voted}", chains)))
     if args.dry_run:
         return int(ExitCode.OK)
-    if not (args.yes or assume_yes()):
-        if not may_prompt(args):
-            print("not publishing: pass -y to publish without a prompt", file=sys.stderr)
-            return int(ExitCode.REFUSED)
-        if not confirm(f"Publish {count} draft(s) and {voted} on {number}?", default=False):
-            return int(ExitCode.REFUSED)
+    if not confirm_publish(args, f"{count} draft(s) and {voted} on {number}"):
+        return int(ExitCode.REFUSED)
     message = "\n\n".join(args.message) if args.message else None
     service.comments.publish_drafts(key, message=message, labels=votes)
     if args.json_:

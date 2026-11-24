@@ -219,6 +219,18 @@ def confirm(question: str, *, default: bool) -> bool:
     return ask_choice(f"{question} {suffix}: ", answers, on_eof=False)
 
 
+def confirm_publish(args: argparse.Namespace, what: str) -> bool:
+    """Whether to publish *what*: ``-y`` (or ``GER_ASSUME_YES``), else a yes at ``Publish <what>?``.
+
+    Without a prompt to answer (no terminal, ``--json``, ``--ai``) it raises :class:`UsageError`: pass ``-y``.
+    """
+    if args.yes or assume_yes():
+        return True
+    if not may_prompt(args):
+        raise UsageError("no prompt to answer (non-interactive, --json or --ai): pass -y to publish")
+    return confirm(f"Publish {what}?", default=False)
+
+
 def add_follow_merges_args(parser: argparse.ArgumentParser) -> None:
     """Register ``--follow-merges`` (used by commands that display a local stack)."""
     parser.add_argument(
