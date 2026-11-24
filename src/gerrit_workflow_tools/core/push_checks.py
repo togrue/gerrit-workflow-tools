@@ -22,8 +22,13 @@ from gerrit_workflow_tools.core.gerrit.stack_context import (
     ChangeResolutionError,
     build_triplet,
 )
-from gerrit_workflow_tools.core.gerrit_change_status import PatchsetStatus, patchset_status
-from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, commit_sha_or_none, git, git_out
+from gerrit_workflow_tools.core.gerrit_change_status import (
+    PatchsetStatus,
+    is_diverged,
+    overlay_code_facts,
+    patchset_status,
+)
+from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git, git_out
 from gerrit_workflow_tools.core.git_state import head_is_linear_on_remote_gerrit_target
 from gerrit_workflow_tools.core.push_targets import NextPatchset, next_patchsets
 from gerrit_workflow_tools.core.push_unchanged import AbandonedChange, OutdatedChange, UnchangedChange
@@ -233,6 +238,7 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
     views = {sha: ChangeView.from_payload(p) for sha, p in ((s, payloads.get(t)) for s, t in triplets.items()) if p}
     drafts = _draft_counts(service, commits, triplets, views)
     below: list[OutdatedChange] = []  # outdated, with no sent commit above yet
+    facts = overlay_code_facts(run.cwd, [(c, views.get(c.sha)) for c in commits])
     for commit in commits:
         view = views.get(commit.sha)
         status = patchset_status(commit.sha, view) if view is not None else None
@@ -255,8 +261,7 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
             view is not None
             and status == PatchsetStatus.NEWER
             and view.is_open
-            and view.current_revision
-            and not commit_sha_or_none(run.cwd, view.current_revision)
+            and is_diverged(commit.sha, view, facts)
         ):
             diverged.append(DivergedChange(commit.short_sha, view.number, view.current_revision_number))
         built_on_outdated += (BuiltOnOutdated(commit.short_sha, change) for change in below)

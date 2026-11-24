@@ -32,7 +32,7 @@ from tests.cli_gerrit_mocks import (
     web_edit,
 )
 from tests.conftest import run_cli
-from tests.helpers import ref_exists, write_rebase_head
+from tests.helpers import in_branch_history, ref_exists, write_rebase_head
 
 
 def _mock_gerrit_push_refspec(mock_run: MagicMock) -> str:
@@ -1259,9 +1259,11 @@ def test_gpush_forgets_only_the_changes_it_sent(stack_repo: Path, monkeypatch: p
     kept, sent = commits_in_range(stack_repo, "main..feature")[:2]
     details = build_details_by_change_id([kept, sent])
     stale = details[list(details)[1]]
-    older = git_out("rev-parse", "main", cwd=stack_repo)  # a patchset you pushed: one this repository has
+    # A patchset you pushed from here before amending: its own commit, in the branch's history.
+    older = git_out("commit-tree", f"{sent.sha}^{{tree}}", "-p", "main", "-m", "older patchset", cwd=stack_repo)
     stale["current_revision"] = older
     stale["revisions"] = {older: {"_number": 1}}
+    in_branch_history(stack_repo, older)
     store = ChangeStore(details)
     run_cli(stack_repo, log_main, [], monkeypatch, gerrit=store)
 
@@ -1591,6 +1593,7 @@ def test_gpush_preview_says_rebase_only_or_code_changed(
         git("commit", "-q", "-a", "--amend", "--no-edit", cwd=stack_repo)
     rebased = git("rev-parse", "HEAD", cwd=stack_repo).stdout.strip()
     git("checkout", "-q", "feature", cwd=stack_repo)
+    in_branch_history(stack_repo, rebased)  # a patchset pushed from here, then rebased
     details = build_details_by_change_id(rows[:1])
     for detail in details.values():
         detail["current_revision"] = rebased

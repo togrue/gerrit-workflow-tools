@@ -11,13 +11,18 @@ When no `.ger/ci/registry.py` (or global cache-dir registry) matches
 
 1. Reads failed **Checks** rows and rewrites their `url` fields to `…/console`.
 2. If Checks produce no links, scans change messages for Jenkins **Build Failed**
-   lines and emits one console link from the newest failure.
+   and **Build Unstable** lines and emits one console link from the newest of them.
+   The link's `verdict` (`CiVerdict`) says which: `failed` or `unstable`. An unstable
+   build is a failure like a failed one: its log is fetched and parsed by `ger ci`, and
+   as a message-derived pipeline (`ger log -vv`) it has state `FAILED` with verdict
+   `unstable`. A custom strategy's `CiLink` without a verdict is `failed`.
 
 Common Jenkins message shapes:
 
 | Pattern | Example (anonymised) |
 |---------|----------------------|
 | Build failed | `Patch Set 2: Verified-1\n\nBuild Failed \n\nhttps://ci.example.org/…/55/ : FAILURE` |
+| Build unstable | `Patch Set 2: Verified-1\n\nBuild Unstable \n\nhttps://ci.example.org/…/56/ : UNSTABLE` |
 | Build started | `Patch Set 1:\n\nBuild Started https://ci.example.org/job/Widget/12/` |
 | No builds | `Patch Set 4:\n\nNo Builds Executed` |
 

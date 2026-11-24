@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -20,6 +20,7 @@ from gerrit_workflow_tools.core.code_facts import (
     norm_sha,
     read_code_facts,
 )
+from gerrit_workflow_tools.core.patchset_history import built_on
 from gerrit_workflow_tools.core.reviewer import ReviewerAccount
 
 
@@ -190,8 +191,9 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     wip: bool = False
     private: bool = False
     diverged: bool = False
-    """``newer``, and Gerrit's current patch set is a commit this repository never had: somebody
-    else (or another checkout) uploaded it, so a push would put this commit over work it was not built on."""
+    """:func:`is_diverged`: ``newer``, and Gerrit's current patch set is not in this commit's history
+    (somebody else, or another checkout, uploaded it), so a push would put this commit over work it
+    was not built on."""
     code_change: CodeChange | None = None
     """``newer`` only: whether its code changed or it is only rebased (then its votes stay)."""
     invalid_footer: str | None = None
@@ -203,14 +205,32 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
 
 
 def overlay_code_facts(cwd: Path | str | None, pairs: Iterable[tuple[Commit, ChangeView | None]]) -> CodeFacts:
-    """The :class:`CodeFacts` :func:`build_log_commit` needs for *pairs*: only commits Gerrit has moved past."""
+    """The :class:`CodeFacts` :func:`build_log_commit` and :func:`is_diverged` need for *pairs*: only commits
+    Gerrit has moved past."""
     shas: list[str | None] = []
+    newer: list[tuple[str, str]] = []
     for row, change in pairs:
         if change is None or not row.valid_change_id or norm_sha(row.sha) == norm_sha(change.current_revision or ""):
             continue
         if (change.status or "").upper() == "MERGED" or patchset_status(row.sha, change) == PatchsetStatus.NEWER:
             shas += [row.sha, change.current_revision]
-    return read_code_facts(cwd, shas)
+            if change.current_revision and (change.status or "").upper() != "MERGED":
+                newer.append((row.sha, change.current_revision))
+    facts = read_code_facts(cwd, shas)
+    return replace(facts, built_on=built_on(cwd, newer)) if newer else facts
+
+
+def is_diverged(local_sha: str, change: ChangeView, facts: CodeFacts) -> bool:
+    """CONTEXT.md **diverged**: *local_sha* is ``newer`` than *change*'s current patch set, which is not in its history.
+
+    *facts* is :func:`overlay_code_facts` over the pair. Whether this repository has the patch set's
+    commit does not matter (ADR-0015): a fetch or a refused ``ger checkout --update`` brings it without
+    building on it.
+    """
+    current = change.current_revision
+    if current is None or patchset_status(local_sha, change) != PatchsetStatus.NEWER:
+        return False
+    return norm_sha(current) not in facts.built_on
 
 
 def patchset_status(local_sha: str, change: ChangeView) -> PatchsetStatus:
@@ -314,8 +334,7 @@ def build_log_commit(
     # Unless the commit is only rebased: Gerrit carries the votes over on such a push, so they stay.
     code = code_change(sha, change, facts) if newer else None
     votes_moved_on = newer and code is not CodeChange.REBASED
-    current = change.current_revision
-    diverged = newer and current is not None and norm_sha(current) not in facts.present
+    diverged = newer and is_diverged(sha, change, facts)
     if votes_moved_on:
         needed.discard("checks")
 

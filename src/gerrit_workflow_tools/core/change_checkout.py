@@ -3,31 +3,37 @@
 Spec: docu/spec/commands/checkout.md. Looking, deciding and doing are apart, so the command
 can ask in between: :func:`plan_checkout` only reads the repository, :func:`choose_action`
 turns the user's flags into what to do (``None`` when only the user can say), and
-:func:`apply_checkout` does it. Nothing here prints or prompts.
+``core/change_checkout_apply.py`` does it. Nothing here prints or prompts.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
-from gerrit_workflow_tools.core.gerrit_patchset import GerritPatchset, ResolvedChange, fetch_patchset
-from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git, git_out
+from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet
+from gerrit_workflow_tools.core.gerrit_change_status import PatchsetStatus, patchset_status
+from gerrit_workflow_tools.core.gerrit_patchset import GerritPatchset, ResolvedChange, patchset_of
+from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git_out
 from gerrit_workflow_tools.core.git_state import (
     checked_out_branch_name,
     effective_gerrit_destination_branch,
     is_bookkeeping_branch,
     refs_for_push_branch_name,
-    resolve_upstream_abbrev_ref,
 )
-from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict
-from gerrit_workflow_tools.core.review_checkout import BRANCH_PREFIX, refuse_own_edits
-from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_commits, read_commit_rows
-from gerrit_workflow_tools.core.upstream import track_remote_branch
+from gerrit_workflow_tools.core.review_checkout import BRANCH_PREFIX
+from gerrit_workflow_tools.core.stack import Commit, commits_in_range, read_commit_rows
 from gerrit_workflow_tools.core.usage import Refusal
+
+
+if TYPE_CHECKING:
+    from gerrit_workflow_tools.core.gerrit.changes import ChangeApi
 
 
 class CheckoutRefusal(Refusal):
@@ -90,6 +96,10 @@ class CheckoutPlan:
     """For a local version Gerrit never had: ``(patchset, commit)`` of the newest patchset of the change
     this repository has, the one the edits were most likely made on. What :attr:`CheckoutAction.MERGE`
     merges from."""
+    gerrit_above: tuple[GerritPatchset, ...] = ()
+    """The lowest commits above the local version that take Gerrit's current patchset of their change
+    when the local version becomes the patchset: each is an older patchset of its change (no edits of
+    yours), and Gerrit's current one sits on the one below (:func:`gerrit_above`)."""
 
     @property
     def state(self) -> LocalState:
@@ -117,9 +127,14 @@ class CheckoutResult:
     """The old tip, when ``--force`` moved a branch off commits Gerrit does not have."""
     merged_from: int | None = None
     """For a merge: the patchset your edits were taken against."""
+    took: tuple[GerritPatchset, ...] = ()
+    """The commits above it that became Gerrit's current patchset of their change
+    (:attr:`CheckoutPlan.gerrit_above`)."""
+    same_as_patchset: bool = False
+    """For a merge: your version held nothing the patchset does not, so the branch has the patchset itself."""
 
 
-def _gerrit_branch(cwd: Path | str, branch: str, settings: Settings) -> str | None:
+def gerrit_branch(cwd: Path | str, branch: str, settings: Settings) -> str | None:
     """The Gerrit branch *branch* pushes to (``main``), or ``None`` when it has no Gerrit destination."""
     destination = effective_gerrit_destination_branch(cwd, branch, settings=settings)
     return refs_for_push_branch_name(destination, settings=settings) if destination else None
@@ -142,7 +157,7 @@ def find_local_versions(cwd: Path | str, change: ResolvedChange, *, settings: Se
             continue
         holders = git_out("for-each-ref", "--format=%(refname:short)", f"--contains={row.sha}", "refs/heads/", cwd=cwd)
         for branch in holders.splitlines():
-            if is_bookkeeping_branch(branch) or _gerrit_branch(cwd, branch, settings) not in (None, view.branch):
+            if is_bookkeeping_branch(branch) or gerrit_branch(cwd, branch, settings) not in (None, view.branch):
                 continue
             above = commits_in_range(cwd, f"{row.sha}..refs/heads/{branch}", first_parent=True)
             versions.append(LocalVersion(branch, row, change.patch_set_of(row.sha), tuple(above)))
@@ -177,12 +192,20 @@ def _pick(versions: list[LocalVersion], current: str | None, patchset: GerritPat
 
 
 def plan_checkout(
-    cwd: Path | str, change: ResolvedChange, patch_set: int | None, *, settings: Settings, branch: str | None = None
+    cwd: Path | str,
+    change: ResolvedChange,
+    patch_set: int | None,
+    *,
+    settings: Settings,
+    branch: str | None = None,
+    changes: ChangeApi | None = None,
 ) -> CheckoutPlan:
     """What checking patchset *patch_set* (default: current) of *change* out would meet. Reads only.
 
     *branch* is ``-b``: the branch to put the patchset on, and the one whose local version
-    counts. Without it, the change's local version decides, else ``change-<number>``.
+    counts. Without it, the change's local version decides, else ``change-<number>``. *changes*
+    asks Gerrit about the commits above the local version (:func:`gerrit_above`); without it none
+    are taken.
     """
     patchset = change.patchset(patch_set)
     versions = find_local_versions(cwd, change, settings=settings)
@@ -201,7 +224,34 @@ def plan_checkout(
         elsewhere=tuple(v for v in versions if v.branch != name),
         current_branch=current,
         edit_base=_edit_base(cwd, change, patchset) if edited else None,
+        gerrit_above=gerrit_above(changes, change.view, patchset, local.above) if changes and local else (),
     )
+
+
+def gerrit_above(
+    changes: ChangeApi, view: ChangeView, patchset: GerritPatchset, above: Sequence[Commit]
+) -> tuple[GerritPatchset, ...]:
+    """Gerrit's current patchsets for the lowest of *above*, when the commit below them becomes *patchset*.
+
+    One by one from the bottom, while the commit is an older patchset of its open change (so it holds
+    no edits of yours) and Gerrit's current patchset of that change sits on the one below: taking it
+    as Gerrit has it leaves nothing to push. The first that does not stops it; it and the rest are
+    rebased as before. *view* is the change being checked out: the others are on its project and branch.
+    """
+    keys = {c.sha: build_triplet(view.project, view.branch, c.valid_change_id) for c in above if c.valid_change_id}
+    payloads = changes.get_payloads(list(keys.values())) if keys else {}
+    taken: list[GerritPatchset] = []
+    below = patchset.commit
+    for commit in above:
+        payload = payloads.get(keys.get(commit.sha, ""))
+        other = ChangeView.from_payload(payload) if payload else None
+        if other is None or not other.is_open or patchset_status(commit.sha, other) is not PatchsetStatus.OUTDATED:
+            break
+        if other.first_parent != below:
+            break
+        taken.append(patchset_of(other, keys[commit.sha]))
+        below = taken[-1].commit
+    return tuple(taken)
 
 
 def _edit_base(cwd: Path | str, change: ResolvedChange, patchset: GerritPatchset) -> tuple[int, str] | None:
@@ -244,137 +294,3 @@ def choose_action(plan: CheckoutPlan, *, update: bool | None, force: bool) -> Ch
         f'{local.commit.subject}"), so ger will not overwrite it. Switch to it as it is with --no-update, {merge}check '
         f"patchset {patchset.patch_set} out on another branch with -b NAME, or replace your version with --force"
     )
-
-
-def _refusal_to_rebase(plan: CheckoutPlan, why: str) -> CheckoutRefusal:
-    local, patchset = plan.local, plan.patchset
-    assert local is not None
-    return CheckoutRefusal(
-        f"your {len(local.above)} commit(s) above change {patchset.number} on {plan.branch} do not apply onto "
-        f"patchset {patchset.patch_set} ({why}); nothing was changed. Rebase them yourself "
-        f"(git rebase --onto {patchset.commit[:12]} {local.commit.short_sha} {plan.branch}), "
-        f"or check patchset {patchset.patch_set} out on a branch of its own with -b NAME"
-    )
-
-
-def _refuse_merge_above(cwd: Path | str, plan: CheckoutPlan) -> None:
-    """Refuse to move a local version that has a merge commit above it.
-
-    ``git rebase`` does not replay a merge: it leaves it out, and with it whatever only the merge
-    records (a conflict resolved by hand, an edit made while merging). The preview cannot tell
-    either: it replays the merge's first-parent diff, which the rebase then never applies.
-    """
-    local, patchset = plan.local, plan.patchset
-    assert local is not None
-    merges = merge_commits(cwd, [commit.sha for commit in local.above])
-    merge = next((commit for commit in local.above if commit.sha in merges), None)
-    if merge is None:
-        return
-    raise CheckoutRefusal(
-        f'"{merge.subject}" ({merge.short_sha}), above change {patchset.number} on {plan.branch}, is a merge commit, '
-        f"which git rebase cannot replay onto patchset {patchset.patch_set}: what only the merge records would be "
-        "lost; nothing was changed. Rebase the commits above the change yourself "
-        f"(git rebase --rebase-merges --onto {patchset.commit[:12]} {local.commit.short_sha} {plan.branch}), "
-        f"or check patchset {patchset.patch_set} out on a branch of its own with -b NAME"
-    )
-
-
-def _merged_commit(cwd: Path | str, plan: CheckoutPlan) -> str:
-    """One commit: the patchset with your edits of the local version merged in (base: :attr:`CheckoutPlan.edit_base`).
-
-    It carries the local version's message and author and sits where the patchset sits, so it
-    pushes as the next patchset. Nothing is written but objects: a conflict refuses, unchanged.
-    """
-    local, patchset, edit_base = plan.local, plan.patchset, plan.edit_base
-    assert local is not None and edit_base is not None
-    base = edit_base[1]
-    merged = git(
-        "merge-tree",
-        "--write-tree",
-        "--name-only",
-        f"--merge-base={base}",
-        patchset.commit,
-        local.commit.sha,
-        cwd=cwd,
-        check=False,
-    )
-    lines = merged.stdout.splitlines()
-    if merged.returncode != 0 or not lines:
-        conflicted = lines[1 : lines.index("")] if "" in lines else lines[1:]
-        files = ", ".join(conflicted) or "files"
-        raise CheckoutRefusal(
-            f"your edits ({local.commit.short_sha}) and patchset {patchset.patch_set} of change {patchset.number} "
-            f"change the same lines ({files}); nothing was changed. Merge them yourself, or keep one side: "
-            f"--no-update keeps yours, --force takes patchset {patchset.patch_set}"
-        )
-    fields = git_out("log", "-1", "--format=%an%x00%ae%x00%ad%x00%B", local.commit.sha, cwd=cwd).split("\x00", 3)
-    name, email, date, message = fields
-    parents = git_out("rev-list", "--parents", "-n", "1", patchset.commit, cwd=cwd).split()[1:2]
-    env = {"GIT_AUTHOR_NAME": name, "GIT_AUTHOR_EMAIL": email, "GIT_AUTHOR_DATE": date}
-    argv = ["commit-tree", lines[0], *(arg for parent in parents for arg in ("-p", parent))]
-    return git(*argv, cwd=cwd, env=env, input=message).stdout.strip()
-
-
-def _update(cwd: Path | str, plan: CheckoutPlan, target: str | None = None) -> int:
-    """Move the local version to *target* (default: the patchset), replaying the commits above it; how many."""
-    local = plan.local
-    target = target or plan.patchset.commit
-    assert local is not None
-    if not local.above:
-        git("switch", "-q", "-C", plan.branch, target, cwd=cwd)
-        return 0
-    try:
-        conflict: PickConflict | None = first_conflict(cwd, target, local.above, (local.commit, *local.above))
-    except PreviewUnavailable:
-        conflict = None  # this git cannot tell beforehand: the rebase itself finds out
-    if conflict is not None:
-        files = ", ".join(conflict.files)
-        raise _refusal_to_rebase(plan, f'"{conflict.commit.subject}" conflicts' + (f" in {files}" if files else ""))
-    done = git("rebase", "-q", "--onto", target, local.commit.sha, plan.branch, cwd=cwd, check=False)
-    if done.returncode != 0:
-        git("rebase", "--abort", cwd=cwd, check=False)
-        if plan.current_branch and plan.current_branch != plan.branch:
-            git("switch", "-q", plan.current_branch, cwd=cwd, check=False)
-        raise _refusal_to_rebase(plan, (done.stderr.strip() or "git rebase failed").partition("\n")[0])
-    return len(local.above)
-
-
-def apply_checkout(
-    cwd: Path | str, plan: CheckoutPlan, action: CheckoutAction, *, settings: Settings
-) -> CheckoutResult:
-    """Do *action*. Refuses before touching anything while the working tree has changes to tracked files,
-    or when a merge commit sits above the local version to move (:func:`_refuse_merge_above`).
-
-    The patchset is fetched with its target branch, so a branch created for it tracks an
-    up-to-date ``<remote>/<target>``. A local version without a Gerrit destination gets that
-    upstream too; one that has a destination keeps it.
-    """
-    remote, patchset, branch = settings.gerrit_remote, plan.patchset, plan.branch
-    if action is CheckoutAction.SWITCH and branch == plan.current_branch:
-        return CheckoutResult(action, branch, resolve_upstream_abbrev_ref(cwd, branch), unchanged=True)
-    refuse_own_edits(cwd, None, rerun="ger checkout")
-    if action in (CheckoutAction.UPDATE, CheckoutAction.MERGE):
-        _refuse_merge_above(cwd, plan)
-    rebased, moved_from, merged_from = 0, None, None
-    if action is CheckoutAction.SWITCH:
-        git("switch", "-q", branch, cwd=cwd)
-    else:
-        fetch_patchset(cwd, remote, patchset, with_target_branch=True)
-    if action is CheckoutAction.CREATE:
-        old = plan.existing_tip
-        if old and git_out("rev-list", old, "--not", patchset.commit, cwd=cwd):
-            moved_from = old
-        git("switch", "-q", "-C" if old else "-c", branch, patchset.commit, cwd=cwd)
-    elif action is CheckoutAction.UPDATE:
-        local = plan.local
-        assert local is not None
-        if plan.state is LocalState.EDITED:
-            moved_from = (local.above[-1] if local.above else local.commit).sha
-        rebased = _update(cwd, plan)
-    elif action is CheckoutAction.MERGE:
-        rebased = _update(cwd, plan, _merged_commit(cwd, plan))
-        merged_from = plan.edit_base[0] if plan.edit_base else None
-    if action is CheckoutAction.CREATE or _gerrit_branch(cwd, branch, settings) is None:
-        track_remote_branch(cwd, branch, remote, patchset.target_branch)
-    upstream = resolve_upstream_abbrev_ref(cwd, branch)
-    return CheckoutResult(action, branch, upstream, rebased=rebased, moved_from=moved_from, merged_from=merged_from)

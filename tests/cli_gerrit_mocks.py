@@ -108,10 +108,14 @@ def build_details_by_change_id(
 def at_older_patchsets(details: dict[str, dict[str, Any]], repo: Path) -> dict[str, dict[str, Any]]:
     """*details* with Gerrit at an older patchset of each change, so a push sends every local commit.
 
-    The older patchset is a commit *repo* has (its ``main``), as a patchset you pushed is: one it
-    never had would make the change **diverged**, which a push refuses.
+    The older patchset is a commit in the checked-out branch's history (its reflog), as a patchset
+    you pushed from here and amended since is: one it was never at would make the change
+    **diverged**, which a push refuses (ADR-0015).
     """
-    older = git_out("rev-parse", "main", cwd=repo)
+    from tests.helpers import in_branch_history
+
+    older = git_out("commit-tree", "main^{tree}", "-p", "main", "-m", "pushed once", cwd=repo)
+    in_branch_history(repo, older)
     for detail in details.values():
         detail["current_revision"] = older
         detail["revisions"] = {older: {"_number": 1}}

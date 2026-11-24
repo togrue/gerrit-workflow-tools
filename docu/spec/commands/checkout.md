@@ -3,7 +3,7 @@
 | | |
 |--|--|
 | **Status** | **Implemented** |
-| **Module** | `cli_checkout.py`; the decision and the git work in `core/change_checkout.py`; the patchset from `core/gerrit_patchset.py` |
+| **Module** | `cli_checkout.py`; the decision in `core/change_checkout.py`, the git work in `core/change_checkout_apply.py`; the patchset from `core/gerrit_patchset.py` |
 | **Requires** | A git repository, `ger.webUrl`, credentials |
 
 Check a Gerrit change out to work on it: rework a change of yours on another machine, take over a colleague's, or pick up a new patchset someone pushed. The change lands on a local branch whose upstream is the change's **target branch** on `ger.remote`, so `ger log` shows its review chain as the **local stack** and `ger push` uploads a new patchset, with nothing to set up.
@@ -16,7 +16,10 @@ Check a Gerrit change out to work on it: rework a change of yours on another mac
 
 ```
 ger checkout CHANGEISH [--patchset N] [-b NAME] [--update | --no-update] [--force] [-y]
+ger checkout --update
 ```
+
+Without `CHANGEISH`, `--update` updates **the whole local stack** (see [Updating the local stack](#updating-the-local-stack)); any other flag without a change exits `2`.
 
 `CHANGEISH` takes the full changeish grammar ([change-and-commit-identifiers.md](../change-and-commit-identifiers.md)): a change number, `change:N`, `cN`, `#N`, a Gerrit URL, a triplet, a `refs/changes/…` ref, a Change-Id. A bare number is a change number here, not a git revision, as in `ger review`. A Change-Id that exists on several target branches is narrowed to your push branch with a resolution note; when that leaves more than one, or none on your push branch and several elsewhere, `ger checkout` exits `4` and lists each candidate as `cN (triplet, status)`, so you can name one.
 
@@ -42,7 +45,7 @@ When the change has a local version, `ger checkout` does not make a second copy.
 |---|---|
 | **Is the patchset** | Switch to its branch and say so (`already on …` when you are there) |
 | **Another patchset of the change** (its commit is a revision Gerrit knows, so it was pushed) | Ask `Update it to patchset N?` (default yes). Yes updates it, no switches to the branch unchanged. `--update` and `--no-update` answer without asking |
-| **Never pushed in that form** (Gerrit has no revision with its commit: you edited it) | Never overwritten silently. With `--update`, when the repository has an older patchset of the change (the one your edits were most likely made on), your edits are **merged** into the patchset: a three-way merge (base: that older patchset) with your commit's message and author, sitting where the patchset sits, the commits above rebased onto it. Push it as the next patchset. A merge that conflicts changes nothing and exits `1`, naming the files. Otherwise `ger checkout` exits `1`, names the commit, and offers the ways out: `--no-update` switches to it as it is, `--update` merges (when it can), `-b NAME` checks the patchset out on another branch, `--force` replaces your version (the old tip is printed) |
+| **Never pushed in that form** (Gerrit has no revision with its commit: you edited it) | Never overwritten silently. With `--update`, when the repository has an older patchset of the change (the one your edits were most likely made on), your edits are **merged** into the patchset: a three-way merge (base: that older patchset) with your commit's message and author, sitting where the patchset sits, the commits above rebased onto it. Push it as the next patchset. When the merge has the patchset's own tree and message (your version holds nothing the patchset lacks, as after rebasing your commit onto the same new parent Gerrit rebased it onto), the branch gets **the patchset itself**, so there is nothing to push: `your version on <branch> has nothing change N patchset M "…" lacks: took it as Gerrit has it`. Otherwise ger records that it took the patchset over (`refs/ger/taken/<patchset>`, pointing at the merge), since the merge sits beside the patchset rather than on it: `ger log` then shows your commit `ahead of gerrit`, no longer **diverged**, and `ger push` sends it ([ADR-0015](../../adr/0015-diverged-is-decided-by-history.md)). A merge that conflicts changes nothing and exits `1`, naming the files, the fetched patchset's SHA, a `git diff <yours> <theirs> -- <files>` to see where, and how to merge by hand: `ger checkout change:N --force` takes the patchset (and prints your old tip), then `git diff <base> <yours> \| git apply -3`, resolve, `git commit -a --amend --no-edit`; or `ger push --force` replaces the patchset with yours. Having fetched the patchset does not make it yours: the change stays **diverged** after the refusal, and `ger push` still refuses it. Otherwise `ger checkout` exits `1`, names the commit, and offers the ways out: `--no-update` switches to it as it is, `--update` merges (when it can), `-b NAME` checks the patchset out on another branch, `--force` replaces your version (the old tip is printed) |
 
 **Without a terminal**, the update question is not guessed: `ger checkout` exits `1` without changing anything and says to pass `--update` or `--no-update`. `-y` (or `GER_ASSUME_YES=1`) answers it yes, as `--update` does.
 
@@ -56,6 +59,8 @@ The local version's commit is replaced by the patchset, and **the commits above 
 
 What is below the local version is replaced by what is below the patchset on Gerrit. That loses nothing: the local version was pushed, so everything below it was pushed too.
 
+**The commits above that Gerrit already moved along are taken as Gerrit has them.** From the bottom, while a commit above is an older patchset of its open change (it holds no edits of yours: Gerrit has it) and Gerrit's current patchset of that change sits on the commit below it as it is now (the patchset just checked out, then the one taken before), that current patchset replaces it, fetched in the same `git fetch`. The first commit that does not qualify stops this; it and the ones above are rebased. That is the web edit of a lower change that Gerrit rebased the rest of the chain onto: the update leaves every commit as Gerrit has it, `ger log` shows them current and `ger push` has nothing to send. Without it, the rebase would give the commits above new SHAs with Gerrit's trees, and the next push would upload patchsets that change nothing. The first line says so: `…, took change 1235 patchset 3 above it as Gerrit has it`.
+
 Before rebasing, each commit above is replayed in the object store (`git merge-tree`, as `ger serve`'s stack moves preview). When one would conflict, `ger checkout` exits `1` before changing anything, names the commit and the files, and says how to do it by hand or how to check the patchset out on its own branch with `-b NAME`. A git too old for the preview tries the rebase and aborts it on a conflict, which leaves the branch as it was.
 
 A **merge commit** above the local version is not replayed at all: `git rebase` leaves a merge out, and with it what only the merge records (a conflict you resolved by hand). So `ger checkout` exits `1` before changing anything, names the merge, and offers the same two ways out, the rebase by hand with `--rebase-merges`. `--force` does not override this; `--no-update` and `-b NAME` are unaffected.
@@ -63,6 +68,10 @@ A **merge commit** above the local version is not replayed at all: `git rebase` 
 A forced update of a version that was never pushed works the same way; the branch's old tip is printed on stderr so your version can be recovered.
 
 A local version's branch keeps its upstream. One with no Gerrit destination gets `<remote>/<target>` as its upstream.
+
+### Updating the local stack
+
+`ger checkout --update` with no change brings every **outdated** commit of the current branch's local stack to Gerrit's current patchset: "take everything Gerrit has". It updates the lowest outdated commit as `ger checkout change:N --update` would (taking the commits above it that Gerrit moved along, rebasing the rest), then looks again, until none is outdated or the same change comes up twice. An outdated commit holds no edits of yours, so nothing is lost; a commit with edits (`newer`, **diverged** or not) is left for `ger checkout change:N --update` to merge. Each update prints its line, as a single update does; with nothing outdated it prints `nothing to update: no commit of <branch> is outdated` and exits `0`. A refusal (a conflict rebasing the commits above) stops it with exit `1`; the updates before it stay. On a detached HEAD it exits `1`.
 
 ---
 
@@ -82,7 +91,7 @@ checked out change 1234 patchset 4 "Extract command routing" on change-1234
   https://host/c/proj/+/1234
 ```
 
-The first line is one of: `checked out … on <branch>`, `updated <branch> from patchset 3 to change 1234 patchset 4 "…", rebased the 2 commit(s) above it`, `switched to <branch>: it has …` (`already on <branch>: …`; when the change sits below the branch tip, `already on <branch>: change 1234 patchset 4 "…" is 2 commit(s) below HEAD`, and HEAD stays where it is), `switched to <branch>, left at patchset 3 (Gerrit has patchset 4)`, `switched to <branch>, left as it is: your version differs from patchset 4`.
+The first line is one of: `checked out … on <branch>`, `updated <branch> from patchset 3 to change 1234 patchset 4 "…", rebased the 2 commit(s) above it` (`…, took change 1235 patchset 3 above it as Gerrit has it` for the commits taken as they are), `merged your version on <branch> into …; push it as the next patchset`, `your version on <branch> has nothing … lacks: took it as Gerrit has it`, `switched to <branch>: it has …` (`already on <branch>: …`; when the change sits below the branch tip, `already on <branch>: change 1234 patchset 4 "…" is 2 commit(s) below HEAD`, and HEAD stays where it is), `switched to <branch>, left at patchset 3 (Gerrit has patchset 4)`, `switched to <branch>, left as it is: your version differs from patchset 4`.
 
 ---
 
@@ -91,8 +100,8 @@ The first line is one of: `checked out … on <branch>`, `updated <branch> from 
 | Code | When |
 |------|------|
 | `0` | Done, including switching to a local version you chose not to update |
-| `1` | Needs your decision: the local version holds edits Gerrit never had (and `--update` was not given, or its merge conflicts); the update question has no terminal to ask on; several local versions no rule decides between; `-b NAME` is taken; the commits above would not rebase cleanly, or one of them is a merge commit |
-| `2` | Bad usage; a rebase is in progress; changes to tracked files are in the way |
+| `1` | Needs your decision (`ger checkout --update` on a detached HEAD too): the local version holds edits Gerrit never had (and `--update` was not given, or its merge conflicts); the update question has no terminal to ask on; several local versions no rule decides between; `-b NAME` is taken; the commits above would not rebase cleanly, or one of them is a merge commit |
+| `2` | Bad usage (no `CHANGEISH` without `--update`, or with another flag); a rebase is in progress; changes to tracked files are in the way |
 | `3` | The changeish or patchset resolves to nothing |
 | `4` | The Change-Id names changes on several target branches and narrowing could not pick one |
 | `5` | Gerrit failed |

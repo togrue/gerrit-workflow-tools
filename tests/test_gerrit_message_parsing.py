@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from gerrit_workflow_tools.core.ci_links import CiLink, apply_ci_strategy
+from gerrit_workflow_tools.core.ci_links import CiLink, CiVerdict, apply_ci_strategy
 from gerrit_workflow_tools.core.ci_strategy import default_extract_ci_links
 from gerrit_workflow_tools.core.gerrit_message_parsing import (
     ci_links_from_build_failed_messages,
@@ -63,6 +63,12 @@ def test_jenkins_build_url_from_text_build_started_inline() -> None:
             "build_failed",
             2,
             "https://ci.example.org/job/Widget/job/Widget/55",
+        ),
+        (
+            "Patch Set 2: Verified-1\n\nBuild Unstable \n\nhttps://ci.example.org/job/Widget/job/Widget/56/ : UNSTABLE",
+            "build_unstable",
+            2,
+            "https://ci.example.org/job/Widget/job/Widget/56",
         ),
         (
             "Patch Set 4:\n\nNo Builds Executed",
@@ -233,3 +239,45 @@ def test_default_extract_ci_links_checks_before_messages() -> None:
             source="checks",
         )
     ]
+
+
+def _unstable(build: int, patch_set: int, date: str) -> dict[str, object]:
+    return {
+        "message": (
+            f"Patch Set {patch_set}: Verified-1\n\nBuild Unstable \n\n"
+            f"https://ci.example.org/job/Widget/{build}/ : UNSTABLE"
+        ),
+        "_revision_number": patch_set,
+        "date": date,
+    }
+
+
+def test_an_unstable_build_is_a_ci_link_with_its_own_verdict() -> None:
+    links = default_extract_ci_links(project="acme/widget", checks=[], messages=[_unstable(56, 1, "2026-01-01")])
+    assert links == [
+        CiLink(
+            label="jenkins",
+            url="https://ci.example.org/job/Widget/56/console",
+            source="message",
+            verdict=CiVerdict.UNSTABLE,
+        )
+    ]
+    assert links[0].build_url == "https://ci.example.org/job/Widget/56"
+
+
+def test_the_newest_of_a_failed_and_an_unstable_build_is_the_link() -> None:
+    failed = {
+        "message": "Patch Set 1: Verified-1\n\nBuild Failed \n\nhttps://ci.example.org/job/Widget/55/ : FAILURE",
+        "_revision_number": 1,
+        "date": "2026-01-01 10:00:00",
+    }
+    [link] = ci_links_from_build_failed_messages([failed, _unstable(56, 1, "2026-01-01 11:00:00")])
+    assert (link.origin_url, link.verdict) == ("https://ci.example.org/job/Widget/56", CiVerdict.UNSTABLE)
+    [link] = ci_links_from_build_failed_messages([_unstable(56, 1, "2026-01-01 09:00:00"), failed])
+    assert (link.origin_url, link.verdict) == ("https://ci.example.org/job/Widget/55", CiVerdict.FAILED)
+
+
+def test_an_unstable_build_is_a_failed_pipeline_that_says_unstable() -> None:
+    [pipeline] = ci_pipelines_from_build_messages([_unstable(56, 2, "2026-01-01")], current_revision_number=2)
+    assert (pipeline.state, pipeline.verdict, pipeline.outdated) == ("FAILED", CiVerdict.UNSTABLE, False)
+    assert pipeline.url == "https://ci.example.org/job/Widget/56/console"

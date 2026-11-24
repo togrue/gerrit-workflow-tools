@@ -51,3 +51,12 @@ def force_zero_change_trust_window(monkeypatch: pytest.MonkeyPatch) -> None:
         orig_init(self, *args, **kwargs)
 
     monkeypatch.setattr(GerritService, "__init__", _init)
+
+
+def in_branch_history(repo: Path, sha: str, branch: str | None = None) -> None:
+    """Put *sha* in *branch*'s history (default: the checked-out one) as an earlier position of it, as
+    pushing it from here and then amending or rebasing leaves it: in the branch's reflog."""
+    ref = f"refs/heads/{branch}" if branch else git_out("symbolic-ref", "HEAD", cwd=repo)
+    tip = git_out("rev-parse", ref, cwd=repo)
+    git("update-ref", "-m", "test: pushed from here", ref, sha, cwd=repo)
+    git("update-ref", "-m", "test: amended since", ref, tip, cwd=repo)

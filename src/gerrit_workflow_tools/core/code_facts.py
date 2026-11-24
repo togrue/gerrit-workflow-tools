@@ -24,6 +24,9 @@ class CodeFacts:
     """Which of the asked commits exist here."""
     patch_ids: dict[str, str] = field(default_factory=dict)
     """``git patch-id`` of each present single-parent commit with a non-empty diff."""
+    built_on: frozenset[str] = frozenset()
+    """Gerrit's current patch sets that are in the history of the local commit compared to them
+    (``core/patchset_history.py``): the ones a ``newer`` commit has not **diverged** from."""
 
 
 def read_code_facts(cwd: Path | str | None, shas: Iterable[str | None]) -> CodeFacts:

@@ -79,7 +79,7 @@ The step that takes local commit rows and returns them enriched with Gerrit stat
 _Avoid_: enrichment, sync, fetch
 
 **Patchset status**:
-How the local commit relates to Gerrit's current patch set: `active`, `newer`, `outdated`, `absent`, or one of the merged variants (`merged-same`, `merged-drift`, `merged-unknown`). `unknown` when Gerrit could not be asked at all (unreachable, credentials rejected): not even absence is known. A `newer` commit has **diverged** when Gerrit's current patch set is a commit this repository never had: it was uploaded from elsewhere, and the local commit was not built on it. Otherwise a `newer` commit's **code change** says whether it is only `rebased` (the same `git patch-id` as Gerrit's current patch set, so the votes usually stay), `changed`, or `unknown` (a merge, root or empty commit on either side).
+How the local commit relates to Gerrit's current patch set: `active`, `newer`, `outdated`, `absent`, or one of the merged variants (`merged-same`, `merged-drift`, `merged-unknown`). `unknown` when Gerrit could not be asked at all (unreachable, credentials rejected): not even absence is known. A `newer` commit has **diverged** when Gerrit's current patch set is not in its history: it was uploaded from elsewhere, and the local commit was not built on it. In its history means reachable from a branch holding the commit as it is or was (its reflog, `lastPush/<branch>`), or recorded as taken over by `ger checkout --update` (`refs/ger/taken/`); having the commit object, as any fetch leaves it, does not count (ADR-0015). Otherwise a `newer` commit's **code change** says whether it is only `rebased` (the same `git patch-id` as Gerrit's current patch set, so the votes usually stay), `changed`, or `unknown` (a merge, root or empty commit on either side).
 _Avoid_: state, sync status
 
 **Annotated stack**:
@@ -143,7 +143,7 @@ The outcome when a push will not run: an empty ready range, a rebase check that 
 _Avoid_: push error, nothing to push
 
 **CI link**:
-A useful URL for a failed build (often a Jenkins console), after a project-specific transform. Shown by `ger log -v` and in JSON as `ci_links`. Distinct from raw Checks **names** (`ci_failures`).
+A useful URL for a failed build (often a Jenkins console), after a project-specific transform. Shown by `ger log -v` and in JSON as `ci_links`. Distinct from raw Checks **names** (`ci_failures`). Carries the build's **verdict** (`CiVerdict`): `failed`, or `unstable` (the build ran and marked itself unstable: failed tests, a quality gate). Both are failures everywhere: attention, `ger ci`, the CI view.
 _Avoid_: build URL (unqualified), CI failure (the name alone)
 
 **CI strategy**:

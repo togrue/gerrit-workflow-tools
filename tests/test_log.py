@@ -38,7 +38,7 @@ from tests.cli_gerrit_mocks import (
     stack_rows_mb_to_head,
 )
 from tests.conftest import json_stdout, run_cli
-from tests.helpers import force_zero_change_trust_window, write_rebase_head
+from tests.helpers import force_zero_change_trust_window, in_branch_history, write_rebase_head
 
 
 def _configure_repo(repo: Path) -> None:
@@ -917,7 +917,8 @@ def _ai_stack(stack_repo: Path) -> ChangeStore:
         {"cr": 0, "submittable": False},
     ]
     details = build_details_by_change_id(rows[:4], per_index_overrides=overrides)
-    older = git_out("rev-parse", "main", cwd=stack_repo)
+    older = git_out("commit-tree", f"{rows[3].sha}^{{tree}}", "-p", f"{rows[3].sha}^^", "-m", "pushed", cwd=stack_repo)
+    in_branch_history(stack_repo, older)  # pushed from here, then rebased: newer, not diverged
     newer = details[f"testproj~main~{rows[3].change_id}"]
     newer["current_revision"], newer["revisions"] = older, {older: {"_number": 1}}
     checks = {f"testproj~main~{rows[1].change_id}": [{"state": "FAILED", "checker_name": "unit-tests"}]}
