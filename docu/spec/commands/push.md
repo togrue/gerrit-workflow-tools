@@ -147,6 +147,16 @@ The line also answers the prompt itself, and these words are never reviewers (a 
 
 **Drafts.** When you have drafts on changes the push updates, the push-options input line is the same one, and the `publish-drafts` keyword decides: with it the push adds Gerrit's `publish-comments` push option, without it the drafts stay. The line starts as `publish-drafts` and the status line shows `Drafts publish N`, so Enter pushes and publishes; delete the keyword (or type `-publish-drafts`) to keep them. With `ger.pushPublishDrafts = false` the line starts empty and the status line shows `Drafts keep N`; `--publish-comments` starts it with `publish-drafts` either way. Without a terminal on stdout the question is `Push and publish N draft(s)? [Y/n/p/r]` instead: yes publishes, `p` pushes and keeps them. Whenever the push does not publish, it sends `no-publish-comments`, so an account preference that publishes on push cannot publish them behind your back. Drafts on commits Gerrit already has (no new patchset) cannot be published by a push; the preview names them (`drafts on … stay drafts`). Details: [reply.md](reply.md#publishing-with-ger-push).
 
+**After the push.** git's own output comes first, untouched; its URLs are whatever host the server thinks it is. Then, with Gerrit's view of the changes, ger's closing lines: each change the push gave a patch set, with the patch set's page built from `ger.webUrl`, and what became of your drafts on them:
+
+```
+Pushed to refs/for/main:
+    97f681f  # history: add undo  change 2101, patchset 3  http://gerrit.example/c/proj/+/2101/3
+2 drafts stay drafts; publish with `ger reply --publish`, or push with --publish-comments
+```
+
+(or `published 2 drafts with the push`). That is one request for the pushed changes, whose cached state the push dropped: the fetch the next `ger log` would make, which it then finds current. With `-y` the status line (`Branch | Target | Reviewers | Topic | WIP | Private | Drafts`) is printed too, before the push, as at the prompt.
+
 After success, optional `lastPush/<branch>` marker (`ger.lastPushedBranch`, default on).
 
 ---

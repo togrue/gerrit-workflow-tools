@@ -1,18 +1,21 @@
 """What each commit a push sends becomes on Gerrit: a new change, or the next patch set of one. Does not print.
 
-Read from the changes the push loads anyway (``check_existing_changes``) and from the repository:
-no request of its own.
+Before the push, read from the changes it loads anyway (``check_existing_changes``) and from the
+repository: no request of its own. After it, :func:`pushed_changes` says what they became.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from gerrit_workflow_tools.core.code_facts import CodeChange, code_change
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
+from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, build_triplet
 from gerrit_workflow_tools.core.gerrit_change_status import PatchsetStatus, overlay_code_facts, patchset_status
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit
 
 
@@ -70,3 +73,42 @@ def next_patchsets(
             tuple(account.slug for account in view.reviewers or ()),
         )
     return out
+
+
+@dataclass(frozen=True)
+class PushedChange:
+    """A commit a push sent, as Gerrit has it now: the change and the patch set it became."""
+
+    commit: Commit
+    number: int | None
+    patch_set: int | None
+    url: str | None
+    """The patch set's page, built from ``ger.webUrl`` (not from the URLs git's remote output names)."""
+
+
+def pushed_changes(run: RunContext, commits: Sequence[Commit]) -> tuple[PushedChange, ...]:
+    """*commits*, which a push just sent, as Gerrit has them now; empty without credentials or an answer.
+
+    One request for all of them: the push dropped their cached state, so this fetch is what the
+    next ``ger log`` would make anyway, and it leaves the cache current.
+    """
+    service = run.gerrit
+    with_ids = [commit for commit in commits if commit.valid_change_id]
+    if not with_ids or not service.credentials_configured:
+        return ()
+    try:
+        stack = run.stack
+        triplets = {c.sha: build_triplet(stack.project, stack.push_branch, c.valid_change_id or "") for c in with_ids}
+        payloads = service.changes.get_payloads(list(dict.fromkeys(triplets.values())))
+    except (ValueError, GerritApiError, ChangeResolutionError):
+        return ()
+    out: list[PushedChange] = []
+    for commit in with_ids:
+        payload = payloads.get(triplets[commit.sha])
+        view = ChangeView.from_payload(payload) if payload else None
+        revision = view.revisions.get(commit.sha.lower()) if view else None
+        if view is None or revision is None:  # Gerrit does not show it as a patch set of the change
+            continue
+        page = view.url(service.web_base)
+        out.append(PushedChange(commit, view.number, revision.number, page and f"{page}/{revision.number}"))
+    return tuple(out)

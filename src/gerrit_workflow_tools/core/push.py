@@ -40,7 +40,7 @@ from gerrit_workflow_tools.core.push_reviewers import (
     push_marks,
     unknown_reviewers,
 )
-from gerrit_workflow_tools.core.push_targets import NextPatchset
+from gerrit_workflow_tools.core.push_targets import NextPatchset, pushed_changes
 from gerrit_workflow_tools.core.push_unchanged import (
     AbandonedChange,
     OutdatedChange,
@@ -337,6 +337,7 @@ def execute(run: RunContext, plan: PushPlan | Sequence[str]) -> PushResult:
     if rejected:
         captured = PushResult(returncode=0, nothing_sent=True)
     _forget_pushed_changes(run, plan)
+    pushed = () if rejected else pushed_changes(run, sent_commits(plan))
     reviewers, error = _apply_reviewers(run, plan)
     updates = state_updates(plan)
     failures = apply_updates(run.gerrit, updates) if updates else []
@@ -352,6 +353,7 @@ def execute(run: RunContext, plan: PushPlan | Sequence[str]) -> PushResult:
         warning=note or None,
         updated=tuple(update for update in updates if update not in failed_updates),
         update_failures=tuple(failures),
+        pushed=pushed,
     )
 
 

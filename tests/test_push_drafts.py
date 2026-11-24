@@ -256,3 +256,43 @@ def test_guard_starts_the_line_without_publish_drafts(stack_repo: Path, monkeypa
     assert code == ExitCode.OK
     assert calls[0]["suffix"] == ""
     assert "no-publish-comments" in _options(refspec)
+
+
+def _pushing_to(store: ChangeStore, keys: list[str], rows: list[Commit], monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    """``git push`` that Gerrit takes: each change gets the local commit as patchset 2."""
+
+    def _push(*_a: object, **_k: object) -> subprocess.CompletedProcess[str]:
+        for key, row in zip(keys, rows, strict=True):
+            store.upload_patchset(key, row.sha, 2)
+        return subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr="remote: http://elsewhere/c/x/+/1\n"
+        )
+
+    mock_run = MagicMock(side_effect=_push)
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    return mock_run
+
+
+@pytest.mark.parametrize(
+    ("argv", "says"),
+    [
+        (["-y"], "1 draft stays a draft; publish with `ger reply --publish`, or push with --publish-comments"),
+        (["-y", "--publish-comments"], "published 1 draft with the push"),
+    ],
+)
+def test_yes_says_what_became_of_the_drafts_and_where_the_changes_are(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str], says: str
+) -> None:
+    """Before: -y kept the drafts with no word about them, and only git's remote output followed."""
+    store, rows, keys = _pushed(stack_repo)
+    _with_draft(store, keys[0])
+    _pushing_to(store, keys, rows, monkeypatch)
+    code, out, _err = run_cli(stack_repo, push_main, argv, monkeypatch, gerrit=store)
+    assert code == ExitCode.OK
+    assert ("Drafts publish 1" if "--publish-comments" in argv else "Drafts keep 1") in out  # the status line
+    closing = out.split("\nPushed to refs/for/main:\n")[1].splitlines()
+    assert closing == [
+        f"    {rows[0].short_sha}  # {rows[0].subject}  change 100, patchset 2  https://gerrit.example/c/testproj/+/100/2",
+        f"    {rows[1].short_sha}  # {rows[1].subject}  change 101, patchset 2  https://gerrit.example/c/testproj/+/101/2",
+        says,
+    ]

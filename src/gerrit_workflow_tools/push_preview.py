@@ -20,6 +20,7 @@ from gerrit_workflow_tools.core.push_reviewers import PushMark, needs_rest_assig
 from gerrit_workflow_tools.core.push_targets import NEW_CHANGE
 from gerrit_workflow_tools.core.push_unchanged import StateUpdate
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
+from gerrit_workflow_tools.core.stack import Commit
 from gerrit_workflow_tools.render.style import (
     ANSI_BLUE,
     ANSI_BOLD,
@@ -175,9 +176,13 @@ def print_not_sent(plan: PushPlan) -> None:
 
 def update_line(update: StateUpdate, summary_highlighter: SummaryHighlighter | None = None) -> str:
     """``<sha> # <subject>  <what is set>``: one change Gerrit already has, and what a push sets on it."""
-    commit = update.change.commit
+    return f"{update_line_head(update.change.commit, summary_highlighter)}  {update.describe()}"
+
+
+def update_line_head(commit: Commit, summary_highlighter: SummaryHighlighter | None = None) -> str:
+    """``<sha> # <subject>``, as the lines after a push name a commit."""
     subject = summary_highlighter.highlight(commit.subject, sha=commit.sha) if summary_highlighter else commit.subject
-    return f"{color_short_sha(commit.short_sha.ljust(8))}{color_text(' # ', ANSI_DIM)}{subject}  {update.describe()}"
+    return f"{color_short_sha(commit.short_sha.ljust(8))}{color_text(' # ', ANSI_DIM)}{subject}"
 
 
 def _wip_field(plan: PushPlan, yes_no: Callable[[bool], str]) -> str:

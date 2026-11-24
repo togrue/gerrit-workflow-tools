@@ -1252,7 +1252,8 @@ def test_a_verbose_flag_that_does_nothing_is_accepted_but_not_advertised(
 
 
 def test_gpush_forgets_only_the_changes_it_sent(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """After a push the next read asks in full for the changes that got a patchset, not for the whole stack."""
+    """After a push the changes that got a patchset are asked for in full once (by the push's closing lines,
+    which leaves the cache current for the next read), not the whole stack."""
     from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS
 
     kept, sent = commits_in_range(stack_repo, "main..feature")[:2]
@@ -1266,15 +1267,15 @@ def test_gpush_forgets_only_the_changes_it_sent(stack_repo: Path, monkeypatch: p
 
     mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
     monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    before = len(store.calls)
     code, out, err = run_cli(stack_repo, gpush_main, ["-y"], monkeypatch, gerrit=store)
     assert code == 0, err
     assert "1 commit Gerrit already has is not sent again" in out
 
-    before = len(store.calls)
     run_cli(stack_repo, log_main, [], monkeypatch, gerrit=store)
-    full = [c for c in store.calls[before:] if c.kwargs.get("options") == list(LOG_QUERY_OPTIONS)]
-    assert len(full) == 1
-    assert sent.change_id in full[0].args[0] and kept.change_id not in full[0].args[0]
+    full = [str(c.args[0]) for c in store.calls[before:] if c.kwargs.get("options") == list(LOG_QUERY_OPTIONS)]
+    assert sum(str(sent.change_id) in query for query in full) == 1
+    assert not any(str(kept.change_id) in query for query in full)
 
 
 def test_gpush_refuses_to_replace_a_patchset_it_never_had(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

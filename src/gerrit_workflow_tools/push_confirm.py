@@ -279,6 +279,8 @@ def confirm_gerrit_push(
         if args.yes:
             if unknown := unknown_plan_reviewers(run, plan):
                 raise UsageError(_no_account(unknown))
+            print()
+            print_plan_status(plan)  # what is sent with it, drafts included, as the prompt would have shown
             if plan.credential_error:
                 print(plan.credential_error, file=sys.stderr)
                 return 1
