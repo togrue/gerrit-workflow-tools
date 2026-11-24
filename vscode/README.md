@@ -335,11 +335,16 @@ When something is missing, the *Review chains* view says what and offers the nex
 |---------------|-----------|
 | Open a folder with a Gerrit checkout / none of the folders is in a git checkout | **Open Folder** (a folder you add later starts ger without a reload) |
 | The program that runs ger was not found | **Install ger** (in a terminal, with uv or pipx), then **Retry**; or **Open Settings** on `ger.executable` when it is installed somewhere else |
-| This repository is not set up for Gerrit yet | **Run ger setup** (in a terminal), then **Retry** |
+| This repository is not set up for Gerrit yet (no `ger.webUrl`) | **Run ger setup** (in a terminal), then **Retry** |
+| ger refuses `ger.webUrl`: it is a plain http:// address | the https:// address (**Run ger setup**), or `git config ger.allowInsecureHttp true` for a test Gerrit; then **Retry** |
+| ger cannot ask Gerrit yet: a setting is missing or wrong | **Run ger setup**, then **Retry** |
 | ger and this extension do not speak the same version of the `ger serve` API (the line above says which versions, and which to update) | **Install the Matching ger** (the release with the extension's version), then **Retry**; when ger is the newer one, updating the extension fixes it too |
 | `ger serve` stopped or failed | **Retry**, or **Show Log** for why |
 
-*Local stack* and *Change* say the same in a line and point to *Review chains*; their buttons in the view title bars appear once ger is running. For an API version they cannot use they say which versions instead, and offer **Update ger** (or, when ger is newer, **Install Matching ger**) themselves.
+**Retry** says what it found when it still cannot start: a notification with ger's reason.
+
+While a setting is wanting, *Local stack* and *Change* say ger's own words for it, with **Run ger setup**.
+Otherwise *Local stack* and *Change* say the same in a line and point to *Review chains*; their buttons in the view title bars appear once ger is running. For an API version they cannot use they say which versions instead, and offer **Update ger** (or, when ger is newer, **Install Matching ger**) themselves.
 
 When the API fits but ger's version differs from the extension's, everything works and a warning says so, once a session: with **Update ger** when ger is older, or a suggestion to update the extension when ger is newer, and **Don't Show Again** for that pair of versions. Dev and local builds are not compared. The log records each comparison and what you chose.
 

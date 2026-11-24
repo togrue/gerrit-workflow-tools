@@ -16,6 +16,7 @@ import {
   eventsMayCome,
   fileState,
   headlineIcon,
+  markdownText,
   movedTo,
   rebaseItem,
   refreshMode,
@@ -268,4 +269,14 @@ test("a review checkout says where the change is: the review worktree, or this c
     reviewOpened({ ...review, staged: false }, true),
     "Change 900 (patchset 2) is checked out for review: this checkout was switched to change-900. Leave Review Checkout switches back.",
   );
+});
+
+test("text in a Markdown tooltip shows as it is: no &nbsp; between its words, no markup or icon read into it", () => {
+  const refusal = "ger.webUrl must use https:// (got 'http://g:8081'): opt in with `git config ger.allowInsecureHttp true`";
+  const shown = markdownText(refusal);
+  assert.ok(!shown.includes("&nbsp;"));
+  // Unescaping every backslash-escaped character gives the text back.
+  assert.equal(shown.replace(/\\(.)/g, "$1"), refusal);
+  assert.equal(markdownText("$(warning) *a* [b](c) <d> & e"), "\\$\\(warning\\) \\*a\\* \\[b\\]\\(c\\) \\<d\\> \\& e");
+  assert.equal(markdownText("one\ntwo"), "one\n\ntwo");
 });

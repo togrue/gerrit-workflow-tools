@@ -22,6 +22,8 @@ export class ServeFailed extends Error {
   constructor(
     message: string,
     readonly code?: string,
+    /** A word for a cause the user can fix, as `ger serve` names it (`insecure-http`). */
+    readonly reason?: string,
   ) {
     super(message);
     this.name = "ServeFailed";
@@ -86,7 +88,7 @@ export class GerProcess {
           return;
         }
         // One JSON line: where it listens, or why it cannot serve.
-        let first: (Hello & { error?: undefined }) | { error: { code: string; message: string } };
+        let first: (Hello & { error?: undefined }) | { error: { code: string; message: string; reason?: string } };
         try {
           first = JSON.parse(out.slice(0, end));
         } catch {
@@ -94,7 +96,7 @@ export class GerProcess {
           return;
         }
         if (first.error) {
-          fail(new ServeFailed(first.error.message, first.error.code));
+          fail(new ServeFailed(first.error.message, first.error.code, first.error.reason));
           return;
         }
         settled = true;

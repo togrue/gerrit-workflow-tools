@@ -4,7 +4,7 @@
 import * as vscode from "vscode";
 
 import { EventFollower } from "./events";
-import { headlineIcon, plural, rebaseItem, refreshMode } from "./format";
+import { headlineIcon, markdownText, plural, rebaseItem, refreshMode } from "./format";
 import { Model } from "./model";
 import { pollSeconds } from "./poller";
 
@@ -24,7 +24,7 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
       const untrusted = model.state === "untrusted";
       const why = untrusted ? "ger starts once you trust this folder." : (model.failure ?? "Starting ger serve…");
       item.text = untrusted ? "$(shield) Gerrit" : model.failure ? "$(warning) Gerrit" : "$(sync~spin) Gerrit";
-      tooltip.appendText(why);
+      tooltip.appendMarkdown(markdownText(why));
       label = `Gerrit: ${why}`;
       item.backgroundColor = undefined;
     } else {
@@ -39,13 +39,13 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
       item.text = `${glyph} ${shown}${news}${old}`;
       label = `Gerrit: ${text}${model.active.size ? `. New activity on ${plural(model.active.size, "chain")}` : ""}${model.stale ? ". Out of date: the last refresh failed" : ""}`;
       if (model.stale) {
-        tooltip.appendMarkdown("$(warning) ").appendText(`Out of date: the last refresh failed (${model.stale}). This is the last answer; the next refresh that works replaces it.`).appendMarkdown("\n\n");
+        tooltip.appendMarkdown("$(warning) ").appendMarkdown(markdownText(`Out of date: the last refresh failed (${model.stale}). This is the last answer; the next refresh that works replaces it.`)).appendMarkdown("\n\n");
       }
       if (headline) {
-        tooltip.appendText(headline.text).appendMarkdown("\n\n");
+        tooltip.appendMarkdown(markdownText(headline.text)).appendMarkdown("\n\n");
       }
       if (rebase) {
-        tooltip.appendText(rebase.next).appendMarkdown("\n\n");
+        tooltip.appendMarkdown(markdownText(rebase.next)).appendMarkdown("\n\n");
       }
       // How urgent, core says: failed CI and a conflict are errors, another rebase stop a warning.
       item.backgroundColor =
@@ -74,10 +74,10 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
       }
       tooltip.appendMarkdown(rebase ? "Click to open Local stack." : headline ? "Click to open it." : "Click to open the overview.");
       // How the views stay current: unobtrusive, only here and in the log.
-      tooltip.appendMarkdown("\n\n").appendText(refreshMode(events.events, pollSeconds(events.live)));
+      tooltip.appendMarkdown("\n\n").appendMarkdown(markdownText(refreshMode(events.events, pollSeconds(events.live))));
     }
     if (note) {
-      tooltip.appendMarkdown("\n\n").appendText(note);
+      tooltip.appendMarkdown("\n\n").appendMarkdown(markdownText(note));
     }
     item.tooltip = tooltip;
     item.accessibilityInformation = { label, role: "button" };

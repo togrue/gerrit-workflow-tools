@@ -143,7 +143,17 @@
       {
         "view": "ger.overview",
         "contents": "This repository is not set up for Gerrit yet: ger needs its web address (`ger.webUrl`) and your credentials, and `ger setup` asks for them.\n[Run ger setup](command:ger.setup)\n[Retry](command:ger.refresh)",
-        "when": "ger.state == setup"
+        "when": "ger.state == setup && ger.setupReason == no-web-url"
+      },
+      {
+        "view": "ger.overview",
+        "contents": "ger refuses ger.webUrl: it is a plain http:// address, and your credentials go with every request. Give it the https:// address (ger setup asks for it), or, for a test Gerrit on your own network, allow http in this repository: git config ger.allowInsecureHttp true. Then Retry.\n[Run ger setup](command:ger.setup)\n[Retry](command:ger.refresh)",
+        "when": "ger.state == setup && ger.setupReason == insecure-http"
+      },
+      {
+        "view": "ger.overview",
+        "contents": "ger cannot ask Gerrit yet: a setting is missing or wrong. Local stack below says what ger reported; ger setup asks for what is missing.\n[Run ger setup](command:ger.setup)\n[Retry](command:ger.refresh)",
+        "when": "ger.state == setup && !ger.setupReason"
       },
       {
         "view": "ger.overview",

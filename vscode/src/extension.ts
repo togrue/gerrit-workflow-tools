@@ -123,7 +123,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   model.onDidChange(() => {
     const waiting = model.overview?.sections?.find((s) => s.name === "to-review")?.chains.length ?? 0;
     overviewTree.description = model.stale ? "out of date" : undefined;
-    // Over the welcome text, which cannot say which versions: this can.
+    // Over the welcome text, which cannot say which versions: this can. (A message hides the welcome text and its
+    // buttons, so setup wanting says its cause there by `ger.setupReason`, and ger's own words in the other views.)
     overviewTree.message = model.incompatible?.message;
     overviewTree.badge = waiting ? { value: waiting, tooltip: `${plural(waiting, "chain")} to review` } : undefined;
   });
@@ -216,7 +217,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
 
   const commands: Record<string, (...args: never[]) => unknown> = {
     "ger.refresh": async () => {
-      if (model.failure || model.stale) {
+      const retried = Boolean(model.failure || model.stale);
+      if (retried) {
         // It failed: Retry starts ger serve afresh, and says so.
         await ui().progress(vscode.ProgressLocation.Notification, "Restarting ger serve", () => {
           model.restart();
@@ -230,6 +232,9 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       if (model.stale) {
         // Failed again: the views keep the last answer (marked out of date); you asked, so say why.
         void ui().message("warning", `Still out of date: ${model.stale}`, {}, []);
+      } else if (model.failure) {
+        // You asked, and it cannot show anything: say what it found this time, not only that it tried.
+        void ui().message("warning", `${retried ? "Still not working" : "Refresh failed"}: ${model.failure}`, {}, []);
       } else if (model.state === "ready") {
         feedback("Refreshed from Gerrit");
         await changeView.open(); // still failing: the change shown stays as it was, the welcome text says why

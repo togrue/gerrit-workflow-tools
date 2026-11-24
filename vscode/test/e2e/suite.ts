@@ -137,6 +137,8 @@ export async function run(): Promise<void> {
       return [
         `status bar | ${status()}`,
         `state  | ${api.model.state}`,
+        // Which welcome text Review chains shows while setup is wanting: the cause ger names.
+        ...(api.model.state === "setup" ? [`chains | (welcome text for setup: ${api.model.setupReason || "any other cause"})`] : []),
         `events | ${api.events.events?.state ?? "(not said)"}`,
         ...(await dump(api.overviewView)).map((line) => `chains | ${line}`),
         ...api.stackView.lines().map((line) => `stack  | ${line}`),
@@ -345,6 +347,29 @@ export async function run(): Promise<void> {
       "Settings › ger.executable set back",
       "ger serve starts again at once, without a reload, and the views show what they showed before.",
       () => settings.update("executable", executable, vscode.ConfigurationTarget.Global),
+    );
+    const webUrl = (url: string) => execFileSync("git", ["config", "ger.webUrl", url], { cwd: repo });
+    await press(
+      "In a terminal, ger.webUrl becomes http://gerrit.example; then Review chains › Refresh from Gerrit",
+      "ger will not send credentials over plain http. Review chains' welcome text says that is why, and names the two ways out (the https:// address, or ger.allowInsecureHttp for a test Gerrit) with Run ger setup and Retry; it does not claim the address is missing. Local stack and Change say ger's own words, with Run ger setup; so does the notification, as you asked for the refresh.",
+      async () => {
+        webUrl("http://gerrit.example");
+        await vscode.commands.executeCommand("ger.refresh");
+        assert.equal(api.model.setupReason, "insecure-http");
+      },
+    );
+    await press(
+      "Review chains › Retry, nothing fixed",
+      "It restarts ger serve, and says what it found: the same refusal, in a notification.",
+      exec("ger.refresh"),
+    );
+    await press(
+      "In a terminal, ger.webUrl is the https:// address again; then Review chains › Retry",
+      "ger serve starts, and the views show what they showed before.",
+      async () => {
+        webUrl("https://g.example");
+        await vscode.commands.executeCommand("ger.refresh");
+      },
     );
 
     // --- Your commit with comments ----------------------------------------------------

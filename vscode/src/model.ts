@@ -6,7 +6,7 @@ import { GerApiError, GerClient, Headline, MoveConflict, Overview, Stack, Upstre
 import { Seen, blockedSwaps, chainsWithActivity, headlineNews, rememberSeen, swapKey } from "./format";
 import type { RowStatus } from "./changeLoad";
 import { IncompatibleServe } from "./compat";
-import { GerProcess } from "./server";
+import { GerProcess, ServeFailed } from "./server";
 import { GerState, failureState, staleReason } from "./state";
 
 const SEEN_KEY = "ger.seen";
@@ -60,6 +60,11 @@ export class Model implements vscode.Disposable {
   stale: string | undefined;
   /** Why `ger serve` was refused, while the state is `incompatible`: the views say which side to update. */
   incompatible: IncompatibleServe | undefined;
+  /**
+   * While the state is `setup`: the setting ger names as the cause, as core words it (`no-web-url`,
+   * `insecure-http`); empty when it names none. The welcome text follows it as `ger.setupReason`.
+   */
+  setupReason = "";
   /** What the views can show; their welcome texts follow it as the `ger.state` context key. */
   state: GerState = "starting";
   /** Keys of chains with activity since they were last seen. */
@@ -138,6 +143,7 @@ export class Model implements vscode.Disposable {
       this.overview = await client.overview(fromGerrit);
       this.failure = undefined;
       this.incompatible = undefined;
+      this.setupReason = "";
       this.stale = undefined;
       // Leave Review Checkout is offered only while there is one to leave.
       const review = await client.review().catch(() => null);
@@ -168,6 +174,8 @@ export class Model implements vscode.Disposable {
         // What was shown may be wrong now: the views say what went wrong and what to do instead.
         this.failure = describeError(error);
         this.incompatible = error instanceof IncompatibleServe ? error : undefined;
+        this.setupReason = state === "setup" && (error instanceof GerApiError || error instanceof ServeFailed) ? (error.reason ?? "") : "";
+        await vscode.commands.executeCommand("setContext", "ger.setupReason", this.setupReason);
         this.stale = undefined;
         this.overview = undefined;
         await this.setState(state);

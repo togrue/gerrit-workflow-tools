@@ -146,6 +146,9 @@ dirty worktree under a stack rewrite or a conflict stand in the way and nothing 
 
 A refusal the client can do something about also carries `reason`, a word for it:
 `uncommitted-changes` on `/stack/rewrite` means the same call with `autostash` would go through.
+A `CONFIG` failure names the setting at fault where it can: `no-web-url` (`ger.webUrl` is not
+set) and `insecure-http` (it is an `http://` address and `ger.allowInsecureHttp` is not set), so
+a client words its own advice while `message` stays ger's.
 
 | Code | Status |
 |------|--------|

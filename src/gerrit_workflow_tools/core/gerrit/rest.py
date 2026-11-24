@@ -299,6 +299,16 @@ def pick_change_from_query_result(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return rows[0]
 
 
+class WebUrlError(ConfigError):
+    """``ger.webUrl`` is missing or unusable. *reason* names which, a word ``ger serve`` serves
+    (``no-web-url``, ``insecure-http``) so a client can point at the setting; the message stays ger's.
+    """
+
+    def __init__(self, message: str, *, reason: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
 def resolve_gerrit_web_base(settings: Settings) -> str:
     """
     Gerrit HTTPS base for the REST API and web links.
@@ -312,16 +322,18 @@ def resolve_gerrit_web_base(settings: Settings) -> str:
         base = override.rstrip("/")
         scheme = urlsplit(base).scheme.lower()
         if scheme != "https" and not (scheme == "http" and settings.gerrit_allow_insecure_http):
-            raise ConfigError(
+            raise WebUrlError(
                 f"ger.webUrl must use https:// (got {base!r}): credentials go with every request. "
                 "For a local test Gerrit on plain http, opt in with "
-                "`git config ger.allowInsecureHttp true`"
+                "`git config ger.allowInsecureHttp true`",
+                reason="insecure-http",
             )
         logger.debug("resolve_gerrit_web_base: ger.webUrl -> %s", base)
         return base
-    raise ConfigError(
+    raise WebUrlError(
         "ger.webUrl is not set: run `ger setup` to configure the Gerrit server "
-        "(or `git config --global ger.webUrl https://gerrit.example.com`)"
+        "(or `git config --global ger.webUrl https://gerrit.example.com`)",
+        reason="no-web-url",
     )
 
 

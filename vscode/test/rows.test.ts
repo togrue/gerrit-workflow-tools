@@ -263,6 +263,9 @@ test("without an upstream the stack offers one to track; while ger is not runnin
   assert.equal(waitingFor("ready", "Your local stack"), undefined);
   assert.equal(waitingFor("starting", "Your local stack")?.text, "Starting ger serve…");
   assert.equal(waitingFor("setup", "Your local stack")?.link?.command, "ger.overview.focus");
+  // Setup wanting, with ger's reason: said in ger's words, with the step that fixes it.
+  const refused = waitingFor("setup", "Your local stack", undefined, "ger.webUrl must use https://");
+  assert.deepEqual(refused, { text: "Your local stack shows here once ger can ask Gerrit. ger says: ger.webUrl must use https://", link: { label: "Run ger setup", command: "ger.setup" } });
 });
 
 // --- Change -------------------------------------------------------------------------

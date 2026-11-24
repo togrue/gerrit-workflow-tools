@@ -319,3 +319,12 @@ export function commentLocation(file: string, lines?: { start: number; end: numb
   const [start, end] = [Math.min(lines.start, lines.end), Math.max(lines.start, lines.end)];
   return start === end ? `${file}:${start}` : `${file}:${start}-${end}`;
 }
+
+/**
+ * `text` as Markdown that shows it as it is: every punctuation mark Markdown (or a theme icon,
+ * `$(name)`) could read escaped, a line break a paragraph. `MarkdownString.appendText` turns
+ * each space into `&nbsp;`, which a status bar tooltip shows as those six characters.
+ */
+export function markdownText(text: string): string {
+  return text.replace(/[\\`*_{}[\]()#+\-.!|<>$~&]/g, "\\$&").replace(/\n/g, "\n\n");
+}

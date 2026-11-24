@@ -338,7 +338,7 @@ export class ChangeView extends WebView<ChangeVm> {
   }
 
   vm(): ChangeVm {
-    const waiting = this.model.overview ? undefined : waitingFor(this.model.state, "A change", this.model.incompatible);
+    const waiting = this.model.overview ? undefined : waitingFor(this.model.state, "A change", this.model.incompatible, this.model.failure);
     if (waiting) {
       return { waiting };
     }

@@ -54,8 +54,9 @@ export interface Waiting {
 /**
  * Why `what` (a view's content, as a noun phrase) is not shown in `state`; undefined when it is.
  * `incompatible`: the refusal, when that is the state; the view then says it and offers the fix.
+ * `failure`: ger's own reason, said when setup is wanting (Review chains' welcome text cannot carry it).
  */
-export function waitingFor(state: GerState, what: string, incompatible?: IncompatibleServe): Waiting | undefined {
+export function waitingFor(state: GerState, what: string, incompatible?: IncompatibleServe, failure?: string): Waiting | undefined {
   if (state === "ready") {
     return undefined;
   }
@@ -64,6 +65,9 @@ export function waitingFor(state: GerState, what: string, incompatible?: Incompa
   }
   if (state === "incompatible" && incompatible) {
     return { text: incompatible.message, link: { label: incompatible.gerOlder ? "Update ger" : "Install Matching ger", command: "ger.installCli" } };
+  }
+  if (state === "setup" && failure) {
+    return { text: `${what} shows here once ger can ask Gerrit. ger says: ${failure}`, link: { label: "Run ger setup", command: "ger.setup" } };
   }
   return {
     text: `${what} shows here once ger runs. Review chains says what is missing and what to do next.`,
