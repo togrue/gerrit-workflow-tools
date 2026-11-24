@@ -79,7 +79,7 @@ note: a rebase is in progress on feature, stopped on a conflict at 1a2b3c4 "Add 
 
 The stop reads `to edit it`, `to edit it, and HEAD has moved on from it: the commits above it were
 made at the stop` (a split), `on a conflict … in <paths>`, `with its conflicts resolved, ready for
-`git rebase --continue`` (nothing unmerged any more) or `between commits`; just `stopped` when
+`ger rebase --continue`` (nothing unmerged any more) or `between commits`; just `stopped` when
 that cannot be told. Where `HEAD` is, by git's own state files:
 
 - At an edit stop, `HEAD` is the commit it stopped at, or an amend of it (on the same commit,

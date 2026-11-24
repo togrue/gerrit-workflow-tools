@@ -121,7 +121,7 @@ The interactive prompt (the confirmation line, `-i`, and confirm-loop `r`) persi
 
 `prepare` runs before `-i`. A push refusal (empty ready range, or a rebase check that refuses) is printed without asking for reviewers. `execute` is the only call that runs `git push`.
 
-0. No rebase underway: the branch ref moves only when a rebase finishes, so mid-rebase `ger push` would send the stack as it was before the rebase. It refuses with exit `2` (`USAGE`) — `--dry-run` too, since the push it previews would not run — and says to finish (`git rebase --continue`) or `git rebase --abort` first. A `git am` underway refuses the same way, with its own reason: the branch moves with each patch it applies, so a push would send it half applied (`git am --continue` or `git am --abort`).
+0. No rebase underway: the branch ref moves only when a rebase finishes, so mid-rebase `ger push` would send the stack as it was before the rebase. It refuses with exit `2` (`USAGE`) — `--dry-run` too, since the push it previews would not run — and says to finish (`ger rebase --continue`) or `ger rebase --abort` first, the words every ger command uses (`rebase_next_step.FINISH`). A `git am` underway refuses the same way, with its own reason: the branch moves with each patch it applies, so a push would send it half applied (`git am --continue` or `git am --abort`).
 1. Target ref resolves locally (fetch if needed).
 2. Ready boundary: stop pattern / ready strategy (unless `--all`), tightened by the first missing/malformed/duplicate Change-Id (always, including with `--all`).
 3. Optional: `ger.pushRemotePolicy` linearity check (unless `--no-rebase-check`).

@@ -38,8 +38,8 @@ from gerrit_workflow_tools.core.edit_attention_walk import (
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_run import GitError, git_out
-from gerrit_workflow_tools.core.rebase_next_step import attention_stop_hint
-from gerrit_workflow_tools.core.rebase_state import RebaseAction, rebase_in_progress, rebase_refusal, unmerged_paths
+from gerrit_workflow_tools.core.rebase_next_step import attention_stop_hint, rebase_refusal
+from gerrit_workflow_tools.core.rebase_state import RebaseAction, rebase_in_progress, unmerged_paths
 from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import merge_base_with_target

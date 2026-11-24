@@ -173,7 +173,7 @@ def test_gpush_refuses_while_a_rebase_is_underway(stack_repo: Path, monkeypatch:
 
     assert code == ExitCode.USAGE
     assert ":refs/for/main" not in out
-    assert "finish it (`git rebase --continue`) or `git rebase --abort`, then push" in err
+    assert "finish it (`ger rebase --continue`) or `ger rebase --abort`, then push" in err
 
 
 def test_gpush_detached_head_does_not_prompt_upstream(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

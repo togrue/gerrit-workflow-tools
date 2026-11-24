@@ -12,6 +12,7 @@ from pathlib import Path
 
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.git_state import am_underway, git_dir, rebase_underway
 from gerrit_workflow_tools.core.rebase_state import (
     AM_UNDERWAY,
     RebaseAction,
@@ -27,7 +28,19 @@ from gerrit_workflow_tools.core.rebase_state import (
 CONTINUE = "`ger rebase --continue`"
 SKIP = "`ger rebase --skip`"
 ABORT = "`ger rebase --abort`"
+FINISH = f"finish it ({CONTINUE}) or {ABORT}"
+"""The way out of a rebase underway, for a command that cannot run during one."""
 _BACK = f"{ABORT} goes back to where the rebase started"
+
+
+def rebase_refusal(cwd: Path | str | None) -> str | None:
+    """Why a command that moves branches cannot start during a rebase or a ``git am``, or ``None``."""
+    repo_dir = git_dir(cwd)
+    if rebase_underway(repo_dir):
+        return f"a rebase is already in progress; {FINISH} first"
+    if am_underway(repo_dir):
+        return f"{AM_UNDERWAY} first"
+    return None
 
 
 def _walks_on(walk_on: str | None) -> str:

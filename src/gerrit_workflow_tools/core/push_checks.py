@@ -33,6 +33,7 @@ from gerrit_workflow_tools.core.git_state import head_is_linear_on_remote_gerrit
 from gerrit_workflow_tools.core.push_targets import NextPatchset, next_patchsets
 from gerrit_workflow_tools.core.push_unchanged import AbandonedChange, OutdatedChange, UnchangedChange
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
+from gerrit_workflow_tools.core.rebase_next_step import FINISH
 from gerrit_workflow_tools.core.rebase_state import AM_UNDERWAY, am_underway, rebase_underway
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit, is_unsquashed_fixup
@@ -64,8 +65,7 @@ def push_blocked(repo_dir: Path | None, branch: str | None) -> PushBlocked | Non
         name = f"'{branch}'" if branch else "the branch"
         return PushBlocked(
             PushBlocker.REBASE,
-            f"a rebase is in progress, and {name} still points at the commits from before it; "
-            "finish it (`git rebase --continue`) or `git rebase --abort`, then push",
+            f"a rebase is in progress, and {name} still points at the commits from before it; {FINISH}, then push",
         )
     if am_underway(repo_dir):
         return PushBlocked(PushBlocker.AM, f"{AM_UNDERWAY}, then push")

@@ -26,7 +26,7 @@ from gerrit_workflow_tools.core.change_checkout import (
 from gerrit_workflow_tools.core.change_checkout_apply import apply_checkout, update_stack
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_patchset import resolve_change
-from gerrit_workflow_tools.core.rebase_state import rebase_refusal
+from gerrit_workflow_tools.core.rebase_next_step import rebase_refusal
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import UsageError
 

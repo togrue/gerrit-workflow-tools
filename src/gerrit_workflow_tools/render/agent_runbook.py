@@ -28,9 +28,9 @@ _RULES = """\
 1. `ger edit <Change-Id>` stops a rebase on the commit, so you can amend it. Use the Change-Id
    given below: commit ids change as you amend the commits underneath.
 2. Make the changes listed for it. Run the checks that failed, where you can.
-3. `git add -A && git commit --amend --no-edit && git rebase --continue`.
+3. `git add -A && git commit --amend --no-edit && ger rebase --continue`.
    If the rebase stops on a conflict in a later commit, resolve it, `git add` the files and
-   `git rebase --continue` again.
+   `ger rebase --continue` again.
 4. For each comment you addressed, run the `ger reply … --done` line given with it. That saves
    a draft reply "Done" which resolves the chain once a human publishes it.
 

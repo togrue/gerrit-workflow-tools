@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from gerrit_workflow_tools.core.annotated_stack import NextStep, NextStepKind, StackOverview
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
+from gerrit_workflow_tools.core.rebase_next_step import CONTINUE
 from gerrit_workflow_tools.core.rebase_state import RebaseProgress, RebaseStop
 from gerrit_workflow_tools.core.rebasing_stack import RebaseStep, RebasingStack
 from gerrit_workflow_tools.core.upstream_moved import UpstreamMoved
@@ -208,7 +209,7 @@ _STOPS = {
         "stopped{at} to edit it, and HEAD has moved on from it: the commits above it were made at the stop"
     ),
     RebaseStop.CONFLICT: "stopped on a conflict{at} in {paths}",
-    RebaseStop.RESOLVED: "stopped{at} with its conflicts resolved, ready for `git rebase --continue`",
+    RebaseStop.RESOLVED: "stopped{at} with its conflicts resolved, ready for " + CONTINUE,
     RebaseStop.PAUSED: "stopped between commits",
 }
 

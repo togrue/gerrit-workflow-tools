@@ -18,7 +18,7 @@ from gerrit_workflow_tools.core.config import ConfigError
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
-from gerrit_workflow_tools.core.rebase_state import rebase_refusal
+from gerrit_workflow_tools.core.rebase_next_step import rebase_refusal
 from gerrit_workflow_tools.core.tracked_changes import TrackedChanges, tracked_changes
 
 
