@@ -34,7 +34,7 @@ editor | (none)
 + change | title: Change 102
 + change | CI failed — V-1 CR+2
 + change | Commit message — test! temporary experiment  (editable)
-+ change | Showing — Local commit <sha> · Against its base commit
++ change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 + change | Files — 1 · +1 −0
 + change |   c.txt — added +1 −0
 + change | Comments — none
@@ -114,11 +114,11 @@ status bar message: $(check) Refreshed from Gerrit
 + change | title: Change 900
 + change | Waiting for your review — V+1
 + change | Commit message — Add retry to the uploader  (read-only)
-+ change | Showing — Patchset 1 (current) · Against its base commit
++ change | Comparing — Base commit → Patchset 1 (current) · default: Against its base commit
 - change | title: Change 102
 - change | CI failed — V-1 CR+2
 - change | Commit message — test! temporary experiment  (editable)
-- change | Showing — Local commit <sha> · Against its base commit
+- change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 + change |   uploader.txt — added +1 −0
 + change | Comments — 1 unresolved of 1
 + change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
@@ -290,7 +290,7 @@ notification (info): No review checkout is open here.
 + change | A change shows here once ger runs. Review chains says what is missing and what to do next.
 - change | Waiting for your review — V+1
 - change | Commit message — Add retry to the uploader  (read-only)
-- change | Showing — Patchset 1 (current) · Against its base commit
+- change | Comparing — Base commit → Patchset 1 (current) · default: Against its base commit
 - change | Files — 1 · +1 −0
 - change |   uploader.txt — added +1 −0
 - change | Comments — 1 unresolved of 1
@@ -347,7 +347,7 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 - stack  | Your local stack shows here once ger runs. Review chains says what is missing and what to do next.
 + change | Waiting for your review — V+1
 + change | Commit message — Add retry to the uploader  (read-only)
-+ change | Showing — Patchset 1 (current) · Against its base commit
++ change | Comparing — Base commit → Patchset 1 (current) · default: Against its base commit
 + change | Files — 1 · +1 −0
 + change |   uploader.txt — added +1 −0
 + change | Comments — 1 unresolved of 1
@@ -365,11 +365,11 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 + change | title: Change 101
 + change | Unresolved comments — V+1 CR+2 💬2
 + change | Commit message — Extract command routing  (editable)
-+ change | Showing — Local commit <sha> · Against its base commit
++ change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 - change | title: Change 900
 - change | Waiting for your review — V+1
 - change | Commit message — Add retry to the uploader  (read-only)
-- change | Showing — Patchset 1 (current) · Against its base commit
+- change | Comparing — Base commit → Patchset 1 (current) · default: Against its base commit
 + change |   b.txt — added +1 −0
 + change | Comments — 2 unresolved of 3
 + change |   Please rename this. — b.txt:1 · Alice Reviewer  [open]
@@ -380,37 +380,37 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 - change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
 ```
 
-## 23. Change › Compare › Gerrit vs. local
+## 23. Change › From › Patchset 1 (current)
 
-**Expect:** The files list becomes what your commit changes compared with Gerrit's patchset: nothing, as the commit is the pushed one.
+**Expect:** From Gerrit's current patchset to your commit: the files list becomes what your commit changes compared with it — nothing, as the commit is the pushed one. The mode toggle goes dim: picked by hand.
 
 ```
 (nothing said or done outside the views)
 --- on screen:
-+ change | Showing — Local commit <sha> · Gerrit vs. local
++ change | Comparing — Patchset 1 (current) → Local commit <sha> · default: Against its base commit (picked by hand)
 + change | Gerrit vs. local — identical to patchset 1 — nothing to push
-- change | Showing — Local commit <sha> · Against its base commit
+- change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 - change | Files — 1 · +1 −0
 - change |   b.txt — added +1 −0
 ```
 
-## 24. Change › Show › Gerrit's current patchset
+## 24. Change › To › Patchset 1 (current)
 
-**Expect:** The view shows patchset 1 as Gerrit has it, against its base; its message is read-only.
+**Expect:** To at From's patchset: From goes back to the base commit. The view shows patchset 1 as Gerrit has it, against its base; its message is read-only.
 
 ```
 (nothing said or done outside the views)
 --- on screen:
 + change | Commit message — Extract command routing  (read-only)
-+ change | Showing — Patchset 1 (current) · Against its base commit
++ change | Comparing — Base commit → Patchset 1 (current) · default: Against its base commit (picked by hand)
 + change | Files — 1 · +1 −0
 + change |   b.txt — added +1 −0
 - change | Commit message — Extract command routing  (editable)
-- change | Showing — Local commit <sha> · Gerrit vs. local
+- change | Comparing — Patchset 1 (current) → Local commit <sha> · default: Against its base commit (picked by hand)
 - change | Gerrit vs. local — identical to patchset 1 — nothing to push
 ```
 
-## 25. Change › Show › Local commit
+## 25. Change › To › Local commit
 
 **Expect:** Back on your commit: the message is editable again.
 
@@ -418,12 +418,68 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 (nothing said or done outside the views)
 --- on screen:
 + change | Commit message — Extract command routing  (editable)
-+ change | Showing — Local commit <sha> · Against its base commit
++ change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 - change | Commit message — Extract command routing  (read-only)
-- change | Showing — Patchset 1 (current) · Against its base commit
+- change | Comparing — Base commit → Patchset 1 (current) · default: Against its base commit (picked by hand)
 ```
 
-## 26. Change › Next Unresolved Comment (Alt+F9)
+## 26. Change › default mode toggle (to Gerrit vs. local)
+
+**Expect:** The default becomes Gerrit vs. local and the change shown follows it: Gerrit's current patchset against your commit, the toggle lit.
+
+```
+(nothing said or done outside the views)
+--- on screen:
++ change | Comparing — Patchset 1 (current) → Local commit <sha> · default: Gerrit vs. local
++ change | Gerrit vs. local — identical to patchset 1 — nothing to push
+- change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
+- change | Files — 1 · +1 −0
+- change |   b.txt — added +1 −0
+```
+
+## 27. Change › From › Base commit
+
+**Expect:** Picked by hand: the change's files against its base, the default still Gerrit vs. local.
+
+```
+(nothing said or done outside the views)
+--- on screen:
++ change | Comparing — Base commit → Local commit <sha> · default: Gerrit vs. local (picked by hand)
++ change | Files — 1 · +1 −0
++ change |   b.txt — added +1 −0
+- change | Comparing — Patchset 1 (current) → Local commit <sha> · default: Gerrit vs. local
+- change | Gerrit vs. local — identical to patchset 1 — nothing to push
+```
+
+## 28. Click "Extract command routing" in Local stack again
+
+**Expect:** Opened anew, the pick by hand is gone: the change starts on the remembered default, Gerrit vs. local.
+
+```
+(nothing said or done outside the views)
+--- on screen:
++ change | Comparing — Patchset 1 (current) → Local commit <sha> · default: Gerrit vs. local
++ change | Gerrit vs. local — identical to patchset 1 — nothing to push
+- change | Comparing — Base commit → Local commit <sha> · default: Gerrit vs. local (picked by hand)
+- change | Files — 1 · +1 −0
+- change |   b.txt — added +1 −0
+```
+
+## 29. Change › default mode toggle (Against its base commit)
+
+**Expect:** The default is the base comparison again: base commit → your commit.
+
+```
+(nothing said or done outside the views)
+--- on screen:
++ change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
++ change | Files — 1 · +1 −0
++ change |   b.txt — added +1 −0
+- change | Comparing — Patchset 1 (current) → Local commit <sha> · default: Gerrit vs. local
+- change | Gerrit vs. local — identical to patchset 1 — nothing to push
+```
+
+## 30. Change › Next Unresolved Comment (Alt+F9)
 
 **Expect:** b.txt opens at line 1, the first thread expands, the status bar says Comment 1 of 2.
 
@@ -434,7 +490,7 @@ status bar message: Comment 1 of 2
 - editor | Preview ger-brief-<id>.md (webview)
 ```
 
-## 27. Next Unresolved Comment again
+## 31. Next Unresolved Comment again
 
 **Expect:** The second thread: Comment 2 of 2.
 
@@ -444,7 +500,7 @@ status bar message: Comment 2 of 2
 (no change)
 ```
 
-## 28. Next Unresolved Comment a third time
+## 32. Next Unresolved Comment a third time
 
 **Expect:** It wraps around to Comment 1 of 2.
 
@@ -454,7 +510,7 @@ status bar message: Comment 1 of 2
 (no change)
 ```
 
-## 29. Change › Previous Unresolved Comment
+## 33. Change › Previous Unresolved Comment
 
 **Expect:** Back to Comment 2 of 2.
 
@@ -464,7 +520,7 @@ status bar message: Comment 2 of 2
 (no change)
 ```
 
-## 30. Click "Please rename this." in the Change view
+## 34. Click "Please rename this." in the Change view
 
 **Expect:** b.txt opens at line 1 with that comment's thread expanded there, the other one closed.
 
@@ -474,7 +530,7 @@ status bar message: Comment 2 of 2
 (no change)
 ```
 
-## 31. Click b.txt under Files
+## 35. Click b.txt under Files
 
 **Expect:** b.txt opens on its own: the commit adds it, so there is nothing to compare it with.
 
@@ -485,7 +541,7 @@ status bar message: Comment 2 of 2
 - editor | b.txt (file, line 1)
 ```
 
-## 32. Inline Keep for Me on "Is this the right design?"
+## 36. Inline Keep for Me on "Is this the right design?"
 
 **Expect:** The thread is marked as kept for you; the agent will leave it alone.
 
@@ -496,7 +552,7 @@ status bar message: $(check) Kept for you: the agent leaves this comment alone
 - change |   Is this the right design? — b.txt:1 · Bob Architect  [open]
 ```
 
-## 33. Local stack › Fix Stack with Agent…
+## 37. Local stack › Fix Stack with Agent…
 
 **Expect:** The runbook opens as a preview; a dialog counts what the agent gets, without the comment kept for you; Copy to Clipboard copies it.
 
@@ -512,7 +568,7 @@ notification (info): Copied. Paste it into your agent, or set `ger.agentCommand`
 - editor | b.txt (ger-file, line 1)
 ```
 
-## 34. Inline Let the Agent Handle It on "Is this the right design?"
+## 38. Inline Let the Agent Handle It on "Is this the right design?"
 
 **Expect:** The thread is no longer marked as kept for you.
 
@@ -523,7 +579,7 @@ status bar message: $(check) Left to the agent
 - change |   Is this the right design? — kept for you · b.txt:1 · Bob Architect  [open, kept for you]
 ```
 
-## 35. Inline Reply as Draft… on "Please rename this."
+## 39. Inline Reply as Draft… on "Please rename this."
 
 **Expect:** An input box asks for the reply; after Enter the draft shows under the thread and the status bar says it was saved.
 
@@ -539,7 +595,7 @@ status bar message: $(check) Draft saved. Publish it with ger push.
 - change |   Please rename this. — b.txt:1 · Alice Reviewer  [open]
 ```
 
-## 36. Inline Reply as Draft… on "Please rename this." again
+## 40. Inline Reply as Draft… on "Please rename this." again
 
 **Expect:** The box opens with your draft in it, to edit; saving updates that draft, nothing you wrote is lost unseen.
 
@@ -555,7 +611,7 @@ status bar message: $(check) Draft updated. Publish it with ger push.
 - change |     you — [draft] Renamed it.
 ```
 
-## 37. Inline Reply Done and Resolve as Draft on "Is this the right design?"
+## 41. Inline Reply Done and Resolve as Draft on "Is this the right design?"
 
 **Expect:** A "Done" draft that resolves the thread is saved at once; the thread shows that your draft resolves it.
 
@@ -567,7 +623,7 @@ status bar message: $(check) Draft saved, resolving the comment. Publish it with
 - change |   Is this the right design? — b.txt:1 · Bob Architect  [open]
 ```
 
-## 38. Inline Reply Done and Resolve as Draft on "Please rename this.", which has your draft
+## 42. Inline Reply Done and Resolve as Draft on "Please rename this.", which has your draft
 
 **Expect:** Your draft stays as you wrote it and now resolves the thread.
 
@@ -578,7 +634,7 @@ status bar message: $(check) Draft updated, resolving the comment. Publish it wi
 - change |   Please rename this. — b.txt:1 · Alice Reviewer · 1 reply  [open]
 ```
 
-## 39. Expand "Looks good overall." (about the whole change) in the Change view, type a reply, Resolved left ticked › Save
+## 43. Expand "Looks good overall." (about the whole change) in the Change view, type a reply, Resolved left ticked › Save
 
 **Expect:** The comment has no line in a file, so it is answered in the view: the reply is saved as a draft, as a reply in an editor thread is, and shows under it; the status bar says it was saved, the comment staying resolved.
 
@@ -590,7 +646,7 @@ status bar message: $(check) Draft saved, resolving the comment. Publish it with
 - change |   Looks good overall. — whole change · Alice Reviewer  [resolved]
 ```
 
-## 40. Click "Please rename this." in the Change view again
+## 44. Click "Please rename this." in the Change view again
 
 **Expect:** b.txt comes back in front of the runbook with that thread expanded: Alice's comment and its suggested fix, your draft reply under it, the reply box, and the Resolved toggle on in its header.
 
@@ -601,7 +657,7 @@ status bar message: $(check) Draft saved, resolving the comment. Publish it with
 - editor | Preview ger-runbook-<id>.md (webview)
 ```
 
-## 41. Type in the editor thread of "Please rename this.", whose Resolved toggle is on (your draft resolves it) › Save
+## 45. Type in the editor thread of "Please rename this.", whose Resolved toggle is on (your draft resolves it) › Save
 
 **Expect:** What you type is added to your draft reply there, after what it already says, and it still resolves the comment; the status bar says the draft was updated.
 
@@ -611,7 +667,7 @@ status bar message: $(check) Draft updated, resolving the comment. Publish it wi
 (no change)
 ```
 
-## 42. Click the Resolved toggle in the header of the editor thread of "Please rename this."
+## 46. Click the Resolved toggle in the header of the editor thread of "Please rename this."
 
 **Expect:** Your draft there is saved again at once, now leaving the comment unresolved; the status bar says so.
 
@@ -622,7 +678,7 @@ status bar message: $(check) Draft updated, leaving the comment unresolved. Publ
 - change |   Please rename this. — your draft resolves it · b.txt:1 · Alice Reviewer · 1 reply  [open]
 ```
 
-## 43. Click the Resolved toggle in the header of the editor thread of "Please rename this." again
+## 47. Click the Resolved toggle in the header of the editor thread of "Please rename this." again
 
 **Expect:** Your draft resolves the comment again, as before.
 
@@ -633,7 +689,7 @@ status bar message: $(check) Draft updated, resolving the comment. Publish it wi
 - change |   Please rename this. — b.txt:1 · Alice Reviewer · 1 reply  [open]
 ```
 
-## 44. "+" on line 1 of b.txt in the diff › Save Draft
+## 48. "+" on line 1 of b.txt in the diff › Save Draft
 
 **Expect:** The comment is saved as a draft and appears as a thread marked as your draft; it is not counted as unresolved feedback.
 
@@ -645,7 +701,7 @@ status bar message: $(check) Draft saved on Gerrit, visible only to you. Publish
 + change |   Should this be configurable? — your draft · b.txt:1  [yours]
 ```
 
-## 45. "+" on line 1 of b.txt in the diff › Save Private Note
+## 49. "+" on line 1 of b.txt in the diff › Save Private Note
 
 **Expect:** The note is saved in this repository only and appears marked as your private note; it is not counted as unresolved feedback.
 
@@ -657,7 +713,7 @@ status bar message: $(check) Private note saved here. It never leaves this repos
 + change |   Remember to check the docs. — your private note · b.txt:1  [yours]
 ```
 
-## 46. Inline Edit… on your comment "Should this be configurable?" in the Change view
+## 50. Inline Edit… on your comment "Should this be configurable?" in the Change view
 
 **Expect:** b.txt opens at its line and the comment turns into a text box in its thread, with Save and Cancel; nothing is saved yet.
 
@@ -668,7 +724,7 @@ status bar message: $(check) Private note saved here. It never leaves this repos
 - editor | b.txt (file, line 1)
 ```
 
-## 47. Change the text in that box › Save
+## 51. Change the text in that box › Save
 
 **Expect:** Your comment says the new text, in the thread and in the Change view; the status bar says it was updated. It is still yours and not published.
 
@@ -681,7 +737,7 @@ status bar message: $(check) Draft updated.
 - editor | b.txt (file)
 ```
 
-## 48. Pencil on your private note in its editor thread, change the text › Cancel
+## 52. Pencil on your private note in its editor thread, change the text › Cancel
 
 **Expect:** The note says what it said before; nothing is saved and nothing is said.
 
@@ -691,7 +747,7 @@ status bar message: $(check) Draft updated.
 (no change)
 ```
 
-## 49. Inline Delete Your Draft Reply… on "Is this the right design?" › Cancel
+## 53. Inline Delete Your Draft Reply… on "Is this the right design?" › Cancel
 
 **Expect:** A dialog shows the draft reply and asks before deleting it; Cancel leaves it.
 
@@ -703,7 +759,7 @@ dialog (warning): Delete your draft reply on b.txt:1?  [Delete] [Cancel]
 (no change)
 ```
 
-## 50. Trash on your private note in its editor thread › Delete
+## 54. Trash on your private note in its editor thread › Delete
 
 **Expect:** A dialog shows the note and asks; Delete removes it from the thread and from the Change view, and the status bar says so.
 
@@ -718,7 +774,7 @@ status bar message: $(check) Private note deleted.
 - change |   Remember to check the docs. — your private note · b.txt:1  [yours]
 ```
 
-## 51. Command palette › ger: Add Comment, with your own b.txt in the editor
+## 55. Command palette › ger: Add Comment, with your own b.txt in the editor
 
 **Expect:** The file in the editor is yours as it is now, not change 101 as shown (its menu does not offer Add Comment): it says where a comment on 101 goes, and opens no box.
 
@@ -728,7 +784,7 @@ notification (info): These are not the lines of "Extract command routing", the c
 (no change)
 ```
 
-## 52. Open b.txt of the commit, cursor on line 1 › Add Comment (Ctrl+Alt+C), type › Save
+## 56. Open b.txt of the commit, cursor on line 1 › Add Comment (Ctrl+Alt+C), type › Save
 
 **Expect:** A comment box opens on that line with the same Save buttons as the "+" in the gutter; saving it adds your comment to the change.
 
@@ -742,7 +798,7 @@ status bar message: $(check) Draft saved on Gerrit, visible only to you. Publish
 - editor | b.txt (file, line 1)
 ```
 
-## 53. Add Comment again › Cancel
+## 57. Add Comment again › Cancel
 
 **Expect:** The box closes; nothing is saved.
 
@@ -752,7 +808,7 @@ status bar message: $(check) Draft saved on Gerrit, visible only to you. Publish
 (no change)
 ```
 
-## 54. Inline Comment on This File… on b.txt under Files
+## 58. Inline Comment on This File… on b.txt under Files
 
 **Expect:** An input box asks for a comment about the whole file; after Enter it is saved like any new comment and shows under Comments as yours.
 
@@ -767,7 +823,7 @@ status bar message: $(check) Draft saved on Gerrit, visible only to you. Publish
 - change | Comments — 2 unresolved of 3 · 2 of yours, not published
 ```
 
-## 55. Change › Edit Commit Here
+## 59. Change › Edit Commit Here
 
 **Expect:** ger edit runs in the terminal; you are told what to do once the rebase stops at 101, not that it already has.
 
@@ -778,7 +834,7 @@ status bar message: $(terminal) ger edit runs in the ger terminal: once the reba
 (no change)
 ```
 
-## 56. Change › Open in Gerrit
+## 60. Change › Open in Gerrit
 
 **Expect:** The browser opens change 101 on Gerrit.
 
@@ -789,7 +845,7 @@ browser opens: https://g.example/c/testproj/+/101
 (no change)
 ```
 
-## 57. Click "test! temporary experiment" in Local stack
+## 61. Click "test! temporary experiment" in Local stack
 
 **Expect:** The Change view says CI failed; the CI group lists the findings, the ones this commit introduced first.
 
@@ -821,7 +877,7 @@ browser opens: https://g.example/c/testproj/+/101
 - change |     you — [draft] Added a test for the parser.
 ```
 
-## 58. Right-click it › Hand to Agent › Cancel
+## 62. Right-click it › Hand to Agent › Cancel
 
 **Expect:** A runbook for this one commit and a dialog to start or copy it; Cancel does nothing more.
 
@@ -835,7 +891,7 @@ dialog (info): 1 commit: 0 comments and 2 CI findings for the agent.  [Copy to C
 - editor | b.txt (ger-file, line 1)
 ```
 
-## 59. Local stack › Push to Gerrit…
+## 63. Local stack › Push to Gerrit…
 
 **Expect:** ger push runs in the ger terminal (a new one when a command still runs there), which shows what it will push and asks first.
 
@@ -846,7 +902,7 @@ status bar message: $(terminal) ger push runs in the ger terminal: it shows what
 (no change)
 ```
 
-## 60. Right-click "Refactor parser init" › Copy SHA
+## 64. Right-click "Refactor parser init" › Copy SHA
 
 **Expect:** The commit's full id is on the clipboard; the status bar says so.
 
@@ -857,7 +913,7 @@ status bar message: $(check) Copied SHA <sha>…
 (no change)
 ```
 
-## 61. Select two rows, right-click › Copy Change-Id
+## 65. Select two rows, right-click › Copy Change-Id
 
 **Expect:** Both Change-Ids are on the clipboard, one per line, newest first as shown.
 
@@ -868,7 +924,7 @@ status bar message: $(check) Copied 2 Change-Ids
 (no change)
 ```
 
-## 62. Drag "Refactor parser init" to the line above "Extract command routing"
+## 66. Drag "Refactor parser init" to the line above "Extract command routing"
 
 **Expect:** It swaps places with the commit above it; a notification offers Undo. Every commit keeps its votes: none changed its code, so Gerrit keeps them on the push.
 
@@ -894,7 +950,7 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 - change |     FAILURE — generic · introduced here
 ```
 
-## 63. Drag "Refactor parser init" to the bottom, then Undo
+## 67. Drag "Refactor parser init" to the bottom, then Undo
 
 **Expect:** It swaps back with the commit below; Undo puts the stack back as it was before this move.
 
@@ -907,7 +963,7 @@ status bar message: $(check) Undone: the stack is as it was
 (no change)
 ```
 
-## 64. Select "Cleanup after experiment" and "Extract command routing", drag them to the bottom, then Undo
+## 68. Select "Cleanup after experiment" and "Extract command routing", drag them to the bottom, then Undo
 
 **Expect:** Both land under the last row, together and in the order they had; Undo puts the stack back.
 
@@ -925,7 +981,7 @@ status bar message: $(check) Undone: the stack is as it was
 ```
 ```
 
-## 65. Drag "Extract command routing" up one row, with uncommitted changes › Cancel
+## 69. Drag "Extract command routing" up one row, with uncommitted changes › Cancel
 
 **Expect:** A dialog asks whether to stash the uncommitted changes and continue; Cancel leaves the stack and the edit as they were.
 
@@ -938,7 +994,7 @@ dialog (warning): You have uncommitted changes. Stash them and continue?  [Stash
 (no change)
 ```
 
-## 66. The same drag › Stash and Continue, then Undo
+## 70. The same drag › Stash and Continue, then Undo
 
 **Expect:** The commits swap, and the edit to a.txt is back in the worktree afterwards; Undo puts the stack back and keeps the edit.
 
@@ -960,7 +1016,7 @@ status bar message: $(check) Undone: the stack is as it was
 ```
 ```
 
-## 67. Change › edit the commit message of "test! temporary experiment" › Apply, then Undo
+## 71. Change › edit the commit message of "test! temporary experiment" › Apply, then Undo
 
 **Expect:** The box holds the message without its Change-Id. The commit gets the new message and keeps its Change-Id, though the text typed named another; the commits above get new ids, nothing else changes. Undo puts the old message back.
 
@@ -981,7 +1037,7 @@ status bar message: $(check) Undone: the stack is as it was
 - stack  | Cleanup after experiment — HEAD · <sha> · held back · only rebased since the last push  [review +2, ci bad]
 ```
 
-## 68. Drag "Rework d.txt" to the line under "Cleanup after experiment"
+## 72. Drag "Rework d.txt" to the line under "Cleanup after experiment"
 
 **Expect:** One place down: the conflict preview already knows the two cannot swap, so it says at once which commit would conflict, and that nothing changed.
 
@@ -991,7 +1047,7 @@ notification (info): "Rework d.txt" cannot change places with "Cleanup after exp
 (no change)
 ```
 
-## 69. Drag "Rework d.txt" to the bottom
+## 73. Drag "Rework d.txt" to the bottom
 
 **Expect:** Refused before anything is touched, saying which commit does not apply in its new place; the stack stays as it was.
 
@@ -1002,7 +1058,7 @@ notification (warning): "Rework d.txt" (<sha>) does not apply in its new place (
 (no change)
 ```
 
-## 70. Drag "Cleanup after experiment" to the line under "Extract command routing"
+## 74. Drag "Cleanup after experiment" to the line under "Extract command routing"
 
 **Expect:** It lands there, and the commits between move up one; Undo is offered.
 
@@ -1015,7 +1071,7 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 + stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci bad]
 ```
 
-## 71. Right-click "Rework d.txt" › Squash into Commit Below, then Undo
+## 75. Right-click "Rework d.txt" › Squash into Commit Below, then Undo
 
 **Expect:** It folds into the commit below, keeping that commit's message; Undo brings it back.
 
@@ -1028,7 +1084,7 @@ status bar message: $(check) Undone: the stack is as it was
 (no change)
 ```
 
-## 72. Right-click "Rework d.txt" › Squash into Commit Below, Keeping This Message, then Undo
+## 76. Right-click "Rework d.txt" › Squash into Commit Below, Keeping This Message, then Undo
 
 **Expect:** Folds, keeping this commit's message, with a note that the Gerrit change of the one below stays open; Undo brings both back, and the Change view shows again what it showed.
 
@@ -1041,7 +1097,7 @@ status bar message: $(check) Undone: the stack is as it was
 (no change)
 ```
 
-## 73. Right-click "Rework d.txt" › Drop Commit… › Cancel
+## 77. Right-click "Rework d.txt" › Drop Commit… › Cancel
 
 **Expect:** A dialog asks to confirm; Cancel leaves everything as it was.
 
@@ -1053,7 +1109,7 @@ dialog (warning): Drop "Rework d.txt" from the stack?  [Drop] [Cancel]
 (no change)
 ```
 
-## 74. Right-click "Rework d.txt" › Drop Commit… › Drop, then Undo
+## 78. Right-click "Rework d.txt" › Drop Commit… › Drop, then Undo
 
 **Expect:** The commit goes; Undo brings it back. It was never pushed, so there is nothing to push.
 
@@ -1069,7 +1125,7 @@ status bar message: $(check) Undone: the stack is as it was
 (no change)
 ```
 
-## 75. Right-click "Rework d.txt" › Drop Commit… › Drop
+## 79. Right-click "Rework d.txt" › Drop Commit… › Drop
 
 **Expect:** The commit is gone from the stack and from the checkout; nothing to push, as Gerrit never had it.
 
@@ -1103,7 +1159,7 @@ notification (info): Dropped "Rework d.txt".  [Undo]
 - change |     FAILURE — generic
 ```
 
-## 76. Local stack › … › Set Upstream Branch… › Escape
+## 80. Local stack › … › Set Upstream Branch… › Escape
 
 **Expect:** A picker lists the branches it could track, the current one marked; Escape changes nothing.
 
@@ -1116,17 +1172,17 @@ picker: Upstream for feature — "The local stack is the commits above it; ger p
 (no change)
 ```
 
-## 77. Review chains › … › Report Issue… › Copy and Open GitHub Issue
+## 81. Review chains › … › Report Issue… › Copy and Open GitHub Issue
 
 **Expect:** The report opens first, as an untitled JSON document to read: what the three views show, with names, paths, text and ids replaced. A notification says so, and that nothing has left the machine. Copy and Open GitHub Issue puts the report on the clipboard and opens a new issue that has only the versions in it and says to paste the report.
 
 ```
-untitled json document opens: 350 lines, starting
+untitled json document opens: 354 lines, starting
     {
       "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
 notification (info): This is the report, and all that would be shared: names, paths, text and ids in it are replaced. Nothing has left this machine.  [Copy and Open GitHub Issue] [Save to File…]
     → pressed "Copy and Open GitHub Issue"
-clipboard: 350 lines, starting "{"
+clipboard: 354 lines, starting "{"
 browser opens: https://github.com/togrue/gerrit-workflow-tools/issues/new?labels=vscode&body=<!-- What happened, and what did you expect%3F -->
 
 
@@ -1145,29 +1201,29 @@ status bar message: $(check) Report copied: paste it into the issue that opens i
 (no change)
 ```
 
-## 78. Command palette › ger: Report Issue… › Save to File…
+## 82. Command palette › ger: Report Issue… › Save to File…
 
 **Expect:** The report opens again to read; Save to File… asks where, suggesting ger-report.json, and the status bar says where it was saved. Nothing is copied and no browser opens.
 
 ```
-untitled json document opens: 350 lines, starting
+untitled json document opens: 354 lines, starting
     {
       "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
 notification (info): This is the report, and all that would be shared: names, paths, text and ids in it are replaced. Nothing has left this machine.  [Copy and Open GitHub Issue] [Save to File…]
     → pressed "Save to File…"
 save dialog: suggests ger-report.json
-    → saved 350 lines as ~/ger-report.json
+    → saved 354 lines as ~/ger-report.json
 status bar message: $(check) Report saved to ~/ger-report.json
 --- on screen:
 (no change)
 ```
 
-## 79. Command palette › ger: Report Issue… › close the report without saving › Copy and Open GitHub Issue
+## 83. Command palette › ger: Report Issue… › close the report without saving › Copy and Open GitHub Issue
 
 **Expect:** The user may have taken things out of the report before closing it, so nothing is copied, not the original either, and no browser opens; a notification says nothing was shared and to run Report Issue… again.
 
 ```
-untitled json document opens: 350 lines, starting
+untitled json document opens: 354 lines, starting
     {
       "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
     → closed without saving
@@ -1256,7 +1312,7 @@ notification (warning): Still out of date: fake ger: down for this test
 - change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 - change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | Commit message — test! temporary experiment  (editable)
-- change | Showing — Local commit <sha> · Against its base commit
+- change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 - change | Files — 1 · +1 −0
 - change |   c.txt — added +1 −0
 - change | Comments — none
@@ -1288,7 +1344,7 @@ status bar message: $(check) Refreshed from Gerrit
 + change | title: Change 103
 + change | CI failed — V-1 CR+2
 + change | Commit message — test! temporary experiment  (editable)
-+ change | Showing — Local commit <sha> · Against its base commit
++ change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 + change | Files — 1 · +1 −0
 + change |   c.txt — added +1 −0
 + change | Comments — none
@@ -1327,7 +1383,7 @@ status bar message: $(check) Refreshed from Gerrit
 - stack  | test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 ```
 
-## 80. Click "test! temporary experiment" in Local stack
+## 84. Click "test! temporary experiment" in Local stack
 
 **Expect:** The Change view shows change 103 as it is now: the commit is the same as on Gerrit. It should have shown that already after ger serve restarted (it kept Change 102's heading and "ahead of Gerrit", no issue yet); this click makes the rebase steps start from a fresh view.
 
@@ -1370,7 +1426,7 @@ stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | CI failed — V-1 CR+2
 change | Commit message — test! temporary experiment  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +1 −0
 change |   c.txt — added +1 −0
 change | Comments — none
@@ -1417,14 +1473,14 @@ change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +2 −0
 change |   c.txt — added +2 −0
 change | Comments — none
 change | (the commit shown is HEAD)
 ```
 
-## 81. Local stack › Continue (the rebase stopped at the amended commit)
+## 85. Local stack › Continue (the rebase stopped at the amended commit)
 
 **Expect:** ger rebase --continue runs in the ger terminal, and the status bar says so; once it has run, the banner and the marks go: the branch is back, the amended commit with its code changed since the last push and "Add e.txt" on top of it; the header names the branch; the Change view shows the amended commit, its message editable again.
 
@@ -1459,7 +1515,7 @@ change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (editable)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +2 −0
 change |   c.txt — added +2 −0
 change | Comments — none
@@ -1502,7 +1558,7 @@ change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +2 −0
 change |   c.txt — added +2 −0
 change | Comments — none
@@ -1546,14 +1602,14 @@ change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +2 −0
 change |   c.txt — added +2 −0
 change | Comments — none
 change | (the commit shown is HEAD)
 ```
 
-## 82. Local stack › click e.txt under the banner
+## 86. Local stack › click e.txt under the banner
 
 **Expect:** e.txt opens in VS Code's merge editor (its file in the worktree is what it writes); nothing else changes.
 
@@ -1579,7 +1635,7 @@ change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +2 −0
 change |   c.txt — added +2 −0
 change | Comments — none
@@ -1620,14 +1676,14 @@ change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +2 −0
 change |   c.txt — added +2 −0
 change | Comments — none
 change | (the commit shown is HEAD)
 ```
 
-## 83. Local stack › Continue (the conflict resolved)
+## 87. Local stack › Continue (the conflict resolved)
 
 **Expect:** ger rebase --continue runs in the ger terminal; once it has run, the banner and the marks go; Local stack shows the branch with "Refactor parser init" changed here since the last push and "Add e.txt" on top.
 
@@ -1662,7 +1718,7 @@ change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (editable)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +2 −0
 change |   c.txt — added +2 −0
 change | Comments — none
@@ -1693,14 +1749,14 @@ change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (editable)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +2 −0
 change |   c.txt — added +2 −0
 change | Comments — none
 change | (the commit shown is below HEAD)
 ```
 
-## 84. Local stack › Rebase onto origin/main ("test! temporary experiment" conflicts in c.txt, as the row said)
+## 88. Local stack › Rebase onto origin/main ("test! temporary experiment" conflicts in c.txt, as the row said)
 
 **Expect:** ger rebase origin/main runs in the ger terminal, and the status bar says so; once it has run, the upstream row goes and Local stack says the rebase stopped on a conflict in c.txt, with Abort and Skip; "test! temporary experiment" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; "Add e.txt" is dimmed. The Change view of 103 says "Conflict in c.txt" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.
 
@@ -1751,7 +1807,7 @@ stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | Conflict in c.txt — resolve it, then Continue — last pushed V-1 CR+2  [Abort] [Skip]
 change | Commit message — test! temporary experiment  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Conflicts — 1 file
 change |   ⚠ c.txt — conflicted
 change | Files, as before the rebase — 1 · +2 −0
@@ -1760,7 +1816,7 @@ change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 85. Local stack › Skip › Cancel
+## 89. Local stack › Skip › Cancel
 
 **Expect:** A dialog asks before "test! temporary experiment" is left out: the commit and the conflict resolution so far would be thrown away, Abort brings back the branch as before the rebase but not the resolution, and its change stays open on Gerrit. Cancelled, nothing runs and nothing changes.
 
@@ -1787,7 +1843,7 @@ stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | Conflict in c.txt — resolve it, then Continue — last pushed V-1 CR+2  [Abort] [Skip]
 change | Commit message — test! temporary experiment  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Conflicts — 1 file
 change |   ⚠ c.txt — conflicted
 change | Files, as before the rebase — 1 · +2 −0
@@ -1796,7 +1852,7 @@ change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 86. Local stack › Push to Gerrit… (during the rebase) › Abort
+## 90. Local stack › Push to Gerrit… (during the rebase) › Abort
 
 **Expect:** No ger push: a dialog says to finish the rebase first, why (in ger push's own words), and offers only Abort: Continue is not a way on while c.txt is conflicted. Abort runs ger rebase --abort in the ger terminal; once it has run, everything is as before the rebase: the branch, its commits, the header; Local stack still says origin/main has 1 new commit.
 
@@ -1850,7 +1906,7 @@ change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (editable)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +2 −0
 change |   c.txt — added +2 −0
 change | Comments — none
@@ -1894,14 +1950,14 @@ change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +2 −0
 change |   c.txt — added +2 −0
 change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 87. Local stack › click "Add e.txt" (still to be replayed)
+## 91. Local stack › click "Add e.txt" (still to be replayed)
 
 **Expect:** The Change view shows "Add e.txt" as it was: it changes e.txt.
 
@@ -1934,14 +1990,14 @@ stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change
 change | No Change-Id — not on Gerrit
 change | Commit message — Add e.txt  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +1 −0
 change |   e.txt — modified +1 −0
 change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 88. Change › click e.txt under Files
+## 92. Change › click e.txt under Files
 
 **Expect:** The diff of e.txt in "Add e.txt" opens, its title naming the commit; both sides are that commit's, as it is not the one you stand on. You keep it open (double-click its tab), so the next file opened does not take its place.
 
@@ -1965,7 +2021,7 @@ stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change
 change | No Change-Id — not on Gerrit
 change | Commit message — Add e.txt  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +1 −0
 change |   e.txt — modified +1 −0
 change | Comments — none
@@ -1973,7 +2029,7 @@ change | (the commit shown is only on the branch as it was before)
 diff tab | e.txt (<sha>) (ger-file on the right, active)
 ```
 
-## 89. Local stack › click "Refactor parser init" (where it stopped)
+## 93. Local stack › click "Refactor parser init" (where it stopped)
 
 **Expect:** The Change view shows the commit you stand on; the diff tab of "Add e.txt" stays as it is.
 
@@ -2008,7 +2064,7 @@ change | title: Change 102
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — Refactor parser init  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 2 · +2 −0
 change |   a.txt — added +1 −0
 change |   e.txt — added +1 −0
@@ -2017,7 +2073,7 @@ change | (the commit shown is HEAD)
 diff tab | e.txt (<sha>) (ger-file on the right, active)
 ```
 
-## 90. Change › click e.txt under Files
+## 94. Change › click e.txt under Files
 
 **Expect:** e.txt opens on its own (the commit adds it), as your file: you stand on this commit.
 
@@ -2042,7 +2098,7 @@ change | title: Change 102
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — Refactor parser init  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 2 · +2 −0
 change |   a.txt — added +1 −0
 change |   e.txt — added +1 −0
@@ -2076,7 +2132,7 @@ change | title: Change 102
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — Refactor parser init  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 2 · +2 −0
 change |   a.txt — added +1 −0
 change |   e.txt — added +1 −0
@@ -2085,7 +2141,7 @@ change | (the commit shown is HEAD)
 diff tab | e.txt (<sha>) (ger-file on the right)
 ```
 
-## 91. Local stack › Continue (e.txt not saved) › Save All
+## 95. Local stack › Continue (e.txt not saved) › Save All
 
 **Expect:** Before anything runs, a dialog names e.txt, says ger rebase --continue sees only the files on disk and then says what saved edits still need, and offers Save All, Continue without saving (git would rewrite e.txt under the edits) and Cancel. Save All pressed, e.txt is saved, then ger rebase --continue runs in the ger terminal, where it refuses: e.txt is changed and not committed, amend it in or stash it. The rebase stays where it stopped.
 
@@ -2116,7 +2172,7 @@ change | title: Change 102
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — Refactor parser init  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 2 · +2 −0
 change |   a.txt — added +1 −0
 change |   e.txt — added +1 −0
@@ -2166,7 +2222,7 @@ change | title: Change 102
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — Refactor parser init  (editable)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 2 · +3 −0
 change |   a.txt — added +1 −0
 change |   e.txt — added +2 −0
@@ -2175,7 +2231,7 @@ change | (the commit shown is below HEAD)
 diff tab | e.txt (<sha>) — stale (ger-file on the right)
 ```
 
-## 92. Settings › ger.closeDiffsOnRebase: on
+## 96. Settings › ger.closeDiffsOnRebase: on
 
 **Expect:** The stale diff tab of "Add e.txt" closes.
 
@@ -2199,7 +2255,7 @@ change | title: Change 102
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — Refactor parser init  (editable)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 2 · +3 −0
 change |   a.txt — added +1 −0
 change |   e.txt — added +2 −0
@@ -2207,7 +2263,7 @@ change | Comments — none
 change | (the commit shown is below HEAD)
 ```
 
-## 93. Local stack › click "Add e.txt"
+## 97. Local stack › click "Add e.txt"
 
 **Expect:** The Change view shows "Add e.txt", now HEAD.
 
@@ -2241,14 +2297,14 @@ stack  | (Add e.txt is HEAD)
 change | title: Change
 change | No Change-Id — not on Gerrit
 change | Commit message — Add e.txt  (editable)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +1 −0
 change |   e.txt — modified +1 −0
 change | Comments — none
 change | (the commit shown is HEAD)
 ```
 
-## 94. Change › click e.txt under Files
+## 98. Change › click e.txt under Files
 
 **Expect:** The diff of e.txt in "Add e.txt" opens with your file on its right: you stand on this commit.
 
@@ -2272,7 +2328,7 @@ stack  | (Add e.txt is HEAD)
 change | title: Change
 change | No Change-Id — not on Gerrit
 change | Commit message — Add e.txt  (editable)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +1 −0
 change |   e.txt — modified +1 −0
 change | Comments — none
@@ -2303,7 +2359,7 @@ stack  | (Add e.txt is HEAD)
 change | title: Change
 change | No Change-Id — not on Gerrit
 change | Commit message — Add e.txt  (editable)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +1 −0
 change |   e.txt — modified +1 −0
 change | Comments — none
@@ -2357,7 +2413,7 @@ stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change
 change | No Change-Id — not on Gerrit
 change | Commit message — Add e.txt  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +1 −0
 change |   e.txt — modified +1 −0
 change | Comments — none
@@ -2396,7 +2452,7 @@ stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change
 change | No Change-Id — not on Gerrit
 change | Commit message — Add e.txt  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +1 −0
 change |   e.txt — modified +1 −0
 change | Comments — none
@@ -2427,7 +2483,7 @@ stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change
 change | No Change-Id — not on Gerrit
 change | Commit message — Add e.txt  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +1 −0
 change |   e.txt — modified +1 −0
 change | Comments — none
@@ -2435,7 +2491,7 @@ change | (the commit shown is only on the branch as it was before)
 diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 ```
 
-## 95. Local stack › Continue (e.txt and notes.txt not saved) › Cancel
+## 99. Local stack › Continue (e.txt and notes.txt not saved) › Cancel
 
 **Expect:** A dialog names e.txt, whose edits are only in the stale diff tab, and notes.txt, though git does not track it (asking once too often loses nothing), and offers Save All, Continue without saving and Cancel. Cancelled, nothing is saved and nothing runs: the rebase stays stopped, the tab stale and unsaved.
 
@@ -2461,7 +2517,7 @@ stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change
 change | No Change-Id — not on Gerrit
 change | Commit message — Add e.txt  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +1 −0
 change |   e.txt — modified +1 −0
 change | Comments — none
@@ -2492,7 +2548,7 @@ stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change
 change | No Change-Id — not on Gerrit
 change | Commit message — Add e.txt  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +1 −0
 change |   e.txt — modified +1 −0
 change | Comments — none
@@ -2524,14 +2580,14 @@ stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change
 change | No Change-Id — not on Gerrit
 change | Commit message — Add e.txt  (read-only)
-change | Showing — Local commit <sha> · Against its base commit
+change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +1 −0
 change |   e.txt — modified +1 −0
 change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 96. Local stack › Continue (ger.closeDiffsOnRebase on)
+## 100. Local stack › Continue (ger.closeDiffsOnRebase on)
 
 **Expect:** Nothing is unsaved, so nothing is asked: ger rebase --continue runs in the ger terminal; once it has run, the rebase is finished, "Add e.txt" is replayed onto origin/main with a new SHA. The Change view follows "Add e.txt" to its new commit.
 
@@ -2556,7 +2612,7 @@ status bar message: $(terminal) ger rebase --continue runs in the ger terminal: 
 - change | title: Change
 - change | No Change-Id — not on Gerrit
 - change | Commit message — Add e.txt  (read-only)
-- change | Showing — Local commit <sha> · Against its base commit
+- change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 - change | Files — 1 · +1 −0
 - change |   e.txt — modified +1 −0
 - change | Comments — none

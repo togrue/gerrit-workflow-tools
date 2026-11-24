@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { CommentChain, Rebase, RebaseAction, StackCommit } from "../src/api";
-import { ChangeState, READ_ONLY, changeHeading, changeLines, changeVm } from "../src/changeRows";
+import { ChangeState, READ_ONLY, changeHeading, changeLines, changeVm, fitSides, modeSides, modesFor } from "../src/changeRows";
 import { attentionIcon } from "../src/format";
 import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, rebaseNotNowFresh, reviewerWords, skipQuestion, stackLines, stoppedAt, sync, stackVm, stackWhere } from "../src/stackRows";
 import { waitingFor } from "../src/state";
@@ -275,7 +275,7 @@ test("the change view shows the message, the files with their line counts, and w
   assert.deepEqual(changeLines(vm), [
     "Nothing to do — no votes",
     "Commit message — Extract routing  (editable)",
-    "Showing — Local commit extract · Against its base commit",
+    "Comparing — Base commit → Local commit extract · default: Against its base commit",
     "Files — 2 · +12 −3",
     "  route.py — src · modified +12 −3",
     "  logo.png — added binary",
@@ -309,7 +309,7 @@ test("stopped by a rebase on a conflict, the change view says what is left and h
   assert.deepEqual(changeLines(conflict).slice(0, 6), [
     "Conflict in src/d.txt — resolve it, then Continue — V-1  [Abort] [Skip]",
     "Commit message — Extract routing  (editable)",
-    "Showing — Local commit extract · Against its base commit",
+    "Comparing — Base commit → Local commit extract · default: Against its base commit",
     "Conflicts — 1 file",
     "  ⚠ src/d.txt — conflicted",
     "Files, as before the rebase — 2 · +12 −3",
@@ -346,35 +346,78 @@ test("the change view shows the votes as the Local stack's badges, the same ones
   assert.deepEqual(changeVm(state({ shown: shown({ pushed: false, code_review: 1 }) })).head?.badges, [], "not on Gerrit: no votes to show");
 });
 
-test("the version picker starts on the local commit and lists Gerrit's patchsets, newest first", () => {
-  const before = changeVm(state()).versions;
-  assert.deepEqual(before, { options: [{ value: "local", label: "Local commit extract" }, { value: "current", label: "Gerrit's current patchset" }], selected: "local" });
-  const after = changeVm(state({ patchsets })).versions;
-  assert.deepEqual(after?.options.map((option) => option.label), ["Local commit extract", "Patchset 3 (current)", "Patchset 2 (you reviewed it)", "Patchset 1"]);
+test("To starts on the local commit and lists Gerrit's patchsets, newest first; From lists them and the base commit below", () => {
+  const before = changeVm(state()).compare;
+  assert.deepEqual(before?.to, { options: [{ value: "local", label: "Local commit extract" }, { value: "current", label: "Gerrit's current patchset" }], selected: "local" });
+  assert.deepEqual(before?.from.options.map((option) => option.value), ["current", "reviewed", "base"], "the patchsets not known yet: the ones a mode names");
+  assert.equal(before?.from.selected, "base");
+  const after = changeVm(state({ patchsets })).compare;
+  assert.deepEqual(after?.to.options.map((option) => option.label), ["Local commit extract", "Patchset 3 (current)", "Patchset 2 (you reviewed it)", "Patchset 1"]);
+  assert.deepEqual(after?.from.options.map((option) => option.label), ["Patchset 3 (current)", "Patchset 2 (you reviewed it)", "Patchset 1", "Base commit"]);
   // Someone's change: no local commit to choose, Gerrit's current patchset is what is shown.
-  assert.equal(changeVm(state({ local: false, version: "current", patchsets })).versions?.selected, "3");
-  assert.deepEqual(changeVm(state({ shown: shown({ pushed: false }) })).versions?.options.map((option) => option.value), ["local"]);
+  assert.equal(changeVm(state({ local: false, version: "current", patchsets })).compare?.to.selected, "3");
+  const unpushed = changeVm(state({ shown: shown({ pushed: false }) })).compare;
+  assert.deepEqual([unpushed?.from.options.map((option) => option.value), unpushed?.to.options.map((option) => option.value)], [["base"], ["local"]]);
 });
 
-test("each comparison is offered only where it means something", () => {
-  const disabled = (extra: Partial<ChangeState>) => changeVm(state(extra)).modes?.options.filter((option) => option.disabled).map((option) => option.value);
-  assert.deepEqual(disabled({}), []);
-  assert.deepEqual(disabled({ local: false }), ["gerrit"], "Gerrit against local needs a local commit");
-  assert.deepEqual(disabled({ shown: shown({ pushed: false }) }), ["reviewed", "gerrit"], "nothing on Gerrit to compare with");
-  assert.deepEqual(disabled({ patchsets: { ...patchsets, reviewed: null } }), ["reviewed"], "never reviewed");
+test("From offers only patchsets older than To; the symbolic sides show as the patchsets they are", () => {
+  const disabled = (extra: Partial<ChangeState>) => changeVm(state({ patchsets, ...extra })).compare?.from.options.filter((option) => option.disabled).map((option) => option.value);
+  assert.deepEqual(disabled({}), [], "against your commit, every patchset is older");
+  assert.deepEqual(disabled({ version: 2 }), ["3", "2"]);
+  assert.deepEqual(disabled({ version: "current" }), ["3"]);
+  const reviewed = changeVm(state({ patchsets, from: "reviewed", version: "current" })).compare;
+  assert.deepEqual([reviewed?.from.selected, reviewed?.to.selected], ["2", "3"]);
+  const never = changeVm(state({ patchsets: { ...patchsets, reviewed: null }, from: "reviewed", version: "current" })).compare?.from;
+  assert.deepEqual([never?.selected, never?.options.at(-2)], ["reviewed", { value: "reviewed", label: "Patchset you last reviewed (none)", disabled: true }]);
+});
+
+test("a mode is From and To for a change; one the change does not allow is its base comparison", () => {
+  const all = { pushed: true, local: true };
+  assert.deepEqual(modeSides("base", all), { from: "base", to: "local" });
+  assert.deepEqual(modeSides("reviewed", all), { from: "reviewed", to: "current" });
+  assert.deepEqual(modeSides("gerrit", all), { from: "current", to: "local" });
+  assert.deepEqual(modeSides("gerrit", { pushed: true, local: false }), { from: "base", to: "current" }, "someone's change: no commit of yours");
+  assert.deepEqual(modeSides("reviewed", { pushed: false, local: true }), { from: "base", to: "local" }, "not on Gerrit: no patchset");
+  assert.deepEqual(modesFor({ pushed: true, local: false }), ["base", "reviewed"]);
+  assert.deepEqual(modesFor({ pushed: false, local: true }), ["base"]);
+});
+
+test("To at or below From sets From back to the base commit; From older than To stays", () => {
+  assert.deepEqual(fitSides(2, 3, patchsets), { from: 2, to: 3 });
+  assert.deepEqual(fitSides(3, 2, patchsets), { from: "base", to: 2 });
+  assert.deepEqual(fitSides("current", "current", patchsets), { from: "base", to: "current" });
+  assert.deepEqual(fitSides("current", "local", patchsets), { from: "current", to: "local" });
+  assert.deepEqual(fitSides("current", "current", undefined), { from: "current", to: "current" }, "the patchsets not known: left to core");
+});
+
+test("the mode toggle is lit while From and To are the default's, and names the next mode a click makes the default", () => {
+  const toggle = (extra: Partial<ChangeState>) => changeVm(state({ patchsets, ...extra })).compare?.mode;
+  const lit = toggle({});
+  assert.deepEqual([lit?.mode, lit?.icon, lit?.next, lit?.active], ["base", "git-commit", "reviewed", true]);
+  assert.equal(lit?.title, "Default comparison: Against its base commit. Click for Since my last review.");
+  const byHand = toggle({ from: 1 });
+  assert.equal(byHand?.active, false);
+  assert.match(byHand?.title ?? "", /picked by hand for this change/);
+  // Resolved: "current" is patchset 3, so picking patchset 3 by hand is the default's From still.
+  assert.equal(toggle({ mode: "gerrit", from: 3 })?.active, true);
+  assert.equal(toggle({ mode: "gerrit", from: "current" })?.next, "base", "the last mode wraps to the first");
+  assert.equal(toggle({ mode: "gerrit", local: false, version: "current" })?.next, "base", "someone's change skips Gerrit vs. local");
 });
 
 test("a review delta names the two versions, and says when there is nothing to show", () => {
   const since = { patch_set: 2, current_patch_set: 3, to_patch_set: null, up_to_date: false, identical: false, rebased: false };
-  const gerrit = changeVm(state({ mode: "gerrit", delta: diff({ since: { ...since, patch_set: 3 }, files: [] }) })).files;
+  const gerrit = changeVm(state({ from: "current", delta: diff({ since: { ...since, patch_set: 3 }, files: [] }) })).files;
   assert.deepEqual([gerrit?.title, gerrit?.summary], ["Gerrit vs. local: patchset 3 → local", "0 files"]);
   // Your commit is the patchset itself: core says so, and the view says there is nothing to push.
-  const same = changeVm(state({ mode: "gerrit", delta: diff({ since: { ...since, patch_set: 3, identical: true }, files: [] }) })).files;
+  const same = changeVm(state({ from: "current", delta: diff({ since: { ...since, patch_set: 3, identical: true }, files: [] }) })).files;
   assert.deepEqual([same?.title, same?.summary], ["Gerrit vs. local", "identical to patchset 3 — nothing to push"]);
-  const reviewed = changeVm(state({ mode: "reviewed", version: 3, delta: diff({ since: { ...since, to_patch_set: 3, rebased: true } }) })).files;
+  const reviewed = changeVm(state({ from: "reviewed", version: 3, delta: diff({ since: { ...since, to_patch_set: 3, rebased: true } }) })).files;
   assert.equal(reviewed?.title, "Since your review: patchset 2 → patchset 3 (rebased)");
-  const never = changeVm(state({ mode: "reviewed", delta: diff({ since: { ...since, patch_set: null }, files: [] }) })).files;
+  const never = changeVm(state({ from: "reviewed", delta: diff({ since: { ...since, patch_set: null }, files: [] }) })).files;
   assert.deepEqual([never?.title, never?.note], ["Since your review", "you have not reviewed this change yet"]);
+  // Two patchsets picked by hand, neither the reviewed one nor Gerrit's against yours: named as compared.
+  const picked = changeVm(state({ patchsets, from: 1, version: 3, delta: diff({ since: { ...since, patch_set: 1, to_patch_set: 3 } }) })).files;
+  assert.equal(picked?.title, "Compared: patchset 1 → patchset 3");
   // Someone's change you reviewed before: what is new is one click away, whatever is compared.
   const hint = changeVm(state({ local: false, version: "current", delta: diff({ since: { ...since, to_patch_set: 3 } }) })).hint;
   assert.deepEqual(hint, { text: "Since your review: patchset 2 → 3 · 2 files", show: true });

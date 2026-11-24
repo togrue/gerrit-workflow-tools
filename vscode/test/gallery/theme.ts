@@ -48,6 +48,9 @@ const VARIABLES: Record<string, [string | null, string | null]> = {
   "dropdown-background": ["#313131", "#ffffff"],
   "dropdown-foreground": ["#cccccc", "#3b3b3b"],
   "dropdown-border": ["#3c3c3c", "#cecece"],
+  "inputOption-activeBorder": ["#2488db", "#005fb8"],
+  "inputOption-activeBackground": ["#2489db82", "#bed6ed"],
+  "inputOption-activeForeground": ["#ffffff", "#000000"],
   "checkbox-selectBackground": ["#202020", "#f8f8f8"],
 
   "button-background": ["#0078d4", "#005fb8"],
