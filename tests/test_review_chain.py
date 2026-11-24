@@ -287,3 +287,25 @@ def test_ci_failure_is_an_attention_reason() -> None:
     assert "ci-failed" in chains[0].attention_reasons
     assert "unresolved-comments" in chains[0].attention_reasons
     assert chains[0].comments_unresolved == 2
+
+
+def test_a_chain_s_worst_vote_counts_a_missing_one_as_not_approved() -> None:
+    """Three changes, only the bottom one +1: the chain is not `cr+1`. A negative vote stays the worst."""
+
+    def chain(*votes: int | None) -> ReviewChain:
+        payloads = []
+        parent = None
+        for i, vote in enumerate(votes):
+            payload = _change(
+                number=100 + i, sha=f"s{i}", parent=parent, subject=f"c{i}", updated="2026-08-18 08:00:00", cr=vote or 0
+            )
+            if vote is None:
+                del payload["labels"]["Code-Review"]
+            payloads.append(payload)
+            parent = f"s{i}"
+        [assembled] = _assemble(payloads, [], web_base=WEB, now=NOW, self_account_id=SELF)
+        return assembled
+
+    assert chain(1, None, None).code_review is None
+    assert chain(1, 2, 1).code_review == 1
+    assert chain(2, None, -1).code_review == -1

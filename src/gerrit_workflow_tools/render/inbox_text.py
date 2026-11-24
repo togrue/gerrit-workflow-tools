@@ -26,6 +26,7 @@ from gerrit_workflow_tools.render.style import (
     color_stat,
     color_text,
     format_link,
+    is_hyperlink_enabled,
     terminal_columns,
     visible_len,
 )
@@ -39,9 +40,13 @@ _MIN_SUBJECT = 12
 """Narrower than this, a cut subject says too little: the row wraps instead."""
 
 
-def _fmt_change_number(number: int) -> str:
-    """Identity of a chain or member, as every changeish argument takes it back; ``ger log``'s SHA cyan."""
-    return color_short_sha(change_label(number))
+def _fmt_change_number(number: int, url: str | None) -> str:
+    """Identity of a chain or member, as every changeish argument takes it back; ``ger log``'s SHA cyan.
+
+    With terminal hyperlinks on, the label opens the change: no URL line is needed below the row.
+    """
+    label = color_short_sha(change_label(number))
+    return format_link(url, label=label) if url and is_hyperlink_enabled() else label
 
 
 def _fmt_votes(item: ReviewChain | ChainMember) -> str:
@@ -122,7 +127,7 @@ def _subject(text: str, *, used: int, columns: int | None, highlighter: SummaryH
 
 def _chain_cells(chain: ReviewChain, *, outgoing: bool) -> list[str]:
     """The aligned part of a chain's row. An outgoing chain is yours: no waiting clock and no owner."""
-    cells = [_fmt_change_number(chain.top.number), _fmt_size(chain.depth), _fmt_chain_votes(chain)]
+    cells = [_fmt_change_number(chain.top.number, chain.url), _fmt_size(chain.depth), _fmt_chain_votes(chain)]
     if outgoing:
         return [*cells, _fmt_age("active", chain.wait_age_seconds, ANSI_DIM)]
     waiting = _fmt_age("waiting", chain.unreviewed_age_seconds, ANSI_YELLOW)
@@ -141,7 +146,7 @@ def _member_lines(
         # A single change's own row says it all; a chain's row says the worst, so the member says which.
         if chain.depth == 1 or not (verbose or member.attention_reasons):
             continue
-        head = f"{color_text('  └ ', ANSI_DIM)}{_fmt_change_number(member.number)}  {_fmt_votes(member)}  "
+        head = f"{color_text('  └ ', ANSI_DIM)}{_fmt_change_number(member.number, member.url)}  {_fmt_votes(member)}  "
         note = _attention_note(member, outgoing=outgoing)
         if note:
             lines.append(f"{head}{color_text('# ', ANSI_DIM)}{note}")
@@ -214,8 +219,8 @@ def _render_section(
         )
         used = visible_len(head) + visible_len(marks)
         print(head + _subject(chain.top.subject, used=used, columns=columns, highlighter=highlighter) + marks)
-        if show_url and chain.url:
-            print(f"{_INDENT}{color_text(format_link(chain.url), ANSI_DIM)}")
+        if show_url and chain.url and not is_hyperlink_enabled():  # else the row's cN opens it
+            print(f"{_INDENT}{color_text(chain.url, ANSI_DIM)}")
         for line in _member_lines(chain, verbose=verbose, outgoing=outgoing, columns=columns, highlighter=highlighter):
             print(line)
     if folded := len(chains) - len(shown):

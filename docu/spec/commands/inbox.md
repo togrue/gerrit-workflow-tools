@@ -110,10 +110,10 @@ Within *to review*, chains sort by **unreviewed age**, oldest first (longest wai
 | `--limit N` | At most N chains per section. N must be positive |
 | `--json` | Machine-readable output (see [JSON](#json)) |
 | `--ai`, `--format {human,ai}` | `ai`: one plain line per chain for a model to read (see [Output (`--ai`)](#output---ai)) |
-| `--url`, `--show-url` | Chain-top URL per entry (default: **on**) |
+| `--url`, `--show-url` | Chain-top URL per entry (default: **on**): a line below the row, unless terminal hyperlinks are on, where the row's `cN` is the link |
 | `--no-url` | Omit URLs from text output |
 | `--color WHEN` | `always` \| `auto` \| `never` |
-| `--hyperlinks WHEN` | `always` \| `auto` \| `never`. When on, the chain-top URL becomes a clickable `Open in gerrit` (OSC 8), same as `ger log`. JSON always includes the raw URL. |
+| `--hyperlinks WHEN` | `always` \| `auto` \| `never`. When on, each `cN` label (the chain's and its members') opens that change (OSC 8), and no URL line follows a row. JSON always includes the raw URL. |
 | `--debug-log`, `-v` | Standard helpers (see `cli_args`) |
 
 Planned, not in this slice: `--since-last`, `--watch`, `--forget`, `--sort`, `--query`.
@@ -155,7 +155,7 @@ An *outgoing* line is yours: it has no waiting clock and no owner, and ends in `
 |--------|---------|
 | `c<n>` | Chain top's Gerrit change number, as every changeish argument takes it back |
 | `N changes` | Chain depth (member count) |
-| `v…` / `cr…` / `com` | One change: its votes. Several: `worst`, then the worst label across members (not the top's own); the members that cause it follow indented. `com` when any member has unresolved comments. Right-aligned, so the tokens line up. Tokens: [Reading-ger-log.md](../../Reading-ger-log.md#status-columns) |
+| `v…` / `cr…` / `com` | One change: its votes. Several: `worst`, then the worst label across members (not the top's own): a negative vote, else a missing one (`cr?` while any member has no vote: one +1 at the bottom of five does not read as approved), else the lowest; the members that cause it follow indented. `com` when any member has unresolved comments. Right-aligned, so the tokens line up. Tokens: [Reading-ger-log.md](../../Reading-ger-log.md#status-columns) |
 | `waiting` | Unreviewed age — how long the chain has waited for you (*to review*); `, active …` follows when the wait age (last activity) reads differently |
 | `active` | Wait age — last activity on any member (*outgoing*) |
 | owner | Chain-top owner, cut at 18 characters |
@@ -187,7 +187,7 @@ Same palette as [`ger log`](log.md) / [Reading-ger-log.md](../../Reading-ger-log
 | CI / build | `build failed`, summary `build failed` count | red |
 | Context | `N changes`, `worst`, `waiting`/`active` labels, activity age, owner, `#`, URL, folded-chains line, empty-section hint | dim |
 
-`--hyperlinks` shortens the chain-top URL the same way as `ger log`.
+With `--hyperlinks` on, the `cN` labels are the links and the URL lines are left out: one line per chain.
 
 ---
 

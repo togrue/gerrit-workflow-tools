@@ -154,8 +154,12 @@ def member_attention_reasons(change: ChangeView, awaiting_reply: int = 0) -> tup
 
 
 def _worst_label(values: list[int | None]) -> int | None:
+    """The worst vote of a label over a chain's members: a negative one; else a missing one
+    (``None``: a change nobody voted on is not approved, whatever the others have); else the lowest."""
     known = [value for value in values if value is not None]
-    return min(known) if known else None
+    if any(value < 0 for value in known) or len(known) == len(values):
+        return min(known, default=None)
+    return None
 
 
 def _to_member(
