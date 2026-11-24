@@ -11,12 +11,10 @@ from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_follow_merges_args,
     add_verbose_and_debug_log_args,
-    assume_yes,
-    confirm,
     init_cli_runtime,
     run_cli_command,
 )
-from gerrit_workflow_tools.cli_terminal import stdin_is_terminal
+from gerrit_workflow_tools.cli_terminal import assume_yes, confirm, stdin_is_terminal
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name, ger_push_mode

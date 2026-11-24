@@ -10,8 +10,7 @@ import logging
 import sys
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_common import ask_choice, confirm
-from gerrit_workflow_tools.cli_terminal import prompt_toolkit_can_run, stdin_is_terminal
+from gerrit_workflow_tools.cli_terminal import ask_choice, confirm, prompt_toolkit_can_run, stdin_is_terminal
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.push import (

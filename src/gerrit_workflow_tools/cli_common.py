@@ -14,14 +14,14 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from contextvars import ContextVar
 from enum import IntEnum
 from pathlib import Path
 from typing import TypeVar
 
 from gerrit_workflow_tools.cli_logging import configure_logging
-from gerrit_workflow_tools.cli_terminal import stdin_is_terminal
+from gerrit_workflow_tools.cli_terminal import assume_yes, confirm, stdin_is_terminal
 from gerrit_workflow_tools.core.attention import NoEditAttentionError
 from gerrit_workflow_tools.core.call_trace import format_call_trace_summary
 from gerrit_workflow_tools.core.changeish import as_change_only
@@ -184,25 +184,6 @@ def _report_failure(error: Exception) -> int:
     return int(code)
 
 
-def ask_choice(prompt: str, answers: Mapping[str, _T], *, hint: str | None = None, on_eof: _T | None = None) -> _T:
-    """Ask until the lower-cased reply is a key of *answers*; return what it maps to.
-
-    End of input or Ctrl-C returns *on_eof* when one is given, and otherwise propagates.
-    """
-    while True:
-        try:
-            reply = input(prompt).strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            if on_eof is None:
-                raise
-            print()
-            return on_eof
-        if reply in answers:
-            return answers[reply]
-        if hint:
-            print(hint, file=sys.stderr)
-
-
 def add_message_args(parser: argparse.ArgumentParser) -> argparse._ArgumentGroup:
     """Register ``-m``/``--message`` (repeatable) and ``-F``/``--file`` as a "message" group.
 
@@ -221,13 +202,6 @@ def read_message(messages: list[str] | None, file: str | None) -> str:
     else:
         text = "\n\n".join(messages or [])
     return text.strip()
-
-
-def confirm(question: str, *, default: bool) -> bool:
-    """Ask a yes/no *question*. Enter takes *default*; anything else unknown asks again."""
-    suffix = "[Y/n]" if default else "[y/N]"
-    answers = {"y": True, "yes": True, "n": False, "no": False, "": default}
-    return ask_choice(f"{question} {suffix}: ", answers, on_eof=False)
 
 
 def confirm_publish(args: argparse.Namespace, what: str) -> bool:
@@ -363,14 +337,6 @@ def add_verbose_and_debug_log_args(
 # Set by `ger --refresh` (cli_ger) for this process and the git-run editors it starts,
 # such as the rebase enricher. Read here, once per run, and nowhere below.
 REFRESH_ENV = "GER_CACHE_REFRESH"
-
-
-ASSUME_YES_ENV = "GER_ASSUME_YES"
-
-
-def assume_yes() -> bool:
-    """Whether ``GER_ASSUME_YES`` answers every confirmation with yes, as ``-y`` does (agent sandboxes)."""
-    return os.environ.get(ASSUME_YES_ENV, "").strip().lower() in ("1", "true", "yes")
 
 
 def refresh_requested() -> bool:

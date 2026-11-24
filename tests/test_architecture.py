@@ -245,8 +245,8 @@ CONCEPTS = [
     Concept(
         name="y/n confirmation parsing",
         pattern=r"""in \(\s*["']y["']|== ["']y["']|\[[yY]/[nN]\]""",
-        owners={"cli_common.py": "ask_choice and confirm parse every prompt's reply"},
-        fix="Ask through cli_common.confirm, or ask_choice when the answers are not yes and no.",
+        owners={"cli_terminal.py": "ask_choice and confirm parse every prompt's reply"},
+        fix="Ask through cli_terminal.confirm, or ask_choice when the answers are not yes and no.",
     ),
 ]
 

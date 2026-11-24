@@ -14,12 +14,12 @@ from gerrit_workflow_tools.cli_common import (
     add_color_args,
     add_output_format_args,
     add_verbose_and_debug_log_args,
-    ask_choice,
     changeish_help,
     init_cli_runtime,
     may_prompt,
     run_cli_command,
 )
+from gerrit_workflow_tools.cli_terminal import ask_choice
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.config_write import ConfigWrite, apply_config_write
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest

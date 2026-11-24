@@ -9,14 +9,12 @@ from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_color_args,
     add_verbose_and_debug_log_args,
-    assume_yes,
     changeish_help,
-    confirm,
     init_cli_runtime,
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_notes import print_note, print_resolution_note
-from gerrit_workflow_tools.cli_terminal import stdin_is_terminal
+from gerrit_workflow_tools.cli_terminal import assume_yes, confirm, stdin_is_terminal
 from gerrit_workflow_tools.core.change_checkout import (
     CheckoutAction,
     CheckoutPlan,

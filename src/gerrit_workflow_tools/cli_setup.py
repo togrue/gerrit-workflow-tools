@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from gerrit_workflow_tools.cli_common import ExitCode, confirm, init_cli_runtime, run_cli_command
-from gerrit_workflow_tools.cli_terminal import prompt_toolkit_can_run
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
+from gerrit_workflow_tools.cli_terminal import confirm, prompt_toolkit_can_run
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_keys import ConfigScope, legacy_key
 from gerrit_workflow_tools.core.config_write import ConfigWrite, apply_config_write
