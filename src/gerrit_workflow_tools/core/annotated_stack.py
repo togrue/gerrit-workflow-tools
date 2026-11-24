@@ -23,9 +23,10 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
+from enum import Enum
 from pathlib import Path
 
-from gerrit_workflow_tools.core.attention import annotate_attention
+from gerrit_workflow_tools.core.attention import Attention, annotate_attention, chain_blocker
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError, format_resolution_note
 from gerrit_workflow_tools.core.gerrit.narrowing import resolution_from_change_rows
 from gerrit_workflow_tools.core.gerrit.rest import GerritUnavailableError
@@ -271,8 +272,80 @@ class StackOverview:
 
     @property
     def ready(self) -> int:
-        """How many commits ``ger push`` sends: those below the ready boundary."""
+        """How many commits sit below the ready boundary: the ones ``ger push`` pushes."""
         return len(self.view.commits) - len(self.blocked)
+
+    @property
+    def to_upload(self) -> list[LogCommit]:
+        """The commits ``ger push`` uploads: below the ready boundary, and new to Gerrit or ahead of it.
+
+        A commit Gerrit already has as its current patch set is pushed but uploads nothing; a
+        diverged one ``ger push`` refuses to put over Gerrit's.
+        """
+        return [
+            c
+            for c in self.view.commits
+            if c.sha not in self.blocked
+            and not c.abandoned
+            and (
+                c.patchset_status == PatchsetStatus.ABSENT
+                or (c.patchset_status == PatchsetStatus.NEWER and not c.diverged)
+            )
+        ]
+
+    def next_steps(self) -> list[NextStep]:
+        """What to do next, one step per state the stack is in that has a ger command for it."""
+        commits = self.view.commits
+        moved = self.moved
+        steps = [NextStep(NextStepKind.UPSTREAM_MOVED)] if moved and moved.behind else []
+        merged = [c for c in commits if c.patchset_status in (PatchsetStatus.MERGED_SAME, PatchsetStatus.MERGED_DRIFT)]
+        if merged and not steps:
+            steps.append(NextStep(NextStepKind.MERGED, (merged[0],)))
+        for kind, hit in (
+            (NextStepKind.ABANDONED, [c for c in commits if c.abandoned]),
+            (NextStepKind.DIVERGED, [c for c in commits if Attention.DIVERGED in c.attention_reasons and c.number]),
+            (
+                NextStepKind.OUTDATED,
+                [c for c in commits if Attention.OUTDATED_PATCHSET in c.attention_reasons and c.number],
+            ),
+        ):
+            if hit:
+                steps.append(NextStep(kind, (hit[0],)))
+        if upload := self.to_upload:
+            steps.append(NextStep(NextStepKind.UPLOAD, tuple(upload)))
+        if wip := [c for c in commits if c.pushed and Attention.WIP in c.attention_reasons]:
+            steps.append(
+                NextStep(NextStepKind.WIP, tuple(wip), beyond_boundary=any(c.sha in self.blocked for c in wip))
+            )
+        if blocker := chain_blocker(commits):
+            steps.append(NextStep(NextStepKind.CHAIN_BLOCKED, (blocker,)))
+        return steps
+
+
+class NextStepKind(str, Enum):
+    """A state of the stack that has a ger command for it (the **next steps** ``ger log`` closes with)."""
+
+    UPSTREAM_MOVED = "upstream-moved"
+    """The upstream moved on: :attr:`StackOverview.moved` says how, and the rebase onto it."""
+    MERGED = "merged"
+    ABANDONED = "abandoned"
+    DIVERGED = Attention.DIVERGED
+    OUTDATED = Attention.OUTDATED_PATCHSET
+    UPLOAD = "upload"
+    """Commits ``ger push`` uploads (:attr:`StackOverview.to_upload`)."""
+    WIP = Attention.WIP
+    CHAIN_BLOCKED = Attention.CHAIN_BLOCKED
+    """The commit that holds the chain back (:attr:`LogCommit.blocks_chain`)."""
+
+
+@dataclass(frozen=True)
+class NextStep:
+    """One next step: what state, and the commits it is about (the first one only, where one command fixes one)."""
+
+    kind: NextStepKind
+    commits: tuple[LogCommit, ...] = ()
+    beyond_boundary: bool = False
+    """WIP only: some of them sit above the ready boundary, so only ``ger push --all`` reaches them."""
 
 
 def load_stack_overview(

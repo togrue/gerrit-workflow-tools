@@ -22,7 +22,13 @@ from gerrit_workflow_tools.cli_notes import print_note
 from gerrit_workflow_tools.core.annotated_stack import load_stack_overview, resolve_rev_range
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.render.ai_text import stack_ai_lines
-from gerrit_workflow_tools.render.show_json import log_commit_json, rebase_json, rebase_steps, upstream_json
+from gerrit_workflow_tools.render.show_json import (
+    log_commit_json,
+    next_steps_json,
+    rebase_json,
+    rebase_steps,
+    upstream_json,
+)
 from gerrit_workflow_tools.render.stack_log import (
     RowOptions,
     footer_lines,
@@ -148,6 +154,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
             "rebase": rebase,
             "upstream": upstream_json(moved),
             "commits": commit_payload,
+            "next": next_steps_json(overview),
         }
         print(json.dumps(payload, indent=2))
         if stack_view.gerrit_unavailable is not None:
@@ -159,8 +166,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
             commits,
             project=stack.project,
             branch=stack.push_branch,
-            ready=overview.ready,
-            next_lines=next_steps(commits, moved),
+            upload=overview.to_upload,
+            next_lines=next_steps(overview),
         )
         print("\n".join(lines))
     else:
@@ -169,8 +176,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
         for line in row_lines(commits, options, summary_highlighter=summary_highlighter, blocked=blocked):
             print(line)
         print()
-        print(summary_line(commits, overview.ready, width=width))
-        for line in footer_lines(next_steps(commits, moved), width=width):
+        print(summary_line(overview, width=width))
+        for line in footer_lines(next_steps(overview), width=width):
             print(line)
     if stack_view.gerrit_unavailable is not None:
         raise stack_view.gerrit_unavailable

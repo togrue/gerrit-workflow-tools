@@ -75,7 +75,7 @@ def test_log_default_text_contains_commit_lines_and_summary(
     code, out, err = run_cli(web_stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     assert "summary:" in out
-    assert "ready" in out and "/" in out
+    assert f"{len(rows)} on Gerrit" in out
     for c in rows:
         assert c.short_sha in out
         assert c.subject in out
@@ -812,7 +812,7 @@ def test_log_ready_count_agrees_with_the_push_boundary(stack_repo: Path, monkeyp
 
     _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=store)
 
-    assert f"ready {ready.pushable_count}/{len(rows)}" in strip_ansi(out)
+    assert f"{len(rows) - ready.pushable_count} held back" in strip_ansi(out)
     assert ready.pushable_count == len(rows) - 2
 
 
@@ -863,7 +863,10 @@ def test_log_says_what_to_run_next_for_a_blocked_chain(stack_repo: Path, monkeyp
     rows = stack_rows_mb_to_head(stack_repo)
     details = build_details_by_change_id(rows, per_index_overrides=[{"cr": 1, "submittable": False}])
     _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore(details))
-    assert "chain blocked: a change below is not submittable yet" in out
+    lines = out.splitlines()
+    assert lines[0].startswith(rows[0].short_sha) and lines[0].endswith("# awaiting review")
+    assert not any("chain blocked" in line for line in lines[1 : len(rows)])
+    assert f"chain blocked by {rows[0].short_sha} (awaiting review)" in lines
 
 
 def test_log_verbose_lists_reviewers_and_ccs(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -927,17 +930,18 @@ def test_log_ai_is_one_plain_line_per_commit(stack_repo: Path, monkeypatch: pyte
     assert code == 0, err
     assert out == strip_ansi(out)  # --ai forces colour off, whatever --color says
     lines = out.splitlines()
-    assert lines[0] == "stack: testproj, branch main, 6 commits, ger push sends 1-2"
+    # The ready boundary stops at commit 3 (``test!``), so commit 4, ahead of Gerrit, is held back.
+    assert lines[0] == "stack: testproj, branch main, 6 commits, ger push uploads nothing"
     sha = [row.short_sha for row in stack_rows_mb_to_head(stack_repo)]
     assert lines[1:7] == [
         f"1. {sha[0]} Refactor parser init — change 100, V+1, CR+2, submittable",
         f"2. {sha[1]} Extract command routing — change 101, V-1, build failed (unit-tests)",
-        f"3. {sha[2]} test! temporary experiment — change 102, V+1, CR+1, 2 unresolved comments, chain blocked",
-        f"4. {sha[3]} Cleanup after experiment — change 103, ahead of gerrit, chain blocked",
-        f"5. {sha[4]} Wip: cache — not-pushed",
+        f"3. {sha[2]} test! temporary experiment — change 102, V+1, CR+1, 2 unresolved comments",
+        f"4. {sha[3]} Cleanup after experiment — change 103, ahead of gerrit",
+        f"5. {sha[4]} Wip: cache — not pushed",
         f"6. {sha[5]} No footer here — missing Change-Id",
     ]
-    assert lines[7].startswith("chain blocked: ")  # stack_log.next_steps, as the human view ends
+    assert lines[7:] == [f"chain blocked by {sha[1]} (build failed)"]  # stack_log.next_steps, as the human view ends
     for empty in ("None", "null", "[]", "CR0", "V0", "0 unresolved", "http", "#"):
         assert empty not in out
 
@@ -969,12 +973,13 @@ def test_log_ai_names_merged_commits_every_failed_check_and_the_wip_next_step(
     assert "rebase is in progress" in err
     assert err == strip_ansi(err)
     lines = out.splitlines()
-    assert lines[1] == f"1. {rows[0].short_sha} Refactor parser init — change 100, merged, V+1, CR+2"
+    assert lines[1] == f"1. {rows[0].short_sha} Refactor parser init — change 100, V+1, CR+2, merged"
     assert lines[2].endswith("— change 101, V-1, CR+2, build failed (unit-tests, lint)")
     assert lines[3].startswith(f"3. {rows[2].short_sha} test! temporary experiment — change 102, V+1, CR+2, WIP")
-    wip_step = "next: 1 WIP change on Gerrit; ready them with `ger push --ready`"
+    # The WIP change is the ``test!`` commit, above the ready boundary: only --all reaches it.
+    wip_step = "next: 1 WIP change on Gerrit; ready them with `ger push --all --ready`"
     assert wip_step in lines
     _code, human, _err = run_cli(web_stack_repo, log_main, ["--color", "never"], monkeypatch, gerrit=store)
-    next_lines = [line for line in human.splitlines() if line.startswith(("next: ", "chain blocked: "))]
+    next_lines = [line for line in human.splitlines() if line.startswith(("next: ", "chain blocked "))]
     assert next_lines == lines[5:]
     assert wip_step in next_lines

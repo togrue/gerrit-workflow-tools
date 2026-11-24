@@ -497,10 +497,10 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/stack.py` | Local stack: `Commit` (the one commit-row type), `get_stack_snapshot` (the one stack loader), `read_commit_rows`, `read_commit_meta`, `read_rewrite_rows`, ranges, merge-base |
 | `core/ready_calc.py` | Ready boundary and push range |
 | `core/ready_strategy.py` | Loading ready-boundary strategies from `.ger/ready/` |
-| `core/annotated_stack.py` | Annotated stack: local stack + Gerrit overlay + attention; the stack overview `ger log` and `GET /stack` answer from (`load_stack_overview`) |
+| `core/annotated_stack.py` | Annotated stack: local stack + Gerrit overlay + attention; the stack overview `ger log` and `GET /stack` answer from (`load_stack_overview`), with what `ger push` would upload (`StackOverview.to_upload`) and the stack's next steps (`StackOverview.next_steps`: `NextStep`, `NextStepKind`) |
 | `core/gerrit_change_status.py` | `LogCommit`, patchset status |
 | `core/code_facts.py` | What the repository knows about the code an overlay compares (`CodeFacts`, `read_code_facts`: one git batch) and merged equivalence (`merged_equivalent`) |
-| `core/attention.py` | Attention: reason names, `determine_attention()`, `ci_failed()`, chain-blocking, edit attention |
+| `core/attention.py` | Attention: reason names, `determine_attention()`, `ci_failed()`, chain-blocking (the commit that blocks, `LogCommit.blocks_chain`, and why: `blocking_reason()`), edit attention |
 | `core/attention_cursor.py` | Attention cursor: Change-Id walk position, TTL, lazy adopt, history |
 | `core/edit_attention_walk.py` | Edit-attention walk: load stack, resume/next/first target, cursor status |
 | `core/attention_strategy.py` | Loading attention strategies from `.ger/attention/` |
@@ -585,7 +585,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | Module | Owns |
 |--------|------|
 | `render/commit_row.py` | Full commit line layout for log/show |
-| `render/stack_log.py` | `ger log`'s text view: the rows with the ready boundary line (`row_lines`), the summary line (`summary_line`), the `next:` lines (`next_steps`) and the rebase note (`rebase_note`) |
+| `render/stack_log.py` | `ger log`'s text view: the rows with the ready boundary line (`row_lines`), the summary line (`summary_line`), the core's next steps in words (`next_steps`) and the rebase note (`rebase_note`) |
 | `render/status_fmt.py` | Plain status tokens (patchset, CR, verified, comments) for editable contexts, and the hint words for attention reasons (`attention_hints` for `ger log`, `member_hints` for `ger inbox`) |
 | `render/comments.py` | Inline comment chains, human and Markdown |
 | `render/suggested_fixes.py` | Gerrit fix suggestions written out below a comment, one shape for the terminal and Markdown (`shown_fixes`, `fix_rows`, `fixes_markdown`), and a comment's whole text with them (`comment_text`, what `ger serve` sends) |

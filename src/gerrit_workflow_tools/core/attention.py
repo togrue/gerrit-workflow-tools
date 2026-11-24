@@ -201,6 +201,32 @@ def commit_blocks_chain_for_submittability(commit: LogCommit) -> bool:
     return not commit.submittable
 
 
+# Why a commit is not submittable, most telling first: what :func:`blocking_reason` picks.
+_BLOCKING_ORDER = (
+    Attention.MERGED_DRIFT,
+    Attention.MERGED_UNKNOWN,
+    Attention.CI_FAILED,
+    Attention.REVIEW_ISSUES,
+    Attention.UNRESOLVED_COMMENTS,
+    Attention.WIP,
+    Attention.NO_REVIEWERS,
+    Attention.AWAITING_REVIEW,
+)
+
+
+def blocking_reason(commit: LogCommit) -> str | None:
+    """Why *commit* holds the chain above it back: the most telling of its reasons.
+
+    ``None`` when none of them says (Gerrit reports it not submittable for a rule of its own).
+    """
+    return next((reason for reason in _BLOCKING_ORDER if reason in commit.attention_reasons), None)
+
+
+def chain_blocker(commits: Sequence[LogCommit]) -> LogCommit | None:
+    """The commit that holds the chain back (:attr:`LogCommit.blocks_chain`), or ``None``."""
+    return next((c for c in commits if c.blocks_chain), None)
+
+
 def annotate_attention(
     commits: list[LogCommit],
     *,
@@ -213,7 +239,8 @@ def annotate_attention(
 
     Chain-blocking: an earlier pushed commit blocks later ones when the chain-block
     strategy (or built-in :func:`commit_blocks_chain_for_submittability`) says so.
-    Same rules as ``ger log``.
+    The first such commit is marked :attr:`LogCommit.blocks_chain` when a commit above it
+    is blocked. Same rules as ``ger log``.
     """
     from gerrit_workflow_tools.core.attention_strategy import (
         attention_reasons_via_registry,
@@ -221,7 +248,9 @@ def annotate_attention(
     )
 
     prefix_chain_blocks = False
+    blocker: LogCommit | None = None
     for commit in commits:
+        commit.blocks_chain = False
         chain_blocked = commit.pushed and prefix_chain_blocks
         commit.attention_reasons = attention_reasons_via_registry(
             root,
@@ -238,7 +267,10 @@ def annotate_attention(
             settings=settings,
             web_base=web_base,
         ):
+            blocker = blocker or commit
             prefix_chain_blocks = True
+    if blocker is not None and any(Attention.CHAIN_BLOCKED in c.attention_reasons for c in commits):
+        blocker.blocks_chain = True
 
 
 def commit_needs_edit_attention(commit: LogCommit) -> bool:

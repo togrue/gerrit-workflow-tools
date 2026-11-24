@@ -106,7 +106,7 @@ def test_attention_text_variants():
 
     assert attention_text(_commit(change_id=None, pushed=False, patchset_status="absent")) == "missing Change-Id"
     assert attention_text(_commit(abandoned=True)) == "abandoned"
-    assert attention_text(_commit(pushed=False, patchset_status="absent")) == "not-pushed"
+    assert attention_text(_commit(pushed=False, patchset_status="absent")) == "not pushed"
     assert attention_text(_commit(submittable=True)) == "submittable"
     assert attention_text(_commit(verified=-1)) == "build failed"
     assert attention_text(_commit(ci_failures=["Lint"])) == "CI failed: Lint"
@@ -183,7 +183,7 @@ def test_enriched_subject_not_pushed_shows_dash():
     annotate_attention([commit])
     subj = _enriched_subject(commit)
     assert "-" in subj
-    assert "not-pushed" in subj
+    assert "not pushed" in subj
 
 
 # ---------------------------------------------------------------------------
@@ -281,7 +281,7 @@ def test_enrich_todo_on_gerrit_api_error_degrades_gracefully(stack_repo: Path):
     # Must not raise; each pick line must still be enriched (degraded to not-pushed).
     for c in rows:
         assert f"pick {c.short_sha} # " in result
-    assert "not-pushed" in result
+    assert "not pushed" in result
 
 
 # ---------------------------------------------------------------------------

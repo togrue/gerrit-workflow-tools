@@ -8,6 +8,7 @@ from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.ci_links import CiPipeline
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.render.status_fmt import (
+    MERGED,
     PRIVATE,
     SUBMITTABLE,
     attention_hints,
@@ -247,7 +248,7 @@ _HINT_COLOR: dict[str, str] = {
     Attention.DIVERGED: ANSI_RED,
     Attention.OUTDATED_PATCHSET: ANSI_RED,
     Attention.REVIEW_ISSUES: ANSI_YELLOW,
-    Attention.CHAIN_BLOCKED: ANSI_DIM_GRAY,
+    MERGED: ANSI_GREEN,
 }
 """Colour per hint key; a terminal hint not listed (missing Change-Id, not-pushed, …) is yellow."""
 

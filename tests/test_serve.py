@@ -138,16 +138,17 @@ def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monk
     log = json_stdout(out)
     stack = _get(GerApi(stack_repo, gerrit=store), "/stack")
     assert code == ExitCode.OK
-    assert list(log) == ["stack", "rebase", "upstream", "commits"]
+    assert list(log) == ["stack", "rebase", "upstream", "commits", "next"]
     assert list(stack) == [
-        *("branch", "head", "rebase_in_progress", "rebase", "upstream", "push_blocked", "stack", "summary", "commits")
+        *("branch", "head", "rebase_in_progress", "rebase", "upstream", "push_blocked", "stack", "summary", "commits"),
+        "next",
     ]
     assert list(stack["summary"]) == ["commits", "ready", "attention", "needs_edit", "not_on_gerrit"]
     shared = [
         *("sha", "change_id", "summary", "pushed", "patchset_status", "verified", "code_review"),
         *("comments_unresolved", "ci_failures", "ci_links", "ci_pipelines", "gerrit_url", "number"),
         *("last_pushed_votes", "code_change", "submittable", "votes", "reviewers", "work_in_progress"),
-        *("private", "attention_reasons", "severity", "change_status", "merged_equivalent"),
+        *("private", "attention_reasons", "severity", "change_status", "merged_equivalent", "blocks_chain"),
     ]
     assert list(log["commits"][0]) == [*shared, "abandoned", "rebase"]
     assert list(stack["commits"][0]) == [
@@ -156,6 +157,7 @@ def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monk
         "needs_edit",
     ]
     assert (log["stack"], log["upstream"], log["rebase"]) == (stack["stack"], stack["upstream"], stack["rebase"])
+    assert log["next"] == stack["next"]
     assert [c["sha"] for c in log["commits"]] == [c["sha"] for c in stack["commits"]] == [r.sha for r in rows]
     assert [c["held_back"] for c in stack["commits"]] == [False, False, True, True]
 

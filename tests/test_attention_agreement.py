@@ -107,7 +107,7 @@ def test_project_strategy_decides_what_is_printed(stack_repo: Path) -> None:
     ("overrides", "expected"),
     [
         ({"patchset_status": PatchsetStatus.NEWER}, "ahead of gerrit"),
-        ({"patchset_status": PatchsetStatus.NEWER, "diverged": True}, "diverged: Gerrit has a patchset you never had"),
+        ({"patchset_status": PatchsetStatus.NEWER, "diverged": True}, "diverged from Gerrit"),
         ({"patchset_status": PatchsetStatus.OUTDATED}, "outdated patchset"),
         ({"code_review": -1}, "review issues"),
     ],

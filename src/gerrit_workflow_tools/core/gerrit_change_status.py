@@ -194,6 +194,9 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     invalid_footer: str | None = None
     """The **footer value** when the commit has one that is not a valid **Change-Id** (``change_id``
     is then ``None``): what lets attention call the footer invalid rather than missing."""
+    blocks_chain: bool = False
+    """The first commit that holds the changes above it back (they carry ``chain-blocked``):
+    attention's verdict, and :func:`core.attention.blocking_reason` says why."""
 
 
 def overlay_code_facts(cwd: Path | str | None, pairs: Iterable[tuple[Commit, ChangeView | None]]) -> CodeFacts:

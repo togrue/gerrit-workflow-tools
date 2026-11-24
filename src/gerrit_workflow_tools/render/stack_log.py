@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from gerrit_workflow_tools.core.annotated_stack import NextStep, NextStepKind, StackOverview
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.rebase_state import RebaseProgress, RebaseStop
@@ -17,6 +18,7 @@ from gerrit_workflow_tools.render.commit_row import (
     oneline_body,
     oneline_line,
 )
+from gerrit_workflow_tools.render.status_fmt import chain_blocked_text
 from gerrit_workflow_tools.render.style import (
     ANSI_BOLD,
     ANSI_CYAN,
@@ -24,7 +26,6 @@ from gerrit_workflow_tools.render.style import (
     ANSI_GREEN,
     ANSI_RED,
     ANSI_YELLOW,
-    color_stat,
     color_text,
     visible_len,
 )
@@ -34,6 +35,8 @@ from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 # Readable without colour (piped, NO_COLOR): commits above it are what `ger push` sends.
 READY_BOUNDARY_MARKER = "---- ready boundary: `ger push` sends the commits above ----"
+
+_MERGED = (PatchsetStatus.MERGED_SAME, PatchsetStatus.MERGED_DRIFT, PatchsetStatus.MERGED_UNKNOWN)
 
 
 @dataclass(frozen=True)
@@ -52,38 +55,35 @@ class RowOptions:
 # ---------------------------------------------------------------------------
 
 
-def _build_summary(commits: list[LogCommit]) -> dict[str, int]:
-    """Return per-category counts for summary printing."""
-    counts: dict[str, int] = {
-        "ci-failures": 0,
-        Attention.UNRESOLVED_COMMENTS: 0,
-        "on-gerrit": 0,
-        Attention.WIP: 0,
-    }
-    for c in commits:
-        if c.pushed and Attention.CI_FAILED in c.attention_reasons:
-            counts["ci-failures"] += 1
-        if c.comments_unresolved > 0:
-            counts[Attention.UNRESOLVED_COMMENTS] += 1
-        if c.pushed:
-            counts["on-gerrit"] += 1
-        if Attention.WIP in c.attention_reasons:
-            counts[Attention.WIP] += 1
-    return counts
+def _stat(count: int, label: str, color: str) -> str:
+    return color_text(str(count), color) + color_text(f" {label}", ANSI_DIM)
 
 
-def summary_line(commits: list[LogCommit], ready_n: int, *, width: int | None = None) -> str:
-    """``summary: ready N/M · …`` with optional ANSI styling; broken between stats to fit *width*."""
-    summary = _build_summary(commits)
-    stats = [color_stat("ready ", f"{ready_n}/{len(commits)}", ANSI_GREEN)]
-    for label, count, color in (
-        ("CI ", summary.get("ci-failures", 0), ANSI_RED),
-        ("comments ", summary.get(Attention.UNRESOLVED_COMMENTS, 0), ANSI_YELLOW),
-        ("on-gerrit ", summary.get("on-gerrit", 0), ANSI_CYAN),
-        ("WIP ", summary.get(Attention.WIP, 0), ANSI_YELLOW),
-    ):
-        if count:
-            stats.append(color_stat(label, count, color))
+def _plural(count: int, noun: str) -> str:
+    return noun if count == 1 else f"{noun}s"
+
+
+def summary_line(overview: StackOverview, *, width: int | None = None) -> str:
+    """``summary: 4 on Gerrit · 1 to upload · …``: each count names what it counts; broken to fit *width*."""
+    commits = overview.view.commits
+    merged = sum(1 for c in commits if c.patchset_status in _MERGED)
+    abandoned = sum(1 for c in commits if c.abandoned)
+    commented = sum(1 for c in commits if c.comments_unresolved > 0)
+    counts = (
+        (
+            sum(1 for c in commits if c.pushed and not c.abandoned and c.patchset_status not in _MERGED),
+            "on Gerrit",
+            ANSI_CYAN,
+        ),
+        (len(overview.to_upload), "to upload", ANSI_GREEN),
+        (len(overview.blocked), "held back", ANSI_YELLOW),
+        (merged, "merged", ANSI_GREEN),
+        (abandoned, "abandoned", ANSI_RED),
+        (sum(1 for c in commits if c.pushed and Attention.CI_FAILED in c.attention_reasons), "failed CI", ANSI_RED),
+        (commented, f"{_plural(commented, 'commit')} with comments", ANSI_YELLOW),
+        (sum(1 for c in commits if Attention.WIP in c.attention_reasons), "WIP", ANSI_YELLOW),
+    )
+    stats = [_stat(count, label, color) for count, label, color in counts if count]
     return _pack(color_text("summary:", f"{ANSI_BOLD}{ANSI_CYAN}"), stats, width=width)
 
 
@@ -109,32 +109,38 @@ def footer_lines(lines: list[str], *, width: int | None) -> list[str]:
     return out
 
 
-def next_steps(commits: list[LogCommit], upstream: UpstreamMoved | None = None) -> list[str]:
-    """One ``next:`` line per state the stack is in that has a ger command for it, oldest commit first."""
-    lines: list[str] = []
-    if upstream and upstream.behind:
-        lines.append(f"next: {upstream.advice()}")
-    merged = [c for c in commits if c.patchset_status in (PatchsetStatus.MERGED_SAME, PatchsetStatus.MERGED_DRIFT)]
-    if merged and not (upstream and upstream.behind):
-        lines.append(
-            f"next: {merged[0].short_sha} is merged on Gerrit; drop it and rebase onto the target with "
-            "`ger rebase --onto-remote --drop-merged-equivalent`"
-        )
-    wip = sum(1 for c in commits if c.pushed and Attention.WIP in c.attention_reasons)
-    if wip:
-        lines.append(f"next: {wip} WIP change{'' if wip == 1 else 's'} on Gerrit; ready them with `ger push --ready`")
-    for reason, how in (
-        (Attention.DIVERGED, "merge Gerrit's patchset into yours with `ger checkout change:{n} --update`"),
-        (Attention.OUTDATED_PATCHSET, "take Gerrit's newer patchset with `ger checkout change:{n} --update`"),
-    ):
-        hit = next((c for c in commits if reason in c.attention_reasons and c.number), None)
-        if hit is not None:
-            lines.append(f"next: {hit.short_sha} {reason}: {how.format(n=hit.number)}")
-    if any(Attention.CHAIN_BLOCKED in c.attention_reasons for c in commits):
-        lines.append(
-            "chain blocked: a change below is not submittable yet (votes, CI, comments); it clears when that one is"
-        )
-    return lines
+def _step_text(step: NextStep, moved: UpstreamMoved | None) -> str:
+    first = step.commits[0] if step.commits else None
+    sha, n = (first.short_sha, first.number) if first else ("", None)
+    count = len(step.commits)
+    match step.kind:
+        case NextStepKind.UPSTREAM_MOVED:
+            return f"next: {moved.advice() if moved else 'rebase onto the upstream'}"
+        case NextStepKind.MERGED:
+            return (
+                f"next: {sha} is merged on Gerrit; drop it and rebase onto the target with "
+                "`ger rebase --onto-remote --drop-merged-equivalent`"
+            )
+        case NextStepKind.ABANDONED:
+            return f"next: {sha} is abandoned on Gerrit; restore it there or drop the commit (`ger edit --drop {sha}`)"
+        case NextStepKind.DIVERGED:
+            how = f"merge Gerrit's patchset into yours with `ger checkout change:{n} --update`"
+            return f"next: {sha} diverged from Gerrit: {how}"
+        case NextStepKind.OUTDATED:
+            return f"next: {sha} has a newer patchset on Gerrit: take it with `ger checkout change:{n} --update`"
+        case NextStepKind.UPLOAD:
+            return f"next: {count} {_plural(count, 'commit')} to upload with `ger push`"
+        case NextStepKind.WIP:
+            push = "ger push --all --ready" if step.beyond_boundary else "ger push --ready"
+            return f"next: {count} WIP {_plural(count, 'change')} on Gerrit; ready them with `{push}`"
+        case NextStepKind.CHAIN_BLOCKED:
+            return chain_blocked_text(step.commits[0])
+    raise AssertionError(step.kind)
+
+
+def next_steps(overview: StackOverview) -> list[str]:
+    """One line per next step (:meth:`StackOverview.next_steps`): ``next: …`` with the ger command for it."""
+    return [_step_text(step, overview.moved) for step in overview.next_steps()]
 
 
 # ---------------------------------------------------------------------------
