@@ -25,7 +25,7 @@ from gerrit_workflow_tools.core.gerrit.stack_context import (
 from gerrit_workflow_tools.core.gerrit_change_status import PatchsetStatus, patchset_status
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, commit_sha_or_none, git, git_out
 from gerrit_workflow_tools.core.git_state import head_is_linear_on_remote_gerrit_target
-from gerrit_workflow_tools.core.push_unchanged import OutdatedChange, UnchangedChange
+from gerrit_workflow_tools.core.push_unchanged import AbandonedChange, OutdatedChange, UnchangedChange
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
 from gerrit_workflow_tools.core.rebase_state import AM_UNDERWAY, am_underway, rebase_underway
 from gerrit_workflow_tools.core.run_context import RunContext
@@ -183,6 +183,8 @@ class ExistingChanges(NamedTuple):
     """The lowest sent commit above each outdated one: its patch set would not sit on Gerrit's current one."""
     reviewers: frozenset[str] = frozenset()
     """Who already reviews one of these changes: accounts Gerrit has, known without asking."""
+    abandoned: tuple[AbandonedChange, ...] = ()
+    """Commits Gerrit has as a patch set of an abandoned change: a push sends them nowhere."""
 
     def refusal(self) -> str | None:
         """Why a push without ``--force`` must not run: it would replace a newer patchset, or build on an old one."""
@@ -222,6 +224,7 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
     unchanged: list[UnchangedChange] = []
     diverged: list[DivergedChange] = []
     outdated: list[OutdatedChange] = []
+    abandoned: list[AbandonedChange] = []
     built_on_outdated: list[BuiltOnOutdated] = []
     views = {sha: ChangeView.from_payload(p) for sha, p in ((s, payloads.get(t)) for s, t in triplets.items()) if p}
     drafts = _draft_counts(service, commits, triplets, views)
@@ -230,9 +233,12 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
         view = views.get(commit.sha)
         status = patchset_status(commit.sha, view) if view is not None else None
         if view is not None and (view.status or "").upper() == "ABANDONED":
+            if status != PatchsetStatus.NEWER:  # Gerrit has it already: one of the change's patch sets
+                abandoned.append(AbandonedChange(commit, view.number))
+                continue
             warnings.append(
-                f"warning: {commit.short_sha} targets abandoned change {view.number}; "
-                "restore it on Gerrit or drop the commit"
+                f"warning: {commit.short_sha} would be a new patch set of abandoned change {view.number}, which "
+                f"Gerrit refuses (restore it in the web UI, or `ger edit --drop {commit.short_sha}`)"
             )
         elif view is not None and status == PatchsetStatus.ACTIVE:
             unchanged.append(UnchangedChange.of(commit, triplets[commit.sha], view))
@@ -259,6 +265,7 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
         outdated=tuple(outdated),
         built_on_outdated=tuple(built_on_outdated),
         reviewers=frozenset(account.slug for view in views.values() for account in view.reviewers or ()),
+        abandoned=tuple(abandoned),
     )
 
 

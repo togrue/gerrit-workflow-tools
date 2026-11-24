@@ -41,6 +41,7 @@ from gerrit_workflow_tools.core.push_reviewers import (
     unknown_reviewers,
 )
 from gerrit_workflow_tools.core.push_unchanged import (
+    AbandonedChange,
     OutdatedChange,
     StateUpdate,
     UnchangedChange,
@@ -71,6 +72,8 @@ class PushPlan:
     """Commits Gerrit already has as current patchsets: push options reach them over REST."""
     outdated: tuple[OutdatedChange, ...] = ()
     """Commits Gerrit already has as older patchsets: not sent, so Gerrit keeps its newer one."""
+    abandoned: tuple[AbandonedChange, ...] = ()
+    """Commits Gerrit has as patch sets of abandoned changes: not sent, and nothing is set on them."""
     drafts: dict[str, int] = field(default_factory=dict)
     """Your unpublished drafts per pushed commit (short SHA -> count)."""
     wip_from: str | None = None
@@ -154,6 +157,7 @@ def changes_nothing(plan: PushPlan) -> bool:
 def sent_commits(plan: PushPlan) -> tuple[Commit, ...]:
     """The commits *plan* gives Gerrit as new patch sets: all but those already one of their change's patch sets."""
     known = {change.commit.sha for change in plan.unchanged} | {change.commit.sha for change in plan.outdated}
+    known |= {change.commit.sha for change in plan.abandoned}
     return tuple(commit for commit in plan.commits if commit.sha not in known)
 
 
@@ -305,6 +309,7 @@ def prepare(
         update_last_pushed=update_last_pushed,
         unchanged=existing.unchanged,
         outdated=existing.outdated,
+        abandoned=existing.abandoned,
         drafts=dict(existing.drafts),
         wip_from=wip_from,
         known_reviewers=existing.reviewers,

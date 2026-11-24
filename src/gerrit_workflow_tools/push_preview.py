@@ -145,9 +145,9 @@ def print_gpush_preview(plan: PushPlan, *, summary_highlighter: SummaryHighlight
         print(color_text(rest, ANSI_DIM) if sent else color_text("No new commits to push; set on Gerrit:", heading))
         for update in updates:
             print(f"    {update_line(update, summary_highlighter)}")
-    if sent and (idle := len(plan.commits) - len(sent) - len(updates) - len(plan.outdated)):
+    if sent and (idle := len(plan.commits) - len(sent) - len(updates) - len(plan.outdated) - len(plan.abandoned)):
         print(color_text(f"{_commits(idle)} not sent again", ANSI_DIM))
-    print_outdated(plan)
+    print_not_sent(plan)
     print_ready_boundary_notice(plan.boundary, summary_highlighter=summary_highlighter)
 
 
@@ -158,13 +158,15 @@ def print_nothing_to_push(plan: PushPlan, *, summary_highlighter: SummaryHighlig
     """
     print_ready_boundary_notice(plan.boundary, summary_highlighter=summary_highlighter, gap=False)
     print(NOTHING_TO_PUSH)
-    print_outdated(plan)
+    print_not_sent(plan)
 
 
-def print_outdated(plan: PushPlan) -> None:
-    """One dim line per outdated commit: Gerrit keeps its newer patchset, and how to take it."""
+def print_not_sent(plan: PushPlan) -> None:
+    """One line per commit Gerrit has and the push does not send: outdated (dim), or on an abandoned change."""
     for change in plan.outdated:
         print(color_text(change.describe(), ANSI_DIM))
+    for abandoned in plan.abandoned:
+        print(color_text(abandoned.describe(), ANSI_YELLOW))
 
 
 def update_line(update: StateUpdate, summary_highlighter: SummaryHighlighter | None = None) -> str:

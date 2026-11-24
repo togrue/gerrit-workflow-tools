@@ -405,12 +405,38 @@ def test_gpush_rejected_by_gerrit_keeps_gits_output_and_adds_gerrits_reason(
     assert not ref_exists(stack_repo, "refs/heads/lastPush/feature")
 
 
-def test_gpush_warns_about_a_commit_on_an_abandoned_change(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gpush_does_not_list_a_commit_of_an_abandoned_change_as_sent(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Before: a warning, the commit under "About to push commits", then "nothing to push"."""
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    details = build_details_by_change_id(rows[:1], per_index_overrides=[{"status": "ABANDONED"}])
+    details |= at_older_patchsets(build_details_by_change_id(rows[1:2]), stack_repo)
+    mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    code, out, err = run_cli(stack_repo, gpush_main, ["-y", rows[1].sha], monkeypatch, gerrit=ChangeStore(details))
+    assert code == 0
+    sent = [line for line in out.split("About to push commits:")[1].splitlines() if line.startswith("    ")]
+    assert [line.split()[0] for line in sent] == [rows[1].short_sha]
+    assert (
+        f"{rows[0].short_sha} not sent: change 100 is abandoned "
+        f"(restore it in the web UI, or `ger edit --drop {rows[0].short_sha}`)" in out
+    )
+    assert "warning" not in err and "commits Gerrit already has" not in out
+    mock_run.assert_called_once()
+
+
+def test_gpush_warns_before_a_new_patchset_for_an_abandoned_change(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A commit Gerrit does not have yet goes up, and Gerrit refuses it: the warning says so first."""
     rows = commits_in_range(stack_repo, "main..feature")
     details = build_details_by_change_id(rows, per_index_overrides=[{"status": "ABANDONED"}])
-    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run"], monkeypatch, gerrit=ChangeStore(details))
+    code, _out, err = run_cli(
+        stack_repo, gpush_main, ["--dry-run"], monkeypatch, gerrit=ChangeStore(at_older_patchsets(details, stack_repo))
+    )
     assert code == 0
-    assert f"warning: {rows[0].short_sha} targets abandoned change 100" in err
+    assert f"warning: {rows[0].short_sha} would be a new patch set of abandoned change 100, which Gerrit refuses" in err
 
 
 def test_gpush_names_a_fixup_commit_as_the_boundary(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

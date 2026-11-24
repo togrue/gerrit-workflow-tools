@@ -12,7 +12,7 @@ from gerrit_workflow_tools.core.push import PushPlan, PushRefusal, changes_nothi
 from gerrit_workflow_tools.core.push_result import NOTHING_TO_PUSH, PushResult
 from gerrit_workflow_tools.core.push_reviewers import ReviewerApplyChangeOutcome
 from gerrit_workflow_tools.core.push_unchanged import StateUpdateFailure
-from gerrit_workflow_tools.push_preview import print_outdated, print_ready_boundary_notice, update_line
+from gerrit_workflow_tools.push_preview import print_not_sent, print_ready_boundary_notice, update_line
 from gerrit_workflow_tools.render.style import color_short_sha
 from gerrit_workflow_tools.summary_highlight import branch_summary_highlighter
 
@@ -73,7 +73,7 @@ def print_push_outcome(result: PushResult, plan: PushPlan | None) -> None:
     if result.set_nothing and not (plan is not None and changes_nothing(plan)):  # else said before it ran
         print(NOTHING_TO_PUSH)
         if plan is not None:
-            print_outdated(plan)
+            print_not_sent(plan)
     if result.error_message:
         print(result.error_message, file=sys.stderr)
     if result.reviewers is not None and plan is not None:
