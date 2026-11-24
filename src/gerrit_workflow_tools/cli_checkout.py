@@ -12,13 +12,12 @@ from gerrit_workflow_tools.cli_args import (
     add_yes_arg,
     changeish_help,
 )
-from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, require_prompt, run_cli_command
 from gerrit_workflow_tools.cli_notes import print_note, print_resolution_note
-from gerrit_workflow_tools.cli_terminal import assume_yes, confirm, stdin_is_terminal
+from gerrit_workflow_tools.cli_terminal import assume_yes, confirm
 from gerrit_workflow_tools.core.change_checkout import (
     CheckoutAction,
     CheckoutPlan,
-    CheckoutRefusal,
     CheckoutResult,
     LocalState,
     choose_action,
@@ -85,16 +84,16 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _ask_update(plan: CheckoutPlan) -> CheckoutAction:
+def _ask_update(args: argparse.Namespace, plan: CheckoutPlan) -> CheckoutAction:
     """Ask whether to update a pushed local version; off a terminal, refuse and name the flags."""
     local, patchset = plan.local, plan.patchset
     assert local is not None
     have = f"{plan.branch} has patchset {local.patch_set} of change {patchset.number}"
-    if not stdin_is_terminal():
-        raise CheckoutRefusal(
-            f"{have}, Gerrit has patchset {patchset.patch_set}: pass --update to update it, "
-            "or --no-update to switch to it as it is"
-        )
+    require_prompt(
+        args,
+        instead=f"--update to update {plan.branch} from patchset {local.patch_set} to {patchset.patch_set}, "
+        "or --no-update to switch to it as it is",
+    )
     rebase = f" and rebase the {len(local.above)} commit(s) above it" if local.above else ""
     question = f"{have}. Update it to patchset {patchset.patch_set}{rebase}?"
     return CheckoutAction.UPDATE if confirm(question, default=True) else CheckoutAction.SWITCH
@@ -161,7 +160,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     changes = service.changes.exact()
     plan = plan_checkout(cwd, change, args.patchset, settings=settings, branch=args.branch, changes=changes)
     update = True if args.update is None and (args.yes or assume_yes()) else args.update
-    action = choose_action(plan, update=update, force=args.force) or _ask_update(plan)
+    action = choose_action(plan, update=update, force=args.force) or _ask_update(args, plan)
     result = apply_checkout(cwd, plan, action, settings=settings)
     _report(plan, result, change.view.url(service.web_base))
     return int(ExitCode.OK)

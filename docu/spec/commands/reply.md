@@ -256,7 +256,7 @@ Shared table: [exit-codes.md](../exit-codes.md). No new codes.
 | Code | When |
 |------|------|
 | `0` | Draft written, discarded or published; `--dry-run` |
-| `1` | Publish declined |
+| `1` | Publish declined: `cancelled` on stderr |
 | `2` | Publishing without a terminal (or with `--json` / `--ai`) and without `-y`: `no prompt to answer (non-interactive, --json or --ai): pass -y to publish`, the words of `ger review --vote` (`cli_common.confirm_publish`); empty message, conflicting flags, `CHAIN` with `--publish`, a comment URL together with `--change`, no `CHAIN` without a TTY, publishing while `GER_NO_PUBLISH` is set |
 | `3` | Chain or change not found; `--discard` with no draft |
 | `4` | `CHAIN` named more than one chain (a place with several open chains, a shared prefix); ambiguous changeish |

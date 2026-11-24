@@ -443,7 +443,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | Module | Owns |
 |--------|------|
 | `cli_ger.py` | Dispatcher: the command registry `_COMMANDS`, aliases, global `--refresh` |
-| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), `may_prompt` (whether a command may ask), `confirm_publish` (the one publish confirmation: `-y`, a prompt, or exit 2 without one) |
+| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), `may_prompt` (whether a command may ask), `require_prompt` (the one answer, exit 2, when a required prompt has nobody to ask), `say_cancelled` (the one word for a declined prompt), `confirm_publish` (the one publish confirmation: `-y`, a prompt, or exit 2 without one) |
 | `cli_args.py` | The argparse groups several commands share, one definition per flag, and the help-text style: `add_output_format_args` (`--json` / `--format` / `--ai`, read back by `output_format`), `add_message_args` (`-m` / `-F`, read back by `read_message`), `add_change_option`, `changeish_help`, `add_color_args`, `add_verbose_and_debug_log_args`, `add_follow_merges_args` |
 | `cli_notes.py` | Transparency notes on stderr, dimmed: `print_note`, `print_resolution_note` (how a changeish resolved) |
 | `cli_terminal.py` | Asking at the terminal: whether the CLI can ask (`stdin_is_terminal`, `prompt_toolkit_can_run`: Windows `NUL` is no console; `assume_yes`: `GER_ASSUME_YES`) and the plain questions every prompt's reply is parsed by (`ask_choice`, `confirm`) |

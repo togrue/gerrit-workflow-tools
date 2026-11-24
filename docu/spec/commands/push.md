@@ -167,7 +167,7 @@ After success, optional `lastPush/<branch>` marker (`ger.lastPushedBranch`, defa
 |------|---------|
 | `0` | Success, dry-run OK, or user cancelled at prompt |
 | `1` | Nothing to push (no commit below the ready boundary), a **diverged** change or a commit above an **outdated** one without `--force`, or you declined the upstream prompt |
-| `2` | Usage: a rebase in progress, invalid option value (`--topic a,b`), a reviewer Gerrit has no account for under the `push` strategy (checked before anything is sent; see Confirmation output), non-interactive without `-y`, `-i` without a terminal, `REV` at or after the ready boundary (the message names the boundary and, when the stop pattern or a ready strategy set it, `--all`) |
+| `2` | Usage: a rebase in progress, invalid option value (`--topic a,b`), a reviewer Gerrit has no account for under the `push` strategy (checked before anything is sent; see Confirmation output), non-interactive without `-y` (`no prompt to answer (non-interactive, --json or --ai): pass -y to push`, the words of every command), `-i` without a terminal, `REV` at or after the ready boundary (the message names the boundary and, when the stop pattern or a ready strategy set it, `--all`) |
 | `3` | `REV` names no commit, no change, or a change with no commit in the local stack |
 | `4` | `REV` names a Change-Id that more than one stack commit carries |
 | `5` | Push succeeded (or had nothing to send), but Gerrit refused what is set over REST: `lazy` / `overwrite` reviewers, or an option on a change Gerrit already had (printed as an error with Gerrit's reason) |

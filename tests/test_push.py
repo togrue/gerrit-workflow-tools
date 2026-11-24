@@ -213,7 +213,7 @@ def test_gpush_treats_windows_nul_as_non_interactive(stack_repo: Path, monkeypat
     code, _out, err = run_cli(stack_repo, gpush_main, [], monkeypatch)
 
     assert code == ExitCode.USAGE
-    assert "--yes" in err
+    assert "pass -y to push" in err
 
 
 def test_gpush_i_treats_windows_nul_as_non_interactive(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

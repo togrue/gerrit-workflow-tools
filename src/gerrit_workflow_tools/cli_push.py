@@ -15,7 +15,7 @@ from gerrit_workflow_tools.cli_args import (
     add_yes_arg,
 )
 from gerrit_workflow_tools.cli_attention import resolve_in_stack
-from gerrit_workflow_tools.cli_common import init_cli_runtime, run_cli_command
+from gerrit_workflow_tools.cli_common import init_cli_runtime, require_prompt, run_cli_command
 from gerrit_workflow_tools.cli_terminal import assume_yes, confirm, stdin_is_terminal
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
@@ -26,7 +26,7 @@ from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.upstream import missing_upstream_error
 from gerrit_workflow_tools.core.usage import UsageError
-from gerrit_workflow_tools.push_confirm import confirm_gerrit_push, prompt_initial_options, require_confirmable
+from gerrit_workflow_tools.push_confirm import confirm_gerrit_push, prompt_initial_options
 from gerrit_workflow_tools.push_outcome import finish_push, print_refusal
 from gerrit_workflow_tools.push_preview import print_nothing_to_push
 from gerrit_workflow_tools.render.style import ANSI_DIM_GRAY, color_text
@@ -174,8 +174,8 @@ def _handle_vanilla_push(run: RunContext, args: argparse.Namespace, *, branch: s
         print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
         print("[dry-run] not executing push", file=sys.stderr)
         return 0
-    require_confirmable(yes=args.yes)
     if not args.yes:
+        require_prompt(args, instead="-y to push")
         print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
         print()
         if not confirm("Do you want to run `git push`?", default=True):

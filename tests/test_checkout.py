@@ -183,9 +183,11 @@ def test_without_a_terminal_an_update_is_never_guessed(
     gerrit.upload(stack_repo, 2, 2, "reworded")
     git("switch", "-q", "main", cwd=stack_repo)
     code, _, err = _checkout(stack_repo, gerrit, ["102"], monkeypatch)
-    assert code == ExitCode.REFUSED
-    assert "feature has patchset 1 of change 102, Gerrit has patchset 2" in err
-    assert "--update" in err and "--no-update" in err
+    assert code == ExitCode.USAGE, "a missing terminal for a required prompt is USAGE, as for push and reply"
+    assert err.strip() == (
+        "error: no prompt to answer (non-interactive, --json or --ai): "
+        "pass --update to update feature from patchset 1 to 2, or --no-update to switch to it as it is"
+    )
     assert _on(stack_repo) == ("main", git_out("rev-parse", "main", cwd=stack_repo))
     assert git_out("rev-parse", "feature", cwd=stack_repo) == gerrit.shas[3]
 
@@ -196,7 +198,7 @@ def test_at_a_terminal_the_update_is_asked_and_defaults_to_yes(
 ) -> None:
     ps2 = gerrit.upload(stack_repo, 2, 2, "reworded")
     asked: list[str] = []
-    monkeypatch.setattr("gerrit_workflow_tools.cli_checkout.stdin_is_terminal", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_common.stdin_is_terminal", lambda: True)
 
     def _answer(prompt: str) -> str:
         asked.append(prompt)

@@ -263,7 +263,7 @@ def test_errors_come_after_what_the_command_printed(stack_repo: Path, monkeypatc
     code = push_main([], gerrit=ChangeStore({}))
     text = shared.getvalue()
     assert code == ExitCode.USAGE
-    assert text.rstrip().endswith("error: non-interactive stdin: use --yes (-y) to push without a confirmation prompt")
+    assert text.rstrip().endswith("error: no prompt to answer (non-interactive, --json or --ai): pass -y to push")
     assert "About to push" in text
 
 

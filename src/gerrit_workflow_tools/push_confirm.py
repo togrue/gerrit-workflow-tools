@@ -10,7 +10,8 @@ import logging
 import sys
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_terminal import ask_choice, confirm, prompt_toolkit_can_run, stdin_is_terminal
+from gerrit_workflow_tools.cli_common import require_prompt
+from gerrit_workflow_tools.cli_terminal import ask_choice, confirm, prompt_toolkit_can_run
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.push import (
@@ -34,11 +35,6 @@ from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 
 logger = logging.getLogger(__name__)
-
-
-def require_confirmable(*, yes: bool) -> None:
-    if not (stdin_is_terminal() or yes):
-        raise UsageError("non-interactive stdin: use --yes (-y) to push without a confirmation prompt")
 
 
 def ask_push_action(drafts: int, *, sends: bool = True) -> str:
@@ -274,7 +270,8 @@ def confirm_gerrit_push(
             if unknown := unknown_plan_reviewers(run, plan):
                 raise UsageError(_no_account(unknown))
             return 0
-        require_confirmable(yes=args.yes)
+        if not args.yes:
+            require_prompt(args, instead="-y to push")
         if args.yes:
             if unknown := unknown_plan_reviewers(run, plan):
                 raise UsageError(_no_account(unknown))

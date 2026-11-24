@@ -281,9 +281,10 @@ def test_publish_prompt_defaults_to_no(
     store, _key = _store_with_draft(web_stack_repo)
     monkeypatch.setattr("gerrit_workflow_tools.cli_common.stdin_is_terminal", lambda: True)
     monkeypatch.setattr("sys.stdin", io.StringIO(answer))
-    code, _out, _err = run_cli(web_stack_repo, reply_main, ["--publish"], monkeypatch, gerrit=store)
+    code, _out, err = run_cli(web_stack_repo, reply_main, ["--publish"], monkeypatch, gerrit=store)
     assert code == (ExitCode.OK if published else ExitCode.REFUSED)
     assert bool(store.calls_to("publish_drafts")) is published
+    assert err.strip().endswith("cancelled") is not published, "a no says so, in the one word every command uses"
 
 
 def test_publish_with_ai_needs_yes_even_on_a_terminal(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

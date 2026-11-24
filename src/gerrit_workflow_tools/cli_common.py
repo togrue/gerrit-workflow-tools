@@ -171,16 +171,35 @@ def _report_failure(error: Exception) -> int:
     return int(code)
 
 
+def require_prompt(args: argparse.Namespace, *, instead: str) -> None:
+    """Raise :class:`UsageError` (exit ``2``) unless the command may ask (:func:`may_prompt`).
+
+    The one answer to a question nobody is there to answer: ``no prompt to answer (non-interactive,
+    --json or --ai): pass <instead>``, where *instead* names the flags that answer it (``-y to push``).
+    """
+    if not may_prompt(args):
+        raise UsageError(f"no prompt to answer (non-interactive, --json or --ai): pass {instead}")
+
+
+def say_cancelled() -> None:
+    """The one word a command says when the user declined its prompt; it then exits ``REFUSED``."""
+    sys.stdout.flush()
+    print("cancelled", file=sys.stderr)
+
+
 def confirm_publish(args: argparse.Namespace, what: str) -> bool:
     """Whether to publish *what*: ``-y`` (or ``GER_ASSUME_YES``), else a yes at ``Publish <what>?``.
 
     Without a prompt to answer (no terminal, ``--json``, ``--ai``) it raises :class:`UsageError`: pass ``-y``.
+    A no says ``cancelled``; the caller exits ``REFUSED``.
     """
     if args.yes or assume_yes():
         return True
-    if not may_prompt(args):
-        raise UsageError("no prompt to answer (non-interactive, --json or --ai): pass -y to publish")
-    return confirm(f"Publish {what}?", default=False)
+    require_prompt(args, instead="-y to publish")
+    if confirm(f"Publish {what}?", default=False):
+        return True
+    say_cancelled()
+    return False
 
 
 def may_prompt(args: argparse.Namespace) -> bool:
