@@ -66,6 +66,7 @@ Default: only **staged** changes are committed. On a TTY with an empty index, an
    **A rebase stopped cleanly (an `edit` stop) does not refuse.** The fixup is committed at the stop, the rest of the rebase replays on top of it, and it folds into its target like any other fixup: [ADR-0003](../../adr/0003-ger-fix-targets-the-local-stack.md) makes `ger fix` a shortcut for a *later* autosquash, and nothing in an edit stop makes that later step wrong. The target resolves against the stack as rebased so far. The next-step line then starts with finishing the rebase (`git rebase --continue`). To change the stopped commit itself, `git commit --amend` is the tool, not a fixup.
 1. Resolve `REF_OR_CHANGE` to a commit SHA on the local stack (see Change resolution above). Never fetches.
    **A change Gerrit already closed refuses**, exit `2` (`USAGE`), with the same messages as [`ger edit`](edit.md#behavior): merged → `git fetch`, then `ger rebase`; abandoned → restore it on Gerrit, or `ger edit --drop` the commit. Git alone cannot tell, since a change submitted after your last `git fetch` is still on the local stack. Gerrit is asked at most once, for the push branch's change carrying the target's Change-Id (`ChangeApi.on_push_branch`), and not at all while the cache has it inside the trust window. When Gerrit cannot be asked (no `ger.webUrl`, no credentials, unreachable), the git-only check stands and the fixup is made: a debug log says why, no error.
+   **A target at or below a merge refuses**, exit `2` (`USAGE`), before anything is staged or committed: `ger rebase --autosquash` could never fold the fixup in, because that rebase would have to replay the merge ([edit.md](edit.md#behavior), [ADR-0003](../../adr/0003-ger-fix-targets-the-local-stack.md)). The message gives the way by hand: `git commit --fixup=<sha>`, then `git rebase -i --rebase-merges --autosquash <fork>`. A target above the newest merge is fine.
 2. If the index has no staged changes and `-a` was not passed:
    - **Interactive TTY** (human output) and there are unstaged modifications to tracked files: prompt `[y/n/d]` — `y` runs `git add -u` and continues; `d` prints the unstaged diff to stderr and re-prompts; `n` / empty / interrupt declines.
    - Otherwise (non-TTY, `--json` or `--ai`, declined, or nothing to stage): exit `2` (`USAGE`) with a hint to stage edits or use `-a`.
@@ -81,7 +82,7 @@ Semantic codes come from the shared `ExitCode` table ([exit-codes.md](../exit-co
 | Code | Meaning |
 |------|---------|
 | `0` | Fixup commit created successfully |
-| `2` | Usage: bad arguments, nothing staged, unresolved conflicts in the index, or the target's change merged or abandoned on Gerrit |
+| `2` | Usage: bad arguments, nothing staged, unresolved conflicts in the index, the target's change merged or abandoned on Gerrit, or the target at or below a merge commit |
 | `3` | `NOT_FOUND` — no commit on the local stack matches |
 | `4` | `AMBIGUOUS` — several stack commits share the Change-Id |
 | `5` | `GERRIT` — Gerrit answered badly, or not at all |

@@ -30,6 +30,17 @@ whatever its remote, the same commits the local stack is counted from. With a co
 that advice is `ger rebase origin/main --drop-merged-equivalent`: the flag applies to a `REV` as
 it does to `--onto-remote`.
 
+### Merge commits
+
+A merge in the commits to replay (`<base>..HEAD`, every parent) refuses, exit `2` (`USAGE`), with
+nothing changed: without `--rebase-merges` git would leave it out and replay what it brought in
+onto the first-parent line, flattening the history, and still succeed. The message names the
+newest merge and the git command that replays merges, `git rebase -i --rebase-merges <base>`, with
+`rerere` on, or a redone merge asks for its conflicts again. ger does not replay merges itself
+(#93). `ger rebase <merge>` still rebases the commits above the newest merge. The check,
+`rewrite_refusal.merge_replay_refusal`, is in `rebase_run.run_interactive_rebase`, so every rebase
+ger starts makes it.
+
 ### Change resolution
 
 `REV` is resolved by `resolve_stack_changeish`, the same path as [`ger fix`](fix.md) and
