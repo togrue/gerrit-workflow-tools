@@ -30,7 +30,7 @@ from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, ChainM
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment, gerrit_inline_comment_url
+from gerrit_workflow_tools.core.gerrit_change_status import InlineComment, gerrit_inline_comment_url
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.core.votes import VOTE_HELP, parse_votes
@@ -249,16 +249,6 @@ def _emit_discard(match: ChainMatch, removed: InlineComment, url: str | None, *,
     print(f'discarded draft on {chain_location(match.chain)}: "{first_line(removed.message)}"')
 
 
-def _pending_drafts(service: GerritService, changes: list[_Change]) -> list[tuple[_Change, list[CommentChain]]]:
-    """Each change that has drafts of yours, with the chains holding them."""
-    out: list[tuple[_Change, list[CommentChain]]] = []
-    for change in changes:
-        with_drafts = service.comments.chains_with_drafts(change.key, change_updated=change.freshness)
-        if with_drafts:
-            out.append((change, with_drafts))
-    return out
-
-
 def _confirmed(args: argparse.Namespace, what: str) -> bool:
     """Whether to go ahead: ``-y``, or a yes at a prompt. JSON output and no terminal never prompt."""
     if args.yes or assume_yes():
@@ -266,30 +256,6 @@ def _confirmed(args: argparse.Namespace, what: str) -> bool:
     if not may_prompt(args):
         raise UsageError("no prompt to answer (non-interactive, --json or --ai): pass -y to publish")
     return confirm(f"Publish {what}?", default=False)
-
-
-def _selected(
-    pending: list[tuple[_Change, list[CommentChain]]], only: list[str] | None, where: str
-) -> list[tuple[_Change, list[CommentChain]]]:
-    """*pending* narrowed to the chains *only* names; all of it without ``--only``.
-
-    An id is a draft's own id, or any comment id in its chain: the CHAIN that ``ger reply``
-    answered names the draft it wrote there.
-    """
-    if only is None:
-        return pending
-    wanted = {draft_id.strip() for draft_id in only}
-
-    def ids(chain: CommentChain) -> set[str]:
-        return {chain.root_id, *(c.comment_id for c in chain.comments if c.comment_id)}
-
-    found = {i for _, chains in pending for chain, _ in drafts_in(chains) for i in ids(chain)}
-    if missing := sorted(wanted - found):
-        raise ChangeResolutionError(f"no draft of yours in a chain with id {', '.join(missing)} on {where}")
-    narrowed = [
-        (change, [chain for chain, _ in drafts_in(chains) if ids(chain) & wanted]) for change, chains in pending
-    ]
-    return [(change, chains) for change, chains in narrowed if chains]
 
 
 def _publish(
@@ -306,9 +272,9 @@ def _publish(
         raise UsageError("--keep-drafts publishes no drafts; it cannot be combined with --only")
     # Publishing acts on Gerrit changes, so a bare number names one (as for --change).
     changes, where = _gerrit_changes(service, cwd, [as_change_only(t) for t in args.targets], branch=branch)
-    pending = [] if args.keep_drafts else _selected(_pending_drafts(service, changes), args.only, where)
+    freshness = {c.key: c.freshness for c in changes}
+    with_drafts = {} if args.keep_drafts else service.comments.drafts_to_publish(freshness, args.only, where=where)
     message = "\n\n".join(args.message) if args.message else None
-    with_drafts = {change.key: chains for change, chains in pending}
     named = bool(args.targets) and bool(message or votes)
     posts = [c for c in changes if c.key in with_drafts or named]
     results: list[dict[str, object]] = [

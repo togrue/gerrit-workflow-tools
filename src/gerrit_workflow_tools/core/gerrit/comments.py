@@ -102,6 +102,37 @@ class CommentApi:
         chains = self.get_chains(change_id, change_updated=change_updated, comments="all")
         return [chain for chain in chains if chain.draft is not None]
 
+    def drafts_to_publish(
+        self, changes: Mapping[str, str | None], only: Sequence[str] | None, *, where: str
+    ) -> dict[str, list[CommentChain]]:
+        """Per change of *changes* (REST key -> freshness token) that has drafts of yours, the chains
+        holding them; with *only*, the chains holding a draft that one of those ids names.
+
+        An id is a draft's own id, or any comment id in its chain: the CHAIN that ``ger reply``
+        answered names the draft it wrote there. An id naming none of your drafts on *where*
+        raises before anything is sent.
+        """
+        pending = {
+            key: chains
+            for key, freshness in changes.items()
+            if (chains := self.chains_with_drafts(key, change_updated=freshness))
+        }
+        if only is None:
+            return pending
+        wanted = {draft_id.strip() for draft_id in only}
+
+        def ids(chain: CommentChain) -> set[str]:
+            return {chain.root_id, *(c.comment_id for c in chain.comments if c.comment_id)}
+
+        def drafted(chains: list[CommentChain]) -> list[CommentChain]:
+            return [chain for chain in chains for c in chain.comments if c.draft]
+
+        found = {i for chains in pending.values() for chain in drafted(chains) for i in ids(chain)}
+        if missing := sorted(wanted - found):
+            raise ChangeResolutionError(f"no draft of yours in a chain with id {', '.join(missing)} on {where}")
+        narrowed = {key: [chain for chain in drafted(chains) if ids(chain) & wanted] for key, chains in pending.items()}
+        return {key: chains for key, chains in narrowed.items() if chains}
+
     def find_chain(self, changes: Mapping[str, str | None], comment_id: str) -> list[ChainMatch]:
         """Chains that contain *comment_id*, among *changes* (REST key -> freshness token).
 
