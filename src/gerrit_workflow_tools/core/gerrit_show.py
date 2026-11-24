@@ -93,7 +93,7 @@ def resolve_show_commit_row(
     *,
     settings: Settings,
     branch: str | None = None,
-    changes: ChangeApi | None = None,
+    changes: ChangeApi,
 ) -> ShowCommitResolution:
     """Resolve one `ger show` argument via the shared changeish core.
 
@@ -115,8 +115,7 @@ def resolve_show_commit_row(
     if resolution.selected is None:
         raise ChangeResolutionError(unresolved_change_message(raw_arg))
 
-    get_change = changes.get if changes is not None else client.get_change
-    change = ChangeView.from_payload(get_change(resolution.selected.triplet))
+    change = ChangeView.from_payload(changes.get(resolution.selected.triplet))
     row = _row_from_gerrit_change(change)
     return ShowCommitResolution(row=row, is_local_commit=False, resolution=resolution)
 
@@ -128,7 +127,7 @@ def resolve_range_endpoint_sha(
     *,
     settings: Settings,
     branch: str | None = None,
-    changes: ChangeApi | None = None,
+    changes: ChangeApi,
 ) -> str:
     """Resolve a range endpoint changeish to a local commit SHA."""
     raw = arg.strip()
@@ -153,8 +152,7 @@ def resolve_range_endpoint_sha(
         for commit in get_stack_snapshot(cwd, branch, settings=settings).carrying(change_id):
             return commit.sha
         if resolution.selected is not None:
-            get_change = changes.get if changes is not None else client.get_change
-            rev = ChangeView.from_payload(get_change(resolution.selected.triplet)).current_revision
+            rev = ChangeView.from_payload(changes.get(resolution.selected.triplet)).current_revision
             if rev is not None:
                 local = commit_sha_or_none(cwd, rev)
                 if local is not None:
@@ -203,7 +201,7 @@ def expand_show_range(
     *,
     settings: Settings,
     branch: str | None = None,
-    changes: ChangeApi | None = None,
+    changes: ChangeApi,
 ) -> list[ShowCommitResolution]:
     """Expand a changeish-resolved ``A..B`` / ``A...B`` range to local commits (oldest first)."""
     parsed = parse_show_range(arg)
@@ -246,14 +244,14 @@ def resolve_show_targets(
     settings: Settings,
     stack: bool = False,
     branch: str | None = None,
-    changes: ChangeApi | None = None,
+    changes: ChangeApi,
     head: str = "HEAD",
 ) -> list[ShowCommitResolution]:
     """Resolve positional changeishes / ranges and optional ``--stack`` into a deduped list.
 
     With no *args* and ``stack=False``, resolves *head*: ``HEAD``, or what it stands for
-    (``run.repo.head``), which also tops the ``--stack``. With *changes* (the service's
-    :class:`ChangeApi`) Gerrit is asked through the cache. Order: ``--stack`` commits first
+    (``run.repo.head``), which also tops the ``--stack``. Gerrit is asked through *changes* (the
+    service's :class:`ChangeApi`), so through the cache. Order: ``--stack`` commits first
     (oldest-first), then each positional arg in order (ranges oldest-first). Duplicates
     (same Change-Id, else same SHA) keep the first occurrence.
     """

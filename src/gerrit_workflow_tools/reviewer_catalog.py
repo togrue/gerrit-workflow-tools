@@ -156,10 +156,6 @@ class ReviewerCatalog:
         catalog._enqueue_warmup()
         return catalog
 
-    def set_on_update(self, on_update: Callable[[], None] | None) -> None:
-        """Install a UI invalidate callback (safe to call after prompt session starts)."""
-        self._on_update = on_update
-
     def close(self) -> None:
         """Stop the background worker. Idempotent."""
         with self._lock:

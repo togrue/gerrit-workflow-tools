@@ -365,7 +365,7 @@ MAX_LINES = 400
 # Files already over MAX_LINES, pinned at their size. They may only shrink; lower the
 # number when they do. A file here that must grow needs an extraction commit first.
 SIZE_BASELINE = {
-    "reviewer_catalog.py": 478,
+    "reviewer_catalog.py": 474,
 }
 
 

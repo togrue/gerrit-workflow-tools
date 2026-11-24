@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import logging
 import sys
 
 from gerrit_workflow_tools.cli_args import (
@@ -44,8 +43,6 @@ from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
 
 DEFAULT_SHOW_CONTEXT_PADDING = 2
-
-logger = logging.getLogger(__name__)
 
 
 def _requested_context_padding(args: argparse.Namespace) -> int | None:

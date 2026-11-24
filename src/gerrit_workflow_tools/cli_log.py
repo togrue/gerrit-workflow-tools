@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import logging
 
 from gerrit_workflow_tools.cli_args import (
     add_color_args,
@@ -39,8 +38,6 @@ from gerrit_workflow_tools.render.status_fmt import status_legend
 from gerrit_workflow_tools.render.style import is_hyperlink_enabled, terminal_width
 from gerrit_workflow_tools.summary_highlight import run_summary_highlighter
 
-
-logger = logging.getLogger(__name__)
 
 _EXAMPLES = """examples:
   ger log                    the stack above its upstream, and what to do next

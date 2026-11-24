@@ -133,14 +133,6 @@ class CiContentService:
         flat = iter(self._resolved(by_link[link], commit) for link, commit in pairs)
         return [[next(flat) for _ in links] for links, _commit in groups]
 
-    def fetch_one(self, link: CiLink, *, body: BodyMode = "none", commit: str | None = None) -> CiContent:
-        """**CI content** for *link*; a failure is recorded on the provenance, never raised.
-
-        Paths are resolved here, after the store: what is kept is what the log said, and one
-        build's findings can be read against whichever commit asks.
-        """
-        return self._resolved(self._fetch_logged(link, body), commit)
-
     def _resolved(self, content: CiContent, commit: str | None) -> CiContent:
         if commit is None or self.cwd is None or not content.findings:
             return content
