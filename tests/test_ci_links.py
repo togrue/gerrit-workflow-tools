@@ -19,7 +19,7 @@ from gerrit_workflow_tools.core.ci_links import (
 from gerrit_workflow_tools.core.ci_strategy import LazyRows, clear_ci_strategy_cache, extract_ci_links_via_registry
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.render.commit_row import extra_detail_lines, format_ci_lines
+from gerrit_workflow_tools.render.commit_row import format_ci_lines
 from gerrit_workflow_tools.render.style import ANSI_DIM_GRAY, init_color_mode, init_hyperlink_mode, strip_ansi
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
@@ -412,14 +412,14 @@ def test_extra_detail_lines_with_hyperlinks() -> None:
         ci_failures=["verify"],
         ci_links=[CiLink(label="verify", url="https://ci/console", source="checks")],
     )
-    lines = extra_detail_lines(commit)
+    lines = format_ci_lines(commit, verbose_level=1)
     assert len(lines) == 1
     plain = strip_ansi(lines[0])
     assert plain.startswith("CI:")
     assert "verify" in plain
     assert "\x1b]8;;https://ci/console" in lines[0]
     init_hyperlink_mode(hyperlinks="never")
-    lines_off = extra_detail_lines(commit)
+    lines_off = format_ci_lines(commit, verbose_level=1)
     assert "https://ci/console" in strip_ansi(lines_off[0])
 
 

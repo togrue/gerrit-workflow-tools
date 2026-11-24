@@ -19,9 +19,6 @@ from gerrit_workflow_tools.core.attention import Attention, ci_failed
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView, parse_gerrit_time
 
 
-_OPEN_STATUSES = frozenset({"NEW", ""})
-
-
 @dataclass(frozen=True)
 class ChainMember:  # pylint: disable=too-many-instance-attributes
     """One open change in a review chain, oldest (base) to newest (top)."""

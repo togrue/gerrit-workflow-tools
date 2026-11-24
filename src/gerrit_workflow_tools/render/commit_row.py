@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from gerrit_workflow_tools.core.attention import Attention
-from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
+from gerrit_workflow_tools.core.ci_links import CiPipeline
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.render.status_fmt import (
     PRIVATE,
@@ -150,13 +150,6 @@ def _ci_state_color(state: str, *, outdated: bool = False) -> str:
     return ANSI_DIM
 
 
-def _format_ci_link_body(link: CiLink) -> str:
-    """OSC 8 label when hyperlinks are on; otherwise ``label url``."""
-    if is_hyperlink_enabled():
-        return format_link(link.url, label=link.label)
-    return f"{link.label} {link.url}"
-
-
 def _format_ci_pipeline_item(pipeline: CiPipeline) -> str:
     color = _ci_state_color(pipeline.state, outdated=pipeline.outdated)
     if pipeline.url and is_hyperlink_enabled():
@@ -233,11 +226,6 @@ def continuation_lines(
         if change_line:
             lines.append(change_line)
     return lines
-
-
-def extra_detail_lines(commit: LogCommit) -> list[str]:
-    """CI continuation lines for ``ger show`` and other compact detail views."""
-    return format_ci_lines(commit, verbose_level=1)
 
 
 _HINT_COLOR: dict[str, str] = {

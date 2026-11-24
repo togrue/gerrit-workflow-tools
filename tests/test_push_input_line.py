@@ -7,7 +7,6 @@ from gerrit_workflow_tools.push_input_line import (
     PushLineState,
     format_canonical,
     parse,
-    refspec_options,
     tokenize,
 )
 
@@ -190,23 +189,6 @@ def test_canonical_round_trip_through_parser() -> None:
     can = format_canonical(s1)
     s2 = _state(can)
     assert s2 == s1
-
-
-# ---------- refspec options ----------
-
-
-def test_refspec_options_push_strategy_emits_reviewers_and_flags() -> None:
-    s = _state("alice bob wip private topic=t1")
-    assert refspec_options(s, "push") == ["r=alice", "r=bob", "wip", "private", "topic=t1"]
-
-
-def test_refspec_options_overwrite_strategy_omits_reviewers() -> None:
-    s = _state("alice private")
-    assert refspec_options(s, "overwrite") == ["private"]
-
-
-def test_refspec_options_empty_state_returns_empty_list() -> None:
-    assert refspec_options(PushLineState(), "push") == []
 
 
 # ---------- tokenizer offsets and spans ----------

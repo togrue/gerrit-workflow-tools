@@ -208,9 +208,3 @@ def collect_comment_chains(
     """
 
     return select_chains(build_comment_chains(file_map, drafts), comments)
-
-
-def collect_unresolved_comment_chains(file_map: dict[str, list[dict[str, Any]]]) -> list[CommentChain]:
-    """Return comment chains whose last reply is still unresolved."""
-
-    return collect_comment_chains(file_map, comments="unresolved")

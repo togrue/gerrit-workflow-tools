@@ -24,9 +24,6 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import (
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 
 
-_EXIT_USAGE = 2
-
-
 def _build_parser() -> argparse.ArgumentParser:
     """Build and return the command-line parser for ``ger resolve``."""
     p = argparse.ArgumentParser(

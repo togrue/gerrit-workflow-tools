@@ -5,7 +5,6 @@ from __future__ import annotations
 from gerrit_workflow_tools.core.comment_chains import (
     build_comment_chains,
     collect_comment_chains,
-    collect_unresolved_comment_chains,
     count_unresolved_in_file_map,
 )
 from gerrit_workflow_tools.render.comments import chain_location
@@ -64,7 +63,7 @@ def test_collect_unresolved_skips_resolved_chain_tail() -> None:
             ),
         ]
     }
-    assert collect_unresolved_comment_chains(file_map) == []
+    assert collect_comment_chains(file_map, comments="unresolved") == []
     assert count_unresolved_in_file_map(file_map) == 0
 
 
@@ -81,7 +80,7 @@ def test_collect_unresolved_includes_open_chain() -> None:
             ),
         ]
     }
-    chains = collect_unresolved_comment_chains(file_map)
+    chains = collect_comment_chains(file_map, comments="unresolved")
     assert len(chains) == 1
     assert chains[0].resolved is False
     assert count_unresolved_in_file_map(file_map) == 1
@@ -132,7 +131,6 @@ def test_collect_comment_chains_all_puts_unresolved_first() -> None:
     assert [chain.resolved for chain in all_chains] == [False, True]
     resolved = collect_comment_chains(file_map, comments="resolved")
     assert [chain.root_id for chain in resolved] == ["closed"]
-    assert collect_comment_chains(file_map, comments="unresolved") == collect_unresolved_comment_chains(file_map)
 
 
 def test_build_comment_chains_keeps_context_lines() -> None:

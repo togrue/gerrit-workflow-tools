@@ -325,7 +325,7 @@ MAX_LINES = 400
 # Files already over MAX_LINES, pinned at their size. They may only shrink; lower the
 # number when they do. A file here that must grow needs an extraction commit first.
 SIZE_BASELINE = {
-    "push_input_line.py": 435,
+    "push_input_line.py": 415,
     "reviewer_catalog.py": 478,
 }
 
@@ -352,7 +352,7 @@ def test_module_size_ratchet() -> None:
 # ``# pylint: disable=too-many-*`` silences the signal that a function should be split.
 # Counts per file may only go down.
 TOO_MANY_BASELINE = {
-    "cli_log.py": 4,
+    "cli_log.py": 3,
     "cli_sha.py": 2,
     "cli_show.py": 3,
     "core/gerrit/change_view.py": 1,

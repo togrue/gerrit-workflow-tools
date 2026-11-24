@@ -35,7 +35,7 @@ from gerrit_workflow_tools.core.gerrit_patchset import changes_ref
 from gerrit_workflow_tools.core.git_run import UnknownRevisionError, _run_git, git, git_out
 from gerrit_workflow_tools.core.inbox import DEFAULT_OUTGOING_QUERY, build_to_review_query
 from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
-from gerrit_workflow_tools.core.reorder import ReorderRefusal, StackStep, reorder_stack, rewrite_stack
+from gerrit_workflow_tools.core.reorder import ReorderRefusal, StackStep, rewrite_stack
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict, swap_conflicts
 from gerrit_workflow_tools.core.review_delta import patchset_delta_files
 from gerrit_workflow_tools.core.stack import Commit, read_commit_meta
@@ -723,7 +723,7 @@ def test_a_reorder_that_conflicts_leaves_the_branch_as_it_was(stack_repo: Path) 
     order = [rows[4].sha, *(row.sha for row in rows[:4])]
     reflog = git_out("reflog", cwd=stack_repo)
     with pytest.raises(ReorderRefusal, match=r"Rewrite a.txt.* does not apply in its new place \(conflict in a.txt\)"):
-        reorder_stack(stack_repo, order, settings=settings)
+        rewrite_stack(stack_repo, [StackStep(sha) for sha in order], settings=settings)
     assert git_out("reflog", cwd=stack_repo) == reflog, "found out without starting a rebase"
     assert git_out("rev-parse", "HEAD", cwd=stack_repo) == head
     assert git_out("branch", "--show-current", cwd=stack_repo) == "feature"
@@ -743,7 +743,9 @@ def test_a_conflict_the_preview_cannot_see_aborts_the_rebase(stack_repo: Path, m
     with pytest.raises(
         ReorderRefusal, match=r"Rewrite a\.txt.* does not apply in its new place \(conflict in a\.txt\);"
     ):
-        reorder_stack(stack_repo, [rows[4].sha, *(r.sha for r in rows[:4])], settings=Settings.from_cwd(stack_repo))
+        rewrite_stack(
+            stack_repo, [StackStep(r.sha) for r in [rows[4], *rows[:4]]], settings=Settings.from_cwd(stack_repo)
+        )
     assert git_out("rev-parse", "HEAD", cwd=stack_repo) == head and not rebase_in_progress(stack_repo)
 
 
@@ -754,8 +756,10 @@ def test_a_rebase_git_refuses_says_why_instead_of_blaming_a_conflict(stack_repo:
     rows = stack_rows_mb_to_head(stack_repo)
     head = git_out("rev-parse", "HEAD", cwd=stack_repo)
     with pytest.raises(ReorderRefusal, match=r"^git rebase failed: .*blocked by a hook; the stack was left as it was$"):
-        reorder_stack(
-            stack_repo, [rows[1].sha, rows[0].sha, *(r.sha for r in rows[2:])], settings=Settings.from_cwd(stack_repo)
+        rewrite_stack(
+            stack_repo,
+            [StackStep(r.sha) for r in [rows[1], rows[0], *rows[2:]]],
+            settings=Settings.from_cwd(stack_repo),
         )
     assert git_out("rev-parse", "HEAD", cwd=stack_repo) == head and not rebase_in_progress(stack_repo)
 
@@ -831,10 +835,10 @@ def test_reorder_refuses_a_stale_order_and_a_dirty_worktree(stack_repo: Path) ->
     settings = Settings.from_cwd(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     with pytest.raises(ReorderRefusal, match="each of the 4 local stack commits once"):
-        reorder_stack(stack_repo, [row.sha for row in rows[:3]], settings=settings)
+        rewrite_stack(stack_repo, [StackStep(row.sha) for row in rows[:3]], settings=settings)
     (stack_repo / "a.txt").write_text("edited\n", encoding="utf-8")
     with pytest.raises(ReorderRefusal, match="uncommitted changes"):
-        reorder_stack(stack_repo, [row.sha for row in reversed(rows)], settings=settings)
+        rewrite_stack(stack_repo, [StackStep(row.sha) for row in reversed(rows)], settings=settings)
 
 
 def test_reorder_says_a_commit_is_gone_or_an_id_too_short_not_both_at_once(stack_repo: Path) -> None:
@@ -842,7 +846,7 @@ def test_reorder_says_a_commit_is_gone_or_an_id_too_short_not_both_at_once(stack
     rows = stack_rows_mb_to_head(stack_repo)
     gone = "f" * 40
     with pytest.raises(ReorderRefusal, match=r"^'ffffffffffff' is not a commit of the local stack \(.*reload it\)$"):
-        reorder_stack(stack_repo, [gone, *(row.sha for row in rows[1:])], settings=settings)
+        rewrite_stack(stack_repo, [StackStep(sha) for sha in [gone, *(row.sha for row in rows[1:])]], settings=settings)
     stack = [dataclasses.replace(rows[0], sha=sha) for sha in ("ab" + "1" * 38, "ab" + "2" * 38)]
     with pytest.raises(ReorderRefusal, match="'ab' names 2 commits of the local stack"):
         reorder._resolve_steps(stack, [StackStep("ab")])  # pylint: disable=protected-access
@@ -854,7 +858,7 @@ def test_reorder_off_the_branch_says_so_instead_of_missing_the_commits_it_was_sh
     order = [row.sha for row in reversed(stack_rows_mb_to_head(stack_repo))]
     git("checkout", "-q", "--detach", "HEAD~2", cwd=stack_repo)
     with pytest.raises(ReorderRefusal, match="HEAD is detached"):
-        reorder_stack(stack_repo, order, settings=settings)
+        rewrite_stack(stack_repo, [StackStep(sha) for sha in order], settings=settings)
     git("checkout", "-q", "feature", cwd=stack_repo)
     git(
         "rebase",
@@ -867,7 +871,7 @@ def test_reorder_off_the_branch_says_so_instead_of_missing_the_commits_it_was_sh
     )
     assert rebase_in_progress(stack_repo)
     with pytest.raises(ReorderRefusal, match="a rebase is already in progress"):
-        reorder_stack(stack_repo, order, settings=settings)
+        rewrite_stack(stack_repo, [StackStep(sha) for sha in order], settings=settings)
 
 
 # --- Transport ---------------------------------------------------------------------

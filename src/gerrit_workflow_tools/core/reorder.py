@@ -226,11 +226,6 @@ def rewrite_stack(
     return StackRewrite(commits, head, stash_kept=stash_kept)
 
 
-def reorder_stack(cwd: Path | str, order: Sequence[str], *, settings: Settings) -> list[Commit]:
-    """Put the local stack into *order* (oldest first), every commit kept. See :func:`rewrite_stack`."""
-    return rewrite_stack(cwd, [StackStep(sha) for sha in order], settings=settings).commits
-
-
 def undo_rewrite(cwd: Path | str, rewrite_head: str, previous_head: str) -> None:
     """Put the branch back on *previous_head*, if it still is where the rewrite left it.
 

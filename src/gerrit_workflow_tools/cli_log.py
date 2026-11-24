@@ -178,7 +178,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _compute_url_start_visible(  # pylint: disable=too-many-arguments
+def _compute_url_start_visible(
     visible: list[LogCommit],
     *,
     show_url: bool,

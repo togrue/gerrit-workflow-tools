@@ -24,9 +24,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from gerrit_workflow_tools.core.push_options import refspec_option_segments
-from gerrit_workflow_tools.core.reviewer import ReviewerStrategy as ReviewerStrategyEnum
-
 
 ReviewerStrategy = Literal["push", "lazy", "overwrite"]
 
@@ -416,20 +413,3 @@ def apply_session_strategy(line: str, strategy: str | None) -> str:
     state = parse(line).state
     state.strategy = merged
     return format_canonical(state)
-
-
-def refspec_options(state: PushLineState, strategy: ReviewerStrategy) -> list[str]:
-    """Return the ``%`` segments to append to ``tip:refs/for/<branch>``.
-
-    Reviewers are only emitted when ``strategy == "push"``; ``lazy`` and
-    ``overwrite`` apply reviewers via REST after the push completes. ``wip``,
-    ``private`` and ``topic`` are always emitted because Gerrit only honors
-    them as magic ref options.
-    """
-    return refspec_option_segments(
-        reviewers=state.reviewers,
-        strategy=ReviewerStrategyEnum(strategy),
-        wip=state.wip,
-        private=state.private,
-        topic=state.topic,
-    )

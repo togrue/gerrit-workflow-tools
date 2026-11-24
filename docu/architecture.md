@@ -540,7 +540,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |
 | `core/commit_diff.py` | What one commit changed: `commit_diff` (files against the first parent), `diff_between` and `file_text` |
 | `core/review_delta.py` | The **review delta**: `last_reviewed_patch_set`, `load_review_delta` (the patchset you reviewed against the current one, another patchset, or the local commit) |
-| `core/reorder.py` | Rewriting the local stack, all or nothing: `rewrite_stack` (reorder, fold, drop; `autostash`), `reorder_stack`, `undo_rewrite`, `ReorderRefusal`; also the sequence editor that run uses |
+| `core/reorder.py` | Rewriting the local stack, all or nothing: `rewrite_stack` (reorder, fold, drop; `autostash`), `undo_rewrite`, `ReorderRefusal`; also the sequence editor that run uses |
 | `core/reword.py` | Message-only rewrites, every tree kept: `rewrite_messages` (recreate commits with new messages), `move_head`, `reword_commit` (one stack commit, its **Change-Id** kept) |
 | `core/reorder_preview.py` | Whether a rewrite would conflict (or a pick become empty), simulated with `git merge-tree`, worktree untouched: `first_conflict`, `swap_conflicts`, `replay_conflict`, `PickConflict`, `PickStop`, `PreviewUnavailable` |
 | `core/agent_runbook.py` | The **agent runbook**: `plan_runbook` (stops of the attention walk, what is the agent's and what is not) and **holds** (`load_holds`, `set_hold`) |

@@ -15,9 +15,6 @@ from gerrit_workflow_tools.core.changeish import unresolved_rev_message
 
 logger = logging.getLogger(__name__)
 
-# Cap logged stdout/stderr so huge blobs (e.g. binary mis-invocation) do not flood the log.
-_LOG_IO_CAP = 1000
-
 _UNKNOWN_REVISION_RE = re.compile(r"unknown revision|bad revision|no such branch|Needed a single revision|bad object")
 
 _NAMED_REVISION_RE = re.compile(r"(?:ambiguous argument|bad revision|no such branch:) '([^']+)'")
