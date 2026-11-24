@@ -227,3 +227,24 @@ def test_show_ai_carries_the_facts_of_the_text_view_under_nested_headings(
     section = lines.index("### Unresolved comments")
     threads = [line for line in lines[section:] if line.startswith("#")]
     assert threads[1:] == ["#### Patchset-level comment", "#### `calc.py:3`"]
+
+
+def test_read_commands_list_refresh_and_it_asks_gerrit_again(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--refresh`` is in the help of the commands that read Gerrit, and bypasses the trust window."""
+    from gerrit_workflow_tools.cli_ci import main as ci_main
+    from gerrit_workflow_tools.cli_config import main as config_main
+    from gerrit_workflow_tools.cli_show import main as show_main
+
+    for main in (log_main, show_main, ci_main):
+        _code, out, _err = run_cli(stack_repo, main, ["--help"], monkeypatch, catch_sys_exit=True)
+        assert "--refresh" in out, main
+    _code, out, _err = run_cli(stack_repo, config_main, ["--help"], monkeypatch, catch_sys_exit=True)
+    assert "--refresh" not in out  # nothing cached to bypass
+
+    store = _store(stack_repo, [{}, {}, {}, {}])
+    _plain_log(stack_repo, monkeypatch, store)
+    before = len(store.calls)
+    _plain_log(stack_repo, monkeypatch, store)
+    assert len(store.calls) == before, "inside the trust window the cache answers"
+    _plain_log(stack_repo, monkeypatch, store, "--refresh")
+    assert len(store.calls) > before

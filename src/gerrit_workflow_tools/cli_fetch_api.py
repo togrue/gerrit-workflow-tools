@@ -30,7 +30,9 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write a single line of JSON to stdout.",
     )
-    add_verbose_and_debug_log_args(p, debug_log_help="Log resolved URL and Gerrit API diagnostics to stderr.")
+    add_verbose_and_debug_log_args(
+        p, debug_log_help="Log resolved URL and Gerrit API diagnostics to stderr.", refresh=False
+    )
     return p
 
 

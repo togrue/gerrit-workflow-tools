@@ -36,6 +36,7 @@ ger log [options] [REV_RANGE]
 | `--show-change-id` | Show full Change-Id on an indented continuation line (default: `ger.logShowChangeId`) |
 | `-v`, `--verbose` | Add indented `CI:` pipeline lines and a `Reviewers:` line (`alice, bob (cc: carol)`; omitted when Gerrit lists nobody) below each commit; primary line unchanged. Repeat (`-vv`) to also show Change-Id. |
 | `--debug-log` | Log git commands to stderr (repeat for more detail) |
+| `--refresh` | Ask Gerrit again instead of serving the cache inside its trust window; same as `ger --refresh log` |
 | `--follow-merges` | Include merge commits in range (see shared helper in `cli_common`) |
 
 `ger log --help` ends with examples and a legend of the status columns, generated from where the tokens are defined (`render/status_fmt.py`: `PATCHSET_TOKENS`, `VOTE_LEGEND`, `status_legend`), so the two cannot drift.
