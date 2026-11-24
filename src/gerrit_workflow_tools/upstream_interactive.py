@@ -7,10 +7,11 @@ import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_terminal import prompt_toolkit_can_run
-from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.config import ConfigError, Settings
+from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.git_state import is_detached_head
 from gerrit_workflow_tools.core.upstream import (
+    MissingUpstreamError,
     NeedsUpstreamError,
     branch_has_upstream,
     local_branch_exists,
@@ -36,7 +37,11 @@ def prompt_upstream_abbrev_interactive(cwd: Path | str | None, branch: str, *, s
         f"No upstream configured for branch {branch!r}.",
         file=sys.stderr,
     )
-    print("Set upstream (TAB to complete, Enter on empty line to abort).", file=sys.stderr)
+    if default:
+        why = f" ({choice_.why})" if choice_.why and default == choice_.suggested else ""
+        print(f"Enter accepts {default}{why}, Ctrl-C aborts; TAB completes other remote branches.", file=sys.stderr)
+    else:
+        print("Type a remote branch (TAB completes), Ctrl-C aborts.", file=sys.stderr)
     try:
         choice = session.prompt(
             f"Set upstream for {branch!r}: ",
@@ -116,3 +121,18 @@ def ask_for_needed_upstream(error: NeedsUpstreamError, asked: set[str]) -> bool 
     asked.add(branch)
     sys.stdout.flush()  # What the command showed before it stopped comes before the question.
     return ask_branch_upstream(cwd, branch, settings=Settings.from_cwd(cwd))
+
+
+def with_suggested_upstream(error: NeedsUpstreamError) -> NeedsUpstreamError:
+    """*error* naming the concrete ``git branch --set-upstream-to=…`` when there is a remote branch to
+    suggest (what the prompt would offer), for where nobody can be asked."""
+    if not isinstance(error, MissingUpstreamError):
+        return error
+    cwd = Path.cwd()
+    try:
+        choice = upstream_choice(cwd, error.branch, settings=Settings.from_cwd(cwd))
+    except (GitError, ConfigError):
+        return error
+    if not choice.suggested:
+        return error
+    return missing_upstream_error(error.branch, askable=error.askable, suggested=choice.suggested, why=choice.why)

@@ -41,7 +41,7 @@ from gerrit_workflow_tools.render.style import (
     init_color_mode,
     init_hyperlink_mode,
 )
-from gerrit_workflow_tools.upstream_interactive import ask_for_needed_upstream
+from gerrit_workflow_tools.upstream_interactive import ask_for_needed_upstream, with_suggested_upstream
 
 
 _T = TypeVar("_T")
@@ -147,7 +147,7 @@ def run_cli_command(body: Callable[[], int]) -> int:
             except NeedsUpstreamError as error:
                 answer = ask_for_needed_upstream(error, asked) if _MAY_ASK_FOR_UPSTREAM.get() else None
                 if answer is None:
-                    return _report_failure(error)
+                    return _report_failure(with_suggested_upstream(error))
                 if not answer:
                     return int(ExitCode.REFUSED)
             except Exception as error:  # pylint: disable=broad-exception-caught

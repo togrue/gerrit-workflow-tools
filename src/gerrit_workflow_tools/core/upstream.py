@@ -35,15 +35,24 @@ class MissingUpstreamError(NeedsUpstreamError, ConfigError):
     """*branch* has no upstream, and the command needs it (exit ``CONFIG``)."""
 
 
-def missing_upstream_error(branch: str, *, askable: bool = True) -> MissingUpstreamError:
-    """The one error, and the one hint, every command gives for a branch with no upstream."""
+def missing_upstream_error(
+    branch: str, *, askable: bool = True, suggested: str | None = None, why: str | None = None
+) -> MissingUpstreamError:
+    """The one error, and the one hint, every command gives for a branch with no upstream.
+
+    With *suggested* (:func:`upstream_choice`'s guess, and *why*), the hint is that very command.
+    """
+    if suggested:
+        reason = f"  # {why}" if why else ""
+        hint = f"Set it with:\n  git branch --set-upstream-to={suggested} {branch}{reason}"
+    else:
+        hint = (
+            "Set an upstream, e.g.:\n"
+            "  git branch --set-upstream-to=<remote>/<branch>\n"
+            "Fetch from your Gerrit remote first if the tracking branch is missing."
+        )
     return MissingUpstreamError(
-        f"No upstream configured for branch {branch!r}.\n"
-        "Set an upstream, e.g.:\n"
-        "  git branch --set-upstream-to=<remote>/<branch>\n"
-        "Fetch from your Gerrit remote first if the tracking branch is missing.",
-        branch=branch,
-        askable=askable,
+        f"No upstream configured for branch {branch!r}.\n{hint}", branch=branch, askable=askable
     )
 
 

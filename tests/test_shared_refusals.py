@@ -70,7 +70,8 @@ def test_a_missing_upstream_reads_the_same_in_log_and_push(
     code, _out, err = run_cli(stack_repo, main_fn, argv, monkeypatch)
     assert code == ExitCode.CONFIG
     assert err.startswith("error: No upstream configured for branch 'feature'.")
-    assert "git branch --set-upstream-to=<remote>/<branch>" in err
+    # The command to run, with what the prompt would have offered: no placeholders to fill in.
+    assert "Set it with:\n  git branch --set-upstream-to=origin/feature feature  # nearest: " in err
 
 
 @pytest.mark.parametrize(("main_fn", "argv"), [(edit_main, ["HEAD~1"]), (main_reword, ["HEAD~1"]), (rebase_main, [])])
@@ -377,3 +378,22 @@ def test_a_core_refusal_exits_and_answers_the_same_from_every_command(
     assert capsys.readouterr().err == "error: in the way\n"
     answer_status, body_json = failure_response(error)
     assert (answer_status, body_json["error"]["code"], body_json["error"]["message"]) == (status, name, "in the way")
+
+
+def test_the_upstream_prompt_says_what_enter_does(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The guess is prefilled: Enter takes it, Ctrl-C leaves. No 'empty line to abort' riddle."""
+    git("branch", "--unset-upstream", cwd=web_stack_repo, check=False)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_common.stdin_is_terminal", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.upstream_interactive.prompt_toolkit_can_run", lambda: True)
+
+    def _session(*_args: object, **_kwargs: object) -> object:
+        class _Session:
+            def prompt(self, *_a: object, **_kw: object) -> str:
+                raise KeyboardInterrupt
+
+        return _Session()
+
+    monkeypatch.setattr("prompt_toolkit.PromptSession", _session)
+    code, _out, err = run_cli(web_stack_repo, log_main, [], monkeypatch)
+    assert code == ExitCode.REFUSED
+    assert "Enter accepts origin/" in err and ", Ctrl-C aborts; TAB completes other remote branches." in err
