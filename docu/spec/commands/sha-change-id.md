@@ -45,7 +45,7 @@ Shared table: **[exit-codes.md](../exit-codes.md)**.
 | Code | Meaning |
 |------|---------|
 | `0` | Exactly one match |
-| `2` | Usage / invalid Change-Id |
+| `2` | Usage / invalid Change-Id: `error: invalid Change-Id: 'HEAD'; ger sha takes a full Change-Id (I + 40 hex). For a commit, change number or other changeish: ger resolve` |
 | `3` | Not found |
 | `7` | Git error |
 | `8` | Duplicate Change-Id |
@@ -62,7 +62,7 @@ Print or validate Change-Ids.
 ger change-id [options] [REV_OR_RANGE]
 ```
 
-Default `REV_OR_RANGE`: `HEAD`. Change-Id argument is echoed unchanged. A range prints oldest first, like `ger log`. An empty range prints `(no commits in range)` on stderr and exits `0`.
+Default `REV_OR_RANGE`: `HEAD`. Change-Id argument is echoed unchanged. A range prints oldest first, like `ger log`. An empty range prints `(no commits in range)` on stderr and exits `0`. A commit with a missing, invalid or duplicate Change-Id is never dropped silently: the valid Change-Ids are printed, then every problem on stderr exactly as `--check` names it, and the exit code is that of the first.
 
 ### Options
 
@@ -73,7 +73,7 @@ Default `REV_OR_RANGE`: `HEAD`. Change-Id argument is echoed unchanged. A range 
 | `--fix` | Assign missing Change-Ids on last message line (message-only rewrite via `commit-tree`) |
 | `--color`, `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
 
-`--check` always covers the full current stack (`upstream_tip..HEAD`). A `REV_OR_RANGE` argument is a usage error in this mode. Formerly named `--check-duplicates`. It names every problem it finds, one `error: commit <sha>: …` line each, oldest commit first; the exit code is that of the first line.
+`--check` always covers the full current stack (`upstream_tip..HEAD`). A `REV_OR_RANGE` argument is a usage error in this mode. Formerly named `--check-duplicates`. It names every problem it finds, one `error: commit <sha>: …` line each, oldest commit first; the exit code is that of the first line. With none, it prints `N commits, all Change-Ids valid` on a terminal and nothing when piped.
 
 ### Exit codes (`--check`)
 

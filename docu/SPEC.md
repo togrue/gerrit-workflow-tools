@@ -25,6 +25,7 @@ Each command spec lists its **implementation module** (e.g. `cli_log.py`) so rev
 - **`ger --help`** — lists every registered command once, in sections: *daily commands* (`log`, `show`, `edit` / `reword` on one line, `fix`, `inbox`, `push`, `rebase`, `reply`, `review`, `checkout`, `comment`, `ci`), *setup* (`setup`, `config`, `vscode`, `bash-completion`) and *scripting and agents* (`resolve`, `sha`, `change-id`, `fetch-api`, `serve`, `cache`); then the *common tasks* index (job → command) and notes on running without a terminal. The sections are `_SECTIONS` in `cli_ger.py`.
 - **`ger --refresh`** — sets `GER_CACHE_REFRESH=1` for the invoked command (bypass stale Gerrit cache reads).
 - **`GER_ASSUME_YES=1`** — answers every confirmation as `-y` does (`ger push`, `ger reply --publish`, `ger review --vote`), for agent sandboxes and scripts that have no terminal. It decides nothing a prompt would not ask: drafts still need `--publish-comments` to go out with a push, a diverged change still needs `--force`, and `GER_NO_PUBLISH` still blocks publishing.
+- **`ger --version`** (`-V`) — prints `ger <version>` and exits `0`.
 - **Aliases** (not shown in `ger --help`): `changeid` → `change-id`; `restack` / `stack` → `rebase`.
 - **Per-command help:** `ger <command> --help` — options there override narrative spec if they differ (then fix the spec).
 

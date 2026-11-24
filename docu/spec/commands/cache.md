@@ -15,8 +15,10 @@ Use global **`ger --refresh`** to bypass cache for one command invocation.
 ## Usage
 
 ```
-ger cache <subcommand>
+ger cache [<subcommand>]
 ```
+
+Without a subcommand, `ger cache` is `ger cache info`.
 
 | Subcommand | Action |
 |------------|--------|

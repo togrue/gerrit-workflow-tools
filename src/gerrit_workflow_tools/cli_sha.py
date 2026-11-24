@@ -160,7 +160,11 @@ def _run(argv: list[str] | None) -> int:  # pylint: disable=too-many-branches,to
     else:
         assert args.change_id is not None
         if not CHANGE_ID_VALUE_RE.match(args.change_id):
-            print(f"error: invalid Change-Id: {args.change_id!r}", file=sys.stderr)
+            print(
+                f"error: invalid Change-Id: {args.change_id!r}; ger sha takes a full Change-Id (I + 40 hex). "
+                "For a commit, change number or other changeish: ger resolve",
+                file=sys.stderr,
+            )
             return int(ExitCode.USAGE)
 
         want = args.change_id.lower()

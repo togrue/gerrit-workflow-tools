@@ -466,3 +466,29 @@ def test_split_change_id_footer_takes_the_footer_out_and_append_puts_it_back_as_
         text, change_id = split_change_id_footer(message)
         assert change_id is not None
         assert append_change_id_trailer(text, change_id) == message
+
+
+def test_gcid_range_prints_the_good_and_reports_every_bad_commit_as_check_does(stack_repo, monkeypatch):
+    """A range never drops a commit silently: each bad one is named, as --check names it."""
+    git("commit", "--allow-empty", "-q", "--no-verify", "-m", "no footer", cwd=stack_repo)
+    git("commit", "--allow-empty", "-q", "--no-verify", "-m", "garbage\n\nChange-Id: Ibad", cwd=stack_repo)
+    code, out, err = run_cli(stack_repo, gcid_main, ["HEAD~3..HEAD"], monkeypatch)
+    _check_code, _check_out, check_err = run_cli(stack_repo, gcid_main, ["--check"], monkeypatch)
+    assert code == ExitCode.MISSING_CHANGE_ID
+    assert out.strip() == _cid("4")
+    assert err == check_err
+
+
+def test_gcid_check_says_all_is_well_on_a_terminal(stack_repo, monkeypatch):
+    import io
+    import sys
+
+    class _Terminal(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    monkeypatch.chdir(stack_repo)
+    out = _Terminal()
+    monkeypatch.setattr(sys, "stdout", out)
+    assert gcid_main(["--check"]) == 0
+    assert out.getvalue().strip() == "4 commits, all Change-Ids valid"

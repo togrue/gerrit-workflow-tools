@@ -161,8 +161,8 @@ def _usage() -> str:
         [
             "",
             "Without a terminal, commands that ask (push, checkout, reply --publish, review --vote) take -y,",
-            "or set GER_ASSUME_YES=1 once; every command with --json also takes --ai (compact text for agents).",
-            "Run ger <command> --help for command-specific options.",
+            "or set GER_ASSUME_YES=1 once. Commands that report state (log, show, inbox, resolve, ...) take --json,",
+            "and with it --ai: compact text for agents. Run ger <command> --help for its options; ger --version.",
         ]
     )
     return "\n".join(lines)
@@ -175,7 +175,7 @@ _TASKS = (
     ("change an older commit of the stack", "edit the files, ger fix REV -a, ger rebase --autosquash"),
     ("bottom merged / target moved on", "ger rebase --onto-remote --drop-merged-equivalent"),
     ("take over newer patchsets from Gerrit", "ger checkout CHANGE --update (merges a local amend)"),
-    ("answer a comment", "ger reply ID -m TEXT [--resolve]; sent by ger push or ger reply --publish"),
+    ("answer a comment", "ger reply PATH:LINE -m TEXT | --done; sent by ger push or ger reply --publish"),
     ("post a note or vote", "ger reply --publish CHANGE --keep-drafts -m TEXT [--vote CR+1]"),
     (
         "publish your drafts",
@@ -225,6 +225,11 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if argv[0] in ("-h", "--help"):
             print(_usage())
+            return 0
+        if argv[0] in ("-V", "--version"):
+            from gerrit_workflow_tools import __version__
+
+            print(f"ger {__version__}")
             return 0
         cmd = _ALIASES.get(argv[0], argv[0])
         if cmd not in _COMMANDS:

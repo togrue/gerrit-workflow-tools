@@ -17,9 +17,11 @@ from gerrit_workflow_tools.core.gerrit.rest import resolve_gerrit_web_base
 
 def _build_parser() -> argparse.ArgumentParser:
     """Build and return the command-line parser for ``ger cache``."""
-    p = argparse.ArgumentParser(prog="ger cache", description="Inspect or clear the local Gerrit API cache.")
-    sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("info", help="Show cache path and row counts.")
+    p = argparse.ArgumentParser(
+        prog="ger cache", description="Inspect or clear the local Gerrit API cache. Without a subcommand: info."
+    )
+    sub = p.add_subparsers(dest="cmd")
+    sub.add_parser("info", help="Show cache path and row counts (the default).")
     sub.add_parser("clear", help="Delete cached Gerrit API payloads and CI content for this Gerrit host.")
     add_color_args(p)
     add_verbose_and_debug_log_args(p, debug_log_help="Log cache administration diagnostics to stderr.")

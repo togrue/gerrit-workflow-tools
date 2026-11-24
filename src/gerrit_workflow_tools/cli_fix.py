@@ -93,8 +93,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="ger fix",
         description=(
-            "Create a fixup commit (``git commit --fixup``) for a commit in the current stack. "
-            "By default only **staged** changes are committed; use ``-a`` to include all modifications to "
+            "Create a fixup commit (git commit --fixup) for a commit in the current stack. "
+            "By default only staged changes are committed; use -a to include all modifications to "
             "tracked files. When the index is empty and stdin is a TTY, you are prompted to stage "
             "tracked modifications (with an option to show the diff)."
         ),
@@ -109,12 +109,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--all",
         action="store_true",
         dest="commit_all",
-        help="Pass ``-a`` to ``git commit`` (stage all modifications to tracked files, then commit).",
+        help="Pass -a to git commit (stage all modifications to tracked files, then commit).",
     )
     p.add_argument(
         "--no-verify",
         action="store_true",
-        help="Bypass pre-commit and commit-msg hooks (passed through to ``git commit``).",
+        help="Bypass pre-commit and commit-msg hooks (passed through to git commit).",
     )
     add_output_format_args(p)
     add_verbose_and_debug_log_args(p, debug_log_help="Log resolution steps to stderr.")

@@ -320,8 +320,8 @@ def resolve_gerrit_web_base(settings: Settings) -> str:
         logger.debug("resolve_gerrit_web_base: ger.webUrl -> %s", base)
         return base
     raise ConfigError(
-        "ger.webUrl is not set; configure the Gerrit HTTPS base, e.g. "
-        "`git config ger.webUrl https://gerrit.example.com`"
+        "ger.webUrl is not set: run `ger setup` to configure the Gerrit server "
+        "(or `git config --global ger.webUrl https://gerrit.example.com`)"
     )
 
 

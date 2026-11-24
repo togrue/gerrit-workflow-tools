@@ -2,7 +2,7 @@
 
 import argparse
 import sys
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import (
@@ -44,12 +44,18 @@ class ChangeIdError(Exception):
         self.code = code
 
 
-def _audit_change_ids(commits: Iterable[Commit]) -> None:
+def _audit_change_ids(commits: Iterable[Commit], *, valid: Callable[[Commit], None] | None = None) -> None:
     """Raise :class:`ChangeIdError` naming every missing, malformed or duplicate Change-Id.
 
-    One line per issue in *commits* order; the exit code is the first issue's.
+    One line per issue in *commits* order; the exit code is the first issue's. *valid* is called
+    first with each commit that has none, in order.
     """
+    commits = list(commits)
     issues, _exit = classify_issues(ChangeIdRow(c.sha, c.short_sha, c.change_id) for c in commits)
+    flagged = {i.sha for i in issues}
+    for commit in commits:
+        if valid is not None and commit.sha not in flagged:
+            valid(commit)
     if issues:
         duplicate = issues[0].kind == ChangeIdIssueKind.DUPLICATE
         raise ChangeIdError(
@@ -58,12 +64,15 @@ def _audit_change_ids(commits: Iterable[Commit]) -> None:
         )
 
 
-def check_stack_change_ids(cwd) -> None:
+def check_stack_change_ids(cwd) -> int:
     """Raise :class:`ChangeIdError` when the current stack has missing/invalid/duplicate Change-Ids.
 
     Always scans ``upstream_tip..HEAD`` (the full local stack), oldest first, and names every issue.
+    Returns how many commits it checked.
     """
-    _audit_change_ids(read_commit_rows(cwd, "--reverse", rev_spec_stack_base_to_end(cwd, "HEAD")))
+    commits = read_commit_rows(cwd, "--reverse", rev_spec_stack_base_to_end(cwd, "HEAD"))
+    _audit_change_ids(commits)
+    return len(commits)
 
 
 def _rev_arg(arg: str) -> str:
@@ -85,9 +94,8 @@ def print_change_ids_for_range(cwd, input_arg, use_remote: bool) -> None:
         rows = read_commit_rows(cwd, "-1", rev)
     if not rows:
         print("(no commits in range)", file=sys.stderr)
-    for row in rows:
-        _audit_change_ids([row])
-        print(row.change_id)
+    # Every commit is reported, as --check reports it: the good ones printed, then each problem.
+    _audit_change_ids(rows, valid=lambda row: print(row.change_id))
 
 
 def _ensure_safe_for_fix(cwd: Path) -> None:
@@ -162,7 +170,9 @@ def _run(argv: list[str] | None) -> int:
                     "error: --check always scans the full current stack; do not pass REV_OR_RANGE",
                     code=int(ExitCode.USAGE),
                 )
-            check_stack_change_ids(cwd)
+            checked = check_stack_change_ids(cwd)
+            if sys.stdout.isatty():
+                print(f"{checked} commit{'' if checked == 1 else 's'}, all Change-Ids valid")
             return 0
 
         if is_change_id(input_arg):
@@ -179,7 +189,13 @@ def _run(argv: list[str] | None) -> int:
 
 def _build_parser() -> argparse.ArgumentParser:
     """Build and return the command-line parser for ``ger change-id``."""
-    p = argparse.ArgumentParser(prog="ger change-id")
+    p = argparse.ArgumentParser(
+        prog="ger change-id",
+        description=(
+            "Print the Change-Id of a commit or of each commit in a range; --check validates the whole local "
+            "stack (missing, invalid or duplicate Change-Ids), --fix adds the missing ones."
+        ),
+    )
     p.add_argument(
         "rev_or_range",
         nargs="?",

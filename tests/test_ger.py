@@ -122,3 +122,39 @@ def test_help_lists_daily_commands_before_setup_and_scripting(
     assert any(line.startswith("  edit, reword ") for line in daily)
     scripting = lines[lines.index("scripting and agents:") + 1 : lines.index("common tasks:") - 1]
     assert "  sha " in "\n".join(scripting)
+
+
+# --- Help and small errors say what is wrong and what to run -------------------------
+
+
+def test_version(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from gerrit_workflow_tools import __version__
+
+    for flag in ("--version", "-V"):
+        code, out, err = _run_ger(stack_repo, [flag], monkeypatch)
+        assert (code, out.strip(), err) == (0, f"ger {__version__}", "")
+
+
+def test_cache_without_a_subcommand_is_info(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from gerrit_workflow_tools.core.git_run import git
+
+    git("config", "ger.webUrl", "https://g.example", cwd=stack_repo)
+    code, out, err = _run_ger(stack_repo, ["cache"], monkeypatch)
+    assert code == 0, err
+    assert out.startswith("host: g.example\n")
+
+
+@pytest.mark.parametrize("command", ["fix", "change-id"])
+def test_help_has_a_description_in_plain_text(command: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    code, out, _err = _run_ger(stack_repo, [command, "--help"], monkeypatch, catch_sys_exit=True)
+    assert code == 0
+    description = out.split("\n\n")[1]
+    assert not description.startswith(("positional", "options")), out
+    assert "``" not in out and "**" not in out
+
+
+def test_no_gerrit_server_points_at_ger_setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Outside a clone `git config` cannot help; the command that sets it up can."""
+    code, _out, err = _run_ger(tmp_path, ["inbox"], monkeypatch)
+    assert code == 6
+    assert "ger.webUrl is not set: run `ger setup`" in err
