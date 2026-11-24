@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -248,3 +249,27 @@ def test_read_commands_list_refresh_and_it_asks_gerrit_again(stack_repo: Path, m
     assert len(store.calls) == before, "inside the trust window the cache answers"
     _plain_log(stack_repo, monkeypatch, store, "--refresh")
     assert len(store.calls) > before
+
+
+def test_show_header_has_no_padding_and_dates_the_author_by_age(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from gerrit_workflow_tools.cli_show import main as show_main
+
+    git("config", "ger.stopPattern", "^nothing-matches$", cwd=stack_repo)
+    store = _store(stack_repo, [{}, {}, {}, {"cr": 1, "submittable": False}])
+    code, out, err = run_cli(stack_repo, show_main, ["HEAD", "--color", "never"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    lines = out.splitlines()
+    assert lines[0] == f"commit {stack_rows_mb_to_head(stack_repo)[-1].short_sha} p v+1 cr+1"
+    assert all(line == line.rstrip() for line in lines if not line.startswith("    "))
+    author = next(line for line in lines if line.startswith("Author: "))
+    assert re.fullmatch(r"Author: .+ <.+>, \d+[mhd] ago \(\d{4}-\d\d-\d\d \d\d:\d\d\)", author), author
+
+
+def test_log_of_an_empty_stack_says_nothing_is_above_the_upstream(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git("update-ref", "refs/remotes/origin/main", "HEAD", cwd=stack_repo)
+    lines = _plain_log(stack_repo, monkeypatch, ChangeStore({}))
+    assert lines == ["nothing above origin/main"]

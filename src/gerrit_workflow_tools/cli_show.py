@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_attention import add_attention_query_args, show_revs_with_attention
@@ -29,6 +30,7 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.gerrit_show import ShownCommit, load_shown_commits, resolve_show_targets
+from gerrit_workflow_tools.core.review_chain import format_age
 from gerrit_workflow_tools.core.stack import read_commit_meta
 from gerrit_workflow_tools.render.ci_content import format_ci_section_human
 from gerrit_workflow_tools.render.comments import (
@@ -177,10 +179,7 @@ def _emit_human_commit(
     if is_local and commit.sha:
         meta_row = read_commit_meta(cwd, commit.sha)
         body = meta_row.body
-        meta = f"Author: {meta_row.author_line}"
-        if meta_row.date:
-            meta = f"{meta} [{meta_row.date}]"
-        print(meta)
+        print(f"Author: {meta_row.author_line}{_when(meta_row.date)}")
 
     if commit.gerrit_url:
         print(f"{color_text('url:', ANSI_DIM)} {color_text(format_link(commit.gerrit_url), ANSI_YELLOW)}")
@@ -214,6 +213,16 @@ def _emit_human_commit(
         print()
         for line in comment_lines:
             print(line)
+
+
+def _when(iso_date: str) -> str:
+    """``, 3h ago (2026-11-24 04:39)`` for an ISO author date; empty when there is none."""
+    try:
+        when = datetime.fromisoformat(iso_date)
+    except ValueError:
+        return f", {iso_date}" if iso_date else ""
+    age = format_age(int((datetime.now(timezone.utc) - when).total_seconds()))
+    return f", {age} ago ({when:%Y-%m-%d %H:%M})"
 
 
 def _emit_brief_commit(commit: LogCommit, *, comments: CommentSelection) -> None:

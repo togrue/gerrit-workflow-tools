@@ -108,7 +108,7 @@ class ShownCommitDiff:
 
 
 # Commit id, parents, author name, email and date, message: NUL-separated, as the -z diff after them.
-_SHOW_FORMAT = "%H%x00%P%x00%an%x00%ae%x00%ad%x00%B%x00"
+_SHOW_FORMAT = "%H%x00%P%x00%an%x00%ae%x00%aI%x00%B%x00"
 
 
 def show_commit_diff(cwd: Path | str | None, rev: str) -> ShownCommitDiff:

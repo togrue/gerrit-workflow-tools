@@ -329,22 +329,18 @@ def votes_text(commit: LogCommit) -> str:
 
 
 def show_headline(commit: LogCommit) -> str:
-    """``commit <sha> <status cols>  # <attention>`` — same tokens as ``ger log``."""
-    sha = color_short_sha(commit.short_sha)
-    push = fmt_patchset_column(commit)
+    """``commit <sha> <status cols>  # <attention>`` — same tokens as ``ger log``, with no padding at the end."""
+    parts = [f"commit {color_short_sha(commit.short_sha)}", fmt_patchset_column(commit)]
     if commit.pushed:
-        verified = fmt_verified(commit.verified)
-        cr = fmt_code_review(commit.code_review)
-        comments = fmt_comments(commit.comments_unresolved)
-    else:
-        verified = "   "
-        cr = "    "
-        comments = "   "
-    base = f"commit {sha} {push} {verified} {cr} {comments}"
+        # A column's own padding (``v? ``) lines rows up in ger log; a headline stands alone.
+        v, cr = verified_token(commit.verified), code_review_token(commit.code_review)
+        parts += [color_text(v.strip(), _VERIFIED_COLOR.get(v, ANSI_DIM))]
+        parts += [color_text(cr.strip(), _CODE_REVIEW_COLOR.get(cr, ANSI_DIM))]
+        if commit.comments_unresolved > 0:
+            parts.append(fmt_comments(commit.comments_unresolved))
+    base = " ".join(parts)
     suffix = attention_suffix(commit)
-    if suffix:
-        return f"{base}  {suffix}"
-    return base
+    return f"{base}  {suffix}" if suffix else base
 
 
 def oneline_line(

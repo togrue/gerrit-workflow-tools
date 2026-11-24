@@ -128,7 +128,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     )
     stack_view, progress, moved, blocked = overview.view, overview.progress, overview.moved, overview.blocked
     if not stack_view.commits:
-        print("(no commits in range)")
+        print(f"nothing above {moved.name}" if moved is not None else f"no commits in {rev_range}")
         return int(ExitCode.OK)
 
     if progress is not None:

@@ -232,8 +232,8 @@ class CommitMeta:
 
 
 def read_commit_meta(cwd: Path | str | None, sha: str) -> CommitMeta:
-    """``Author <email>``, the author date and the message body of *sha*, from one ``git show``."""
-    lines = git_out("show", "-s", "--no-patch", "--format=%an%n%ae%n%ad%n%B", sha, cwd=cwd).splitlines()
+    """``Author <email>``, the author date (ISO 8601) and the message body of *sha*, from one ``git show``."""
+    lines = git_out("show", "-s", "--no-patch", "--format=%an%n%ae%n%aI%n%B", sha, cwd=cwd).splitlines()
     while lines and lines[-1] == "":
         lines.pop()
     author, email, date = [*lines, "", "", ""][:3]

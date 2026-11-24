@@ -45,6 +45,8 @@ ger log [options] [REV_RANGE]
 
 ## Output (text)
 
+An empty stack prints `nothing above origin/main` (the upstream's name), an empty explicit range `no commits in A..B`.
+
 Default: one primary line per commit, optional `# …` detail lines, trailing **summary** line.
 
 **User guide (columns, tokens, examples):** [Reading-ger-log.md](../../Reading-ger-log.md). With hyperlinks on, each line gets a clickable `Open in gerrit` instead of the raw address. `--url` forces the URL column even when hyperlinks are off.
