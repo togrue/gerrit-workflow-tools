@@ -325,7 +325,6 @@ MAX_LINES = 400
 # Files already over MAX_LINES, pinned at their size. They may only shrink; lower the
 # number when they do. A file here that must grow needs an extraction commit first.
 SIZE_BASELINE = {
-    "push_input_line.py": 415,
     "reviewer_catalog.py": 478,
 }
 
@@ -360,7 +359,6 @@ TOO_MANY_BASELINE = {
     "core/gerrit_change_status.py": 1,
     "core/ready_calc.py": 1,
     "core/review_chain.py": 6,
-    "push_input_line.py": 3,
     "rebase_enricher.py": 2,
 }
 
