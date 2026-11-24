@@ -219,13 +219,15 @@ def _push_gerrit(run: RunContext, args: argparse.Namespace, *, branch: str) -> i
         return 1
     for warning in prepared.warnings:
         print(warning, file=sys.stderr)
-    plan = prepared
-    if args.i:
-        plan = prompt_initial_options(cwd, plan, args, settings=settings)
+    asked = prompt_initial_options(cwd, prepared, args, settings=settings) if args.i else prepared
+    if asked is None:
+        print("Push cancelled.", file=sys.stderr)
+        return 0
+    plan = asked
     if changes_nothing(plan) and not args.dry_run:  # nothing to confirm, so -y is not needed either
         return finish_push(execute(run, plan), plan)
     highlighter = branch_summary_highlighter(cwd, plan.branch, first_parent=first_parent, settings=settings)
-    confirmed = confirm_gerrit_push(cwd, plan, args, settings=settings, summary_highlighter=highlighter)
+    confirmed = confirm_gerrit_push(run, plan, args, summary_highlighter=highlighter)
     if isinstance(confirmed, int):
         return confirmed
     code = finish_push(execute(run, confirmed), confirmed)

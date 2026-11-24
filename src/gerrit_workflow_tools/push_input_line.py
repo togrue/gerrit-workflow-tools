@@ -8,15 +8,18 @@ classified spans for highlighting, and renders the canonical form back out.
 Grammar (best effort, case-insensitive keywords)::
 
     line     := element (WS+ element)*
-    element  := removal | rclause | topic | flag | strategy | reviewer
+    element  := removal | rclause | topic | flag | strategy | answer | reviewer
     removal  := '-' (keyword | reviewer)
     rclause  := ('r' '=' list) | ('r' WS+ list)        # list = name (',' name)*
     topic    := ('topic' '=' value) | ('topic' WS+ value)
     flag     := 'wip' | 'private' | 'publish-drafts'
     strategy := 'push' | 'lazy' | 'overwrite'
+    answer   := 'y' | 'yes' | 'n' | 'no' | 'q' | 'quit' | '?' | 'help'
     reviewer := bare-word that is not a reserved keyword
 
-Quoted strings (``"..."`` / ``'...'``) are accepted as topic values.
+Quoted strings (``"..."`` / ``'...'``) are accepted as topic values. An *answer* answers
+the prompt the line stands in (push, cancel, show this grammar); a reviewer with such a
+name is written ``r=y``.
 """
 
 from __future__ import annotations
@@ -37,6 +40,16 @@ KW_LAZY = "lazy"
 KW_OVERWRITE = "overwrite"
 KW_PUBLISH_DRAFTS = "publish-drafts"
 
+LineAnswer = Literal["push", "cancel", "help"]
+ANSWERS: dict[str, LineAnswer] = {
+    **dict.fromkeys(("y", "yes"), "push"),
+    **dict.fromkeys(("n", "no", "q", "quit"), "cancel"),
+    **dict.fromkeys(("?", "help"), "help"),
+}
+"""Words that answer the prompt instead of naming a reviewer."""
+KEYWORDS_HINT = "keywords: r= topic= wip private push lazy overwrite publish-drafts  ·  y n ? (help)"
+"""The prompt's toolbar when it has nothing else to say."""
+
 SpanKind = Literal[
     "whitespace",
     "minus",
@@ -48,6 +61,7 @@ SpanKind = Literal[
     "keyword_lazy",
     "keyword_overwrite",
     "keyword_publish_drafts",
+    "keyword_answer",
     "equals",
     "comma",
     "reviewer",
@@ -98,6 +112,8 @@ class PushLineState:
     strategy: ReviewerStrategy = "push"
     publish_drafts: bool = False
     """Publish your drafts on the updated changes with the push (``publish-drafts``)."""
+    answer: LineAnswer | None = None
+    """What the line answers besides its options: push, cancel, or show the grammar (:data:`ANSWERS`)."""
 
     def add_reviewer(self, name: str) -> None:
         """Append ``name`` if non-empty and not already present."""
@@ -179,6 +195,7 @@ _KEYWORD_KINDS: dict[str, SpanKind] = {
     KW_LAZY: "keyword_lazy",
     KW_OVERWRITE: "keyword_overwrite",
     KW_PUBLISH_DRAFTS: "keyword_publish_drafts",
+    **dict.fromkeys(ANSWERS, "keyword_answer"),
 }
 _FLAG_FIELDS: dict[SpanKind, str] = {
     "keyword_wip": "wip",
@@ -211,7 +228,7 @@ def _set_topic(state: PushLineState, value: str, start: int, end: int, diags: li
 def _removal(state: PushLineState, tok: Token, spans: list[Span]) -> None:
     """``-word``: switch a keyword off, or drop a reviewer."""
     inner, inner_start = tok.text[1:], tok.start + 1
-    kind = _classify_keyword(inner)
+    kind = None if inner.lower() in ANSWERS else _classify_keyword(inner)
     spans += [Span("minus", tok.start, inner_start), Span(kind or "reviewer", inner_start, tok.end)]
     if kind == "keyword_r":
         state.reviewers.clear()
@@ -263,6 +280,14 @@ def _keyword_value(
     return 2
 
 
+def _answer(state: PushLineState, tok: Token, spans: list[Span], diags: list[Diagnostic]) -> None:
+    answer = ANSWERS[tok.text.lower()]
+    spans.append(Span("keyword_answer", tok.start, tok.end))
+    if state.answer not in (None, answer):
+        diags.append(Diagnostic("error", f"`{tok.text}` contradicts the answer before it", tok.start, tok.end))
+    state.answer = answer
+
+
 def parse(buf: str) -> ParseResult:
     """Parse ``buf`` into a :class:`PushLineState` plus diagnostics and spans."""
     state = PushLineState()
@@ -291,6 +316,8 @@ def parse(buf: str) -> ParseResult:
         elif kind in _STRATEGIES:
             spans.append(Span(kind, tok.start, tok.end))
             state.strategy = _STRATEGIES[kind]
+        elif kind == "keyword_answer":
+            _answer(state, tok, spans, diags)
         else:
             spans.append(Span("reviewer", tok.start, tok.end))
             state.add_reviewer(tok.text)

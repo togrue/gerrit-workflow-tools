@@ -180,6 +180,8 @@ class ExistingChanges(NamedTuple):
     """Commits Gerrit already has as an older patchset of their change: a push sends them nowhere."""
     built_on_outdated: tuple[BuiltOnOutdated, ...] = ()
     """The lowest sent commit above each outdated one: its patch set would not sit on Gerrit's current one."""
+    reviewers: frozenset[str] = frozenset()
+    """Who already reviews one of these changes: accounts Gerrit has, known without asking."""
 
     def refusal(self) -> str | None:
         """Why a push without ``--force`` must not run: it would replace a newer patchset, or build on an old one."""
@@ -255,6 +257,7 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
         diverged=tuple(diverged),
         outdated=tuple(outdated),
         built_on_outdated=tuple(built_on_outdated),
+        reviewers=frozenset(account.slug for view in views.values() for account in view.reviewers or ()),
     )
 
 

@@ -22,11 +22,14 @@ from gerrit_workflow_tools.core.push import (
     push_argv,
     revise,
     sent_commits,
+    unknown_plan_reviewers,
 )
 from gerrit_workflow_tools.core.push_options import PushOptions
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
+from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import UsageError
-from gerrit_workflow_tools.push_input_line import KW_PUBLISH_DRAFTS, ParseResult, PushLineState
+from gerrit_workflow_tools.push_input_line import KW_PUBLISH_DRAFTS, ParseResult, PushLineState, format_canonical
+from gerrit_workflow_tools.push_input_prompt import LINE_HELP
 from gerrit_workflow_tools.push_preview import print_dry_run, print_gpush_preview, print_plan_status
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
@@ -86,8 +89,12 @@ def prompt_reviewers_line(
     message: str = "Push options: ",
     prefill: bool = True,
     suffix: str = "",
+    text: str | None = None,
 ) -> ParseResult:
-    """Open the highlighted push-options input line, prefilled from flags/registry unless *prefill* is off."""
+    """Open the highlighted push-options input line, prefilled from flags/registry unless *prefill* is off.
+
+    A *text* is the starting line instead, when the line opens again after help or a refused reviewer.
+    """
     from gerrit_workflow_tools.push_input_prompt import prompt_branch_push_options
 
     return prompt_branch_push_options(
@@ -100,6 +107,7 @@ def prompt_reviewers_line(
         message=message,
         prefill=prefill,
         suffix=suffix,
+        text=text,
     )
 
 
@@ -143,8 +151,11 @@ def apply_interactive_line(
     if not res.valid_for_apply:
         print("Invalid push options; nothing changed.", file=sys.stderr)
         return None
-    if not _line_sets_options(res.state):
+    if not _line_sets_options(res.state) and res.state.answer is None:
         print("No push options entered; nothing changed.")
+        return None
+    if res.state.answer is not None:
+        print(LINE_HELP if res.state.answer == "help" else "Nothing changed.")
         return None
     revised = revise(plan, _options_from_line(res.state), settings=settings)
     if save and prompt_save_reviewers():
@@ -160,49 +171,74 @@ def options_line_available() -> bool:
 _CONFIRM_LINE_MESSAGE = "Push options (Enter {}, Up: history, Ctrl-C cancels): "
 
 
+def _no_account(unknown: tuple[str, ...]) -> str:
+    """Why a push with reviewers *unknown* does not go up (:func:`unknown_plan_reviewers`)."""
+    return f"Gerrit has no account {', '.join(f'`{name}`' for name in unknown)}; nothing was pushed or set"
+
+
 def confirm_with_options_line(
-    cwd: Path, plan: PushPlan, args: argparse.Namespace, *, settings: Settings, drafts: int = 0
+    run: RunContext, plan: PushPlan, args: argparse.Namespace, *, drafts: int = 0
 ) -> PushPlan | None:
-    """The one-line push confirmation: Enter pushes, a typed line sets options first. ``None`` cancels.
+    """The one-line push confirmation: Enter (or ``y``) pushes, a typed line sets options first. ``None`` cancels.
 
     An empty line keeps the options *plan* already has, as the status line shows them. When the
     push sends no commit, Enter sets them on Gerrit, and the line says that instead. With *drafts*, the
     line starts with ``publish-drafts`` when *plan* publishes them, and the keyword decides whether it does.
+    ``n`` / ``q`` cancel, ``?`` / ``help`` print the grammar and ask again. A reviewer Gerrit has no account
+    for asks again too, with the line as typed: a refused line sets nothing.
     """
-    try:
+    text: str | None = None
+    while True:
+        try:
+            res = prompt_reviewers_line(
+                run.cwd,
+                plan.branch,
+                settings=run.settings,
+                change_ref=change_ref_of(run.cwd, plan, plan.tip_sha, settings=run.settings),
+                reviewer_flag_segments=list(args.reviewers),
+                session_strategy=_session_strategy(args),
+                message=_CONFIRM_LINE_MESSAGE.format("pushes" if sent_commits(plan) else "sets them on Gerrit"),
+                prefill=False,
+                suffix=KW_PUBLISH_DRAFTS if drafts and plan.options.publish_comments else "",
+                text=text,
+            )
+        except (EOFError, KeyboardInterrupt):
+            return None
+        state, text = res.state, format_canonical(res.state)
+        if state.answer == "cancel":
+            return None
+        if state.answer == "help":
+            print(LINE_HELP)
+            continue
+        revised = revise(plan, _options_from_line(state), settings=run.settings) if _line_sets_options(state) else plan
+        revised = publish_drafts_with(revised, state.publish_drafts) if drafts else revised
+        if unknown := unknown_plan_reviewers(run, revised):
+            print(f"error: {_no_account(unknown)}. Fix the name, or drop it with -{unknown[0]}", file=sys.stderr)
+            continue
+        return revised
+
+
+def prompt_initial_options(
+    cwd: Path, plan: PushPlan, args: argparse.Namespace, *, settings: Settings
+) -> PushPlan | None:
+    """``-i``: the push options line before the preview. ``None``: the line cancelled the push."""
+    text: str | None = None
+    while True:
         res = prompt_reviewers_line(
             cwd,
             plan.branch,
             settings=settings,
-            change_ref=change_ref_of(cwd, plan, plan.tip_sha, settings=settings),
+            change_ref=change_ref_of(cwd, plan, plan.branch, settings=settings),
             reviewer_flag_segments=list(args.reviewers),
             session_strategy=_session_strategy(args),
-            message=_CONFIRM_LINE_MESSAGE.format("pushes" if sent_commits(plan) else "sets them on Gerrit"),
-            prefill=False,
-            suffix=KW_PUBLISH_DRAFTS if drafts and plan.options.publish_comments else "",
+            text=text,
         )
-    except (EOFError, KeyboardInterrupt):
+        if res.state.answer != "help":
+            break
+        print(LINE_HELP)
+        text = format_canonical(res.state)
+    if res.state.answer == "cancel":
         return None
-    if _line_sets_options(res.state):
-        plan = revise(plan, _options_from_line(res.state), settings=settings)
-    return publish_drafts_with(plan, res.state.publish_drafts) if drafts else plan
-
-
-def prompt_initial_options(
-    cwd: Path,
-    plan: PushPlan,
-    args: argparse.Namespace,
-    *,
-    settings: Settings,
-) -> PushPlan:
-    res = prompt_reviewers_line(
-        cwd,
-        plan.branch,
-        settings=settings,
-        change_ref=change_ref_of(cwd, plan, plan.branch, settings=settings),
-        reviewer_flag_segments=list(args.reviewers),
-        session_strategy=_session_strategy(args),
-    )
     if _line_sets_options(res.state):
         plan = revise(plan, _options_from_line(res.state), settings=settings)
     if prompt_save_reviewers():
@@ -211,14 +247,14 @@ def prompt_initial_options(
 
 
 def confirm_gerrit_push(
-    cwd: Path,
-    plan: PushPlan,
-    args: argparse.Namespace,
-    *,
-    settings: Settings,
-    summary_highlighter: SummaryHighlighter,
+    run: RunContext, plan: PushPlan, args: argparse.Namespace, *, summary_highlighter: SummaryHighlighter
 ) -> PushPlan | int:
-    """Return the plan to execute, or an exit code when the command should stop."""
+    """Return the plan to execute, or an exit code when the command should stop.
+
+    Reviewers Gerrit has no account for stop the push before anything is sent: off a terminal (and
+    under ``--dry-run``) as a usage error, at the prompt by asking again.
+    """
+    settings = run.settings
     stack_printed = False
     drafts_defaulted = False
     while True:
@@ -236,9 +272,13 @@ def confirm_gerrit_push(
             stack_printed = True
         if args.dry_run:
             print_dry_run(plan)
+            if unknown := unknown_plan_reviewers(run, plan):
+                raise UsageError(_no_account(unknown))
             return 0
         require_confirmable(yes=args.yes)
         if args.yes:
+            if unknown := unknown_plan_reviewers(run, plan):
+                raise UsageError(_no_account(unknown))
             if plan.credential_error:
                 print(plan.credential_error, file=sys.stderr)
                 return 1
@@ -252,8 +292,8 @@ def confirm_gerrit_push(
         print()
         print_plan_status(plan)
         print()
-        if line:
-            revised = confirm_with_options_line(cwd, plan, args, settings=settings, drafts=drafts)
+        if line:  # the line asks Gerrit about its reviewers itself
+            revised = confirm_with_options_line(run, plan, args, drafts=drafts)
             act = "push" if revised else "cancel"
             plan = revised or plan
         else:
@@ -261,11 +301,14 @@ def confirm_gerrit_push(
             act = ask_push_action(asked, sends=bool(sent_commits(plan)))
             if act == "push" and asked:
                 plan = publish_drafts_with(plan, True)
+            if act == "push" and (unknown := unknown_plan_reviewers(run, plan)):
+                print(f"error: {_no_account(unknown)}. Answer r to change the reviewers", file=sys.stderr)
+                continue
         if act == "cancel":
             print("Push cancelled.", file=sys.stderr)
             return 0
         if act == "reviewers":
-            revised = apply_interactive_line(cwd, plan, args, settings=settings, save=False)
+            revised = apply_interactive_line(run.cwd, plan, args, settings=settings, save=False)
             if revised is not None:
                 plan = revised
             continue

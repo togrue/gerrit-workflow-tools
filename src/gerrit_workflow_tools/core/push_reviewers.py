@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
 from gerrit_workflow_tools.core.changeish import parse
@@ -55,6 +55,28 @@ class PushMark:
     reviewers: tuple[str, ...]
     wip: bool
     private: bool
+
+
+def unknown_reviewers(
+    service: GerritService, strategy: ReviewerStrategy, reviewers: Sequence[str], *, present: Iterable[str] = ()
+) -> tuple[str, ...]:
+    """The *reviewers* Gerrit has no account for: what a push must not send, asked before it sends anything.
+
+    Only for the ``push`` strategy, where ``%r=`` and the reviewer batch on changes Gerrit already
+    has take accounts; ``lazy`` and ``overwrite`` add over REST after the push, where a group is a
+    reviewer too (``spec/commands/push.md``). A name already on a pushed change (*present*) is
+    known without a request. Best effort: without credentials, or when Gerrit cannot be asked,
+    nothing is known and nothing is refused, and Gerrit judges the push itself.
+    """
+    known = {name.casefold() for name in present}
+    asked = [name for name in reviewers if name.casefold() not in known]
+    if strategy != ReviewerStrategy.PUSH or not asked or not service.credentials_configured:
+        return ()
+    try:
+        ids = reviewer_account_ids(service.rest, asked)
+    except GerritApiError:
+        return ()
+    return tuple(name for name, account_id in ids.items() if account_id is None)
 
 
 def needs_rest_assignment(strategy: ReviewerStrategy, reviewers: Sequence[str]) -> bool:

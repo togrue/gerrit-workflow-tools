@@ -30,7 +30,7 @@ def _pushed(stack_repo: Path, *, updated: bool = True) -> tuple[ChangeStore, lis
     details = build_details_by_change_id(rows)
     if updated:
         at_older_patchsets(details, stack_repo)
-    return ChangeStore(details), rows, list(details)
+    return ChangeStore(details, accounts={7: {"_account_id": 7, "username": "alice"}}), rows, list(details)
 
 
 def _with_draft(store: ChangeStore, key: str) -> None:

@@ -544,7 +544,10 @@ def test_gpush_an_unknown_reviewer_is_said_once_with_gerrits_reason(
 
     rows = commits_in_range(stack_repo, "main..feature")[:2]
     _rejected_as_unchanged(monkeypatch)
-    store = _UnknownReviewer(build_details_by_change_id(rows, per_index_overrides=[{"reviewers": []}] * 2))
+    store = _UnknownReviewer(
+        build_details_by_change_id(rows, per_index_overrides=[{"reviewers": []}] * 2),
+        accounts={7: {"_account_id": 7, "username": "nosuchuser"}},  # an account it has, yet refuses to add
+    )
     code, _out, err = run_cli(
         stack_repo, gpush_main, ["-y", "--reviewers", "nosuchuser", rows[1].sha], monkeypatch, gerrit=store
     )
@@ -832,7 +835,9 @@ def test_gpush_show_attributes_shows_arrow_when_reviewers_differ(
         gpush_main,
         ["--dry-run", "--reviewers", "alice", "--reviewers", "bob"],
         monkeypatch,
-        gerrit=ChangeStore(at_older_patchsets(details, stack_repo)),
+        gerrit=ChangeStore(
+            at_older_patchsets(details, stack_repo), accounts={7: {"_account_id": 7, "username": "bob"}}
+        ),
     )
     assert code == 0
     assert "->" in out

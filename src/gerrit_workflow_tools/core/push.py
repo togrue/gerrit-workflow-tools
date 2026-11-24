@@ -40,6 +40,7 @@ from gerrit_workflow_tools.core.push_reviewers import (
     credential_error,
     needs_rest_assignment,
     push_marks,
+    unknown_reviewers,
 )
 from gerrit_workflow_tools.core.push_unchanged import (
     OutdatedChange,
@@ -77,6 +78,8 @@ class PushPlan:
     wip_from: str | None = None
     """The first commit pushed as work-in-progress; those below it go up ready. ``None``: the options
     decide for every commit."""
+    known_reviewers: frozenset[str] = frozenset()
+    """Who already reviews one of the pushed changes: names Gerrit has an account for, known without asking."""
 
 
 @dataclass(frozen=True)
@@ -147,6 +150,12 @@ def revise(plan: PushPlan, options: PushOptions, *, settings: Settings) -> PushP
         options=options,
         credential_error=credential_error(options.strategy, options.reviewers, settings),
     )
+
+
+def unknown_plan_reviewers(run: RunContext, plan: PushPlan) -> tuple[str, ...]:
+    """The reviewers *plan* asks for that Gerrit has no account for (:func:`unknown_reviewers`)."""
+    options = plan.options
+    return unknown_reviewers(run.gerrit, options.strategy, options.reviewers, present=plan.known_reviewers)
 
 
 def changes_nothing(plan: PushPlan) -> bool:
@@ -307,6 +316,7 @@ def prepare(
         outdated=existing.outdated,
         drafts=dict(existing.drafts),
         wip_from=wip_from,
+        known_reviewers=existing.reviewers,
     )
     return publish_drafts_with(plan, publish_comments)
 
