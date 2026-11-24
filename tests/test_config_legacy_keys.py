@@ -18,13 +18,17 @@ from gerrit_workflow_tools.core.upstream import append_recent_upstream_abbrev, r
 
 @pytest.fixture(autouse=True)
 def _capture_config_warnings(caplog: pytest.LogCaptureFixture) -> Iterator[None]:
-    """The package logger may not propagate (``--debug-log`` set-up in another test), so hook it directly."""
+    """Hook the config logger directly, and only directly: whether the package logger propagates
+    to the root (where caplog also listens) depends on which test configured logging first."""
     log = logging.getLogger("gerrit_workflow_tools.core.config")
+    propagate = log.propagate
+    log.propagate = False
     log.addHandler(caplog.handler)
     try:
         yield
     finally:
         log.removeHandler(caplog.handler)
+        log.propagate = propagate
 
 
 def _warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
