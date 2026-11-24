@@ -267,8 +267,13 @@ export async function run(): Promise<void> {
     const theirs = await chainRow("Add retry to the uploader");
     await press(
       "Click \"Add retry to the uploader\" under To review",
-      "The Change view shows change 900: what it needs from you, its files, its comments.",
-      exec("ger.openChange", theirs),
+      "The Change view shows change 900: what it needs from you, its files, its comments. Not yours to reword, its message is plain text, its Change-Id under it.",
+      async () => {
+        await exec("ger.openChange", theirs)();
+        assert.ok(await until(() => api.changeView.vm().message !== undefined), "the message comes");
+        const message = api.changeView.vm().message;
+        assert.deepEqual([message?.plain, message?.text.includes("Change-Id:"), message?.changeId.startsWith("I")], [true, false, true], "plain text, the Change-Id out of it");
+      },
     );
     await press("Inline Open in Gerrit on change 900", "The browser opens change 900 on Gerrit.", exec("ger.openInGerrit", theirs));
     await press(
@@ -604,10 +609,17 @@ export async function run(): Promise<void> {
     });
     await press(
       "Change › edit the commit message of \"test! temporary experiment\" › Apply, then Undo",
-      "The commit gets the new message and keeps its Change-Id, though the text typed had none; the commits above get new ids, nothing else changes. Undo puts the old message back.",
+      "The box holds the message without its Change-Id. The commit gets the new message and keeps its Change-Id, though the text typed named another; the commits above get new ids, nothing else changes. Undo puts the old message back.",
       async () => {
         const row = await stackRow("test! temporary experiment");
-        await api.changeView.reword(row.sha, "test! a better name\n\nAnd why.", () => undefined);
+        const changeId = api.model.stack?.commits.find((c) => c.sha === row.sha)?.change_id;
+        await exec("ger.openChange", row)();
+        assert.ok(await until(() => api.changeView.vm().message?.changeId === changeId), "the message comes, its Change-Id out of the box");
+        assert.equal(api.changeView.vm().message?.text.includes("Change-Id:"), false);
+        await page.receive({ type: "message", text: `test! a better name\n\nAnd why.\n\nChange-Id: I${"f".repeat(40)}` });
+        // Undo is pressed on the notification at once: the reworded commit is the one HEAD was on before it.
+        const message = execFileSync("git", ["log", "-1", "--format=%B", "--grep=^test! a better name", "HEAD@{1}"], { cwd: repo, encoding: "utf8" });
+        assert.equal(message.trim(), `test! a better name\n\nAnd why.\n\nChange-Id: ${changeId}`, "the commit keeps its own Change-Id, as the last trailer");
       },
       [{ button: "Undo" }],
     );

@@ -1,6 +1,7 @@
 // "Change": the view model of src/changeRows.ts. The commit message is a text box (Apply writes
-// it to the commit), two pickers choose the version and what it is compared with, and the
-// files, comment chains and CI findings are rows that open what they name.
+// it to the commit; its Change-Id is a read-only line under it), or plain text where it cannot be
+// reworded. Two pickers choose the version and what it is compared with, and the files, comment
+// chains and CI findings are rows that open what they name.
 
 (function () {
   const { h, icon, badge, actions, info, post, panel, listen, getState, setState } = window.ger;
@@ -32,8 +33,9 @@
     const note = h("span", { class: "detail" });
     const author = h("span", { class: "detail" });
     const bar = h("div", { class: "message-bar" }, apply, revert, note);
-    const block = h("div", { class: "message-block" }, h("div", { class: "heading" }, h("span", { class: "label" }, "Commit message"), author), box, bar);
-    const state = { key, base: "", block, box, author };
+    const changeId = h("div", { class: "change-id" });
+    const block = h("div", { class: "message-block" }, h("div", { class: "heading" }, h("span", { class: "label" }, "Commit message"), author), box, changeId, bar);
+    const state = { key, base: "", block, box, author, changeId };
     const fit = () => {
       box.rows = Math.max(3, Math.min(16, box.value.split("\n").length + 1));
     };
@@ -70,7 +72,25 @@
     return state;
   }
 
+  /** The Change-Id trailer, out of the box: always shown, selectable, never edited. Apply puts it back on. */
+  function changeIdLine(element, changeId) {
+    element.textContent = changeId ? `Change-Id: ${changeId}` : "";
+    element.hidden = !changeId;
+    return element;
+  }
+
+  /** A message that cannot be reworded here: plain wrapped text, no box, no note saying so. */
+  function plainBlock(message) {
+    editor = null;
+    const heading = h("div", { class: "heading" }, h("span", { class: "label" }, "Commit message"), h("span", { class: "detail" }, message.author));
+    const text = h("div", { class: "message-text", "aria-label": "Commit message" }, message.text);
+    return h("div", { class: "message-block" }, heading, text, changeIdLine(h("div", { class: "change-id" }), message.changeId));
+  }
+
   function messageBlock(message) {
+    if (message.plain) {
+      return plainBlock(message);
+    }
     if (!editor || editor.key !== message.key) {
       editor = buildEditor(message.key);
       editor.box.value = drafts[message.key] ?? message.text;
@@ -82,16 +102,21 @@
     editor.box.readOnly = Boolean(message.readOnly);
     editor.box.title = message.readOnly || "";
     editor.author.textContent = message.author;
+    changeIdLine(editor.changeId, message.changeId);
     editor.sync();
     return editor.block;
   }
 
   /**
    * The message's place until it comes: the block drawn empty, as tall as a change's shortest
-   * message (subject, blank line, Change-Id), its bar saying what the real one will. A longer
-   * message grows the box when it comes.
+   * message (subject, blank line, a trailer), its bar saying what the real one will. A longer
+   * message grows the box when it comes. One that will be plain text holds its place without a box.
    */
-  function messagePlace(readOnly) {
+  function messagePlace(readOnly, plain) {
+    if (plain) {
+      const heading = h("div", { class: "heading" }, h("span", { class: "label" }, "Commit message"), h("span", { class: "detail" }, "loading…"));
+      return h("div", { class: "message-block loading" }, heading, h("div", { class: "message-text" }, "\u00a0"));
+    }
     const box = h("textarea", { class: "message", rows: "4", readonly: "", disabled: "", tabindex: "-1", "aria-hidden": "true" });
     const bar = h("div", { class: "message-bar" }, h("span", { class: "detail" }, readOnly || ""));
     const heading = h("div", { class: "heading" }, h("span", { class: "label" }, "Commit message"), h("span", { class: "detail" }, "loading…"));
@@ -374,7 +399,7 @@
     if (vm.message) {
       parts.push(messageBlock(vm.message));
     } else if (vm.loading && vm.loading.message) {
-      parts.push(messagePlace(vm.loading.readOnly));
+      parts.push(messagePlace(vm.loading.readOnly, vm.loading.plain));
     }
     if (vm.versions && vm.modes) {
       parts.push(h("div", { class: "pickers" }, picker("Show", vm.versions, "version"), picker("Compare", vm.modes, "mode")));

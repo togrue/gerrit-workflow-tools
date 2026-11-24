@@ -352,6 +352,32 @@ def test_reword_changes_one_message_and_nothing_else(stack_repo: Path) -> None:
     assert [c.sha for c in stack_rows_mb_to_head(stack_repo)] == [row.sha for row in rows]
 
 
+def test_reword_of_the_message_diff_serves_keeps_the_change_id_typed_over(stack_repo: Path) -> None:
+    """``/diff`` serves the message without its Change-Id for an editor; ``keep_change_id`` puts it back."""
+    store, _keys, rows = _gerrit(stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+    shown = _get(api, "/diff", rev=rows[1].sha)
+    assert shown["change_id"] == rows[1].change_id
+    assert "Change-Id" not in shown["message_text"]
+    assert shown["message"].startswith(shown["message_text"])
+
+    # Applied unchanged, nothing is rewritten.
+    same = _post(api, "/stack/reword", {"rev": rows[1].sha, "message": shown["message_text"], "keep_change_id": True})
+    assert same["head"] == same["previous_head"]
+
+    other = "I" + "f" * 40
+    typed = f"A better subject\n\nSigned-off-by: Me <me@example.com>\nChange-Id: {other}\n"
+    _post(api, "/stack/reword", {"rev": rows[1].sha, "message": typed, "keep_change_id": True})
+    after = stack_rows_mb_to_head(stack_repo)
+    assert after[1].body == f"A better subject\n\nSigned-off-by: Me <me@example.com>\nChange-Id: {rows[1].change_id}"
+
+    # Cleared, or only a Change-Id typed: empty, refused, nothing rewritten.
+    for message in ("  \n", f"Change-Id: {other}"):
+        with pytest.raises(ReorderRefusal, match="message is empty"):
+            _post(api, "/stack/reword", {"rev": after[1].sha, "message": message, "keep_change_id": True})
+    assert [c.sha for c in stack_rows_mb_to_head(stack_repo)] == [c.sha for c in after]
+
+
 def test_reword_refuses_an_empty_message_and_a_commit_outside_the_stack(stack_repo: Path) -> None:
     store, _keys, rows = _gerrit(stack_repo)
     api = GerApi(stack_repo, gerrit=store)

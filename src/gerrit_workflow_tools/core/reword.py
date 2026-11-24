@@ -11,7 +11,11 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from gerrit_workflow_tools.core.change_id import append_change_id_footer, extract_valid_change_id
+from gerrit_workflow_tools.core.change_id import (
+    append_change_id_trailer,
+    extract_valid_change_id,
+    strip_change_id_lines,
+)
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none, git
 from gerrit_workflow_tools.core.git_state import current_branch
@@ -71,13 +75,18 @@ def move_head(cwd: Path | str, new_head: str) -> None:
         )
 
 
-def reword_commit(cwd: Path | str, rev: str, message: str, *, settings: Settings) -> StackRewrite:
+def reword_commit(
+    cwd: Path | str, rev: str, message: str, *, settings: Settings, keep_change_id: bool = False
+) -> StackRewrite:
     """Give the local stack commit *rev* (a full or abbreviated id) the commit message *message*.
 
-    A message that lost the commit's **Change-Id** footer gets it back: rewording must not
-    turn the commit into another Gerrit change. One that names another Change-Id is taken as
-    written. Raises :class:`ReorderRefusal`, with nothing changed, for an empty message, a
-    commit that is not in the stack, a rebase underway or a detached ``HEAD``.
+    A message that lost the commit's **Change-Id** footer gets it back, as the last trailer:
+    rewording must not turn the commit into another Gerrit change. One that names another
+    Change-Id is taken as written, unless *keep_change_id*: then every ``Change-Id:`` line in
+    *message* is dropped and the commit keeps its own (*message* is the text an editor showed
+    without it, ``split_change_id_footer``). Raises :class:`ReorderRefusal`, with nothing
+    changed, for an empty message (a lone Change-Id dropped counts), a commit that is not in
+    the stack, a rebase underway or a detached ``HEAD``.
     """
     refuse_unless_on_the_branch(cwd)
     snapshot = get_stack_snapshot(cwd, settings=settings)
@@ -85,11 +94,13 @@ def reword_commit(cwd: Path | str, rev: str, message: str, *, settings: Settings
     if len(matches) != 1:
         raise ReorderRefusal(f"{rev[:12]!r} is not a commit of the local stack (the stack may have changed: reload it)")
     target = matches[0]
+    if keep_change_id and target.valid_change_id:
+        message = strip_change_id_lines(message)
     text = "\n".join(line.rstrip() for line in message.strip().splitlines())
     if not text:
         raise ReorderRefusal("the commit message is empty; the commit was left as it was")
     if target.valid_change_id and not extract_valid_change_id(text):
-        text = append_change_id_footer(text, target.valid_change_id).strip()
+        text = append_change_id_trailer(text, target.valid_change_id)
     head = commit_sha_or_none(cwd, "HEAD") or ""
     if text == target.body.strip():
         return StackRewrite(list(snapshot.commits), head)

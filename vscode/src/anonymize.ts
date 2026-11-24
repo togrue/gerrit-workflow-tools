@@ -63,6 +63,8 @@ const PERSON = string((text, names) => names.person(text));
 const SHA = string((text, names) => names.hex(text));
 const CHANGE_ID = string((text, names) => names.changeId(text));
 const KEY = string((text, names) => names.key(text));
+/** The Change-Id beside the commit message: none stays none. */
+const FOOTER_CHANGE_ID = string((text, names) => (text ? names.changeId(text) : ""));
 const URL = string((text, names) => names.url(text));
 const ID = string((text, names) => names.id(text));
 const PATH = string((text, names) => (NOT_FILES.includes(text) ? text : names.path(text)));
@@ -264,7 +266,7 @@ const CHANGE: Shape = {
   /** An error as git or Gerrit worded it. */
   problem: TEXT,
   key: KEY,
-  loading: { message: KEEP, readOnly: READ_ONLY_WORDS },
+  loading: { message: KEEP, readOnly: READ_ONLY_WORDS, plain: KEEP },
   head: {
     icon: ICON,
     tone: TONE,
@@ -285,7 +287,7 @@ const CHANGE: Shape = {
       detail: ours([...Object.values(SYNC_WORDS), "comments and CI below are about Gerrit's version"]),
     },
   ],
-  message: { key: KEY, text: TEXT, author: PERSON, readOnly: READ_ONLY_WORDS },
+  message: { key: KEY, text: TEXT, changeId: FOOTER_CHANGE_ID, author: PERSON, readOnly: READ_ONLY_WORDS, plain: KEEP },
   versions: { options: [{ value: VERSION, label: VERSION_LABEL, disabled: KEEP }], selected: VERSION },
   modes: { options: [{ value: MODE, label: ours([...Object.values(MODES), `${MODES.reviewed} (you have not reviewed it)`]), disabled: KEEP }], selected: MODE },
   hint: {
