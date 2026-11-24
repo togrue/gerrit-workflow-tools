@@ -534,7 +534,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/ci_paths.py` | Resolving **CI finding** paths to the files of a commit (`tracked_paths`, `resolve_finding_paths`) |
 | `core/ci_jenkins.py` | The built-in Jenkins CI content provider |
 | `core/ci_http.py` | `CiHttp`: the HTTP seam CI content providers fetch through; `UrllibCiHttp`, CI credential headers |
-| `core/http_connect.py` | Opening connections to a host with several addresses: `connect` races them and remembers the one that answered, `urlopen` uses it and follows a redirect to another origin without the credentials |
+| `core/http_connect.py` | Opening connections to a host with several addresses: `connect` races them and remembers the one that answered, `urlopen` uses it and follows a redirect to another origin without the credentials, and why a connection failed, in a few words (`why_unreachable`) |
 | `core/ger_registry.py` | The shared two-tier loader for `.ger/<domain>/` extension registries; the local tier only when trusted. Imports a registry and its helpers only from its `RegistrySource`, never from disk or bytecode |
 | `core/registry_trust.py` | Whether a project-local registry may run: `ger.scriptsDir` from uncloned config, or a trusted digest of its code (`record_trust`, `untrusted_local_registries`); `RegistrySource` (`read_registry_source`: a registry's sources, read once, what is hashed is what runs); `source_digest` |
 | `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes; `load_shown_commits` (overlay, comment chains and CI content per target; a change that waits on your review leads with that) |
