@@ -3,7 +3,7 @@
 | | |
 |--|--|
 | **Status** | **Implemented** |
-| **Module** | `cli_review.py`; checkout and review state in `core/review_checkout.py`; votes on `CommentApi` in `core/gerrit/comments.py`; the chain from `GerritRest.get_related` |
+| **Module** | `cli_review.py`; the vote in `review_vote.py`; checkout and review state in `core/review_checkout.py`; votes on `CommentApi` in `core/gerrit/comments.py`; the chain from `GerritRest.get_related` |
 | **Requires** | A git repository, `ger.webUrl`, credentials |
 
 Review someone else's change in your editor. `ger review` checks the change out, shows *what this commit changed* to every git tool you already use, walks up and down its review chain, and publishes your comments with your vote.

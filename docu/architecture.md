@@ -603,6 +603,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/style.py` | ANSI color and hyperlink helpers, the run's color and hyperlink mode, UTF-8 stdio |
 | `render/download_meter.py` | The stderr meter for bytes still arriving (`DownloadMeter`) |
 | `summary_highlight.py` | Subject highlighting from stop/warning patterns: the run's highlighter (`run_summary_highlighter`) and the one for a branch's stack |
+| `review_vote.py` | What `ger review --vote` lists, asks and sends (`vote`): your drafts and the votes, per change |
 | `push_preview.py` | What `ger push` shows before it pushes: commit list, boundary notice, status line, the dry run |
 | `push_confirm.py` | What `ger push` asks: the confirm loop (ADR-0008), the push-options line, the Y/n/r question, `-i`, saving reviewers |
 | `push_outcome.py` | What `ger push` reports once `git push` ran (git's own output, errors, what it assigned, what it set over REST), or why it refused |

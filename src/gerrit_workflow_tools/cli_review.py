@@ -16,15 +16,12 @@ from gerrit_workflow_tools.cli_common import (
     add_verbose_and_debug_log_args,
     ask_choice,
     changeish_help,
-    confirm_publish,
     init_cli_runtime,
     may_prompt,
     run_cli_command,
 )
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import ConfigWrite, apply_config_write
-from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
-from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_patchset import resolve_patchset
@@ -43,9 +40,9 @@ from gerrit_workflow_tools.core.review_checkout import (
 from gerrit_workflow_tools.core.review_delta import ReviewDelta, load_review_delta
 from gerrit_workflow_tools.core.review_target import related_chain_numbers
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.core.votes import VOTE_HELP, parse_votes
-from gerrit_workflow_tools.render.comments import drafts_in, format_pending_drafts
+from gerrit_workflow_tools.core.votes import VOTE_HELP
 from gerrit_workflow_tools.render.review_json import review_state_json
+from gerrit_workflow_tools.review_vote import vote
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -207,48 +204,6 @@ def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: Re
     return int(ExitCode.OK)
 
 
-def _vote_target(args: argparse.Namespace, service: GerritService, cwd: Path) -> tuple[str, int, int | None]:
-    """``(triplet, number, reviewed patchset)`` to vote on: ``--change``, else the review going on."""
-    if args.change is not None:
-        target, _url = resolve_patchset(service, cwd, args.change, None)
-        return target.key, target.number, None
-    state = find_review(cwd, service.settings)
-    if state is None:
-        raise ReviewUsageError("no review going on here: name the change with --change")
-    return state.key, state.number, state.patch_set
-
-
-def _vote(args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritService, cwd: Path) -> int:
-    votes = parse_votes(args.vote)
-    if publish_blocked() and not args.dry_run:
-        p.error(f"publishing is blocked: {PUBLISH_GUARD_ENV} is set in the environment")
-    key, number, reviewed = _vote_target(args, service, cwd)
-    # Only a review going on names a patchset the vote could miss; --change was just read from Gerrit.
-    current = reviewed and ChangeView.from_payload(service.rest.get_change(key)).current_revision_number
-    if current != reviewed:
-        print(
-            f"change {number} is at patchset {current}, you reviewed {reviewed}: run ger review {number} first",
-            file=sys.stderr,
-        )
-        return int(ExitCode.REFUSED)
-    chains = service.comments.chains_with_drafts(key)
-    count = len(drafts_in(chains))
-    voted = ", ".join(f"{label}{value:+d}" for label, value in votes.items())
-    if not args.json_:
-        print("\n".join(format_pending_drafts(f"change {number}: {count} draft(s), {voted}", chains)))
-    if args.dry_run:
-        return int(ExitCode.OK)
-    if not confirm_publish(args, f"{count} draft(s) and {voted} on {number}"):
-        return int(ExitCode.REFUSED)
-    message = "\n\n".join(args.message) if args.message else None
-    service.comments.publish_drafts(key, message=message, labels=votes)
-    if args.json_:
-        print(json.dumps({"change": key, "drafts": count, "labels": votes, "status": "published"}, indent=2))
-    else:
-        print(f"published {count} draft(s) and {voted} on {number}")
-    return int(ExitCode.OK)
-
-
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
     """Check out, stage, walk, vote on or leave a review."""
     return run_cli_command(lambda: _run(argv, gerrit=gerrit))
@@ -288,7 +243,7 @@ def _act(args: argparse.Namespace, p: argparse.ArgumentParser, run: RunContext) 
         return int(ExitCode.OK)
     service = run.gerrit
     if args.vote is not None:
-        return _vote(args, p, service, cwd)
+        return vote(args, p, service, cwd)
     return _open(args, service, cwd, state)
 
 
