@@ -313,9 +313,9 @@ def _run_interactive_stack_rebase(
         return code
     rebase_fork, _, _ = merge_base_with_target(cwd, branch)
 
-    env = {"GEDIT_FULL_SHA": full, "GEDIT_SHORT_SHA": short, "GEDIT_ACTION": action}
+    env = {"GER_EDIT_SHORT_SHA": short, "GER_EDIT_ACTION": action}
     if args.debug_log:
-        env["GEDIT_DEBUG_LOG"] = "1"
+        env["GER_EDIT_DEBUG_LOG"] = "1"
     logger.debug("ger edit rebasing onto %s to stop at %s", rebase_fork[:8], short)
     returncode = run_interactive_rebase(
         run,

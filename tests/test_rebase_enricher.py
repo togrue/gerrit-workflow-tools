@@ -390,7 +390,7 @@ def test_main_missing_args_returns_1():
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_editor_prefers_grebase_editor(tmp_path: Path, monkeypatch):
+def test_resolve_editor_prefers_the_rebase_editor_variable(tmp_path: Path, monkeypatch):
     from gerrit_workflow_tools.rebase_enricher import _resolve_editor
 
     monkeypatch.setenv("GREBASE_EDITOR", "myeditor")

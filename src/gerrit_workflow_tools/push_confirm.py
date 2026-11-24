@@ -30,7 +30,7 @@ from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.push_input_line import KW_PUBLISH_DRAFTS, ParseResult, PushLineState, format_canonical
 from gerrit_workflow_tools.push_input_prompt import LINE_HELP
-from gerrit_workflow_tools.push_preview import print_dry_run, print_gpush_preview, print_plan_status
+from gerrit_workflow_tools.push_preview import print_dry_run, print_plan_status, print_push_preview
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 
@@ -263,7 +263,7 @@ def confirm_gerrit_push(
             argv[-1],
         )
         if not stack_printed:
-            print_gpush_preview(plan, summary_highlighter=summary_highlighter)
+            print_push_preview(plan, summary_highlighter=summary_highlighter)
             stack_printed = True
         if args.dry_run:
             print_dry_run(plan)
