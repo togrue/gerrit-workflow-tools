@@ -7,9 +7,11 @@ from dataclasses import dataclass
 from gerrit_workflow_tools.core.annotated_stack import NextStep, NextStepKind, StackOverview
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
+from gerrit_workflow_tools.core.rebase_next_step import CONTINUE
 from gerrit_workflow_tools.core.rebase_state import RebaseProgress, RebaseStop
 from gerrit_workflow_tools.core.rebasing_stack import RebaseStep, RebasingStack
 from gerrit_workflow_tools.core.upstream_moved import UpstreamMoved
+from gerrit_workflow_tools.core.words import counted, plural
 from gerrit_workflow_tools.render.commit_row import (
     attention_column,
     continuation_indent,
@@ -59,10 +61,6 @@ def _stat(count: int, label: str, color: str) -> str:
     return color_text(str(count), color) + color_text(f" {label}", ANSI_DIM)
 
 
-def _plural(count: int, noun: str) -> str:
-    return noun if count == 1 else f"{noun}s"
-
-
 def summary_line(overview: StackOverview, *, width: int | None = None) -> str:
     """``summary: 4 on Gerrit · 1 to upload · …``: each count names what it counts; broken to fit *width*."""
     commits = overview.view.commits
@@ -80,7 +78,7 @@ def summary_line(overview: StackOverview, *, width: int | None = None) -> str:
         (merged, "merged", ANSI_GREEN),
         (abandoned, "abandoned", ANSI_RED),
         (sum(1 for c in commits if c.pushed and Attention.CI_FAILED in c.attention_reasons), "failed CI", ANSI_RED),
-        (commented, f"{_plural(commented, 'commit')} with comments", ANSI_YELLOW),
+        (commented, f"{plural(commented, 'commit')} with comments", ANSI_YELLOW),
         (sum(1 for c in commits if Attention.WIP in c.attention_reasons), "WIP", ANSI_YELLOW),
     )
     stats = [_stat(count, label, color) for count, label, color in counts if count]
@@ -129,10 +127,10 @@ def _step_text(step: NextStep, moved: UpstreamMoved | None) -> str:
         case NextStepKind.OUTDATED:
             return f"next: {sha} has a newer patchset on Gerrit: take it with `ger checkout change:{n} --update`"
         case NextStepKind.UPLOAD:
-            return f"next: {count} {_plural(count, 'commit')} to upload with `ger push`"
+            return f"next: {count} {plural(count, 'commit')} to upload with `ger push`"
         case NextStepKind.WIP:
             push = "ger push --all --ready" if step.beyond_boundary else "ger push --ready"
-            return f"next: {count} WIP {_plural(count, 'change')} on Gerrit; ready them with `{push}`"
+            return f"next: {count} WIP {plural(count, 'change')} on Gerrit; ready them with `{push}`"
         case NextStepKind.CHAIN_BLOCKED:
             return chain_blocked_text(step.commits[0])
     raise AssertionError(step.kind)
@@ -208,7 +206,7 @@ _STOPS = {
         "stopped{at} to edit it, and HEAD has moved on from it: the commits above it were made at the stop"
     ),
     RebaseStop.CONFLICT: "stopped on a conflict{at} in {paths}",
-    RebaseStop.RESOLVED: "stopped{at} with its conflicts resolved, ready for `git rebase --continue`",
+    RebaseStop.RESOLVED: "stopped{at} with its conflicts resolved, ready for " + CONTINUE,
     RebaseStop.PAUSED: "stopped between commits",
 }
 
@@ -229,5 +227,5 @@ def rebase_note(progress: RebaseProgress, rebasing: RebasingStack | None) -> str
         )
         return f"{whose}; this shows {shown}."
     todo = rebasing.steps.count(RebaseStep.TODO)
-    rest = f"; {todo} commit{'s' if todo != 1 else ''} still to replay, shown as before" if todo else ""
+    rest = f"; {counted(todo, 'commit')} still to replay, shown as before" if todo else ""
     return f"{whose}{rest}."

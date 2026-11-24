@@ -113,7 +113,7 @@ flowchart TB
 | Layer | Location | Responsibility |
 |-------|----------|----------------|
 | **Entry** | `cli_ger.py` | Lazy command dispatch, global `--refresh` → `GER_CACHE_REFRESH` |
-| **CLI** | `cli_*.py`, `cli_common.py` | Argparse, exit codes, stderr/stdout UX, logging/color init |
+| **CLI** | `cli_*.py`, `cli_common.py`, `cli_args.py` | Argparse, exit codes, stderr/stdout UX, logging/color init |
 | **Presentation** | `render/`, `summary_highlight.py`, push/rebase helpers | Column layout, ANSI color and hyperlinks (`render/style.py`), interactive push prompt, `GIT_SEQUENCE_EDITOR` wrappers |
 | **Service** | `server/` | A peer of the CLI layer: HTTP in, core call, JSON out. Imports core, `render/` JSON builders and `cli_common.failure_exit`; nothing imports it but `cli_serve.py` |
 | **Core** | `core/` (except `core/gerrit/`) | Stack math, config, Change-Id rules, status model, git subprocess wrapper |
@@ -443,7 +443,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | Module | Owns |
 |--------|------|
 | `cli_ger.py` | Dispatcher: the command registry `_COMMANDS`, aliases, global `--refresh` |
-| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), shared argparse groups (`add_output_format_args`: `--json` / `--format` / `--ai`, read back by `output_format`), `confirm_publish` (the one publish confirmation: `-y`, a prompt, or exit 2 without one) |
+| `cli_common.py` | Shared runtime: `ExitCode`, `init_cli_runtime` (the run context; `refresh_requested`), `run_cli_command`, `failure_exit` (which failure is worth which code), `may_prompt` (whether a command may ask), `require_prompt` (the one answer, exit 2, when a required prompt has nobody to ask), `say_cancelled` (the one word for a declined prompt), `confirm_publish` (the one publish confirmation: `-y`, a prompt, or exit 2 without one) |
+| `cli_args.py` | The argparse groups several commands share, one definition per flag, and the help-text style: `add_output_format_args` (`--json` / `--format` / `--ai`, read back by `output_format`), `add_message_args` (`-m` / `-F`, read back by `read_message`), `add_change_option`, `changeish_help`, `add_color_args`, `add_verbose_and_debug_log_args`, `add_follow_merges_args` |
 | `cli_notes.py` | Transparency notes on stderr, dimmed: `print_note`, `print_resolution_note` (how a changeish resolved) |
 | `cli_terminal.py` | Asking at the terminal: whether the CLI can ask (`stdin_is_terminal`, `prompt_toolkit_can_run`: Windows `NUL` is no console; `assume_yes`: `GER_ASSUME_YES`) and the plain questions every prompt's reply is parsed by (`ask_choice`, `confirm`) |
 | `cli_logging.py` | Diagnostic logging for `--debug-log`: `configure_logging` (package log level, the call trace, Gerrit response bodies) |
@@ -454,7 +455,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `cli_reply.py` | `ger reply` |
 | `cli_comment.py` | `ger comment` |
 | `cli_review.py` | `ger review` |
-| `cli_checkout.py` | `ger checkout`: the update question and what it says |
+| `cli_checkout.py` | `ger checkout`: the update question |
 | `cli_push.py` | `ger push` |
 | `cli_edit.py` | `ger edit`, `ger reword` |
 | `cli_rebase.py` | `ger rebase` |
@@ -477,6 +478,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/run_context.py` | The **run context**: `RunContext` (the repository and the Gerrit service of one command run or one request; `run.cwd`, `run.settings`, `run.worktree` and `run.stack` read through them) |
 | `core/repository.py` | The repository a run works in, each answer read once for the run: `Repository` (its `worktree`, `working_branch`, `stack_branch`, `root` and **stack context**, `stack`) |
 | `core/votes.py` | The vote grammar (`+1` for Code-Review, `CR+1`, `V=-1`): `parse_votes` for every command that votes, `format_votes`, and `votes_ruled_out` against a change's `ChangeView.permitted_votes` |
+| `core/words.py` | How a count is said, for core's messages and render's lines alike: `counted` (`1 draft`, `2 drafts`; never `draft(s)`) and `plural` (the noun alone) |
 | `core/usage.py` | `UsageError`: the command cannot run as asked (bad input, or a state it refuses to start from), exit `USAGE`; `Refusal`: ger will not go on without the user's decision (`ReviewRefusal`, `CheckoutRefusal`, `ReorderRefusal`), exit `REFUSED`, HTTP 409 |
 | `core/git_run.py` | Running git: the subprocess wrapper (`git`, `git_out`, `commit_sha_or_none`, `GitError`) |
 | `core/config.py` | `Settings`: one `git config --list --show-scope` snapshot (values + winning scope) |
@@ -488,13 +490,13 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/editor_extension.py` | The VS Code extension that goes with ger: the one a release bundles (`bundled_extension`), a checkout's sources (`source_extension`) and packaging them (`build_extension`), the editor's CLI (`find_editor_cli`), and installing it |
 | `core/git_state.py` | Repository state: branch, HEAD, upstream, Gerrit push destination, and the branch a stopped rebase belongs to |
 | `core/tracked_changes.py` | What the index and work tree hold of yours, by what `git stash` saves of it (`tracked_changes`, `TrackedChanges`): changes to tracked files, submodules staged at another commit, submodules a file replaced. A submodule's own state is none of them |
-| `core/rebase_state.py` | A rebase underway: whether one is, how far it got and why it stopped (`rebase_progress`, `RebaseProgress`, `RebaseStop`), the refusal it causes (`rebase_refusal`) |
-| `core/rebase_next_step.py` | What to do at a rebase underway: the one next step after a conflict (`conflict_next_step`) or at an edit stop (`edit_stop_next_step`), and why a way on is refused (`stop_refusal` from the stop alone, `go_on_refusal` before every ger "go on") |
+| `core/rebase_state.py` | A rebase underway: whether one is, how far it got and why it stopped (`rebase_progress`, `RebaseProgress`, `RebaseStop`) |
+| `core/rebase_next_step.py` | What to do at a rebase underway, in one set of words (`CONTINUE`, `SKIP`, `ABORT`, `FINISH`): the refusal a rebase underway causes (`rebase_refusal`), the one next step after a conflict (`conflict_next_step`) or at an edit stop (`edit_stop_next_step`), and why a way on is refused (`stop_refusal` from the stop alone, `go_on_refusal` before every ger "go on") |
 | `core/rewrite_refusal.py` | Why rewriting the local stack, or a switch, cannot start: the one wording each rewrite shares (`history_rewrite_refusal`), its parts over what the index and work tree hold (`uncommitted_changes_refusal`, `submodule_refusal`), and a target whose change Gerrit already closed (`closed_change_refusal`, for `ger edit` / `reword` / `fix`) |
 | `core/rebasing_stack.py` | The **rebasing stack**: the local stack while a rebase is underway, each commit with its **rebase step** (`load_rebasing_stack`, `RebasingStack`, `RebaseStep`), and where the rebase stopped as `GET /stack` serves it, the stop `ger rebase --continue|--skip` refuses by (`stopped_rebase`) |
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log`, as text (`format_call_trace_summary`); `cli_common.print_call_trace_summary` prints it |
 | `core/changeish.py` | The changeish grammar: what an input naming a commit or change looks like |
-| `core/change_id.py` | Change-Id footer: `parse_change_id_footer` (raw footer value), `validate_change_id_value`, `extract_valid_change_id`, `change_id_of_rev`, `classify_issues`, generate and fix |
+| `core/change_id.py` | Change-Id footer: `parse_change_id_footer` (raw footer value), `validate_change_id_value`, `extract_valid_change_id`, `change_id_of_rev`, `classify_issues` and the errors its issues are worth (`change_id_issues_error`: `ChangeIdIssuesError`, `DuplicateChangeIdError`), generate and fix |
 | `core/stack.py` | Local stack: `Commit` (the one commit-row type), `get_stack_snapshot` (the one stack loader), `read_commit_rows`, `read_commit_meta`, `read_rewrite_rows`, ranges, merge-base |
 | `core/ready_calc.py` | Ready boundary and push range |
 | `core/ready_strategy.py` | Loading ready-boundary strategies from `.ger/ready/` |
@@ -547,7 +549,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/review_delta.py` | The **review delta**: `last_reviewed_patch_set`, `load_review_delta` (the patchset you reviewed against the current one, another patchset, or the local commit) |
 | `core/reorder.py` | Rewriting the local stack, all or nothing: `rewrite_stack` (reorder, fold, drop; `autostash`), `undo_rewrite`, `ReorderRefusal`; also the sequence editor that run uses |
 | `core/rewrite_outcome.py` | What a finished rewrite of the local stack did, as data (`rewrite_outcome`, `RewriteOutcome`): commits rewritten, how many of them now ahead of Gerrit (from the cache, no request), fixups squashed, commits already upstream, and the commits it dropped (`DroppedCommit`, `dropped_commit`), against the stack before it (`stack_before`) |
-| `core/reword.py` | Message-only rewrites, every tree kept: `rewrite_messages` (recreate commits with new messages), `move_head`, `reword_commit` (one stack commit, its **Change-Id** kept) |
+| `core/reword.py` | Message-only rewrites, every tree kept: `rewrite_messages` (recreate commits with new messages), `move_head`, `reword_commit` (one stack commit, its **Change-Id** kept), `add_missing_change_ids` (`ger change-id --fix`) |
 | `core/reorder_preview.py` | Whether a rewrite would conflict (or a pick become empty), simulated with `git merge-tree`, worktree untouched: `first_conflict`, `swap_conflicts`, `replay_conflict`, `PickConflict`, `PickStop`, `PreviewUnavailable` |
 | `core/agent_runbook.py` | The **agent runbook**: `plan_runbook` (stops of the attention walk, what is the agent's and what is not) and **holds** (`load_holds`, `set_hold`) |
 | `core/push.py` | Push plan and push refusal: prepare, revise, execute |
@@ -555,7 +557,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/push_options.py` | Push options (`PushOptions`) and their magic-ref form on the refspec (`push_refspec`) |
 | `core/push_unchanged.py` | Push options on changes Gerrit already has at that commit: `planned_updates` (only what differs), `apply_updates` over REST, `OutdatedChange` (Gerrit has a newer patch set: nothing is set), and the warning when options reached nothing |
 | `core/push_targets.py` | What each commit a push sends becomes on Gerrit: a new change, or the next patch set of one (`NextPatchset`: rebase only or code changed, owner, reviewers), read from what the push loads anyway; after it, `pushed_changes`: the patch set each became, for the closing lines |
-| `core/push_checks.py` | What a push looks at before it runs: the branch it pushes, its ready prefix and boundary, the remote rebase check, what Gerrit already holds |
+| `core/push_checks.py` | What a push looks at before it runs: the branch it pushes, its ready boundary and the commits below it, the remote rebase check, what Gerrit already holds |
 | `core/push_reviewers.py` | Post-push reviewer strategies and the reviewer marks a push preview reads |
 | `core/reviewer.py` | `ReviewerAccount`, reviewer-name parsing and resolution to account ids, and who a push asks for |
 | `core/reviewer_completion.py` | Account search for completion UIs |
@@ -598,6 +600,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/comments_markdown.py` | Inline comment chains as Markdown: `ger show --ai` and the agent runbook (`format_comment_chain_markdown`, `format_unresolved_section_markdown`) |
 | `render/suggested_fixes.py` | Gerrit fix suggestions written out below a comment, one shape for the terminal and Markdown (`shown_fixes`, `fix_rows`, `fixes_markdown`), and a comment's whole text with them (`comment_text`, what `ger serve` sends) |
 | `render/wrap.py` | Word wrap for `ger show` prose: comment boxes and the commit message |
+| `render/checkout_text.py` | What `ger checkout` says once it checked a change out (`checkout_lines`) |
+| `render/show_text.py` | `ger show`'s human text for one commit (`commit_lines`), the brief one of a multi-commit view (`brief_commit_lines`) and the line between them (`commit_separator`) |
 | `render/show_markdown.py` | `ger show`'s Markdown (`--ai`) for one commit: `commit_markdown` |
 | `render/inbox_text.py` | `ger inbox`'s human text: a row per review chain by inbox section, and each section's summary (`render_inbox_text`) |
 | `render/ai_text.py` | `--ai` text for `ger log` (`stack_ai_lines`) and `ger inbox` (`inbox_ai_lines`): one plain line per commit or chain, in `status_fmt`'s words |
@@ -644,7 +648,9 @@ One row per module, by package-relative path. **Owns** is the concept the module
 Concepts that still exist more than once, ranked by how far the copies have **drifted** — divergence is the cost, not line count. Each item names the exceptions that track it in [`tests/test_architecture.py`](../tests/test_architecture.py); fixing the item means deleting them. Resolve each drift to *one* stated behaviour, and record a choice that would otherwise be re-suggested as an ADR.
 
 1. **One reviewer normalizer.** Reviewer logic is spread over `core/reviewer.py`, `core/reviewer_completion.py`, `core/push_reviewers.py`, `core/reviewers_strategy.py` and `reviewer_catalog.py`.
-2. **Show resolution vs generic resolution.** `core/gerrit_show.py` wraps `resolve_changeish` but calls `GerritRest.get_change` itself to build a row for remote-only changes, next to what `ger resolve` already exposes. `gerrit_show.resolve_range_endpoint_sha` re-implements `change_resolution.resolve_to_stack_sha`, and `cli_show` hands `service.rest` to it, so show rows skip the cache.
+2. **Show resolution vs generic resolution.** `core/gerrit_show.py` wraps `resolve_changeish` and builds a row for a remote-only change itself (through the service's `ChangeApi`, so the cache: every caller passes `changes`, which is now required), next to what `ger resolve` already exposes. `gerrit_show.resolve_range_endpoint_sha` re-implements `change_resolution.resolve_to_stack_sha`.
+3. **Exit codes outside the mapper.** Some CLI modules still return a bare number, or print `error:` and return a code themselves, beside `run_cli_command` and `ExitCode`. Tracked by `test_commands_exit_with_exit_code_members`.
+4. **Flags defined per command.** A flag several commands take (`--branch`, `-y`, `--dry-run`, `--debug-log`, …) was written out in each, with its own help text, so the same flag drifted apart. Tracked by `test_a_flag_means_one_thing` and `test_help_text_style`.
 
 ---
 

@@ -69,7 +69,7 @@ ger log                  # stack vs Gerrit — see Reading-ger-log.md
 ger inbox                # chains waiting on your review, and your own (this project; --all)
 ger show <ref>           # one change, full comments
 ger ci                   # why CI failed: findings from the CI logs
-ger push                 # push ready prefix
+ger push                 # push the commits below the ready boundary
 ger checkout <change>    # work on a change from Gerrit (or update your copy of it)
 
 ger review <change>      # check out someone's change in the review worktree

@@ -4,20 +4,17 @@ from __future__ import annotations
 
 import argparse
 import json
-import logging
 
-from gerrit_workflow_tools.cli_attention import require_stack_upstream
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
+from gerrit_workflow_tools.cli_args import (
     add_color_args,
     add_follow_merges_args,
+    add_on_off_arg,
     add_output_format_args,
     add_verbose_and_debug_log_args,
-    init_cli_runtime,
-    may_prompt,
     output_format,
-    run_cli_command,
 )
+from gerrit_workflow_tools.cli_attention import require_stack_upstream
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, may_prompt, run_cli_command
 from gerrit_workflow_tools.cli_notes import print_note
 from gerrit_workflow_tools.core.annotated_stack import load_stack_overview, resolve_rev_range
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
@@ -41,8 +38,6 @@ from gerrit_workflow_tools.render.status_fmt import status_legend
 from gerrit_workflow_tools.render.style import is_hyperlink_enabled, terminal_width
 from gerrit_workflow_tools.summary_highlight import run_summary_highlighter
 
-
-logger = logging.getLogger(__name__)
 
 _EXAMPLES = """examples:
   ger log                    the stack above its upstream, and what to do next
@@ -73,23 +68,22 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="url",
         help=(
             "Include each change's Gerrit web URL in text output (JSON always includes gerrit_url). "
-            "When OSC 8 hyperlinks are on, a compact ``Open in gerrit`` link is shown by default. "
-            "Otherwise default: ``ger.logShowUrl``."
+            "When OSC 8 hyperlinks are on, a compact 'Open in gerrit' link is shown by default. "
+            "Otherwise default: ger.logShowUrl."
         ),
     )
-    parser.add_argument(
+    add_on_off_arg(
+        parser,
         "--show-change-id",
-        action="store_true",
-        help="Show full Change-Id on an indented continuation line. Default: ``ger.logShowChangeId``.",
+        help_text="Show full Change-Id on an indented continuation line. Default: ger.logShowChangeId.",
     )
     add_verbose_and_debug_log_args(
         parser,
-        debug_log_help="Log git commands to stderr.",
         verbose_count=True,
         verbose_help=(
-            "Add indented CI pipeline lines below each commit (``-vv`` also shows Change-Id). "
+            "Add indented CI pipeline lines below each commit (-vv also shows Change-Id). "
             "The primary line layout is unchanged. "
-            "Does not enable diagnostic logging; use ``--debug-log`` for that."
+            "Does not enable diagnostic logging; use --debug-log for that."
         ),
     )
     add_follow_merges_args(parser)
@@ -117,7 +111,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     gdef = settings.log_defaults
     verbose_level = int(args.verbose)
     show_url = bool(args.url) or gdef["show_url"] or is_hyperlink_enabled()
-    show_change_id = bool(args.show_change_id) or gdef["show_change_id"] or verbose_level >= 2
+    show_change_id = gdef["show_change_id"] if args.show_change_id is None else args.show_change_id
+    show_change_id = show_change_id or verbose_level >= 2
 
     branch = run.repo.stack_branch if args.rev_range else run.repo.require_stack_branch()
     rev_range = resolve_rev_range(args.rev_range, branch=branch)

@@ -25,7 +25,7 @@ class _Tty:
 
 
 def _pushed(stack_repo: Path, *, updated: bool = True) -> tuple[ChangeStore, list[Commit], list[str]]:
-    """The ready prefix (two commits) on Gerrit, with an older patchset unless *updated* is False."""
+    """The two commits below the ready boundary on Gerrit, with an older patchset unless *updated* is False."""
     rows = commits_in_range(stack_repo, "main..feature")[:2]
     details = build_details_by_change_id(rows)
     if updated:
@@ -83,7 +83,7 @@ def test_prompt_offers_to_publish_the_drafts(
     monkeypatch.setattr("builtins.input", _input)
     code, out, _err, refspec = _run_push(stack_repo, monkeypatch, [], store)
     assert code == ExitCode.OK
-    assert any("Push and publish 1 draft(s)? [Y/n/p/r]" in p for p in prompts)
+    assert any("Push and publish 1 draft? [Y/n/p/r]" in p for p in prompts)
     assert "Drafts keep 1" in out
     assert option in _options(refspec)
     assert ("no-publish-comments" in _options(refspec)) is (option == "no-publish-comments")

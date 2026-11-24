@@ -16,7 +16,8 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_change_status import PatchsetStatus
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.git_state import git_dir
-from gerrit_workflow_tools.core.rebase_state import RebaseStop, rebase_in_progress, rebase_progress, rebase_refusal
+from gerrit_workflow_tools.core.rebase_next_step import rebase_refusal
+from gerrit_workflow_tools.core.rebase_state import RebaseStop, rebase_in_progress, rebase_progress
 from gerrit_workflow_tools.core.rebasing_stack import RebaseStep
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.server.api import GerApi
@@ -155,7 +156,7 @@ def test_ger_log_and_serve_show_the_same_stack_during_a_rebase(
     (stack_repo / "c.txt").write_text("resolved\n", encoding="utf-8")
     git("add", "c.txt", cwd=stack_repo)
     _code, _out, err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=store)
-    assert "with its conflicts resolved, ready for `git rebase --continue`" in err
+    assert "with its conflicts resolved, ready for `ger rebase --continue`" in err
 
 
 def _stop_to_edit(repo: Path, todo_edit: str = "1s/^pick/edit/", onto: str = "HEAD~2") -> None:

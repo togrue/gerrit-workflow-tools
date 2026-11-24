@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import sys
 from pathlib import Path
 
@@ -19,9 +18,6 @@ from gerrit_workflow_tools.core.upstream import (
     set_branch_upstream,
     upstream_choice,
 )
-
-
-logger = logging.getLogger(__name__)
 
 
 def prompt_upstream_abbrev_interactive(cwd: Path | str | None, branch: str, *, settings: Settings) -> str | None:

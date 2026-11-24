@@ -7,17 +7,18 @@ import json
 import sys
 from dataclasses import dataclass
 
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
+from gerrit_workflow_tools.cli_args import (
+    add_branch_arg,
     add_change_option,
     add_color_args,
+    add_dry_run_arg,
+    add_message_args,
     add_output_format_args,
     add_verbose_and_debug_log_args,
-    confirm_publish,
-    init_cli_runtime,
+    add_yes_arg,
     read_message,
-    run_cli_command,
 )
+from gerrit_workflow_tools.cli_common import ExitCode, confirm_publish, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.changeish import as_change_only
 from gerrit_workflow_tools.core.comment_chains import ChainRef, ChainRefError, find_chains, parse_chain_ref
@@ -31,6 +32,7 @@ from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.core.votes import VOTE_HELP, parse_votes
+from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.comments import (
     chain_location,
     draft_transition,
@@ -74,15 +76,8 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     add_change_option(p, "Look for CHAIN on this change only (default: every change in the local stack).")
-    p.add_argument(
-        "--branch",
-        metavar="NAME",
-        default=None,
-        help="Local branch whose stack to search (default: working branch).",
-    )
-    text = p.add_argument_group("message")
-    text.add_argument("-m", "--message", action="append", default=None, help="Message; repeat for paragraphs.")
-    text.add_argument("-F", "--file", metavar="FILE", default=None, help="Read the message from FILE ('-': stdin).")
+    add_branch_arg(p)
+    text = add_message_args(p)
     text.add_argument("--done", action="store_true", help=f"Reply {_DONE!r} and resolve the chain.")
     state = p.add_mutually_exclusive_group()
     state.add_argument("--resolve", action="store_true", help="Resolve the chain once the draft is published.")
@@ -108,13 +103,11 @@ def _build_parser() -> argparse.ArgumentParser:
     publish.add_argument(
         "--vote", action="append", default=None, metavar="LABEL=N", help=f"With --publish: {VOTE_HELP}"
     )
-    publish.add_argument("--dry-run", action="store_true", help="With --publish: list the drafts, publish nothing.")
-    publish.add_argument(
-        "-y", "--yes", action="store_true", help="With --publish: skip the confirmation (GER_ASSUME_YES=1 too)."
-    )
+    add_dry_run_arg(publish, scope="--publish")
+    add_yes_arg(publish, scope="--publish")
     add_output_format_args(p)
     add_color_args(p)
-    add_verbose_and_debug_log_args(p, debug_log_help="Log Gerrit calls to stderr.")
+    add_verbose_and_debug_log_args(p)
     return p
 
 
@@ -297,7 +290,7 @@ def _publish(args: argparse.Namespace, run: RunContext, branch: str | None) -> i
     if elsewhere and not args.json_:
         print(f"  {drafts_elsewhere(dict.fromkeys(elsewhere))}")
     count = sum(len(drafts_in(chains)) for chains in with_drafts.values())
-    what = f"{count} draft(s){f' and {extras}' if extras else ''} on {len(posts)} change(s)"
+    what = f"{counted(count, 'draft')}{f' and {extras}' if extras else ''} on {counted(len(posts), 'change')}"
     if posts and not args.dry_run and not confirm_publish(args, what):
         return int(ExitCode.REFUSED)
 
@@ -320,7 +313,8 @@ def _publish(args: argparse.Namespace, run: RunContext, branch: str | None) -> i
                 )
                 row["status"] = "published"
                 if not args.json_:
-                    print(f"published {row['drafts']} draft(s){f' and {extras}' if extras else ''} on {change.summary}")
+                    with_extras = f" and {extras}" if extras else ""
+                    print(f"published {counted(len(drafts), 'draft')}{with_extras} on {change.summary}")
             except GerritApiError as error:
                 failed = True
                 row.update(status="failed", error=str(error))

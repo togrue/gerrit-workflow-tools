@@ -1,4 +1,4 @@
-"""Checkpoint 3-5: clone, topic branches, ger push (ready prefix, --all), branch isolation."""
+"""Checkpoint 3-5: clone, topic branches, ger push (below the ready boundary, --all), branch isolation."""
 
 from __future__ import annotations
 

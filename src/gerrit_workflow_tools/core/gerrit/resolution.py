@@ -13,6 +13,7 @@ from typing import Any, Literal
 from gerrit_workflow_tools.core.changeish import ChangeishKind, change_label
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, build_triplet
 from gerrit_workflow_tools.core.stack import abbreviated_sha
+from gerrit_workflow_tools.core.words import counted
 
 
 SelectedReason = Literal["unique", "target-branch", "prefer-open", "explicit", "branch-mismatch"]
@@ -157,10 +158,6 @@ def format_local_sibling_note(resolution: Resolution) -> str | None:
     return local_sibling_note(sibling, branch=selected.branch, number=selected.number)
 
 
-def _changes(count: int) -> str:
-    return f"{count} change{'' if count == 1 else 's'}"
-
-
 def _elsewhere(changes: list[SelectedChange]) -> str:
     """``dev as c2051, main as c2049 (abandoned)``."""
     return ", ".join(
@@ -185,7 +182,7 @@ def format_resolution_note(resolution: Resolution) -> str | None:
             if footer:
                 return f"note: not on your push target yet; same Change-Id on {_elsewhere(alternatives)}"
             return (
-                f"note: Change-Id matches {_changes(len(alternatives))} on "
+                f"note: Change-Id matches {counted(len(alternatives), 'change')} on "
                 f"{'another branch' if len({alt.branch for alt in alternatives}) == 1 else 'other branches'} "
                 f"({_elsewhere(alternatives)}); none on your push target."
             )
@@ -209,6 +206,6 @@ def format_resolution_note(resolution: Resolution) -> str | None:
     other = next((alt for alt in alternatives if alt.number != selected.number), None)
     override = f"Name another by its number{f' ({change_label(other.number)})' if other else ''} or triplet."
     return (
-        f"note: Change-Id {selected.change_id} matches {_changes(len(all_matches))} (branches: {branches}); "
+        f"note: Change-Id {selected.change_id} matches {counted(len(all_matches), 'change')} (branches: {branches}); "
         f"{detail}. {override}"
     )

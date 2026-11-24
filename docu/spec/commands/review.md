@@ -160,7 +160,7 @@ When you have reviewed an older patchset of the change (posted a vote, comment o
 | Code | When |
 |------|------|
 | `0` | Done |
-| `1` | A `change-<number>` branch has your commits; Gerrit's patchset is newer than the one you voted on; the user declined |
+| `1` | A `change-<number>` branch has your commits; Gerrit's patchset is newer than the one you voted on; the user declined (it says `cancelled`) |
 | `2` | Bad usage; `--vote` without a terminal and without `-y`; the worktree holds your edits; no review going on for `--next`, `--prev`, `--stage`, `--vote`; staging a root commit; `GER_NO_PUBLISH` with `--vote` |
 | `3` | The changeish or patchset resolves to nothing |
 | `5` | Gerrit failed |

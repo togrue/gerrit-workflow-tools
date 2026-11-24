@@ -32,7 +32,7 @@ class _Tty:
 
 
 def _store(stack_repo: Path, *, updated: bool = True, wip: bool = False) -> tuple[ChangeStore, list[str]]:
-    """The ready prefix (two commits) on Gerrit: at an older patchset (*updated*), else as it is here."""
+    """The two commits below the ready boundary on Gerrit: at an older patchset (*updated*), else as it is here."""
     rows = commits_in_range(stack_repo, "main..feature")[:2]
     details = build_details_by_change_id(rows, per_index_overrides=[{"work_in_progress": wip}] * 2)
     if updated:

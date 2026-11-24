@@ -6,17 +6,16 @@ import argparse
 import json
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
+from gerrit_workflow_tools.cli_args import (
+    add_branch_arg,
     add_change_option,
     add_color_args,
     add_message_args,
     add_output_format_args,
     add_verbose_and_debug_log_args,
-    init_cli_runtime,
     read_message,
-    run_cli_command,
 )
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.core.changeish import change_label
 from gerrit_workflow_tools.core.comment_anchor import CommentLocation, LocationError
 from gerrit_workflow_tools.core.comment_chains import ChainRefError, parse_chain_ref
@@ -69,7 +68,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="PATH, PATH:LINE, PATH:START-END or PATH:LINE.COL-LINE.COL (lines and columns from 1).",
     )
     add_change_option(p, "Comment on this change (default: the change under review here, else the commit at HEAD).")
-    p.add_argument("--branch", metavar="NAME", default=None, help="Local branch whose stack to resolve in.")
+    add_branch_arg(p)
     add_message_args(p)
     p.add_argument("--resolved", action="store_true", help="Start the chain resolved (an FYI).")
     local = p.add_mutually_exclusive_group()
@@ -86,7 +85,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     add_output_format_args(p)
     add_color_args(p)
-    add_verbose_and_debug_log_args(p, debug_log_help="Log Gerrit calls to stderr.")
+    add_verbose_and_debug_log_args(p)
     return p
 
 

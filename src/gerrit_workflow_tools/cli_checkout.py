@@ -5,31 +5,31 @@ from __future__ import annotations
 import argparse
 import sys
 
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
+from gerrit_workflow_tools.cli_args import (
     add_color_args,
+    add_patchset_arg,
     add_verbose_and_debug_log_args,
+    add_yes_arg,
     changeish_help,
-    init_cli_runtime,
-    run_cli_command,
 )
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, require_prompt, run_cli_command
 from gerrit_workflow_tools.cli_notes import print_note, print_resolution_note
-from gerrit_workflow_tools.cli_terminal import assume_yes, confirm, stdin_is_terminal
+from gerrit_workflow_tools.cli_terminal import assume_yes, confirm
 from gerrit_workflow_tools.core.change_checkout import (
     CheckoutAction,
     CheckoutPlan,
-    CheckoutRefusal,
     CheckoutResult,
-    LocalState,
     choose_action,
     plan_checkout,
 )
 from gerrit_workflow_tools.core.change_checkout_apply import apply_checkout, update_stack
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_patchset import resolve_change
-from gerrit_workflow_tools.core.rebase_state import rebase_refusal
+from gerrit_workflow_tools.core.rebase_next_step import rebase_refusal
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import UsageError
+from gerrit_workflow_tools.core.words import counted
+from gerrit_workflow_tools.render.checkout_text import checkout_lines
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -52,7 +52,7 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="?",
         help=changeish_help("The change", change_only=True) + " Leave it out with --update: the whole local stack.",
     )
-    p.add_argument("--patchset", type=int, default=None, metavar="N", help="Check out patchset N (default: current).")
+    add_patchset_arg(p)
     p.add_argument(
         "-b",
         "--branch",
@@ -79,72 +79,36 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Replace a local version Gerrit never had, or reset an existing branch NAME.",
     )
-    p.add_argument(
-        "-y",
-        "--yes",
-        action="store_true",
-        help="Answer the update question with yes, as --update does (GER_ASSUME_YES=1 too).",
-    )
+    add_yes_arg(p)
     add_color_args(p)
-    add_verbose_and_debug_log_args(p, debug_log_help="Log git and Gerrit calls to stderr.")
+    add_verbose_and_debug_log_args(p)
     return p
 
 
-def _ask_update(plan: CheckoutPlan) -> CheckoutAction:
+def _ask_update(args: argparse.Namespace, plan: CheckoutPlan) -> CheckoutAction:
     """Ask whether to update a pushed local version; off a terminal, refuse and name the flags."""
     local, patchset = plan.local, plan.patchset
     assert local is not None
     have = f"{plan.branch} has patchset {local.patch_set} of change {patchset.number}"
-    if not stdin_is_terminal():
-        raise CheckoutRefusal(
-            f"{have}, Gerrit has patchset {patchset.patch_set}: pass --update to update it, "
-            "or --no-update to switch to it as it is"
-        )
-    rebase = f" and rebase the {len(local.above)} commit(s) above it" if local.above else ""
+    require_prompt(
+        args,
+        instead=f"--update to update {plan.branch} from patchset {local.patch_set} to {patchset.patch_set}, "
+        "or --no-update to switch to it as it is",
+    )
+    rebase = f" and rebase the {counted(len(local.above), 'commit')} above it" if local.above else ""
     question = f"{have}. Update it to patchset {patchset.patch_set}{rebase}?"
     return CheckoutAction.UPDATE if confirm(question, default=True) else CheckoutAction.SWITCH
 
 
-def _above(result: CheckoutResult) -> str:
-    """What became of the commits above: taken as Gerrit has them, rebased."""
-    took = ", ".join(f"change {p.number} patchset {p.patch_set}" for p in result.took)
-    parts = [f"took {took} above it as Gerrit has it"] if took else []
-    parts += [f"rebased the {result.rebased} commit(s) above it"] if result.rebased else []
-    return "".join(f", {part}" for part in parts)
-
-
 def _report(plan: CheckoutPlan, result: CheckoutResult, url: str | None) -> None:
-    patchset, branch = plan.patchset, result.branch
-    change = f'change {patchset.number} patchset {patchset.patch_set} "{patchset.subject}"'
-    where = "staying on" if result.unchanged else "switched to"
-    if result.action is CheckoutAction.CREATE:
-        print(f"checked out {change} on {branch}")
-    elif result.action is CheckoutAction.UPDATE:
-        old = plan.local.patch_set if plan.local else None
-        verb = "moved" if old and old > patchset.patch_set else "updated"  # back to an older patchset
-        print(f"{verb} {branch} {f'from patchset {old} ' if old else ''}to {change}{_above(result)}")
-    elif result.action is CheckoutAction.MERGE and result.same_as_patchset:
-        print(f"your version on {branch} has nothing {change} lacks: took it as Gerrit has it{_above(result)}")
-    elif result.action is CheckoutAction.MERGE:
-        base = f" (your edits against patchset {result.merged_from})" if result.merged_from else ""
-        print(f"merged your version on {branch} into {change}{base}{_above(result)}; push it as the next patchset")
-    elif plan.state is LocalState.SAME:
-        above = len(plan.local.above) if plan.local else 0  # the branch tip, where HEAD is now
-        where_it_is = f"{change} is {above} commit(s) below HEAD" if above else f"it has {change}"
-        print(f"{'already on' if result.unchanged else 'switched to'} {branch}: {where_it_is}")
-    elif plan.state is LocalState.PUSHED:
-        old = plan.local.patch_set if plan.local else None
-        print(f"{where} {branch}, left at patchset {old} (Gerrit has patchset {patchset.patch_set})")
-    else:
-        print(f"{where} {branch}, left as it is: your version differs from patchset {patchset.patch_set}")
-    if result.upstream:
-        print(f"  upstream: {result.upstream}")
-    if url:
-        print(f"  {url}")
+    print("\n".join(checkout_lines(plan, result, url)))
     if result.moved_from:
-        print(f"moved {branch} off commits Gerrit does not have; its old tip was {result.moved_from}", file=sys.stderr)
+        print(
+            f"moved {result.branch} off commits Gerrit does not have; its old tip was {result.moved_from}",
+            file=sys.stderr,
+        )
     for other in plan.elsewhere:
-        print_note(f"note: change {patchset.number} also has a local version on {other.branch}")
+        print_note(f"note: change {plan.patchset.number} also has a local version on {other.branch}")
 
 
 def main(argv: list[str] | None = None, *, gerrit: GerritRest | None = None) -> int:
@@ -166,7 +130,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     changes = service.changes.exact()
     plan = plan_checkout(cwd, change, args.patchset, settings=settings, branch=args.branch, changes=changes)
     update = True if args.update is None and (args.yes or assume_yes()) else args.update
-    action = choose_action(plan, update=update, force=args.force) or _ask_update(plan)
+    action = choose_action(plan, update=update, force=args.force) or _ask_update(args, plan)
     result = apply_checkout(cwd, plan, action, settings=settings)
     _report(plan, result, change.view.url(service.web_base))
     return int(ExitCode.OK)

@@ -114,7 +114,7 @@ Within *to review*, chains sort by **unreviewed age**, oldest first (longest wai
 | `--no-url` | Omit URLs from text output |
 | `--color WHEN` | `always` \| `auto` \| `never` |
 | `--hyperlinks WHEN` | `always` \| `auto` \| `never`. When on, the chain-top URL becomes a clickable `Open in gerrit` (OSC 8), same as `ger log`. JSON always includes the raw URL. |
-| `--debug-log`, `-v` | Standard helpers (see `cli_common`) |
+| `--debug-log`, `-v` | Standard helpers (see `cli_args`) |
 
 Planned, not in this slice: `--since-last`, `--watch`, `--forget`, `--sort`, `--query`.
 
@@ -299,7 +299,7 @@ New binding vocabulary lives in [CONTEXT.md](../../../CONTEXT.md): **review chai
 
 ## Open questions
 
-- **`-q` / quiet.** A cron notifier would want a quiet flag. Either add `-q` here or promote it to `cli_common` for all commands. Deferred with `--since-last`.
+- **`-q` / quiet.** A cron notifier would want a quiet flag. Either add `-q` here or promote it to `cli_args` for all commands. Deferred with `--since-last`.
 - **Chain key stability.** Keying on the chain top's change number is readable, but the top changes when someone adds a commit on top. Keying on the chain *base* is more stable; decide before the watermark format is written.
 - **Relation to `ger review checkout`.** The intended follow-up is materializing a chain into a dedicated review clone. `ger inbox --json` already carries project, branch, top change number. Confirm no extra field is required before freezing the schema.
 

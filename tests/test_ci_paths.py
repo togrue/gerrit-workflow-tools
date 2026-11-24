@@ -116,10 +116,10 @@ def test_the_service_resolves_against_the_commit_but_stores_what_the_log_said(tm
         store=CiContentStore(tmp_path / "store"),
         cwd=repo,
     )
-    resolved = service.fetch_one(link, commit=sha)
+    resolved = service.fetch([link], commit=sha)[0]
     assert resolved.findings[0].path == "demo/calc.py"
-    cached = service.fetch_one(link, commit=sha)
+    cached = service.fetch([link], commit=sha)[0]
     assert cached.provenance.cached and cached.findings[0].fingerprint == resolved.findings[0].fingerprint
     # Without a commit, or with one that is not here, the path stays as logged.
-    assert service.fetch_one(link).findings[0].path == "/var/agents/7/ws/demo/calc.py"
-    assert service.fetch_one(link, commit="0" * 40).findings[0].path == "/var/agents/7/ws/demo/calc.py"
+    assert service.fetch([link])[0].findings[0].path == "/var/agents/7/ws/demo/calc.py"
+    assert service.fetch([link], commit="0" * 40)[0].findings[0].path == "/var/agents/7/ws/demo/calc.py"

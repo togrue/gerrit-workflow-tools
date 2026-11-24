@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from urllib.parse import quote, urlsplit
 
-from gerrit_workflow_tools.cli_common import ExitCode, add_verbose_and_debug_log_args, init_cli_runtime, run_cli_command
+from gerrit_workflow_tools.cli_args import add_verbose_and_debug_log_args
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
+from gerrit_workflow_tools.core.usage import UsageError
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -30,9 +31,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write a single line of JSON to stdout.",
     )
-    add_verbose_and_debug_log_args(
-        p, debug_log_help="Log resolved URL and Gerrit API diagnostics to stderr.", refresh=False
-    )
+    add_verbose_and_debug_log_args(p, refresh=False)
     return p
 
 
@@ -58,17 +57,15 @@ def _run(argv: list[str] | None) -> int:
     settings = run.settings
     path = _api_path(args.path)
     if path is None:
-        print(
-            f"error: invalid path {args.path!r}: expected a path under /a/, such as changes/104. "
-            "Git Bash rewrites a leading /, so leave it off.",
-            file=sys.stderr,
+        raise UsageError(
+            f"invalid path {args.path!r}: expected a path under /a/, such as changes/104. "
+            "Git Bash rewrites a leading /, so leave it off."
         )
-        return int(ExitCode.USAGE)
     client = HttpGerritRest.from_settings(settings)
     data = client.get_json(path)
     indent = None if args.compact else 2
     print(json.dumps(data, indent=indent, sort_keys=True))
-    return 0
+    return int(ExitCode.OK)
 
 
 if __name__ == "__main__":

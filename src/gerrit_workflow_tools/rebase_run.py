@@ -30,6 +30,7 @@ from gerrit_workflow_tools.core.rewrite_refusal import history_rewrite_refusal
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE
 from gerrit_workflow_tools.core.usage import UsageError
+from gerrit_workflow_tools.core.words import counted
 
 
 def require_history_rewrite(cwd: Path) -> None:
@@ -160,8 +161,8 @@ def outcome_text(outcome: RewriteOutcome) -> str:
     """What a finished rewrite did, in words: ``rewrote all 3 commits, now ahead of Gerrit; squashed 1 fixup``."""
     rewritten, total = outcome.rewritten, outcome.commits
     if not (rewritten or outcome.dropped or outcome.squashed or outcome.upstream):
-        return f"nothing changed, the local stack is as it was ({_count(total)})"
-    said = [f"dropped {_count(len(outcome.dropped))}"] if outcome.dropped else []
+        return f"nothing changed, the local stack is as it was ({counted(total, 'commit')})"
+    said = [f"dropped {counted(len(outcome.dropped), 'commit')}"] if outcome.dropped else []
     if rewritten:
         whole = "all " if rewritten == total > 1 else ""
         part = f" of {total}" if rewritten < total else ""
@@ -169,11 +170,15 @@ def outcome_text(outcome: RewriteOutcome) -> str:
             f"rewrote {whole}{rewritten}{part} commit{'' if rewritten == total == 1 else 's'}{_on_gerrit(outcome)}"
         )
     elif total:
-        said.append(f"the other {_count(total)} as they were" if outcome.dropped else f"{_count(total)} as they were")
+        said.append(
+            f"the other {counted(total, 'commit')} as they were"
+            if outcome.dropped
+            else f"{counted(total, 'commit')} as they were"
+        )
     if outcome.squashed:
-        said.append(f"squashed {_count(outcome.squashed, 'fixup')}")
+        said.append(f"squashed {counted(outcome.squashed, 'fixup')}")
     if outcome.upstream:
-        said.append(f"left out {_count(outcome.upstream)} already upstream")
+        said.append(f"left out {counted(outcome.upstream, 'commit')} already upstream")
     return "; ".join(said)
 
 
@@ -187,7 +192,3 @@ def _on_gerrit(outcome: RewriteOutcome) -> str:
     if ahead == 0:
         return ", none on Gerrit yet"
     return f": {ahead} now ahead of Gerrit, {rewritten - ahead} not on Gerrit yet"
-
-
-def _count(n: int, what: str = "commit") -> str:
-    return f"{n} {what}{'' if n == 1 else 's'}"

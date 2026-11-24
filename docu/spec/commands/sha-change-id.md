@@ -36,7 +36,7 @@ ger sha -n / --next-attention [CHANGEISH]
 | `--ai`, `--format {human,ai}` | The same line as without it, colour off; combines with `--short` / `--subject` ([Output formats](../../SPEC.md#output-formats)). `--json` excludes `--short`, `--subject` and `--ai` |
 | `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
 
-Default range (Change-Id lookup): configured Gerrit stack window, else upstream..HEAD, else merge-base..HEAD.
+Default range (Change-Id lookup): the local stack, `upstream..HEAD` of the working branch along first parents, loaded as `ger log` loads it (`get_stack_snapshot`).
 
 ### Exit codes
 

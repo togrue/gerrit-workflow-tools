@@ -1,12 +1,6 @@
-"""Shared CLI helpers and argparse conventions for ``gerrit_workflow_tools`` CLIs.
+"""The shared CLI runtime: exit codes, the run's bootstrap, and where failures map to codes.
 
-Help text style (``help=`` on parsers and arguments):
-
-- Imperative mood, sentence case, and end each string with a period (consistent).
-- When a flag only affects package logging, phrase it as "Log … to stderr".
-- Shared flag text lives in ``HELP_*`` constants in this module; CLIs should use them.
-- Use :func:`add_verbose_and_debug_log_args` for ``-v``/``--verbose`` and ``--debug-log``
-  (diagnostic logging to stderr); do not use ``--verbose`` for logging.
+The argparse groups commands share live in :mod:`gerrit_workflow_tools.cli_args`.
 """
 
 from __future__ import annotations
@@ -18,13 +12,22 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from enum import IntEnum
 from pathlib import Path
-from typing import TypeVar
 
+# The `as` names are re-exported for cli_review.py only, until it imports them from cli_args
+# (test_argument_groups_come_from_cli_args tracks it). Import them from cli_args.
+from gerrit_workflow_tools.cli_args import (
+    add_change_option as add_change_option,
+    add_color_args as add_color_args,
+    add_output_format_args as add_output_format_args,
+    add_verbose_and_debug_log_args as add_verbose_and_debug_log_args,
+    changeish_help as changeish_help,
+    output_format,
+)
 from gerrit_workflow_tools.cli_logging import configure_logging
 from gerrit_workflow_tools.cli_terminal import assume_yes, confirm, stdin_is_terminal
 from gerrit_workflow_tools.core.attention import NoEditAttentionError
 from gerrit_workflow_tools.core.call_trace import format_call_trace_summary
-from gerrit_workflow_tools.core.changeish import as_change_only
+from gerrit_workflow_tools.core.change_id import ChangeIdIssuesError, DuplicateChangeIdError
 from gerrit_workflow_tools.core.ci_content import CiContentError
 from gerrit_workflow_tools.core.comment_target import MissingChangeIdError
 from gerrit_workflow_tools.core.config import ConfigError, Settings
@@ -44,21 +47,6 @@ from gerrit_workflow_tools.render.style import (
     init_terminal_width,
 )
 from gerrit_workflow_tools.upstream_interactive import ask_for_needed_upstream, with_suggested_upstream
-
-
-_T = TypeVar("_T")
-
-HELP_JSON = "Write machine-readable JSON to stdout."
-HELP_COLOR = "Colorize output: always, auto, or never."
-HELP_HYPERLINKS = "Emit OSC 8 terminal hyperlinks: always, auto, or never."
-HELP_REFRESH = (
-    "Ask Gerrit again instead of serving what the cache holds (its trust window), and refetch CI logs. "
-    "Same as `ger --refresh <command>`."
-)
-HELP_DEBUG_LOG = (
-    "Log diagnostics to stderr (git commands, outcomes, resolved refs/URLs, decisions, Gerrit API "
-    "response bodies, and a high-level request timing summary)."
-)
 
 
 class ExitCode(IntEnum):
@@ -98,10 +86,12 @@ class ExitCode(IntEnum):
 
 
 # Ordered longest-subclass-first: ChangeAmbiguousError, MissingChangeIdError and NoWorkingBranchError derive from
-# ChangeResolutionError,
+# ChangeResolutionError, DuplicateChangeIdError from ChangeIdIssuesError,
 # and ConfigError from ValueError, so the more specific entry has to be matched first.
 _FAILURE_EXITS: tuple[tuple[type[BaseException], ExitCode, str], ...] = (
     (ChangeAmbiguousError, ExitCode.AMBIGUOUS, "error"),
+    (DuplicateChangeIdError, ExitCode.DUPLICATE_CHANGE_ID, "error"),
+    (ChangeIdIssuesError, ExitCode.MISSING_CHANGE_ID, "error"),
     (MissingChangeIdError, ExitCode.MISSING_CHANGE_ID, "error"),
     (NoWorkingBranchError, ExitCode.USAGE, "error"),
     (ChangeResolutionError, ExitCode.NOT_FOUND, "error"),
@@ -184,154 +174,40 @@ def _report_failure(error: Exception) -> int:
     return int(code)
 
 
-def add_message_args(parser: argparse.ArgumentParser) -> argparse._ArgumentGroup:
-    """Register ``-m``/``--message`` (repeatable) and ``-F``/``--file`` as a "message" group.
+def require_prompt(args: argparse.Namespace, *, instead: str) -> None:
+    """Raise :class:`UsageError` (exit ``2``) unless the command may ask (:func:`may_prompt`).
 
-    Read them with :func:`read_message`.
+    The one answer to a question nobody is there to answer: ``no prompt to answer (non-interactive,
+    --json or --ai): pass <instead>``, where *instead* names the flags that answer it (``-y to push``).
     """
-    text = parser.add_argument_group("message")
-    text.add_argument("-m", "--message", action="append", default=None, help="Message; repeat for paragraphs.")
-    text.add_argument("-F", "--file", metavar="FILE", default=None, help="Read the message from FILE ('-': stdin).")
-    return text
+    if not may_prompt(args):
+        raise UsageError(f"no prompt to answer (non-interactive, --json or --ai): pass {instead}")
 
 
-def read_message(messages: list[str] | None, file: str | None) -> str:
-    """Message text from repeated ``-m`` (one paragraph each) or ``-F FILE`` (``-``: stdin), stripped."""
-    if file is not None:
-        text = sys.stdin.read() if file == "-" else Path(file).read_text(encoding="utf-8")
-    else:
-        text = "\n\n".join(messages or [])
-    return text.strip()
+def say_cancelled() -> None:
+    """The one word a command says when the user declined its prompt; it then exits ``REFUSED``."""
+    sys.stdout.flush()
+    print("cancelled", file=sys.stderr)
 
 
 def confirm_publish(args: argparse.Namespace, what: str) -> bool:
     """Whether to publish *what*: ``-y`` (or ``GER_ASSUME_YES``), else a yes at ``Publish <what>?``.
 
     Without a prompt to answer (no terminal, ``--json``, ``--ai``) it raises :class:`UsageError`: pass ``-y``.
+    A no says ``cancelled``; the caller exits ``REFUSED``.
     """
     if args.yes or assume_yes():
         return True
-    if not may_prompt(args):
-        raise UsageError("no prompt to answer (non-interactive, --json or --ai): pass -y to publish")
-    return confirm(f"Publish {what}?", default=False)
-
-
-def add_follow_merges_args(parser: argparse.ArgumentParser) -> None:
-    """Register ``--follow-merges`` (used by commands that display a local stack)."""
-    parser.add_argument(
-        "--follow-merges",
-        action="store_true",
-        default=False,
-        help="Traverse all commit parents (including merge commits) instead of only the first-parent chain. "
-        "By default only the first-parent chain is shown, matching Gerrit's relation-chain semantics.",
-    )
-
-
-_CHANGEISH_FORMS = "Change-Id (I…), change:<n> (or c<n>, '#<n>'), triplet, refs/changes/… ref or Gerrit URL"
-
-
-def changeish_help(what: str, *, change_only: bool = False) -> str:
-    """Help for a **changeish** argument; one wording, so every command tells the same truth.
-
-    *change_only* is for arguments that can only ever name a Gerrit change (``ger checkout``,
-    ``ger review``): a bare number is then that change. Everywhere else it is a git revision first.
-    """
-    if change_only:
-        return f"{what}: a change number, {_CHANGEISH_FORMS}."
-    return f"{what}: a git revision (<n> and c<n> too, else the change), {_CHANGEISH_FORMS}."
-
-
-def add_change_option(
-    parser: argparse.ArgumentParser | argparse._ArgumentGroup, help_text: str, *, repeatable: bool = False
-) -> None:
-    """Register ``--change CHANGEISH``: it only ever names a Gerrit change, so a bare number is one.
-
-    One registration for every command, so ``--change 692`` means change 692 everywhere.
-    *repeatable* collects every ``--change`` in a list (``None`` without one)."""
-    parser.add_argument(
-        "--change",
-        metavar="CHANGEISH",
-        default=None,
-        action="append" if repeatable else "store",
-        type=as_change_only,
-        help=f"{help_text} A change number, {_CHANGEISH_FORMS}.",
-    )
-
-
-def add_output_format_args(parser: argparse.ArgumentParser, *, ai_view: str | None = None) -> None:
-    """Register mutually exclusive ``--json`` / ``--format`` / ``--ai``; read the choice with :func:`output_format`.
-
-    Every command with ``--json`` takes ``--ai`` (``--format ai``): text for a model to read, never a prompt.
-    *ai_view* says what that is when the command has a view of its own for it; ``"markdown"`` makes it
-    the command's Markdown view and offers ``--format markdown`` too. Without one, ``ai`` is the human
-    output with colour and hyperlinks off.
-    """
-    fmt = parser.add_mutually_exclusive_group()
-    fmt.add_argument("--json", action="store_true", dest="json_", help=HELP_JSON)
-    markdown = ai_view == "markdown"
-    choices = ("human", "markdown", "ai") if markdown else ("human", "ai")
-    view = "the Markdown view" if markdown else ai_view or "the human output without colour or hyperlinks"
-    fmt.add_argument(
-        "--format",
-        choices=choices,
-        dest="format_",
-        help=f"Output format (default: human). 'ai': {view}, for a model; it never prompts.",
-    )
-    fmt.add_argument("--ai", action="store_const", const="ai", dest="format_", help="Alias for --format ai.")
-    parser.set_defaults(ai_view_="markdown" if markdown else "ai")
-
-
-def output_format(args: argparse.Namespace) -> str:
-    """``json``, ``markdown``, ``ai`` or ``human``, from the flags :func:`add_output_format_args` registered."""
-    if getattr(args, "json_", False):
-        return "json"
-    fmt = getattr(args, "format_", None) or "human"
-    return str(args.ai_view_) if fmt == "ai" else fmt
+    require_prompt(args, instead="-y to publish")
+    if confirm(f"Publish {what}?", default=False):
+        return True
+    say_cancelled()
+    return False
 
 
 def may_prompt(args: argparse.Namespace) -> bool:
     """Whether a command may ask: human output on a terminal. ``--json`` and ``--ai`` output never prompts."""
     return output_format(args) == "human" and stdin_is_terminal()
-
-
-def add_color_args(parser: argparse.ArgumentParser) -> None:
-    """Register shared color-output and hyperlink flags."""
-    for flag, help_text in (("--color", HELP_COLOR), ("--hyperlinks", HELP_HYPERLINKS)):
-        parser.add_argument(flag, choices=("always", "auto", "never"), default="auto", metavar="WHEN", help=help_text)
-
-
-def add_verbose_and_debug_log_args(
-    parser: argparse.ArgumentParser,
-    *,
-    debug_log_help: str | None = None,
-    verbose_help: str | None = None,
-    verbose_count: bool = False,
-    refresh: bool = True,
-) -> None:
-    """Register ``-v``/``--verbose``, ``--debug-log`` and, for a command that reads Gerrit (*refresh*), ``--refresh``.
-
-    Pass *verbose_help* when a command uses ``--verbose`` for richer output. Without it
-    ``-v`` does nothing, so it is accepted (scripts may pass it) but not advertised: no help
-    line, no completion. With *verbose_count*, ``-v`` may be repeated (e.g. ``-vv``);
-    ``args.verbose`` is an ``int`` (0 when omitted).
-    """
-    v_help = verbose_help or argparse.SUPPRESS
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="count" if verbose_count else "store_true",
-        default=0 if verbose_count else False,
-        help=v_help,
-    )
-    parser.add_argument(
-        "--debug-log",
-        action="store_true",
-        help=debug_log_help or HELP_DEBUG_LOG,
-    )
-    if refresh:
-        # `ger --refresh <command>` works anywhere on the line (cli_ger takes it out before the command's
-        # parser runs); it is listed here so each command's --help says so.
-        parser.add_argument("--refresh", action="store_true", help=HELP_REFRESH)
 
 
 # Set by `ger --refresh` (cli_ger) for this process and the git-run editors it starts,

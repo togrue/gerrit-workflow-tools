@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
-from gerrit_workflow_tools.cli_edit import main as gedit_main, main_reword as greword_main
+from gerrit_workflow_tools.cli_edit import main as edit_main, main_reword as reword_main
 from gerrit_workflow_tools.cli_fix import main as fix_main
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.git_run import git, git_out
@@ -28,7 +28,7 @@ from tests.test_gerrit_unavailable import _DownGerrit
 MERGED = "is already merged on Gerrit"
 ABANDONED = "is abandoned on Gerrit"
 
-COMMANDS = {"edit": gedit_main, "reword": greword_main, "fix": fix_main}
+COMMANDS = {"edit": edit_main, "reword": reword_main, "fix": fix_main}
 
 
 @pytest.fixture

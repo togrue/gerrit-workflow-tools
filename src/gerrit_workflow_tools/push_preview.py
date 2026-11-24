@@ -131,7 +131,7 @@ def _commits(count: int) -> str:
     return "1 commit Gerrit already has is" if count == 1 else f"{count} commits Gerrit already has are"
 
 
-def print_gpush_preview(plan: PushPlan, *, summary_highlighter: SummaryHighlighter) -> None:
+def print_push_preview(plan: PushPlan, *, summary_highlighter: SummaryHighlighter) -> None:
     """What the push sends and what it sets over REST, each listed once, under a heading only when it has any.
 
     Commits Gerrit already has with nothing to set are one line, not a list.

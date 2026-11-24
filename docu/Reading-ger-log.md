@@ -116,7 +116,7 @@ Right-aligned annotations summarize what needs action. Omitted when nothing stan
 | `not pushed` | Commit not on Gerrit yet |
 | `Gerrit state unknown` | Gerrit could not be asked; JSON reason `gerrit-unknown`. `ger log` exits `5` |
 | `build failed` | Verified −1 or named CI failure |
-| `N unresolved comment(s)` | Open review threads |
+| `N unresolved comments` | Open review threads (`1 unresolved comment`) |
 | `no reviewers` | Change has no reviewers assigned |
 | `ahead of gerrit` | Local commit is newer than Gerrit's current patch set |
 | `diverged from Gerrit` | Ahead of Gerrit, but Gerrit's current patch set was uploaded from elsewhere (a web edit, another checkout) and is not in your history; JSON reason `diverged`. `ger push` refuses to replace it; `ger checkout <change> --update` merges it into your commit |
@@ -162,7 +162,7 @@ chain blocked by 1a2b3c4 (build failed)
 | `held back` | Commits at or above the ready boundary, which `ger push` leaves out |
 | `merged` / `abandoned` | Changes Gerrit merged or abandoned |
 | `failed CI` | Commits with failed Verified / CI |
-| `commit(s) with comments` | Commits with unresolved comments (the row's hint counts the threads) |
+| `commits with comments` (`1 commit with comments`) | Commits with unresolved comments (the row's hint counts the threads) |
 | `WIP` | Work-in-progress changes; a `next:` line says ``ready them with `ger push --ready` `` (`--all --ready` when one sits above the ready boundary) |
 
 Only counts above zero are shown. The `next:` lines below it name the command for each state the stack is in (an abandoned change, commits to upload, the upstream moved on, …), and the last line names the commit that blocks the chain, if one does.
@@ -198,5 +198,5 @@ For an agent, `ger log --ai` prints the same stack in words, one line per commit
 
 - [Getting-Started.md](Getting-Started.md) — first-run setup
 - [spec/commands/show.md](spec/commands/show.md) — deep dive on one change
-- [spec/commands/push.md](spec/commands/push.md) — pushing the ready prefix
+- [spec/commands/push.md](spec/commands/push.md) — pushing the commits below the ready boundary
 - [spec/commands/edit.md](spec/commands/edit.md) — jump to first commit needing attention (`--first-attention-commit`)

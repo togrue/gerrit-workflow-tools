@@ -47,10 +47,9 @@ stack. `REV` is the commit to rebase *from*, which normally sits below the stack
 
 | Option | Description |
 |--------|-------------|
-| `--onto-remote` | Rebase onto fetched `refs/remotes/<ger.remote>/<target>` tip |
-| `--no-onto-remote` | Force merge-base behavior (overrides `ger.rebaseOntoRemote`) |
-| `--drop-merged-equivalent` | Mark provably merged-equivalent commits as `drop` in todo |
-| `--autosquash` | Fold `fixup!` / `squash!` commits (what [`ger fix`](fix.md) makes) into their targets: `git rebase -i --autosquash`. The way `ger fix`, `ger log` and `ger push` tell you to squash one. Without it, git's `rebase.autosquash` decides, as for a plain `git rebase -i`: you see the todo either way |
+| `--onto-remote` / `--no-onto-remote` | Rebase onto fetched `refs/remotes/<ger.remote>/<target>` tip; `--no-onto-remote` forces merge-base behavior (overrides `ger.rebaseOntoRemote`) |
+| `--drop-merged-equivalent` / `--no-drop-merged-equivalent` | Mark provably merged-equivalent commits as `drop` in todo; `--no-…` keeps them even when `ger.rebaseDropMergedEquivalent` is on |
+| `--autosquash` / `--no-autosquash` | Fold `fixup!` / `squash!` commits (what [`ger fix`](fix.md) makes) into their targets: `git rebase -i --autosquash`. The way `ger fix`, `ger log` and `ger push` tell you to squash one. `--no-autosquash` keeps every `fixup!` commit where it is whatever `rebase.autosquash` says. Without either, git's `rebase.autosquash` decides, as for a plain `git rebase -i`: you see the todo either way |
 | `--continue` | Go on with the rebase underway: `git rebase --continue`. Refused while paths are still unmerged, with the shared next step, over unstaged changes to tracked files, and where nothing is left to apply |
 | `--abort` | Stop the rebase underway: `git rebase --abort`, the branch back where it was |
 | `--skip` | Leave out the commit the rebase stopped on with a conflict: `git rebase --skip`. Refused at any other stop, and where it would keep a commit made by hand and throw away work |

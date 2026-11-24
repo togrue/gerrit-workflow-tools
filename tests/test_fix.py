@@ -229,6 +229,10 @@ def test_fix_hint_folds_the_fixup_and_ger_edit_never_folds_it_behind_your_back(
     assert git_out("log", "-1", "--format=%s", cwd=stack_repo) == f"fixup! {target}"
     assert len(git_out("rev-list", "@{u}..HEAD", cwd=stack_repo).split()) == count - 1
 
+    code, _out, err = run_cli(stack_repo, rebase_main, ["--no-autosquash"], monkeypatch, gerrit=ChangeStore({}))
+    assert code == 0, err
+    assert git_out("log", "-1", "--format=%s", cwd=stack_repo) == f"fixup! {target}", "kept despite rebase.autosquash"
+
     code, _out, err = run_cli(stack_repo, rebase_main, ["--autosquash"], monkeypatch, gerrit=ChangeStore({}))
     assert code == 0, err
     subjects = git_out("log", "--format=%s", "@{u}..HEAD", cwd=stack_repo).splitlines()

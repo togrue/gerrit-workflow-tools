@@ -297,6 +297,7 @@ def test_gcid_check_reports_every_issue_oldest_first(stack_repo, monkeypatch):
     assert out == ""
     lines = err.strip().splitlines()
     assert len(lines) == 2, err
+    assert all(line.startswith("error: commit ") for line in lines), "every issue its own error line"
     assert lines[0].endswith("no Change-Id in commit message")
     assert lines[1].endswith("invalid Change-Id: 'Ibad'")
 

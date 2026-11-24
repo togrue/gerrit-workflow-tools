@@ -15,15 +15,15 @@ logger = logging.getLogger(__name__)
 
 def main(argv: list[str] | None = None) -> int:
     """Rewrite the interactive-rebase todo for one commit (``ger edit`` via ``GIT_SEQUENCE_EDITOR``)."""
-    if os.environ.get("GEDIT_DEBUG_LOG"):
+    if os.environ.get("GER_EDIT_DEBUG_LOG"):
         configure_logging(True)
     args = argv if argv is not None else sys.argv
     if len(args) < 2:
-        print("usage: GIT_SEQUENCE_EDITOR for gedit only", file=sys.stderr)
+        print("usage: GIT_SEQUENCE_EDITOR for ger edit only", file=sys.stderr)
         return 1
     todo = Path(args[1])
-    short_sha = os.environ.get("GEDIT_SHORT_SHA", "")
-    action = os.environ.get("GEDIT_ACTION", "edit")
+    short_sha = os.environ.get("GER_EDIT_SHORT_SHA", "")
+    action = os.environ.get("GER_EDIT_ACTION", "edit")
     logger.debug(
         "sequence_editor todo=%s action=%s short_sha=%s",
         todo,
@@ -31,7 +31,7 @@ def main(argv: list[str] | None = None) -> int:
         short_sha,
     )
     if action not in ("edit", "reword", "drop"):
-        print(f"invalid GEDIT_ACTION: {action}", file=sys.stderr)
+        print(f"invalid GER_EDIT_ACTION: {action}", file=sys.stderr)
         return 1
     text = todo.read_text(encoding="utf-8", errors="replace")
     lines = text.splitlines(keepends=True)

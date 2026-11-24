@@ -104,7 +104,7 @@ def test_a_file_comment_has_no_line(stack_repo: Path, monkeypatch: pytest.Monkey
 def test_the_location_is_checked_against_the_commit(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store, key = _store(stack_repo)
     code, _, err = _comment(stack_repo, store, ["d.txt:2", "-m", "x"], monkeypatch)
-    assert code == ExitCode.USAGE and "has 1 line(s)" in err
+    assert code == ExitCode.USAGE and "has 1 line in" in err
     # a.txt came in an older commit, but it is in HEAD's tree, so its lines are real there.
     assert _comment(stack_repo, store, ["a.txt:1", "-m", "x"], monkeypatch)[0] == ExitCode.OK
     code, _, err = _comment(stack_repo, store, ["nope.txt:1", "-m", "x"], monkeypatch)

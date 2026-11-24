@@ -95,21 +95,21 @@ def test_running_build_floating_url_or_unknown_state_is_not_cached() -> None:
 
 def test_credential_for_the_link_host_is_sent(tmp_path: Path) -> None:
     http = FakeCiHttp(jenkins_build())
-    _service(http, tmp_path, **{"ger.ciCredential.ci.example.org": "bot:s3cret"}).fetch_one(LINK)
+    _service(http, tmp_path, **{"ger.ciCredential.ci.example.org": "bot:s3cret"}).fetch([LINK])[0]
     assert all(headers.get("Authorization", "").startswith("Basic ") for _url, headers in http.calls)
 
 
 def test_bearer_credential_and_other_hosts_get_nothing(tmp_path: Path) -> None:
     http = FakeCiHttp(jenkins_build())
-    _service(http, tmp_path, **{"ger.ciCredential.ci.example.org": "tok"}).fetch_one(LINK)
+    _service(http, tmp_path, **{"ger.ciCredential.ci.example.org": "tok"}).fetch([LINK])[0]
     assert http.calls[0][1] == {"Authorization": "Bearer tok"}
     http = FakeCiHttp(jenkins_build())
-    _service(http, tmp_path / "b", **{"ger.ciCredential.other.example.org": "tok"}).fetch_one(LINK)
+    _service(http, tmp_path / "b", **{"ger.ciCredential.other.example.org": "tok"}).fetch([LINK])[0]
     assert http.calls[0][1] == {}
 
 
 def test_fetch_failure_is_recorded_not_raised(tmp_path: Path) -> None:
-    content = _service(FakeCiHttp({}), tmp_path).fetch_one(LINK)
+    content = _service(FakeCiHttp({}), tmp_path).fetch([LINK])[0]
     assert content.failed
     assert "HTTP 404" in (content.provenance.error or "")
     assert content.findings == []
@@ -117,17 +117,17 @@ def test_fetch_failure_is_recorded_not_raised(tmp_path: Path) -> None:
 
 def test_unmatched_url_names_the_host(tmp_path: Path) -> None:
     link = CiLink(label="x", url="https://builds.example.net/run/1", source="checks")
-    content = _service(FakeCiHttp({}), tmp_path).fetch_one(link)
+    content = _service(FakeCiHttp({}), tmp_path).fetch([link])[0]
     assert content.provenance.error == "no CI content provider matches builds.example.net"
 
 
 def test_finished_build_is_served_from_the_store_next_time(tmp_path: Path) -> None:
     http = FakeCiHttp(jenkins_build())
     service = _service(http, tmp_path)
-    first = service.fetch_one(LINK)
+    first = service.fetch([LINK])[0]
     assert not first.provenance.cached
     calls = len(http.calls)
-    again = service.fetch_one(CiLink(label="jenkins", url=f"{JENKINS}/consoleText", source="checks"), body="full")
+    again = service.fetch([CiLink(label="jenkins", url=f"{JENKINS}/consoleText", source="checks")], body="full")[0]
     assert len(http.calls) == calls, "same build, same entry; body was under the cap"
     assert again.provenance.cached
     assert again.findings == first.findings
@@ -137,9 +137,9 @@ def test_finished_build_is_served_from_the_store_next_time(tmp_path: Path) -> No
 def test_refresh_bypasses_the_store(tmp_path: Path) -> None:
     http = FakeCiHttp(jenkins_build())
     service = _service(http, tmp_path)
-    service.fetch_one(LINK)
+    service.fetch([LINK])[0]
     service.refresh = True
-    assert not service.fetch_one(LINK).provenance.cached
+    assert not service.fetch([LINK])[0].provenance.cached
 
 
 def test_oversized_body_keeps_findings_only_and_full_refetches(tmp_path: Path) -> None:
@@ -147,11 +147,11 @@ def test_oversized_body_keeps_findings_only_and_full_refetches(tmp_path: Path) -
     service = _service(http, tmp_path)
     assert service.store is not None
     service.store.max_body_bytes = 10
-    service.fetch_one(LINK)
+    service.fetch([LINK])[0]
     calls = len(http.calls)
-    assert service.fetch_one(LINK).provenance.cached
+    assert service.fetch([LINK])[0].provenance.cached
     assert len(http.calls) == calls
-    full = service.fetch_one(LINK, body="full")
+    full = service.fetch([LINK], body="full")[0]
     assert not full.provenance.cached
     assert len(http.calls) > calls
 
@@ -159,18 +159,18 @@ def test_oversized_body_keeps_findings_only_and_full_refetches(tmp_path: Path) -
 def test_running_build_is_never_stored(tmp_path: Path) -> None:
     http = FakeCiHttp(jenkins_build(building=True))
     service = _service(http, tmp_path)
-    service.fetch_one(LINK)
-    assert not service.fetch_one(LINK).provenance.cached
+    service.fetch([LINK])[0]
+    assert not service.fetch([LINK])[0].provenance.cached
 
 
 def test_findings_parsed_by_other_ci_code_are_a_miss(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     http = FakeCiHttp(jenkins_build())
     service = _service(http, tmp_path)
-    service.fetch_one(LINK)
-    assert service.fetch_one(LINK).provenance.cached
+    service.fetch([LINK])[0]
+    assert service.fetch([LINK])[0].provenance.cached
     monkeypatch.setattr(ci_content_service, "_GER_CI_DIGEST", "the finders changed")
-    assert not service.fetch_one(LINK).provenance.cached, "an upgrade parses the log again"
-    assert service.fetch_one(LINK).provenance.cached, "and keeps what it parsed"
+    assert not service.fetch([LINK])[0].provenance.cached, "an upgrade parses the log again"
+    assert service.fetch([LINK])[0].provenance.cached, "and keeps what it parsed"
 
 
 def test_same_link_on_two_commits_is_downloaded_once(tmp_path: Path) -> None:
@@ -262,7 +262,7 @@ CONTENT_PROVIDERS = [Builds(), "not a provider"]
         assert [getattr(p, "id", None) for p in providers] == ["builds", "jenkins"]
         url = "https://builds.example.net/run/1"
         service = CiContentService(providers=providers, http=FakeCiHttp({url: "boom"}), settings=Settings.from_map({}))
-        content = service.fetch_one(CiLink(label="b", url=url, source="checks"))
+        content = service.fetch([CiLink(label="b", url=url, source="checks")])[0]
         assert content.provenance.provider == "builds"
         assert [f.message for f in content.findings] == ["boom"]
     finally:
@@ -312,7 +312,7 @@ def test_editing_a_registry_helper_parses_the_log_again(
         service = CiContentService(
             providers=providers, http=FakeCiHttp({url: "boom"}), settings=Settings.from_map({}), store=store
         )
-        return service.fetch_one(CiLink(label="b", url=url, source="checks"))
+        return service.fetch([CiLink(label="b", url=url, source="checks")])[0]
 
     try:
         assert not fetch_in_a_new_process("old: ").provenance.cached
@@ -340,7 +340,7 @@ def test_a_provider_defined_in_a_helper_module_keys_on_the_registry(stack_repo: 
         service = CiContentService(
             providers=providers, http=FakeCiHttp({url: "boom"}), settings=Settings.from_map({}), store=store
         )
-        return service.fetch_one(CiLink(label="b", url=url, source="checks"))
+        return service.fetch([CiLink(label="b", url=url, source="checks")])[0]
 
     try:
         assert not fetch_in_a_new_process("old: ").provenance.cached
@@ -380,7 +380,7 @@ def test_a_provider_that_raises_is_a_recorded_error(tmp_path: Path) -> None:
             raise RuntimeError("parser exploded")
 
     service = CiContentService(providers=[Broken()], http=FakeCiHttp({}), settings=Settings.from_map({}))
-    content = service.fetch_one(LINK)
+    content = service.fetch([LINK])[0]
     assert (content.provenance.provider, content.provenance.error) == ("broken", "parser exploded")
 
 

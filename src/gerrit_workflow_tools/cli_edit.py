@@ -8,6 +8,12 @@ import os
 import sys
 from typing import Literal
 
+from gerrit_workflow_tools.cli_args import (
+    add_message_args,
+    add_verbose_and_debug_log_args,
+    changeish_help,
+    read_message,
+)
 from gerrit_workflow_tools.cli_attention import (
     print_cursor_history,
     print_cursor_status,
@@ -15,15 +21,7 @@ from gerrit_workflow_tools.cli_attention import (
     resolve_in_stack,
     set_cursor_from_changeish,
 )
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
-    add_message_args,
-    add_verbose_and_debug_log_args,
-    changeish_help,
-    init_cli_runtime,
-    read_message,
-    run_cli_command,
-)
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.cli_terminal import stdin_is_terminal
 from gerrit_workflow_tools.core.attention_cursor import (
     CursorAction,
@@ -40,8 +38,8 @@ from gerrit_workflow_tools.core.edit_attention_walk import (
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_run import GitError, git_out
-from gerrit_workflow_tools.core.rebase_next_step import attention_stop_hint
-from gerrit_workflow_tools.core.rebase_state import RebaseAction, rebase_in_progress, rebase_refusal, unmerged_paths
+from gerrit_workflow_tools.core.rebase_next_step import attention_stop_hint, rebase_refusal
+from gerrit_workflow_tools.core.rebase_state import RebaseAction, rebase_in_progress, unmerged_paths
 from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import merge_base_with_target
@@ -132,7 +130,6 @@ def _build_parser(*, prog: str, description: str, default_action: Literal["edit"
     ).description = "The new message for a reword, without an editor; a message without a Change-Id keeps the commit's."
     add_verbose_and_debug_log_args(
         p,
-        debug_log_help="Log git commands and rebase sequence editor steps to stderr.",
     )
     return p
 
@@ -316,9 +313,9 @@ def _run_interactive_stack_rebase(
         return code
     rebase_fork, _, _ = merge_base_with_target(cwd, branch)
 
-    env = {"GEDIT_FULL_SHA": full, "GEDIT_SHORT_SHA": short, "GEDIT_ACTION": action}
+    env = {"GER_EDIT_SHORT_SHA": short, "GER_EDIT_ACTION": action}
     if args.debug_log:
-        env["GEDIT_DEBUG_LOG"] = "1"
+        env["GER_EDIT_DEBUG_LOG"] = "1"
     logger.debug("ger edit rebasing onto %s to stop at %s", rebase_fork[:8], short)
     returncode = run_interactive_rebase(
         run,

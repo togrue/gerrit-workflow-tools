@@ -14,6 +14,7 @@ from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain, fo
 from gerrit_workflow_tools.core.review_checkout import ReviewState
 from gerrit_workflow_tools.core.review_target import VoteOption, VotePlan
 from gerrit_workflow_tools.render.comments import chain_location, draft_transition, drafts_in, first_line
+from gerrit_workflow_tools.render.status_fmt import unresolved_comments_text
 
 
 def iso_utc(moment: datetime | None) -> str | None:
@@ -78,7 +79,7 @@ def _headline_text(headline: Headline) -> str:
         return f"CI failed on {what}"
     if headline.reason == Attention.UNRESOLVED_COMMENTS:
         count = member.comments_unresolved
-        return f"{count} unresolved comment{'' if count == 1 else 's'} on {what}"
+        return f"{unresolved_comments_text(count)} on {what}"
     if headline.reason == Attention.REVIEW_ISSUES:
         return f"Negative vote on {what}"
     return f"{chain.owner_name} has waited {format_age(chain.unreviewed_age_seconds)} for your review of {what}"

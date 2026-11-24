@@ -32,13 +32,14 @@ from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnav
 from gerrit_workflow_tools.core.review_checkout import refuse_own_edits
 from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_commits
 from gerrit_workflow_tools.core.upstream import track_remote_branch
+from gerrit_workflow_tools.core.words import counted
 
 
 def _refusal_to_rebase(plan: CheckoutPlan, why: str) -> CheckoutRefusal:
     local, patchset = plan.local, plan.patchset
     assert local is not None
     return CheckoutRefusal(
-        f"your {len(local.above)} commit(s) above change {patchset.number} on {plan.branch} do not apply onto "
+        f"your {counted(len(local.above), 'commit')} above change {patchset.number} on {plan.branch} do not apply onto "
         f"patchset {patchset.patch_set} ({why}); nothing was changed. Rebase them yourself "
         f"(git rebase --onto {patchset.commit[:12]} {local.commit.short_sha} {plan.branch}), "
         f"or check patchset {patchset.patch_set} out on a branch of its own with -b NAME"

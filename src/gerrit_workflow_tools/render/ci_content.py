@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from gerrit_workflow_tools.core.ci_content import CiContent, CiFinding
+from gerrit_workflow_tools.core.words import counted
 
 
 def ci_content_json(content: CiContent, *, include_body: bool = False) -> dict[str, object]:
@@ -56,7 +57,7 @@ def _finding_human(finding: CiFinding) -> list[str]:
 
 def warnings_note(count: int) -> str:
     """The one line that stands for *count* collapsed warnings."""
-    return f"{count} warning{'' if count == 1 else 's'} not listed (ger ci --warnings lists them)"
+    return f"{counted(count, 'warning')} not listed (ger ci --warnings lists them)"
 
 
 def _build_and_log(content: CiContent) -> str:

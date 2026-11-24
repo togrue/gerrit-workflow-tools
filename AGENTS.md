@@ -44,7 +44,8 @@ leaves the codebase with fewer ways to do a thing than before.
 ```
 cli_ger.py        one entry point; dispatches to commands by name
 cli_<command>.py  one file per subcommand; arg parsing and printing only
-cli_common.py     shared CLI runtime: ExitCode, run_cli_command, init_cli_runtime, arg groups
+cli_common.py     shared CLI runtime: ExitCode, run_cli_command, init_cli_runtime
+cli_args.py       the argparse groups commands share: one definition per flag
 core/             the domain: stack, changeish resolution, attention, CI, reviewers
 core/gerrit/      talking to Gerrit: the GerritRest seam, GerritService, SQLite cache
 render/           shared output formatting

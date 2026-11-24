@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from gerrit_workflow_tools.core.agent_runbook import RunbookStop
 from gerrit_workflow_tools.core.ci_content import CiFinding
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain
+from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.comments import chain_location, first_line
 from gerrit_workflow_tools.render.comments_markdown import format_comment_chain_markdown
 
@@ -28,9 +29,9 @@ _RULES = """\
 1. `ger edit <Change-Id>` stops a rebase on the commit, so you can amend it. Use the Change-Id
    given below: commit ids change as you amend the commits underneath.
 2. Make the changes listed for it. Run the checks that failed, where you can.
-3. `git add -A && git commit --amend --no-edit && git rebase --continue`.
+3. `git add -A && git commit --amend --no-edit && ger rebase --continue`.
    If the rebase stops on a conflict in a later commit, resolve it, `git add` the files and
-   `git rebase --continue` again.
+   `ger rebase --continue` again.
 4. For each comment you addressed, run the `ger reply … --done` line given with it. That saves
    a draft reply "Done" which resolves the chain once a human publishes it.
 
@@ -98,7 +99,7 @@ def runbook_markdown(stops: Sequence[RunbookStop], *, branch: str | None) -> str
     lines = [
         "# Address the review feedback on this stack",
         "",
-        f"Branch `{branch or 'HEAD'}`: {len(work)} commit(s) to work on.",
+        f"Branch `{branch or 'HEAD'}`: {counted(len(work), 'commit')} to work on.",
         "",
         _RULES,
     ]

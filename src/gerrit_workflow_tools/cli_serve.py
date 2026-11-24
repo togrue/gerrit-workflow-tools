@@ -11,13 +11,8 @@ import threading
 from pathlib import Path
 from typing import BinaryIO
 
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
-    add_verbose_and_debug_log_args,
-    failure_exit,
-    init_cli_runtime,
-    run_cli_command,
-)
+from gerrit_workflow_tools.cli_args import add_verbose_and_debug_log_args
+from gerrit_workflow_tools.cli_common import ExitCode, failure_exit, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.core.ci_http import CiHttp
 from gerrit_workflow_tools.core.gerrit.event_source import EventSource
 from gerrit_workflow_tools.core.gerrit.event_stream import EventStream, StreamState, StreamStatus
@@ -51,7 +46,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Stop when stdin closes, so the service ends with the process that started it.",
     )
-    add_verbose_and_debug_log_args(p, debug_log_help="Log requests, git and Gerrit calls to stderr.")
+    add_verbose_and_debug_log_args(p)
     return p
 
 

@@ -161,7 +161,7 @@ def test_a_change_branch_with_your_commits_is_not_moved_without_force(
     mine = _head(worktree)
     _review(stack_repo, store, ["101"], monkeypatch)
     code, _, err = _review(stack_repo, store, ["102"], monkeypatch)
-    assert code == ExitCode.REFUSED and "change-102 has 1 commit(s)" in err
+    assert code == ExitCode.REFUSED and "change-102 has 1 commit the patchset" in err
     code, _, err = _review(stack_repo, store, ["102", "--force"], monkeypatch)
     assert code == ExitCode.OK and f"old tip was {mine}" in err
     assert git_out("rev-parse", "change-102", cwd=worktree) == shas[2]
@@ -264,7 +264,8 @@ def test_vote_asks_first_and_never_publishes_without_yes_off_a_terminal(
     assert (code, err.strip()) == (reply[0], reply[2].strip()) == (ExitCode.USAGE, f"error: {_NO_PROMPT}")
     monkeypatch.setattr("gerrit_workflow_tools.cli_common.stdin_is_terminal", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt: "n")
-    assert _review(stack_repo, store, ["--vote", "CR+2"], monkeypatch)[0] == ExitCode.REFUSED
+    code, _out, err = _review(stack_repo, store, ["--vote", "CR+2"], monkeypatch)
+    assert (code, err.strip().splitlines()[-1]) == (ExitCode.REFUSED, "cancelled")
     assert _review(stack_repo, store, ["--vote", "CR+2", "--dry-run"], monkeypatch)[0] == ExitCode.OK
     monkeypatch.setenv("GER_NO_PUBLISH", "1")
     assert _review(stack_repo, store, ["--vote", "CR+2", "-y"], monkeypatch)[0] == ExitCode.USAGE

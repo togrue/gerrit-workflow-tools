@@ -10,7 +10,8 @@ import logging
 import sys
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_terminal import ask_choice, confirm, prompt_toolkit_can_run, stdin_is_terminal
+from gerrit_workflow_tools.cli_common import ExitCode, require_prompt
+from gerrit_workflow_tools.cli_terminal import ask_choice, confirm, prompt_toolkit_can_run
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.push import (
@@ -27,18 +28,14 @@ from gerrit_workflow_tools.core.push_reviewers import change_ref_of
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import UsageError
+from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.push_input_line import KW_PUBLISH_DRAFTS, ParseResult, PushLineState, format_canonical
 from gerrit_workflow_tools.push_input_prompt import LINE_HELP
-from gerrit_workflow_tools.push_preview import print_dry_run, print_gpush_preview, print_plan_status
+from gerrit_workflow_tools.push_preview import print_dry_run, print_plan_status, print_push_preview
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 
 logger = logging.getLogger(__name__)
-
-
-def require_confirmable(*, yes: bool) -> None:
-    if not (stdin_is_terminal() or yes):
-        raise UsageError("non-interactive stdin: use --yes (-y) to push without a confirmation prompt")
 
 
 def ask_push_action(drafts: int, *, sends: bool = True) -> str:
@@ -59,7 +56,7 @@ def ask_push_action(drafts: int, *, sends: bool = True) -> str:
     }
     if drafts:
         return ask_choice(
-            f"Push and publish {drafts} draft(s)? [Y/n/p/r]: ",
+            f"Push and publish {counted(drafts, 'draft')}? [Y/n/p/r]: ",
             {**answers, "p": "push-only"},
             hint="  (Enter or y: push and publish, p: push and keep the drafts, n: cancel, r: set reviewers)",
             on_eof="cancel",
@@ -267,14 +264,15 @@ def confirm_gerrit_push(
             argv[-1],
         )
         if not stack_printed:
-            print_gpush_preview(plan, summary_highlighter=summary_highlighter)
+            print_push_preview(plan, summary_highlighter=summary_highlighter)
             stack_printed = True
         if args.dry_run:
             print_dry_run(plan)
             if unknown := unknown_plan_reviewers(run, plan):
                 raise UsageError(_no_account(unknown))
-            return 0
-        require_confirmable(yes=args.yes)
+            return int(ExitCode.OK)
+        if not args.yes:
+            require_prompt(args, instead="-y to push")
         if args.yes:
             if unknown := unknown_plan_reviewers(run, plan):
                 raise UsageError(_no_account(unknown))
@@ -282,7 +280,7 @@ def confirm_gerrit_push(
             print_plan_status(plan)  # what is sent with it, drafts included, as the prompt would have shown
             if plan.credential_error:
                 print(plan.credential_error, file=sys.stderr)
-                return 1
+                return int(ExitCode.REFUSED)
             return plan
         line = options_line_available()
         drafts = publishable_drafts(plan)
@@ -307,7 +305,7 @@ def confirm_gerrit_push(
                 continue
         if act == "cancel":
             print("Push cancelled.", file=sys.stderr)
-            return 0
+            return int(ExitCode.OK)
         if act == "reviewers":
             revised = apply_interactive_line(run.cwd, plan, args, settings=settings, save=False)
             if revised is not None:

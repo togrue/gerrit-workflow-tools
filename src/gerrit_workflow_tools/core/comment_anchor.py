@@ -16,6 +16,7 @@ from gerrit_workflow_tools.core.gerrit.rest import printable_path
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.git_state import repo_toplevel
+from gerrit_workflow_tools.core.words import counted
 
 
 _POSITION = r"(\d+)(?:\.(\d+))?"
@@ -211,7 +212,7 @@ def fit_to_file(location: CommentLocation, lines: list[str] | None, *, commit: s
     for line in (location.start_line, location.line):
         if line is not None and line > count:
             raise LocationError(
-                f"{location.describe()}: {printable_path(location.path)} has {count} line(s) in {commit[:12]}"
+                f"{location.describe()}: {printable_path(location.path)} has {counted(count, 'line')} in {commit[:12]}"
             )
     rng = location.range
     if rng is None:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -30,8 +29,6 @@ if TYPE_CHECKING:
     from gerrit_workflow_tools.core.stack import Commit
     from gerrit_workflow_tools.core.suggested_edits import SuggestedEdit
 
-
-logger = logging.getLogger(__name__)
 
 LocalCommentState = Literal["note", "local-draft"]
 """A comment that lives only in the local comment store."""

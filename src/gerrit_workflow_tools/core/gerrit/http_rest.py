@@ -26,6 +26,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     strip_terminal_controls,
 )
 from gerrit_workflow_tools.core.http_connect import urlopen, why_unreachable
+from gerrit_workflow_tools.core.words import counted
 
 
 logger = logging.getLogger(__name__)
@@ -211,7 +212,7 @@ class HttpGerritRest:
         if not isinstance(data, list):
             raise GerritApiError(f"unexpected {what} response")
         rows = [row for row in data if isinstance(row, dict)]
-        logger.info("%s -> %d row(s)", what, len(rows))
+        logger.info("%s -> %s", what, counted(len(rows), "row"))
         return rows
 
     def query_changes(

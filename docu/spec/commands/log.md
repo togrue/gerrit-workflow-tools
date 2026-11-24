@@ -33,11 +33,11 @@ ger log [options] [REV_RANGE]
 | `--color WHEN` | `always` \| `auto` \| `never`; `auto` honours `NO_COLOR` ([Configuration.md](../../Configuration.md#colour)) |
 | `--hyperlinks WHEN` | `always` \| `auto` \| `never`. When on, text URLs become a clickable `Open in gerrit` (OSC 8) and that compact link is shown by default. JSON always includes the raw `gerrit_url`. |
 | `--url`, `--show-url` | Gerrit web URL per line (forced on). Default: on when hyperlinks are on, otherwise `ger.logShowUrl`. |
-| `--show-change-id` | Show full Change-Id on an indented continuation line (default: `ger.logShowChangeId`) |
+| `--show-change-id` / `--no-show-change-id` | Show full Change-Id on an indented continuation line (default: `ger.logShowChangeId`; `-vv` shows it too) |
 | `-v`, `--verbose` | Add indented `CI:` pipeline lines and a `Reviewers:` line (`alice, bob (cc: carol)`; omitted when Gerrit lists nobody) below each commit; primary line unchanged. Repeat (`-vv`) to also show Change-Id. |
-| `--debug-log` | Log git commands to stderr (repeat for more detail) |
+| `--debug-log` | Standard helpers: diagnostics to stderr |
 | `--refresh` | Ask Gerrit again instead of serving the cache inside its trust window; same as `ger --refresh log` |
-| `--follow-merges` | Include merge commits in range (see shared helper in `cli_common`) |
+| `--follow-merges` | Include merge commits in range (see shared helper in `cli_args`) |
 
 `ger log --help` ends with examples and a legend of the status columns, generated from where the tokens are defined (`render/status_fmt.py`: `PATCHSET_TOKENS`, `VOTE_LEGEND`, `status_legend`), so the two cannot drift.
 
@@ -55,7 +55,7 @@ Columns: patchset token (`p`/`n`/`o`/`-`), Verified, Code-Review, comment marker
 
 **Summary example:** `summary: 4 on Gerrit · 1 to upload · 2 held back · 1 failed CI · 1 commit with comments`
 
-Each count names what it counts, and only counts above zero are shown: `on Gerrit` (open changes), `to upload` (what `ger push` would upload: commits below the **ready boundary** that Gerrit does not have, or is behind on; `StackOverview.to_upload`), `held back` (at or above the ready boundary), `merged`, `abandoned`, `failed CI`, `commit(s) with comments` (commits, not threads; the row's hint counts the threads) and `WIP`.
+Each count names what it counts, and only counts above zero are shown: `on Gerrit` (open changes), `to upload` (what `ger push` would upload: commits below the **ready boundary** that Gerrit does not have, or is behind on; `StackOverview.to_upload`), `held back` (at or above the ready boundary), `merged`, `abandoned`, `failed CI`, `commits with comments` (commits, not threads; the row's hint counts the threads) and `WIP`.
 
 Below the summary, dim **next lines** (`StackOverview.next_steps` in core, put into words by `render/stack_log.py` `next_steps`) name the ger command for a state the stack is in, in this order: the upstream moved on after a fetch (`origin/main has 1 new commit; rebase onto it with `ger rebase origin/main``; when a commit would stop that rebase, `; "Refactor parser init" would conflict in a.txt` or `; "Refactor parser init" would become empty: its change is already upstream`; and `; 1 commit is already upstream and will be dropped` for what the rebase leaves out: previewed without touching the worktree, as `GET /stack` serves it), a merged commit (`ger rebase --onto-remote --drop-merged-equivalent`; once the upstream moved on, the one line above names the rebase instead, `ger rebase origin/main --drop-merged-equivalent`, its `argv`), an abandoned change (`1a2b3c4 is abandoned on Gerrit; restore it there or drop the commit (`ger edit --drop 1a2b3c4`)`), a **diverged** change or one with a newer patchset on Gerrit (`ger checkout change:<n> --update`), commits to upload (`1 commit to upload with `ger push``), WIP changes on Gerrit (`ger push --ready`, or `ger push --all --ready` when one sits above the ready boundary, where a plain push does not reach), and last the commit that blocks the chain: `chain blocked by 1a2b3c4 (awaiting review)`. One line per state, none when there is nothing to do.
 
@@ -79,7 +79,7 @@ note: a rebase is in progress on feature, stopped on a conflict at 1a2b3c4 "Add 
 
 The stop reads `to edit it`, `to edit it, and HEAD has moved on from it: the commits above it were
 made at the stop` (a split), `on a conflict … in <paths>`, `with its conflicts resolved, ready for
-`git rebase --continue`` (nothing unmerged any more) or `between commits`; just `stopped` when
+`ger rebase --continue`` (nothing unmerged any more) or `between commits`; just `stopped` when
 that cannot be told. Where `HEAD` is, by git's own state files:
 
 - At an edit stop, `HEAD` is the commit it stopped at, or an amend of it (on the same commit,

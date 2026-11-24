@@ -6,14 +6,16 @@ import argparse
 import logging
 import sys
 
-from gerrit_workflow_tools.cli_attention import resolve_in_stack
-from gerrit_workflow_tools.cli_common import (
+from gerrit_workflow_tools.cli_args import (
+    add_branch_arg,
     add_color_args,
+    add_dry_run_arg,
     add_follow_merges_args,
     add_verbose_and_debug_log_args,
-    init_cli_runtime,
-    run_cli_command,
+    add_yes_arg,
 )
+from gerrit_workflow_tools.cli_attention import resolve_in_stack
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, require_prompt, run_cli_command
 from gerrit_workflow_tools.cli_terminal import assume_yes, confirm, stdin_is_terminal
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
@@ -24,7 +26,7 @@ from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.upstream import missing_upstream_error
 from gerrit_workflow_tools.core.usage import UsageError
-from gerrit_workflow_tools.push_confirm import confirm_gerrit_push, prompt_initial_options, require_confirmable
+from gerrit_workflow_tools.push_confirm import confirm_gerrit_push, prompt_initial_options
 from gerrit_workflow_tools.push_outcome import finish_push, print_refusal
 from gerrit_workflow_tools.push_preview import print_nothing_to_push
 from gerrit_workflow_tools.render.style import ANSI_DIM_GRAY, color_text
@@ -46,24 +48,14 @@ def _build_arg_parser() -> argparse.ArgumentParser:
             "cannot be used with --yes)."
         ),
     )
-    parser.add_argument(
-        "--branch",
-        metavar="NAME",
-        default=None,
-        help="Push the specified local branch instead of the current branch.",
-    )
-    parser.add_argument("--dry-run", action="store_true", help="Print actions only; do not push.")
+    add_branch_arg(parser)
+    add_dry_run_arg(parser)
     parser.add_argument(
         "--no-rebase-check",
         action="store_true",
         help="Do not fetch or verify that HEAD is linear on the remote Gerrit target (see ger.pushRemotePolicy).",
     )
-    parser.add_argument(
-        "-y",
-        "--yes",
-        action="store_true",
-        help="Push without confirmation (required when stdin is not a terminal; GER_ASSUME_YES=1 sets it).",
-    )
+    add_yes_arg(parser)
     parser.add_argument(
         "--publish-comments",
         action="store_true",
@@ -89,7 +81,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         metavar="ACCOUNTS",
         help=(
             "Comma-separated Gerrit reviewer accounts (repeat for more; overwrites branch gerReviewers). "
-            "Appended as ref options %%r=…"
+            "Appended as ref options (%%r=…)."
         ),
     )
     parser.add_argument(
@@ -126,7 +118,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     add_verbose_and_debug_log_args(
         parser,
-        debug_log_help="Log git commands and push steps to stderr.",
     )
     parser.add_argument(
         "until",
@@ -140,7 +131,9 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 def _add_mark_flags(group: argparse._MutuallyExclusiveGroup, *flags: tuple[str, str]) -> None:
     for flag, what in flags:
-        group.add_argument(flag, action="store_true", help=f"Mark change(s) {what}; REST where Gerrit has the commit).")
+        group.add_argument(
+            flag, action="store_true", help=f"Mark the changes {what}; REST where Gerrit has the commit)."
+        )
 
 
 def _gerrit_flags_set(args: argparse.Namespace) -> bool:
@@ -176,20 +169,20 @@ def _handle_vanilla_push(run: RunContext, args: argparse.Namespace, *, branch: s
     )
     if isinstance(prepared, PushRefusal):
         print(prepared.message, file=sys.stderr)
-        return 1
+        return int(ExitCode.REFUSED)
     cmd = prepared
     logger.debug("ger push vanilla: %s", cmd)
     if args.dry_run:
         print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
         print("[dry-run] not executing push", file=sys.stderr)
-        return 0
-    require_confirmable(yes=args.yes)
+        return int(ExitCode.OK)
     if not args.yes:
+        require_prompt(args, instead="-y to push")
         print(color_text(" ".join(cmd), ANSI_DIM_GRAY))
         print()
         if not confirm("Do you want to run `git push`?", default=True):
             print("Push cancelled.", file=sys.stderr)
-            return 1
+            return int(ExitCode.REFUSED)  # a vanilla push; a Gerrit push's cancel exits OK (push.md)
     logger.debug("ger push vanilla executing: %s (cwd=%s)", " ".join(cmd), cwd)
     return finish_push(execute(run, cmd), None)
 
@@ -221,13 +214,13 @@ def _push_gerrit(run: RunContext, args: argparse.Namespace, *, branch: str) -> i
     )
     if isinstance(prepared, PushRefusal):
         print_refusal(cwd, branch, prepared, first_parent=first_parent, settings=settings)
-        return 1
+        return int(ExitCode.REFUSED)
     for warning in prepared.warnings:
         print(warning, file=sys.stderr)
     asked = prompt_initial_options(cwd, prepared, args, settings=settings) if args.i else prepared
     if asked is None:
         print("Push cancelled.", file=sys.stderr)
-        return 0
+        return int(ExitCode.OK)
     plan = asked
     highlighter = branch_summary_highlighter(cwd, plan.branch, first_parent=first_parent, settings=settings)
     if changes_nothing(plan) and not args.dry_run:  # nothing to confirm, so -y is not needed either
@@ -282,7 +275,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     mode = ger_push_mode(cwd, branch, settings=settings)
     if not args.yes and not args.dry_run and mode in ("gerrit", None) and (args.branch or not detached):
         if not require_branch_upstream(cwd, branch, settings=settings):
-            return 1
+            return int(ExitCode.REFUSED)
         mode = ger_push_mode(cwd, branch, settings=settings)
     if mode is None:  # Already asked above, or chose not to (--yes, --dry-run, detached HEAD).
         raise missing_upstream_error(branch, askable=False)

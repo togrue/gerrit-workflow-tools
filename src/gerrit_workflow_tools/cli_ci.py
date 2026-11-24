@@ -6,15 +6,15 @@ import argparse
 import json
 import sys
 
-from gerrit_workflow_tools.cli_common import (
-    ExitCode,
+from gerrit_workflow_tools.cli_args import (
+    add_branch_arg,
     add_color_args,
     add_output_format_args,
+    add_stack_arg,
     add_verbose_and_debug_log_args,
-    init_cli_runtime,
     output_format,
-    run_cli_command,
 )
+from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.cli_notes import print_resolution_note
 from gerrit_workflow_tools.core.annotated_targets import annotate_targets, local_stack_or_none
 from gerrit_workflow_tools.core.attention import Attention
@@ -56,13 +56,8 @@ The status columns are those of ger log (see ger log --help).""",
         metavar="CHANGEISH",
         help="Changeish, or A..B / A...B range with changeish endpoints (default: HEAD unless --stack).",
     )
-    p.add_argument("--stack", action="store_true", help="Include all commits in the local stack (upstream_tip..HEAD).")
-    p.add_argument(
-        "--branch",
-        metavar="NAME",
-        default=None,
-        help="Use the specified local branch for stack/upstream context (default: working branch).",
-    )
+    add_stack_arg(p)
+    add_branch_arg(p)
     p.add_argument(
         "--full",
         action="store_true",
@@ -78,7 +73,6 @@ The status columns are those of ger log (see ger log --help).""",
     add_verbose_and_debug_log_args(
         p,
         verbose_help="Also print the last lines of each log after its findings.",
-        debug_log_help="Log Gerrit resolution and CI fetches to stderr.",
     )
     return p
 

@@ -91,7 +91,7 @@ def test_checkout_a_pushed_change_then_pick_up_its_new_patchset(
     # --update moves the change to patchset 2 and rebases the follow-up onto it.
     code, out, err = _checkout(taker, [str(number), "--update"], monkeypatch)
     assert code == 0, err
-    assert "from patchset 1 to" in out and "rebased the 1 commit(s) above it" in out
+    assert "from patchset 1 to" in out and "rebased the 1 commit above it" in out
     assert git_out("rev-parse", "HEAD~1", cwd=taker) == ps2
     assert git_out("log", "-1", "--format=%s", cwd=taker) == "my follow-up"
 

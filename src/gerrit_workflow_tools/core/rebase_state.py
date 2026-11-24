@@ -1,9 +1,9 @@
 """A rebase underway: whether one is, how far it got and why it stopped.
 
-Every history-moving ger command asks here whether a rebase is underway before it starts
-(:func:`rebase_refusal`). What to do at a stop, and why a way on is refused, is
-:mod:`gerrit_workflow_tools.core.rebase_next_step`. Why a rewrite cannot start over your changes is
-:mod:`gerrit_workflow_tools.core.rewrite_refusal`.
+Every history-moving ger command asks whether a rebase is underway before it starts
+(``rebase_next_step.rebase_refusal``, in the words of every way on). What to do at a stop, and why a
+way on is refused, is :mod:`gerrit_workflow_tools.core.rebase_next_step`. Why a rewrite cannot
+start over your changes is :mod:`gerrit_workflow_tools.core.rewrite_refusal`.
 Which branch a stopped rebase belongs to stays with branch resolution in
 :mod:`gerrit_workflow_tools.core.git_state`; the local stack while it runs is
 :mod:`gerrit_workflow_tools.core.rebasing_stack`.
@@ -262,16 +262,6 @@ def _nothing_uncommitted(cwd: Path | str | None) -> bool:
 
 AM_UNDERWAY = "a `git am` is in progress; finish it (`git am --continue`) or `git am --abort`"
 """What is underway while ``git am`` applies patches: every refusal over it starts so."""
-
-
-def rebase_refusal(cwd: Path | str | None) -> str | None:
-    """Why a command that moves branches cannot start during a rebase or a ``git am``, or ``None``."""
-    repo_dir = git_dir(cwd)
-    if rebase_underway(repo_dir):
-        return "a rebase is already in progress; finish it (`ger rebase --continue`) or `ger rebase --abort` first"
-    if am_underway(repo_dir):
-        return f"{AM_UNDERWAY} first"
-    return None
 
 
 def unmerged_paths(cwd: Path | str | None) -> list[str]:
