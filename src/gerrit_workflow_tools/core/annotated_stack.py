@@ -38,6 +38,7 @@ from gerrit_workflow_tools.core.rebase_state import RebaseProgress, rebase_progr
 from gerrit_workflow_tools.core.rebasing_stack import RebasingStack, load_rebasing_stack
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, upstream_tracking_tip_and_display
+from gerrit_workflow_tools.core.upstream import NeedsUpstreamError
 from gerrit_workflow_tools.core.upstream_moved import UpstreamMoved, merged_same, upstream_moved
 
 
@@ -164,7 +165,7 @@ def _commits_on_target(run: RunContext, rows: list[Commit], rev_range: str) -> f
         return frozenset()
     try:
         tip, _display = upstream_tracking_tip_and_display(run.cwd, run.repo.stack_branch, settings=run.settings)
-    except GitError:
+    except (GitError, NeedsUpstreamError):  # a detached HEAD has no upstream: nothing counts as merged
         return frozenset()
     upstream_shas = git("rev-list", f"{rows[0].sha}^..{tip}", cwd=run.cwd, check=False).stdout.split()
     return frozenset(upstream_shas) & {row.sha for row in rows}

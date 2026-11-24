@@ -30,6 +30,7 @@ from gerrit_workflow_tools.core.comment_target import MissingChangeIdError
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeAmbiguousError, ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
+from gerrit_workflow_tools.core.gerrit.stack_context import NoWorkingBranchError
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError
 from gerrit_workflow_tools.core.review_checkout import ReviewChainEndError
 from gerrit_workflow_tools.core.run_context import RunContext
@@ -96,11 +97,13 @@ class ExitCode(IntEnum):
     """A **CI link**'s content could not be fetched or parsed where a command required it (``ger ci``)."""
 
 
-# Ordered longest-subclass-first: ChangeAmbiguousError and MissingChangeIdError derive from ChangeResolutionError,
+# Ordered longest-subclass-first: ChangeAmbiguousError, MissingChangeIdError and NoWorkingBranchError derive from
+# ChangeResolutionError,
 # and ConfigError from ValueError, so the more specific entry has to be matched first.
 _FAILURE_EXITS: tuple[tuple[type[BaseException], ExitCode, str], ...] = (
     (ChangeAmbiguousError, ExitCode.AMBIGUOUS, "error"),
     (MissingChangeIdError, ExitCode.MISSING_CHANGE_ID, "error"),
+    (NoWorkingBranchError, ExitCode.USAGE, "error"),
     (ChangeResolutionError, ExitCode.NOT_FOUND, "error"),
     (GerritApiError, ExitCode.GERRIT, "gerrit error"),
     (ConfigError, ExitCode.CONFIG, "error"),

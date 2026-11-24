@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 _EXAMPLES = """examples:
   ger log                    the stack above its upstream, and what to do next
   ger log -v                 also each commit's CI links and reviewers
-  ger log origin/main..HEAD  a range of commits (works on a detached HEAD too)
+  ger log origin/main..HEAD  a range of commits
   ger log --ai               one plain line per commit, for an agent"""
 
 
@@ -119,7 +119,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     show_url = bool(args.url) or gdef["show_url"] or is_hyperlink_enabled()
     show_change_id = bool(args.show_change_id) or gdef["show_change_id"] or verbose_level >= 2
 
-    rev_range = resolve_rev_range(args.rev_range, branch=run.repo.stack_branch)
+    branch = run.repo.stack_branch if args.rev_range else run.repo.require_stack_branch()
+    rev_range = resolve_rev_range(args.rev_range, branch=branch)
     if not require_stack_upstream(run, rev_range, interactive=may_prompt(args)):
         return int(ExitCode.REFUSED)
 

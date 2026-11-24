@@ -132,7 +132,7 @@ The first line names the project, the push branch, the commit count and what `ge
 |------|---------|
 | `0` | Success, whether or not a commit requires attention |
 | `1` | `REFUSED` — you declined the upstream prompt |
-| `2` | Invalid usage |
+| `2` | Invalid usage, or a detached HEAD no local branch points at (outside a rebase): there is no working branch, so no stack and no Gerrit branch to compare with ([exit codes](../exit-codes.md)) |
 | `3` | A revision in the range does not exist |
 | `5` | Gerrit API error, or Gerrit could not be asked at all (see below) |
 

@@ -19,6 +19,20 @@ class ChangeResolutionError(RuntimeError):
     """Changeish could not be resolved (not found, invalid input, missing stack context)."""
 
 
+class NoWorkingBranchError(ChangeResolutionError):
+    """HEAD is detached and no local branch points at it: there is no **working branch**, so no stack.
+
+    One message and one exit code (``USAGE``) for every command: the state is the user's to change.
+    Still a :class:`ChangeResolutionError`, so a caller that can do without a stack context goes on.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "HEAD is detached and no local branch points at it, so there is no stack and no Gerrit branch "
+            "to compare with; check out the branch you work on: git switch <branch>"
+        )
+
+
 class NoDestinationBranchError(NeedsUpstreamError, ChangeResolutionError):
     """The stack has no Gerrit destination because its branch has no upstream (and no ``gerTarget``)."""
 
@@ -43,7 +57,7 @@ def _stack_branch_name(cwd: Path | str | None, branch: str | None, *, settings: 
     working = resolve_working_branch(cwd, settings=settings)
     if working:
         return working
-    raise ChangeResolutionError("cannot determine working branch (detached HEAD with no branch context)")
+    raise NoWorkingBranchError()
 
 
 def stack_project(cwd: Path | str | None, branch: str | None = None, *, settings: Settings) -> str:

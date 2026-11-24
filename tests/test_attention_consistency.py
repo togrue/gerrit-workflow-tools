@@ -78,3 +78,23 @@ def test_show_of_a_commit_the_upstream_contains_says_merged(stack_repo: Path, mo
     head = out.splitlines()[0]
     assert head.split()[2] == "m" and head.endswith("# merged"), head
     assert "not pushed" not in out
+
+
+def test_a_detached_head_no_branch_points_at_is_one_message_and_one_exit_code(
+    blocked_stack: tuple[Path, ChangeStore], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ger log failed in git (exit 7) and ger show / ger ci as an unresolved changeish (3): now one usage error."""
+    from gerrit_workflow_tools.cli_common import ExitCode
+
+    repo, store = blocked_stack
+    git("checkout", "-q", "--detach", "HEAD~1", cwd=repo)
+    answers = {
+        (main.__module__, tuple(argv)): run_cli(repo, main, argv, monkeypatch, gerrit=store)
+        for main, argv in ((log_main, []), (log_main, ["origin/main..HEAD"]), (show_main, []), (ci_main, []))
+    }
+    assert {code for code, _out, _err in answers.values()} == {ExitCode.USAGE}
+    messages = {err.strip() for _code, _out, err in answers.values()}
+    assert len(messages) == 1, messages
+    (message,) = messages
+    assert message.startswith("error: HEAD is detached and no local branch points at it")
+    assert message.endswith("check out the branch you work on: git switch <branch>")
