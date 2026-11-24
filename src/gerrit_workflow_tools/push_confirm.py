@@ -16,7 +16,6 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.push import (
     PushPlan,
-    change_ref_of,
     publish_drafts_with,
     publishable_drafts,
     push_argv,
@@ -25,6 +24,7 @@ from gerrit_workflow_tools.core.push import (
     unknown_plan_reviewers,
 )
 from gerrit_workflow_tools.core.push_options import PushOptions
+from gerrit_workflow_tools.core.push_reviewers import change_ref_of
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import UsageError
@@ -144,7 +144,7 @@ def apply_interactive_line(
         cwd,
         plan.branch,
         settings=settings,
-        change_ref=change_ref_of(cwd, plan, plan.tip_sha, settings=settings),
+        change_ref=change_ref_of(cwd, plan.push_branch, plan.tip_sha, settings=settings),
         reviewer_flag_segments=list(args.reviewers),
         session_strategy=_session_strategy(args),
     )
@@ -194,7 +194,7 @@ def confirm_with_options_line(
                 run.cwd,
                 plan.branch,
                 settings=run.settings,
-                change_ref=change_ref_of(run.cwd, plan, plan.tip_sha, settings=run.settings),
+                change_ref=change_ref_of(run.cwd, plan.push_branch, plan.tip_sha, settings=run.settings),
                 reviewer_flag_segments=list(args.reviewers),
                 session_strategy=_session_strategy(args),
                 message=_CONFIRM_LINE_MESSAGE.format("pushes" if sent_commits(plan) else "sets them on Gerrit"),
@@ -228,7 +228,7 @@ def prompt_initial_options(
             cwd,
             plan.branch,
             settings=settings,
-            change_ref=change_ref_of(cwd, plan, plan.branch, settings=settings),
+            change_ref=change_ref_of(cwd, plan.push_branch, plan.branch, settings=settings),
             reviewer_flag_segments=list(args.reviewers),
             session_strategy=_session_strategy(args),
             text=text,

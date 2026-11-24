@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 
+from gerrit_workflow_tools.core.change_id import change_id_of_rev
 from gerrit_workflow_tools.core.changeish import parse
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet
+from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
 from gerrit_workflow_tools.core.reviewer import (
     ReviewerStrategy,
     gerrit_credentials_configured,
@@ -55,6 +58,17 @@ class PushMark:
     reviewers: tuple[str, ...]
     wip: bool
     private: bool
+
+
+def change_ref_of(cwd: Path, push_branch: str, rev: str, *, settings: Settings) -> str | None:
+    """The *push_branch* triplet for the change *rev* carries; ``None`` without a Change-Id or project.
+
+    What the push prompt's reviewer completion asks Gerrit about: never the bare Change-Id,
+    which Gerrit answers with 404 ("Multiple changes found") once it is on a second branch.
+    """
+    change_id = change_id_of_rev(cwd, rev)
+    project = resolve_gerrit_project_name(cwd, settings=settings) if change_id else None
+    return build_triplet(project, push_branch, change_id) if change_id and project else None
 
 
 def unknown_reviewers(
