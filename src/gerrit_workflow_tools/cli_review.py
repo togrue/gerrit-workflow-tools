@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -50,7 +51,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="ger review",
         usage=(
-            "ger review CHANGEISH [--patchset N] [--stage | --no-stage] [--in-worktree | --in-place] [--force]\n"
+            "ger review CHANGEISH [--patchset N | --bottom] [--stage | --no-stage] [--in-worktree | --in-place] "
+            "[--force]\n"
             "       ger review (--next | --prev) [--stage | --no-stage] [--force]\n"
             "       ger review (--stage | --unstage | --status | --done)\n"
             "       ger review --vote [LABEL]+N ... [--chain | --change CHANGEISH ...] [-m MSG] [--dry-run] [-y]"
@@ -64,6 +66,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "changeish", nargs="?", metavar="CHANGEISH", help=changeish_help("The change to review", change_only=True)
     )
     p.add_argument("--patchset", type=int, default=None, metavar="N", help="Review patchset N (default: current).")
+    p.add_argument(
+        "--bottom",
+        action="store_true",
+        help="Start at the bottom of CHANGEISH's review chain (its lowest open change); walk up with --next.",
+    )
     walk = p.add_mutually_exclusive_group()
     walk.add_argument("--next", action="store_true", help="Review the change above in its review chain.")
     walk.add_argument("--prev", action="store_true", help="Review the change below in its review chain.")
@@ -110,6 +117,8 @@ def _check_args(p: argparse.ArgumentParser, args: argparse.Namespace) -> None:
         p.error("--vote acts on the change being reviewed; give it on its own")
     if args.changeish is not None and (args.next or args.prev or args.status or args.done):
         p.error("name a CHANGEISH or walk with --next/--prev, not both")
+    if args.bottom and (args.changeish is None or args.patchset is not None):
+        p.error("--bottom goes with a CHANGEISH, without --patchset: it starts at the chain's lowest open change")
     if not opens and (args.patchset is not None or args.mode is not None or args.force):
         p.error("--patchset, --in-worktree, --in-place and --force go with a CHANGEISH or --next/--prev")
     if not opens and args.vote is None and not args.status and not args.done and args.stage is None:
@@ -156,6 +165,30 @@ def _delta_lines(delta: ReviewDelta) -> list[str]:
     ]
 
 
+def next_steps(state: ReviewState, chain: list[int] | None, cwd: Path) -> str:
+    """The commands of the review loop from here: get to the worktree, read, comment, answer, walk, vote."""
+    worktree = Path(state.worktree)
+    here = cwd.resolve()
+    steps = (
+        [] if here == worktree.resolve() or worktree.resolve() in here.parents else [f"cd {_shown_path(worktree, cwd)}"]
+    )
+    steps += ["ger show", "ger comment PATH:LINE -m …", "ger reply ID -m …"]
+    if chain is not None and chain[-1:] == [state.number]:  # the top: nothing left to walk to
+        steps += ["ger review --vote +1" + (" --chain" if len(chain) > 1 else ""), "ger review --done"]
+    else:
+        steps += ["ger review --next", "ger review --vote +1"]
+    return "next: " + " · ".join(steps)
+
+
+def _shown_path(path: Path, cwd: Path) -> str:
+    """*path* relative to *cwd* when that is shorter, as one types it after ``cd``."""
+    try:
+        relative = os.path.relpath(path, cwd)
+    except ValueError:  # another drive (Windows)
+        return str(path)
+    return relative if len(relative) < len(str(path)) else str(path)
+
+
 def _emit_state(
     state: ReviewState,
     *,
@@ -163,6 +196,7 @@ def _emit_state(
     url: str | None,
     as_json: bool,
     delta: ReviewDelta | None = None,
+    hint: str | None = None,
 ) -> None:
     if as_json:
         payload = review_state_json(state, chain=chain, url=url)
@@ -184,12 +218,18 @@ def _emit_state(
         print(f"  {url}")
     for line in _delta_lines(delta) if delta else ():
         print(line)
+    if hint:
+        print(hint)
 
 
 def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: ReviewState | None) -> int:
     settings = service.settings
+    chain: list[int] | None = None
     if args.changeish is not None:
         target, url = resolve_patchset(service, cwd, args.changeish, args.patchset)
+        chain = related_chain_numbers(service, target.key, target.patch_set) if args.bottom else None
+        if chain and chain[0] != target.number:
+            target, url = resolve_patchset(service, cwd, f"change:{chain[0]}", None)
         mode = _mode(args, cwd, settings)
     else:
         if state is None:
@@ -204,8 +244,9 @@ def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: Re
     new, moved_from = open_review(cwd, target, settings=settings, options=options)
     if moved_from is not None:
         print(f"moved {new.branch} off your commits; its old tip was {moved_from}", file=sys.stderr)
-    chain = related_chain_numbers(service, new.key, new.patch_set)
-    _emit_state(new, chain=chain, url=url, as_json=args.json_, delta=_since_reviewed(service, cwd, new))
+    chain = chain or related_chain_numbers(service, new.key, new.patch_set)
+    delta = _since_reviewed(service, cwd, new)
+    _emit_state(new, chain=chain, url=url, as_json=args.json_, delta=delta, hint=next_steps(new, chain, cwd))
     return int(ExitCode.OK)
 
 
@@ -228,7 +269,7 @@ def _act(args: argparse.Namespace, p: argparse.ArgumentParser, run: RunContext) 
         if state is None:
             print(json.dumps({"review": None}) if args.json_ else "no review going on")
         else:
-            _emit_state(state, chain=None, url=None, as_json=args.json_)
+            _emit_state(state, chain=None, url=None, as_json=args.json_, hint=next_steps(state, None, cwd))
         return int(ExitCode.OK)
     if args.done:
         if state is None:

@@ -754,4 +754,4 @@ def test_the_footer_names_the_command_that_starts_the_longest_waiting_chain_at_i
     top = _change(number=4441, sha="b2", parent="b1", subject="top", updated="2026-08-18 08:00:00.000000000")
     code, out, err = run_cli(tmp_path, inbox_main, ["--color=never"], monkeypatch, gerrit=_store(base, top))
     assert code == int(ExitCode.OK), err
-    assert "next: ger review c4440 (base of c4441's chain), then --next" in out
+    assert "next: ger review c4441 --bottom, then --next" in out

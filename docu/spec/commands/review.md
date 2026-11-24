@@ -15,8 +15,8 @@ Review someone else's change in your editor. `ger review` checks the change out,
 ## The loop it enables
 
 ```text
-ger inbox                   -> chains waiting on you
-ger review 1234             -> change 1234 checked out in the review worktree, its diff staged
+ger inbox                   -> chains waiting on you, each named by its top change
+ger review 1235 --bottom    -> the chain's lowest open change (1234) checked out in the review worktree, its diff staged
   ...read it in the IDE; ger comment src/app.py:42 -m "..."...
 ger review --next           -> the next change up the chain
 ger review --vote +1        -> "Publish 3 draft(s) and Code-Review+1 on 1235? [y/N]"
@@ -29,7 +29,7 @@ ger review --done           -> back to how things were
 ## Usage
 
 ```
-ger review CHANGEISH [--patchset N] [--stage | --no-stage] [--in-worktree | --in-place] [--force] [--json | --ai]
+ger review CHANGEISH [--patchset N | --bottom] [--stage | --no-stage] [--in-worktree | --in-place] [--force] [--json | --ai]
 ger review (--next | --prev) [--stage | --no-stage] [--force] [--json | --ai]
 ger review (--stage | --unstage) [--json | --ai]
 ger review --status [--json | --ai]
@@ -89,6 +89,8 @@ Edits you make while staged show as **unstaged** changes, on top of the staged r
 
 ## Walking the review chain
 
+`ger review CHANGEISH --bottom` starts at the **bottom** of CHANGEISH's review chain, its lowest open change, instead of CHANGEISH itself: `ger inbox` names a chain by its top, and review begins at the bottom (one more REST call, the related changes; not with `--patchset`). From there `--next` walks up.
+
 `--next` and `--prev` move to the change above or below in the change's **review chain**, using Gerrit's related changes for the reviewed patchset (one REST call). Merged and abandoned members are skipped. Each step fetches the new change and stages it like the first one.
 
 At either end of the chain, `ger review` exits `10`, the code scripts already loop on for the attention walk.
@@ -140,9 +142,12 @@ reviewing 1234 patchset 4 "Extract command routing" (staged)
   https://host/c/proj/+/1234
   since your review of patchset 2: src/router.py (+12 -3), tests/test_router.py (+20 -0)
     git diff 1a2b3c4d5e6f 9f8e7d6c5b4a
+next: cd ../proj-review · ger show · ger comment PATH:LINE -m … · ger reply ID -m … · ger review --next · ger review --vote +1
 ```
 
-When you have reviewed an older patchset of the change (posted a vote, comment or reply on it), the last two lines say what changed since: the **review delta** (`core/review_delta.py`, the one the VS Code extension shows), narrowed to the files either patchset touched when it was rebased, and the `git diff` that shows it. Nothing is said for patchset 1 or a patchset you already reviewed, and a failure to compute it never fails the review.
+The last line names the next commands of the loop: `next: cd ../proj-review · ger show · ger comment PATH:LINE -m … · ger reply ID -m … · ger review --next · ger review --vote +1`. The `cd` (to the review worktree, relative when shorter) only when you are not in it; at the top of the chain `--next` gives way to `ger review --vote +1 --chain` (just `--vote +1` for a single change) and `ger review --done`. `--status` ends with the same line.
+
+When you have reviewed an older patchset of the change (posted a vote, comment or reply on it), the two lines before it say what changed since: the **review delta** (`core/review_delta.py`, the one the VS Code extension shows), narrowed to the files either patchset touched when it was rebased, and the `git diff` that shows it. Nothing is said for patchset 1 or a patchset you already reviewed, and a failure to compute it never fails the review.
 
 **`--ai`** (or `--format ai`): the human output with colour and hyperlinks off ([Output formats](../../SPEC.md#output-formats)).
 

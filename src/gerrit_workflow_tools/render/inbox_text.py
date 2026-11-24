@@ -215,11 +215,13 @@ def _render_section(
 
 
 def _review_hint(chain: ReviewChain) -> str:
-    """The command that starts on the chain waiting longest: at its base, where review begins."""
-    base = chain.members[0].number
+    """The command that starts on the chain waiting longest: at its bottom, where review begins.
+
+    Named by the row's change, with ``ger review --bottom``: the same command works for every row.
+    """
     if chain.depth == 1:
-        return f"next: ger review {change_label(base)}"
-    return f"next: ger review {change_label(base)} (base of {change_label(chain.top.number)}'s chain), then --next"
+        return f"next: ger review {change_label(chain.top.number)}"
+    return f"next: ger review {change_label(chain.top.number)} --bottom, then --next"
 
 
 def render_inbox_text(

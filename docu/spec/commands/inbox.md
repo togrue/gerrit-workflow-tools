@@ -138,7 +138,7 @@ c4380  9 changes  worst v-1 cr0       waiting 6d             carol  # refactor: 
   └ c4379  v+1 cr0  com  # 2 unresolved comments
 
 summary: 3 chains · 15 changes · longest wait 6d · build failed 1 · comments 1
-next: ger review c4317 (base of c4321's chain), then --next
+next: ger review c4321 --bottom, then --next
 
 outgoing (5; 1 needs you)
 c4410  2 changes  worst v-1 cr0       active 2h  # feat: quota headers
@@ -168,7 +168,7 @@ An *outgoing* line is yours: it has no waiting clock and no owner, and ends in `
 
 **Indented member lines** appear for members with attention reasons — CI failure, unresolved comments, negative vote — on a chain of several changes, the top included. A single change's row already says it all. A healthy chain stays one line plus its URL.
 
-**The footer** of *to review* names the command that starts on the longest-waiting chain where review begins, its base: `next: ger review c4317 (base of c4321's chain), then --next` (`ger review` checks out the change named, so the top would start at the end).
+**The footer** of *to review* names the command that starts on the longest-waiting chain where review begins, its bottom: `next: ger review c4321 --bottom, then --next`. A row names its chain by the top, and `ger review` checks out the change named, so `--bottom` starts at the chain's lowest open change instead: the same command works for every row.
 
 **Empty sections** print a dim `(nothing to review)` / `(no open chains of yours)` rather than vanishing, so the output shape is stable.
 

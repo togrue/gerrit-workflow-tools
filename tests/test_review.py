@@ -477,3 +477,31 @@ def test_chain_and_change_together_are_a_usage_error(
 
 def _subjects(store: ChangeStore, keys: list[str]) -> list[str]:
     return [store.get_change(key)["subject"] for key in keys]
+
+
+def test_bottom_starts_at_the_lowest_open_change_of_the_named_chain(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ger inbox names a chain by its top; ger review TOP --bottom starts where review begins."""
+    store, _keys, shas = gerrit
+    code, out, err = _review(stack_repo, store, ["103", "--bottom", "--json"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert (json_stdout(out)["number"], json_stdout(out)["chain"]) == (100, [100, 101, 102, 103])
+    assert git_out("rev-parse", "change-100", cwd=_worktree(stack_repo)) == shas[0]
+    assert _review(stack_repo, store, ["103", "--bottom", "--patchset", "1"], monkeypatch)[0] == ExitCode.USAGE
+
+
+def test_review_says_how_to_get_there_and_what_to_run_next(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, _keys, _shas = gerrit
+    _, out, _ = _review(stack_repo, store, ["102"], monkeypatch)
+    assert out.splitlines()[-1] == (
+        "next: cd ../stack-review · ger show · ger comment PATH:LINE -m … · ger reply ID -m … · "
+        "ger review --next · ger review --vote +1"
+    )
+    _, out, _ = _review(_worktree(stack_repo), store, ["--next"], monkeypatch)  # the top: vote, then done
+    assert out.splitlines()[-1] == (
+        "next: ger show · ger comment PATH:LINE -m … · ger reply ID -m … · ger review --vote +1 --chain · "
+        "ger review --done"
+    )
