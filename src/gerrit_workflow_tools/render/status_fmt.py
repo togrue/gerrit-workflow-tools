@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 
 from gerrit_workflow_tools.core.attention import Attention, blocking_reason
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
@@ -52,6 +52,21 @@ def status_legend() -> str:
         width = max(len(token) for token, _meaning in group)
         lines += [f"  {token.ljust(width)}  {meaning}" for token, meaning in group]
     return "\n".join(lines)
+
+
+def legend_line(commits: Sequence[LogCommit]) -> str:
+    """The status tokens *commits* show, in one line (``p pushed · n newer locally · v/cr …``): the
+    words of :func:`status_legend`, as short as a commented line in a rebase todo wants them."""
+    shown = {patchset_token(commit) for commit in commits}
+    tokens = [(token, meaning) for token, meaning in [*PATCHSET_TOKENS.values(), ABANDONED_TOKEN] if token in shown]
+    words = [f"{token} {meaning.split(':')[0]}" for token, meaning in dict(tokens).items()]
+    if any(commit.pushed for commit in commits):
+        (verified, v_words), (review, cr_words), (comments, com_words) = VOTE_LEGEND
+        prefix = (verified.split()[-1].rstrip("?"), review.split()[-1].rstrip("?"))  # `v?` → `v`
+        names = (v_words.split(" vote")[0], cr_words.split(" vote")[0])
+        words.append(f"{'/'.join(prefix)} {'/'.join(names)} vote{v_words.split(' vote')[1]}")
+        words.append(f"{comments} {com_words.split(' (')[0]}")
+    return " · ".join(words)
 
 
 def verified_token(v: int | None) -> str:
@@ -225,6 +240,11 @@ def member_hints(member: ChainMember, *, side: str = REVIEWER) -> list[tuple[str
     if Attention.REVIEW_ISSUES in reasons:
         hints.append((Attention.REVIEW_ISSUES, "negative vote"))
     return hints
+
+
+def hints_text(commit: LogCommit) -> str:
+    """``ger log``'s trailing hints of *commit* (:func:`attention_hints`) as plain text: ``review issues, …``."""
+    return ", ".join(text for _key, text in attention_hints(commit))
 
 
 def attention_text(commit: LogCommit) -> str:

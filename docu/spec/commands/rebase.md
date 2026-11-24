@@ -6,7 +6,7 @@
 | **Module** | `src/gerrit_workflow_tools/cli_rebase.py`, `rebase_enricher.py` |
 | **Requires** | Gerrit enrichment: `ger.webUrl` + credentials |
 
-Start **`git rebase -i`** with Gerrit status annotations on each `pick` line (patchset, Verified, CR, comments, attention note).
+Start **`git rebase -i`** with Gerrit status annotations on each `pick` line (patchset, Verified, CR, comments, and the hints of the commit's `ger log` row: `render/status_fmt.hints_text`). A comment line `# ---- ready boundary: `ger push` sends the commits above ----` sits before the first commit `ger push` holds back, as in `ger log`, and one more right below the commands says what the tokens on them mean (`render/status_fmt.legend_line`, from the table `ger log --help` prints): `# p pushed · v/cr Verified/Code-Review vote (? none yet) · com unresolved comments`.
 
 **Aliases:** `ger restack`, `ger stack` → `rebase`.
 
