@@ -136,3 +136,24 @@ def test_log_advises_on_an_abandoned_change_and_marks_a_merged_one(
     assert (
         f"next: {drop} is abandoned on Gerrit; restore it there or drop the commit (`ger edit --drop {drop}`)" in lines
     )
+
+
+def test_log_help_explains_every_status_token_it_can_print(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The legend comes from the tokens' one definition: every token the column can show is explained."""
+    from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
+    from gerrit_workflow_tools.render.status_fmt import code_review_token, patchset_token, verified_token
+
+    def make_log_commit(
+        *, patchset_status: PatchsetStatus = PatchsetStatus.ACTIVE, abandoned: bool = False
+    ) -> LogCommit:
+        return LogCommit("a" * 40, "aaaaaaa", "s", None, True, abandoned, patchset_status, None, None, 0)
+
+    code, out, _err = run_cli(stack_repo, log_main, ["--help"], monkeypatch, catch_sys_exit=True)
+    assert code == 0
+    legend = out[out.index("status columns:") :].splitlines()[1:]
+    explained = {word for line in legend for word in line.strip().split("  ")[0].split()}
+    shown = {patchset_token(make_log_commit(patchset_status=status)) for status in PatchsetStatus}
+    shown.add(patchset_token(make_log_commit(abandoned=True)))
+    shown |= {verified_token(v).strip() for v in (1, -1, None)} | {code_review_token(None).strip(), "com"}
+    assert shown <= explained, shown - explained
+    assert "examples:" in out and "ger log origin/main..HEAD" in out

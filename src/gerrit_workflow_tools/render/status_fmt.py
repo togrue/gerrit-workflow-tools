@@ -7,26 +7,40 @@ from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetS
 from gerrit_workflow_tools.core.inbox import OUTGOING, TO_REVIEW
 
 
+# The one definition of each status token and what it means: the columns use it, and so does the
+# legend in ``ger log --help`` (:func:`status_legend`), so the two cannot drift apart.
+ABANDONED_TOKEN = ("a", "abandoned on Gerrit")
+PATCHSET_TOKENS: dict[PatchsetStatus, tuple[str, str]] = {
+    PatchsetStatus.ACTIVE: ("p", "pushed: Gerrit's current patchset"),
+    PatchsetStatus.NEWER: ("n", "newer locally: to upload"),
+    PatchsetStatus.OUTDATED: ("o", "outdated: Gerrit has a newer patchset"),
+    PatchsetStatus.ABSENT: ("-", "not on Gerrit"),
+    PatchsetStatus.MERGED_SAME: ("m", "merged"),
+    PatchsetStatus.MERGED_DRIFT: ("!", "merged, but your commit differs"),
+    PatchsetStatus.MERGED_UNKNOWN: ("?", "merged, sameness unknown"),
+    PatchsetStatus.UNKNOWN: ("~", "Gerrit could not be asked"),
+}
+VOTE_LEGEND = (
+    ("v+1 v-1 v?", "Verified vote (? none yet)"),
+    ("cr+2 … cr-2 cr?", "Code-Review vote (? none yet)"),
+    ("com", "unresolved comments"),
+)
+
+
 def patchset_token(commit: LogCommit) -> str:
-    """Single-character patchset status: p/n/o/m/!/?/a/-, and ``~`` when Gerrit could not be asked."""
+    """Single-character patchset status (:data:`PATCHSET_TOKENS`, :data:`ABANDONED_TOKEN`)."""
     if commit.abandoned:
-        return "a"
-    status = commit.patchset_status
-    if status == "merged-same":
-        return "m"
-    if status == "merged-drift":
-        return "!"
-    if status == "merged-unknown":
-        return "?"
-    if status == "active":
-        return "p"
-    if status == "newer":
-        return "n"
-    if status == "outdated":
-        return "o"
-    if status == "unknown":
-        return "~"
-    return "-"
+        return ABANDONED_TOKEN[0]
+    return PATCHSET_TOKENS.get(PatchsetStatus(commit.patchset_status), ("-", ""))[0]
+
+
+def status_legend() -> str:
+    """What each status column token means, for a command's ``--help`` epilog."""
+    lines = ["status columns:"]
+    for group in ([*PATCHSET_TOKENS.values(), ABANDONED_TOKEN], VOTE_LEGEND):
+        width = max(len(token) for token, _meaning in group)
+        lines += [f"  {token.ljust(width)}  {meaning}" for token, meaning in group]
+    return "\n".join(lines)
 
 
 def verified_token(v: int | None) -> str:

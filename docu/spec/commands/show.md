@@ -51,6 +51,8 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 
 **Markdown / `--ai`:** no ANSI or OSC 8; full comment bodies; headings per change and per `path:line` thread with blockquoted replies — suited for pasting into an AI review session.
 
+`ger show --help` ends with examples, and points to `ger log --help` for the status columns.
+
 ---
 
 ## Behavior (current)

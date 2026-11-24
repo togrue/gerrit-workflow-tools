@@ -37,11 +37,18 @@ from gerrit_workflow_tools.render.stack_log import (
     row_lines,
     summary_line,
 )
+from gerrit_workflow_tools.render.status_fmt import status_legend
 from gerrit_workflow_tools.render.style import is_hyperlink_enabled, terminal_width
 from gerrit_workflow_tools.summary_highlight import run_summary_highlighter
 
 
 logger = logging.getLogger(__name__)
+
+_EXAMPLES = """examples:
+  ger log                    the stack above its upstream, and what to do next
+  ger log -v                 also each commit's CI links and reviewers
+  ger log origin/main..HEAD  a range of commits (works on a detached HEAD too)
+  ger log --ai               one plain line per commit, for an agent"""
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +61,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ger log",
         description="Compact, actionable overview of the local stack vs Gerrit.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=f"{_EXAMPLES}\n\n{status_legend()}",
     )
     add_output_format_args(parser, ai_view="one plain line per commit")
     add_color_args(parser)

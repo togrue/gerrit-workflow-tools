@@ -40,6 +40,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="ger ci",
         description="Fetch the CI logs behind failed CI links and list the findings (why CI failed).",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""examples:
+  ger ci                 why CI failed on HEAD, or which commit below it failed
+  ger ci --stack         every commit of the local stack
+  ger ci 1a2b3c4 -v      one commit, with the last lines of each log
+  ger ci --full | less   the whole log after the findings
+
+The status columns are those of ger log (see ger log --help).""",
     )
     p.add_argument(
         "revs",

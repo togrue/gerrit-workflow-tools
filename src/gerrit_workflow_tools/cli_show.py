@@ -75,6 +75,15 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="ger show",
         description="Show commit(s) and Gerrit status (labels, comments, CI).",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""examples:
+  ger show                  HEAD: votes, attention and unresolved comments (with their ids)
+  ger show HEAD~1 --context a commit, with the code around each comment
+  ger show change:1234      a change by number, whether or not you have it locally
+  ger show --stack          every commit of the local stack
+  ger reply ID --done       answer a comment by the id ger show prints
+
+The status columns are those of ger log (see ger log --help).""",
     )
     p.add_argument(
         "revs",

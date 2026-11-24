@@ -50,7 +50,7 @@ With `--show-change-id` (or `-vv`), the full Change-Id appears on an indented co
 
 ### Patchset (`p`, `n`, `o`, `-`, …)
 
-Single letter: is this local commit aligned with Gerrit?
+Single letter: is this local commit aligned with Gerrit? `ger log --help` lists every token in short.
 
 | Token | Meaning | Typical action |
 |-------|---------|----------------|

@@ -38,6 +38,8 @@ ger log [options] [REV_RANGE]
 | `--debug-log` | Log git commands to stderr (repeat for more detail) |
 | `--follow-merges` | Include merge commits in range (see shared helper in `cli_common`) |
 
+`ger log --help` ends with examples and a legend of the status columns, generated from where the tokens are defined (`render/status_fmt.py`: `PATCHSET_TOKENS`, `VOTE_LEGEND`, `status_legend`), so the two cannot drift.
+
 ---
 
 ## Output (text)

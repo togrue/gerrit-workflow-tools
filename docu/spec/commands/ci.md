@@ -34,6 +34,8 @@ Targets resolve exactly as in [`ger show`](show.md): each `CHANGEISH` is a chang
 | `--format {human,markdown,ai}` / `--ai` | Output format; `ai` (`--ai`) is the Markdown view ([Output formats](../../SPEC.md#output-formats)) |
 | `--color`, `--hyperlinks`, `--debug-log` | Standard helpers |
 
+`ger ci --help` ends with examples, and points to `ger log --help` for the status columns.
+
 ---
 
 ## Output
