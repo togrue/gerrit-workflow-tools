@@ -593,7 +593,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/ai_text.py` | `--ai` text for `ger log` (`stack_ai_lines`) and `ger inbox` (`inbox_ai_lines`): one plain line per commit or chain, in `status_fmt`'s words |
 | `render/show_json.py` | JSON for one commit's overlay state: `log_commit_json` (shared by `ger log` and `ger show`), comment chains |
 | `render/agent_runbook.py` | The agent runbook as Markdown (`runbook_markdown`) and JSON (`runbook_json`) |
-| `render/review_json.py` | JSON for **review chains** (`chain_json`), the **headline** (`headline_json`) and the **review state** (`review_state_json`) |
+| `render/review_json.py` | JSON for **review chains** (`chain_json`), the **inbox sections** (`sections_json`, for `ger inbox --json` and `GET /overview`), the **headline** (`headline_json`) and the **review state** (`review_state_json`) |
 | `render/ci_content.py` | **CI content** projections: JSON, human and Markdown, grouped by CI link label |
 | `render/style.py` | ANSI color and hyperlink helpers, the run's color and hyperlink mode, UTF-8 stdio |
 | `render/download_meter.py` | The stderr meter for bytes still arriving (`DownloadMeter`) |

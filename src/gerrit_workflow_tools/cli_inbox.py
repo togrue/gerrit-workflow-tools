@@ -28,7 +28,7 @@ from gerrit_workflow_tools.core.inbox import (
 from gerrit_workflow_tools.core.review_chain import ReviewChain, format_age, host_from_web_base
 from gerrit_workflow_tools.render.ai_text import inbox_ai_lines
 from gerrit_workflow_tools.render.commit_row import fmt_code_review, fmt_comments, fmt_verified
-from gerrit_workflow_tools.render.review_json import chain_json, iso_utc
+from gerrit_workflow_tools.render.review_json import iso_utc, sections_json
 from gerrit_workflow_tools.render.status_fmt import SECTION_HEADINGS, member_hints
 from gerrit_workflow_tools.render.style import (
     ANSI_BOLD,
@@ -284,15 +284,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
             "host": host_from_web_base(service.web_base),
             "generated": iso_utc(now),
             "projects": projects,
-            "sections": [
-                {
-                    "name": section.name,
-                    "query": section.query,
-                    "summary": section_summary(section.chains),
-                    "chains": [chain_json(chain) for chain in section.chains],
-                }
-                for section in sections
-            ],
+            "sections": sections_json(sections),
         }
         print(json.dumps(payload, indent=2))
     else:

@@ -1,4 +1,5 @@
-"""JSON payloads for **review chains**, the **headline** (``ger inbox``, ``ger serve``) and the **review state**."""
+"""JSON payloads for **review chains**, **inbox sections** and the **headline** (``ger inbox``, ``ger serve``),
+and the **review state**."""
 
 from __future__ import annotations
 
@@ -6,7 +7,7 @@ from dataclasses import asdict
 from datetime import datetime
 
 from gerrit_workflow_tools.core.attention import Attention, attention_severity
-from gerrit_workflow_tools.core.inbox import Headline, RebaseHeadline
+from gerrit_workflow_tools.core.inbox import Headline, InboxSection, RebaseHeadline, section_summary
 from gerrit_workflow_tools.core.rebase_state import RebaseStop
 from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain, format_age
 from gerrit_workflow_tools.core.review_checkout import ReviewState
@@ -112,6 +113,19 @@ def _rebase_headline_json(headline: RebaseHeadline) -> dict[str, object]:
         "url": commit.gerrit_url if commit else None,
         "text": _rebase_headline_text(headline),
     }
+
+
+def sections_json(sections: list[InboxSection]) -> list[dict[str, object]]:
+    """The **inbox sections**, ``ger inbox --json`` and ``GET /overview`` alike: name, query, summary, chains."""
+    return [
+        {
+            "name": section.name,
+            "query": section.query,
+            "summary": section_summary(section.chains),
+            "chains": [chain_json(chain) for chain in section.chains],
+        }
+        for section in sections
+    ]
 
 
 def headline_json(headline: Headline | RebaseHeadline | None) -> dict[str, object] | None:

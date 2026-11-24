@@ -24,7 +24,7 @@ from gerrit_workflow_tools.core.gerrit.change_view import parse_gerrit_time
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
 from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
-from gerrit_workflow_tools.core.inbox import RebaseHeadline, load_inbox, pick_headline, project_scope, section_summary
+from gerrit_workflow_tools.core.inbox import RebaseHeadline, load_inbox, pick_headline, project_scope
 from gerrit_workflow_tools.core.push_checks import push_blocked
 from gerrit_workflow_tools.core.rebase_state import rebase_underway
 from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_conflicts
@@ -40,7 +40,13 @@ from gerrit_workflow_tools.core.stack import (
 )
 from gerrit_workflow_tools.core.upstream import branch_has_upstream, upstream_choice
 from gerrit_workflow_tools.render.agent_runbook import runbook_json
-from gerrit_workflow_tools.render.review_json import chain_json, headline_json, iso_utc, review_state_json
+from gerrit_workflow_tools.render.review_json import (
+    chain_json,
+    headline_json,
+    iso_utc,
+    review_state_json,
+    sections_json,
+)
 from gerrit_workflow_tools.render.show_json import (
     commit_json_payload,
     log_commit_json,
@@ -214,15 +220,7 @@ def _inbox(ctx: Context, req: Request, *, current: set[str], rebase: RebaseHeadl
         "generated": iso_utc(now),
         "projects": projects,
         "headline": headline_json(pick_headline(sections, current=current, rebase=rebase)),
-        "sections": [
-            {
-                "name": section.name,
-                "query": section.query,
-                "summary": section_summary(section.chains),
-                "chains": [chain_json(chain) for chain in section.chains],
-            }
-            for section in sections
-        ],
+        "sections": sections_json(sections),
     }
 
 
