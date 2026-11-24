@@ -510,7 +510,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/inbox.py` | The inbox: **inbox section** queries (`build_to_review_query`), `load_inbox` (both sections), `section_summary`, the **headline** (`pick_headline`; a rebase underway, handed in as a `RebaseHeadline`, leads it), and which changes wait on your review (`waiting_on_your_review`: the *to review* query, narrowed to them; `to_review_needs_you_as_reviewer`: whether only changes that list you can match) |
 | `core/gerrit_patchset.py` | One Gerrit patchset: which one a changeish names (`resolve_change`, `resolve_patchset`, `GerritPatchset`), its `refs/changes/…` ref, fetching it |
 | `core/review_target.py` | The review chain a review walks: `related_chain_numbers` |
-| `core/change_checkout.py` | Checking a change out to work on it: the **local version** (`find_local_versions`), what to do with it (`plan_checkout`, `choose_action`), and doing it (`apply_checkout`, rebasing the commits above an updated version) |
+| `core/change_checkout.py` | Checking a change out to work on it: the **local version** (`find_local_versions`) and what to do with it (`plan_checkout`, `choose_action`) |
+| `core/change_checkout_apply.py` | Doing what `ger checkout` decided (`apply_checkout`): moving the local version onto the patchset, rebasing the commits above it, merging your edits into it |
 | `core/review_checkout.py` | Review checkout: the review worktree, `change-<number>` branches, staging, review state, walking a chain |
 | `core/comment_chains.py` | Inline comment threads, resolved and unresolved; how a chain is named (`ChainRef`: id, id prefix, `PATH:LINE`, URL) |
 | `core/suggested_edits.py` | A comment's suggested edits: Gerrit fix suggestions and ```` ```suggestion ```` blocks of its text, in one shape |

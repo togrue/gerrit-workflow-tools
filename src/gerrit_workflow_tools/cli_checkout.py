@@ -23,10 +23,10 @@ from gerrit_workflow_tools.core.change_checkout import (
     CheckoutRefusal,
     CheckoutResult,
     LocalState,
-    apply_checkout,
     choose_action,
     plan_checkout,
 )
+from gerrit_workflow_tools.core.change_checkout_apply import apply_checkout
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit_patchset import resolve_change
 from gerrit_workflow_tools.core.rebase_state import rebase_refusal

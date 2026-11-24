@@ -3,7 +3,7 @@
 | | |
 |--|--|
 | **Status** | **Implemented** |
-| **Module** | `cli_checkout.py`; the decision and the git work in `core/change_checkout.py`; the patchset from `core/gerrit_patchset.py` |
+| **Module** | `cli_checkout.py`; the decision in `core/change_checkout.py`, the git work in `core/change_checkout_apply.py`; the patchset from `core/gerrit_patchset.py` |
 | **Requires** | A git repository, `ger.webUrl`, credentials |
 
 Check a Gerrit change out to work on it: rework a change of yours on another machine, take over a colleague's, or pick up a new patchset someone pushed. The change lands on a local branch whose upstream is the change's **target branch** on `ger.remote`, so `ger log` shows its review chain as the **local stack** and `ger push` uploads a new patchset, with nothing to set up.
