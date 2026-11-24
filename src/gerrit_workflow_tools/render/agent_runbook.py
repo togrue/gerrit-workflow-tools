@@ -7,7 +7,8 @@ from collections.abc import Sequence
 from gerrit_workflow_tools.core.agent_runbook import RunbookStop
 from gerrit_workflow_tools.core.ci_content import CiFinding
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain
-from gerrit_workflow_tools.render.comments import chain_location, first_line, format_comment_chain_markdown
+from gerrit_workflow_tools.render.comments import chain_location, first_line
+from gerrit_workflow_tools.render.comments_markdown import format_comment_chain_markdown
 
 
 _RULES = """\

@@ -1,4 +1,4 @@
-"""Human and Markdown rendering for Gerrit inline comment chains."""
+"""Human rendering for Gerrit inline comment chains, and the words both views share (``comments_markdown``)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     InlineComment,
     gerrit_inline_comment_url,
 )
-from gerrit_workflow_tools.core.suggested_edits import SuggestedEdit
 from gerrit_workflow_tools.render.style import (
     ANSI_BLUE,
     ANSI_BOLD,
@@ -23,7 +22,7 @@ from gerrit_workflow_tools.render.style import (
     format_link,
     visible_len,
 )
-from gerrit_workflow_tools.render.suggested_fixes import fix_rows, fixes_markdown
+from gerrit_workflow_tools.render.suggested_fixes import fix_rows
 from gerrit_workflow_tools.render.wrap import fit_header, wrap_lines
 
 
@@ -49,7 +48,6 @@ def chain_location(chain: CommentChain) -> str:
 
 # How a local comment is headed, human and Markdown.
 LOCAL_LABELS = {"note": "note (private)", "local-draft": "local draft (not on Gerrit)"}
-_LOCAL_LABELS_MARKDOWN = {"note": "Note (private)", "local-draft": "Local draft (not on Gerrit)"}
 
 
 def anchor_suffix(chain: CommentChain) -> str:
@@ -75,7 +73,7 @@ def chain_heading(chain: CommentChain) -> str:
     return loc
 
 
-def _chain_url(chain: CommentChain, gerrit_url: str | None) -> str | None:
+def chain_url(chain: CommentChain, gerrit_url: str | None) -> str | None:
     """The chain's Gerrit URL; a local chain has none."""
     if chain.local:
         return None
@@ -124,11 +122,11 @@ def _pad_inner(text: str, inner_width: int) -> str:
     return f"{text}{' ' * pad}"
 
 
-def _format_context_line(line: ContextLine) -> str:
+def format_context_line(line: ContextLine) -> str:
     return f"{line.line_number:>4}  {line.text}"
 
 
-def _chain_context_lines(chain: CommentChain) -> tuple[ContextLine, ...]:
+def chain_context_lines(chain: CommentChain) -> tuple[ContextLine, ...]:
     if chain.anchor is not None and chain.anchor.outdated and chain.anchor.text:
         # The lines it was written on are gone from this version: show them as they were.
         return chain.anchor.context_lines
@@ -158,10 +156,10 @@ def _box_content_rows(
     URL is left whole so it stays copyable, and may widen the box by itself.
     """
     rows: list[str] = []
-    context = _chain_context_lines(chain)
+    context = chain_context_lines(chain)
     if context:
         for line in context:
-            for part in wrap_lines(_format_context_line(line), width):
+            for part in wrap_lines(format_context_line(line), width):
                 rows.append(color_text(part, ANSI_DIM))
         rows.append("")
     for row_item in chain.comments:
@@ -185,9 +183,9 @@ def _box_content_rows(
                 prefix = f"  {indent}"
                 parts = _prefixed_wrap(text, width, prefix=prefix) if wraps else [f"{prefix}{text}"]
                 rows.extend(color_text(part, ANSI_GREEN) for part in parts)
-    chain_url = _chain_url(chain, gerrit_url)
-    if chain_url:
-        rows.append(f"{color_text('url:', ANSI_DIM)} {color_text(format_link(chain_url), ANSI_YELLOW)}")
+    url = chain_url(chain, gerrit_url)
+    if url:
+        rows.append(f"{color_text('url:', ANSI_DIM)} {color_text(format_link(url), ANSI_YELLOW)}")
     return rows
 
 
@@ -236,55 +234,6 @@ def format_comment_chain_human(
     return lines
 
 
-def format_comment_chain_markdown(
-    chain: CommentChain,
-    gerrit_url: str | None,
-) -> list[str]:
-    """Return Markdown lines for one comment chain (full bodies, no ANSI)."""
-    loc = chain_location(chain)
-    heading = f"### `{loc}`{anchor_suffix(chain)}"
-    if chain.resolved:
-        heading = f"{heading} (resolved)"
-    lines: list[str] = [heading]
-    chain_url = _chain_url(chain, gerrit_url)
-    if chain_url:
-        lines.append(chain_url)
-        lines.append("")
-
-    context = _chain_context_lines(chain)
-    if context:
-        lines.append("```")
-        for line in context:
-            lines.append(_format_context_line(line))
-        lines.append("```")
-        lines.append("")
-
-    for row_item in chain.comments:
-        if row_item.local is not None:
-            lines.append(f"**{_LOCAL_LABELS_MARKDOWN[row_item.local]}**")
-        elif row_item.draft:
-            lines.append(f"**{draft_label(chain, row_item, label='Draft reply (unpublished)')}**")
-        else:
-            lines.append(f"**{row_item.author or 'anonymous'}**")
-        body = row_item.message.rstrip("\n")
-        if body:
-            for ln in body.splitlines() or [""]:
-                lines.append(f"> {ln}" if ln else ">")
-        else:
-            lines.append(">")
-        lines.extend(_fix_suggestions_markdown(row_item.suggested_edits))
-        lines.append("")
-    # Drop the trailing blank between chains; caller adds separation.
-    if lines and lines[-1] == "":
-        lines.pop()
-    return lines
-
-
-def _fix_suggestions_markdown(edits: tuple[SuggestedEdit, ...]) -> list[str]:
-    """The Gerrit fix suggestions in *edits*, quoted under the comment, each replacement fenced."""
-    return [line for fix in fixes_markdown(edits) for line in (">", *(f"> {text}".rstrip() for text in fix))]
-
-
 def format_unresolved_section_human(
     chains: list[CommentChain],
     gerrit_url: str | None,
@@ -312,41 +261,3 @@ def empty_comments_message(comments: CommentSelection) -> str:
     if comments == "all":
         return "(no comments)"
     return "(no unresolved comments)"
-
-
-def format_unresolved_section_markdown(
-    chains: list[CommentChain],
-    gerrit_url: str | None,
-    *,
-    pushed: bool,
-    comments: CommentSelection = "unresolved",
-) -> list[str]:
-    """Markdown comment blocks (full bodies), split by resolved state when needed."""
-    if not pushed and not chains:
-        return ["### Unresolved comments", "", "(not on Gerrit — no comments)"]
-    if not chains:
-        heading = "### Resolved comments" if comments == "resolved" else "### Unresolved comments"
-        if comments == "all":
-            heading = "### Comments"
-        return [heading, "", empty_comments_message(comments)]
-
-    unresolved = [chain for chain in chains if not chain.resolved]
-    resolved = [chain for chain in chains if chain.resolved]
-    out: list[str] = []
-    if unresolved:
-        out.append("### Unresolved comments")
-        out.append("")
-        for i, chain in enumerate(unresolved):
-            out.extend(format_comment_chain_markdown(chain, gerrit_url))
-            if i < len(unresolved) - 1:
-                out.append("")
-    if resolved:
-        if out:
-            out.append("")
-        out.append("### Resolved comments")
-        out.append("")
-        for i, chain in enumerate(resolved):
-            out.extend(format_comment_chain_markdown(chain, gerrit_url))
-            if i < len(resolved) - 1:
-                out.append("")
-    return out

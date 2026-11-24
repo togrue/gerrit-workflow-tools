@@ -10,10 +10,8 @@ from gerrit_workflow_tools.core.comment_chains import build_comment_chains
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, ContextLine, InlineComment
 from gerrit_workflow_tools.core.gerrit_show import parse_show_range
-from gerrit_workflow_tools.render.comments import (
-    format_comment_chain_human,
-    format_comment_chain_markdown,
-)
+from gerrit_workflow_tools.render.comments import format_comment_chain_human
+from gerrit_workflow_tools.render.comments_markdown import format_comment_chain_markdown
 from gerrit_workflow_tools.render.style import (
     ANSI_BLUE,
     ANSI_DIM_GRAY,
