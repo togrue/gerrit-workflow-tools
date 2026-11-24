@@ -245,6 +245,8 @@ def prepare(
     cwd, settings = run.cwd, run.settings
     if topic and "," in topic:
         raise UsageError(f"invalid topic {topic!r}: a comma separates push options")
+    if topic is not None and not topic.strip():
+        raise UsageError("--topic needs a name: a push cannot clear a change's topic (do that in the web UI)")
     if blocked := push_blocked(run.worktree.repository_dir, branch):
         raise UsageError(blocked.message)
     destination = effective_gerrit_destination_branch(cwd, branch, settings=settings)
@@ -296,7 +298,9 @@ def prepare(
         return PushRefusal(f"error: {exc}", warnings=warnings)
     if wip_from is not None and wip_from not in {commit.sha for commit in commits}:
         if not all_commits:
-            raise UsageError(f"--wip-from {wip_from[:8]} is not among the commits this push sends")
+            raise UsageError(
+                f"--wip-from {wip_from[:8]} is not among the commits this push sends{boundary.beyond(until)}"
+            )
         wip_from = None
     if not force and (refusal := existing.refusal()):
         return PushRefusal(refusal, boundary=boundary, warnings=warnings)

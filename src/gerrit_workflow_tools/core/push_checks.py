@@ -9,6 +9,7 @@ from enum import Enum
 from pathlib import Path
 from typing import NamedTuple
 
+from gerrit_workflow_tools.core.change_id import parse_change_id_footer, validate_change_id_value
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import (
@@ -28,7 +29,7 @@ from gerrit_workflow_tools.core.push_unchanged import OutdatedChange, UnchangedC
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
 from gerrit_workflow_tools.core.rebase_state import AM_UNDERWAY, am_underway, rebase_underway
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.core.stack import Commit
+from gerrit_workflow_tools.core.stack import Commit, is_unsquashed_fixup
 
 
 class PushBlocker(Enum):
@@ -283,11 +284,27 @@ def _draft_counts(
 
 @dataclass(frozen=True)
 class PushBoundary:
+    """Where the ready boundary stops a push, why, and what gets past it."""
+
     sha: str | None
     reason: str
     short_sha: str | None
     subject: str | None
-    remaining_unpushed: int
+    held_back: int
+    """The commits from the boundary up, which this push leaves as they are (Gerrit may have them already)."""
+    fix: str | None = None
+    """What gets them past it: ``--all`` for the stop pattern or a ready strategy, else a Change-Id fix."""
+    all_lifts: bool = False
+    """``--all`` pushes past it (:attr:`ReadyResult.all_lifts_boundary`)."""
+
+    def beyond(self, until: str | None) -> str:
+        """``: it is above …``: why a commit of the local stack is not among those a push sends."""
+        if until:
+            return f": it is above {until}, where this push stops"
+        if not self.sha:
+            return ""
+        way = "; add --all to push past it" if self.all_lifts else ""
+        return f": it is above the ready boundary ({self.short_sha}: {self.reason}){way}"
 
 
 def push_ready(
@@ -325,6 +342,23 @@ def push_boundary(cwd: Path, ready: ReadyResult, *, head: str) -> PushBoundary:
     short_sha = git_or_none(cwd, "rev-parse", "--short", sha) if sha else None
     subject = git_or_none(cwd, "show", "-s", "--format=%s", sha) if sha else None
     count = git_or_none(cwd, "rev-list", "--count", f"{sha}..{head}") if sha else None
-    # The boundary commit itself stays unpushed, and `sha..head` leaves it out.
-    remaining = int(count) + 1 if count and count.isdigit() else 0
-    return PushBoundary(sha, ready.boundary_reason, short_sha, subject, remaining)
+    # The boundary commit itself is held back too, and `sha..head` leaves it out.
+    held = int(count) + 1 if count and count.isdigit() else 0
+    fix = _boundary_fix(cwd, sha, short_sha or sha[:7], subject or "", ready) if sha else None
+    return PushBoundary(sha, ready.boundary_reason, short_sha, subject, held, fix, ready.all_lifts_boundary)
+
+
+def _boundary_fix(cwd: Path, sha: str, short_sha: str, subject: str, ready: ReadyResult) -> str | None:
+    """How the commits *ready* holds back get past its boundary at *sha*."""
+    if ready.all_lifts_boundary:
+        return "`ger push --all` sends them as work-in-progress"
+    if is_unsquashed_fixup(subject):  # its reason says what to do already
+        return None
+    found, malformed = validate_change_id_value(
+        parse_change_id_footer(git_or_none(cwd, "show", "-s", "--format=%B", sha) or "")
+    )
+    if not found and not malformed:
+        return (
+            f"`ger reword {short_sha}` (`git commit --amend` at HEAD) adds one, with Gerrit's commit-msg hook installed"
+        )
+    return f"`ger reword {short_sha}` and delete its Change-Id line; Gerrit's commit-msg hook adds a new one"

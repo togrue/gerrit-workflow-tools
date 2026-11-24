@@ -275,7 +275,7 @@ def test_gpush_cancel_at_prompt(stack_repo: Path, monkeypatch: pytest.MonkeyPatc
     assert "git push" not in out
     i_push = out.index("About to push commits:")
     i_stop = out.index("Stopped at commit")
-    i_remain = out.index("2 not-ready commit(s) remain unpushed")
+    i_remain = out.index("2 commits from ")
     i_status = out.index("Branch", i_remain)
     assert i_push < i_stop < i_remain < i_status
     assert "Target" in out[i_status:]
@@ -493,7 +493,11 @@ def test_gpush_with_nothing_to_send_or_set_says_so_without_asking(
         stack_repo, gpush_main, [*argv, rows[1].sha], monkeypatch, gerrit=ChangeStore(build_details_by_change_id(rows))
     )
 
-    assert (code, out.strip(), err) == (ExitCode.OK, "nothing to push: Gerrit already has these commits", "")
+    assert (code, err) == (ExitCode.OK, "")
+    assert out.strip().endswith(
+        "held back by the ready boundary; `ger push --all` sends them as work-in-progress\n"
+        "nothing to push: Gerrit already has these commits"
+    )
     mock_run.assert_not_called()
 
 
@@ -1354,7 +1358,7 @@ def test_gpush_sends_nothing_where_glog_says_outdated(stack_repo: Path, monkeypa
     assert code == 0
     assert "nothing to push: Gerrit already has these commits" in dry
     assert all(_outdated_line(row, number) in dry for number, row in enumerate(rows, start=100))
-    assert "[dry-run] no git push: Gerrit already has these commits" in err
+    assert "[dry-run] no git push" not in err  # "nothing to push" said it already
     mock_run.assert_not_called()
 
 
@@ -1425,3 +1429,94 @@ def test_gpush_options_on_outdated_changes_name_the_newer_patchsets(
     assert "`ger checkout change:100 --update`" in err and "ger.token" not in err
     writes = ("set_wip", "set_topic", "set_private", "set_reviewers_batch", "delete_reviewer")
     assert not any(store.calls_to(method) for method in writes)
+
+
+@pytest.mark.parametrize("argv", [["-y"], ["--dry-run"], []])
+def test_gpush_names_the_ready_boundary_on_every_path(
+    argv: list[str], stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Before, a real push with nothing new said only "nothing to push"; --dry-run named the boundary."""
+    rows = commits_in_range(stack_repo, "main..feature")
+    mock_run = _rejected_as_unchanged(monkeypatch)
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+    code, out, _err = run_cli(
+        stack_repo, gpush_main, argv, monkeypatch, gerrit=ChangeStore(build_details_by_change_id(rows[:2]))
+    )
+    assert code == ExitCode.OK
+    boundary = rows[2]
+    lines = out.splitlines()
+    assert lines[:3] == [
+        f'Stopped at commit "{boundary.short_sha}  # {boundary.subject}", because it matches the stop pattern '
+        "`^(?:dropme!|todo\\b|test!|wip\\b)`.",
+        f"... 2 commits from {boundary.short_sha} up held back by the ready boundary; "
+        "`ger push --all` sends them as work-in-progress",
+        "nothing to push: Gerrit already has these commits",
+    ]
+    mock_run.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("footer", "fix"),
+    [
+        ("", "(`git commit --amend` at HEAD) adds one, with Gerrit's commit-msg hook installed"),
+        ("\n\nChange-Id: Inot-a-valid-id", "and delete its Change-Id line; Gerrit's commit-msg hook adds a new one"),
+    ],
+)
+def test_gpush_a_change_id_boundary_names_the_fix(
+    footer: str, fix: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--all does not pass a Change-Id error, so the notice names what does."""
+    git("commit", "--allow-empty", "-m", f"no good footer{footer}", cwd=stack_repo)
+    short = git("rev-parse", "--short", "HEAD", cwd=stack_repo).stdout.strip()
+    code, out, _err = run_cli(stack_repo, gpush_main, ["--dry-run", "--all"], monkeypatch)
+    assert code == 0
+    assert f"... 1 commit held back by the ready boundary; `ger reword {short}` {fix}" in out
+
+
+def test_gpush_wip_from_above_the_ready_boundary_names_it_and_all(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    code, _out, err = run_cli(stack_repo, gpush_main, ["--dry-run", "--wip-from", "HEAD"], monkeypatch)
+    boundary = commits_in_range(stack_repo, "main..feature")[2]
+    assert code == ExitCode.USAGE
+    assert f"is not among the commits this push sends: it is above the ready boundary ({boundary.short_sha}: " in err
+    assert err.rstrip().endswith("; add --all to push past it")
+
+
+@pytest.mark.parametrize("topic", ["", "  "])
+def test_gpush_empty_topic_is_refused_naming_the_way(
+    topic: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Before, `--topic ""` said "nothing to push" and the topic stayed as it was."""
+    mock_run = MagicMock()
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    code, _out, err = run_cli(stack_repo, gpush_main, ["-y", "--topic", topic], monkeypatch)
+    assert code == ExitCode.USAGE
+    assert "--topic needs a name: a push cannot clear a change's topic (do that in the web UI)" in err
+    mock_run.assert_not_called()
+
+
+def test_gpush_usage_brackets_the_exclusive_wip_flags(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        gpush_main(["--help"])
+    usage = " ".join(capsys.readouterr().out.split("positional arguments")[0].split())
+    assert "[--wip | --ready | --wip-from REV] [--private | --no-private]" in usage
+
+
+def test_gpush_dry_run_says_what_it_shows_before_what_it_would_not_do(stack_repo: Path) -> None:
+    """Both streams into one pipe: the [dry-run] lines on stderr used to come before the preview on stdout."""
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; from gerrit_workflow_tools.cli_push import main; sys.exit(main())",
+            "--dry-run",
+        ],
+        cwd=stack_repo,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stdout
+    assert proc.stdout.index("About to push commits:") < proc.stdout.index("[dry-run] not executing push")

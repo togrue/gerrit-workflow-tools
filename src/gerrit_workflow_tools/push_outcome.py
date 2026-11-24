@@ -8,7 +8,7 @@ from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.push import PushPlan, PushRefusal
+from gerrit_workflow_tools.core.push import PushPlan, PushRefusal, changes_nothing
 from gerrit_workflow_tools.core.push_result import NOTHING_TO_PUSH, PushResult
 from gerrit_workflow_tools.core.push_reviewers import ReviewerApplyChangeOutcome
 from gerrit_workflow_tools.core.push_unchanged import StateUpdateFailure
@@ -70,7 +70,7 @@ def print_push_outcome(result: PushResult, plan: PushPlan | None) -> None:
 
     Gerrit refusing an option on a change it already had fails the command, so it is an error.
     """
-    if result.set_nothing:
+    if result.set_nothing and not (plan is not None and changes_nothing(plan)):  # else said before it ran
         print(NOTHING_TO_PUSH)
         if plan is not None:
             print_outdated(plan)

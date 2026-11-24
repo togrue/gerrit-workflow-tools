@@ -28,6 +28,7 @@ from gerrit_workflow_tools.core.upstream import missing_upstream_error
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.push_confirm import confirm_gerrit_push, prompt_initial_options, require_confirmable
 from gerrit_workflow_tools.push_outcome import finish_push, print_refusal
+from gerrit_workflow_tools.push_preview import print_nothing_to_push
 from gerrit_workflow_tools.render.style import ANSI_DIM_GRAY, color_text
 from gerrit_workflow_tools.summary_highlight import branch_summary_highlighter
 from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
@@ -109,20 +110,21 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="Gerrit change topic (magic ref %%topic=…; REST where Gerrit already has the commit).",
     )
-    state, private = parser.add_mutually_exclusive_group(), parser.add_mutually_exclusive_group()
-    for group, flag, what in (
-        (state, "--wip", "work-in-progress (magic ref %%wip"),
-        (state, "--ready", "ready for review, the way back from --wip (magic ref %%ready"),
-        (private, "--private", "private (magic ref %%private"),
-        (private, "--no-private", "not private, the way back from --private (magic ref %%remove-private"),
-    ):
-        group.add_argument(flag, action="store_true", help=f"Mark change(s) {what}; REST where Gerrit has the commit).")
+    # Each group's flags are added one after the other, so the usage line brackets them: [--wip | --ready | ...].
+    state = parser.add_mutually_exclusive_group()
+    _add_mark_flags(state, ("--wip", "work-in-progress (magic ref %%wip"))
+    _add_mark_flags(state, ("--ready", "ready for review, the way back from --wip (magic ref %%ready"))
     state.add_argument(
         "--wip-from",
         metavar="REV",
         default=None,
         help="Push the commits from REV up as work-in-progress and those below it ready (two pushes). "
         "--all does this at the ready boundary by itself.",
+    )
+    _add_mark_flags(
+        parser.add_mutually_exclusive_group(),
+        ("--private", "private (magic ref %%private"),
+        ("--no-private", "not private, the way back from --private (magic ref %%remove-private"),
     )
     add_verbose_and_debug_log_args(
         parser,
@@ -136,6 +138,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Push only through this commit: a git rev, Change-Id, change:N or triplet in the local stack.",
     )
     return parser
+
+
+def _add_mark_flags(group: argparse._MutuallyExclusiveGroup, *flags: tuple[str, str]) -> None:
+    for flag, what in flags:
+        group.add_argument(flag, action="store_true", help=f"Mark change(s) {what}; REST where Gerrit has the commit).")
 
 
 def _gerrit_flags_set(args: argparse.Namespace) -> bool:
@@ -224,9 +231,10 @@ def _push_gerrit(run: RunContext, args: argparse.Namespace, *, branch: str) -> i
         print("Push cancelled.", file=sys.stderr)
         return 0
     plan = asked
-    if changes_nothing(plan) and not args.dry_run:  # nothing to confirm, so -y is not needed either
-        return finish_push(execute(run, plan), plan)
     highlighter = branch_summary_highlighter(cwd, plan.branch, first_parent=first_parent, settings=settings)
+    if changes_nothing(plan) and not args.dry_run:  # nothing to confirm, so -y is not needed either
+        print_nothing_to_push(plan, summary_highlighter=highlighter)
+        return finish_push(execute(run, plan), plan)
     confirmed = confirm_gerrit_push(run, plan, args, summary_highlighter=highlighter)
     if isinstance(confirmed, int):
         return confirmed

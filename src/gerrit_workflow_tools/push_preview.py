@@ -86,19 +86,24 @@ def _format_boundary_commit_line(boundary: PushBoundary, *, summary_highlighter:
     return f"{color_short_sha(sha_p)}{color_text(' # ', ANSI_DIM)}{highlighted}"
 
 
-def print_ready_boundary_notice(boundary: PushBoundary, *, summary_highlighter: SummaryHighlighter) -> None:
-    """Print why the ready boundary stopped the stack (stop pattern or Change-Id, etc.)."""
+def print_ready_boundary_notice(
+    boundary: PushBoundary, *, summary_highlighter: SummaryHighlighter, gap: bool = True
+) -> None:
+    """Why the ready boundary stopped the stack (stop pattern or Change-Id, etc.), and what gets past it."""
     boundary_line = _format_boundary_commit_line(boundary, summary_highlighter=summary_highlighter)
     if not boundary_line:
         return
-    print()
+    if gap:
+        print()
     pat = _stop_pattern_from_reason(boundary.reason)
     if pat:
         print(_boundary_notice(boundary_line, ", because it matches the stop pattern ", pat))
     else:
         print(_boundary_notice(boundary_line, color_text(", because ", ANSI_YELLOW), boundary.reason))
-    if boundary.remaining_unpushed > 0:
-        print(color_text(f"... {boundary.remaining_unpushed} not-ready commit(s) remain unpushed", ANSI_YELLOW))
+    if boundary.held_back > 0:
+        held = "1 commit" if boundary.held_back == 1 else f"{boundary.held_back} commits from {boundary.short_sha} up"
+        fix = f"; {boundary.fix}" if boundary.fix else ""
+        print(color_text(f"... {held} held back by the ready boundary{fix}", ANSI_YELLOW))
 
 
 def _commit_lines(plan: PushPlan, summary_highlighter: SummaryHighlighter) -> list[str]:
@@ -128,6 +133,9 @@ def print_gpush_preview(plan: PushPlan, *, summary_highlighter: SummaryHighlight
     """
     heading = f"{ANSI_BOLD}{ANSI_CYAN}"
     sent, updates = sent_commits(plan), state_updates(plan)
+    if not sent and not updates:
+        print_nothing_to_push(plan, summary_highlighter=summary_highlighter)
+        return
     if sent:
         print(color_text("About to push commits:", heading))
         for line in _commit_lines(plan, summary_highlighter):
@@ -139,10 +147,18 @@ def print_gpush_preview(plan: PushPlan, *, summary_highlighter: SummaryHighlight
             print(f"    {update_line(update, summary_highlighter)}")
     if sent and (idle := len(plan.commits) - len(sent) - len(updates) - len(plan.outdated)):
         print(color_text(f"{_commits(idle)} not sent again", ANSI_DIM))
-    if not sent and not updates:
-        print(NOTHING_TO_PUSH)
     print_outdated(plan)
     print_ready_boundary_notice(plan.boundary, summary_highlighter=summary_highlighter)
+
+
+def print_nothing_to_push(plan: PushPlan, *, summary_highlighter: SummaryHighlighter) -> None:
+    """A push that changes nothing on Gerrit: where the ready boundary stopped it, then that Gerrit has the rest.
+
+    The same lines whether it is a dry run or not (``changes_nothing``).
+    """
+    print_ready_boundary_notice(plan.boundary, summary_highlighter=summary_highlighter, gap=False)
+    print(NOTHING_TO_PUSH)
+    print_outdated(plan)
 
 
 def print_outdated(plan: PushPlan) -> None:
@@ -203,8 +219,10 @@ def print_dry_run(plan: PushPlan) -> None:
     """Status line and the ``git push`` that would run; what would happen after it on stderr."""
     print()
     print_plan_status(plan)
+    sys.stdout.flush()  # what would run comes after what was shown, also when both go to one pipe
     if not sent_commits(plan):  # what the real run does: no git push, REST only
-        print("[dry-run] no git push: Gerrit already has these commits", file=sys.stderr)
+        if state_updates(plan):
+            print("[dry-run] no git push: Gerrit already has these commits", file=sys.stderr)
     else:
         for argv in push_argvs(plan):
             print(color_text(" ".join(argv), ANSI_DIM_GRAY))
