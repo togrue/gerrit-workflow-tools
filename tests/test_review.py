@@ -572,3 +572,31 @@ def test_a_single_change_review_offers_no_walk(
     store.set_related(keys[1], [])  # no relation chain: a change of its own
     _, out, _ = _review(stack_repo, store, ["101"], monkeypatch)
     assert out.splitlines()[-1].endswith(" · ger review --vote +1 · ger review --done")
+
+
+def test_a_staged_review_refuses_what_would_rewrite_or_push_the_reviewed_change(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Staged, the working branch is the review's change-<n>: fix, edit, reword, rebase and push would take it."""
+    from gerrit_workflow_tools import cli_edit, cli_fix, cli_push, cli_rebase
+
+    store, _keys, shas = gerrit
+    _review(stack_repo, store, ["102"], monkeypatch)
+    worktree = _worktree(stack_repo)
+    message = (
+        "error: a staged review of c102 is underway here: `ger review --unstage` to work on it, or `ger review --done`"
+    )
+    for main, argv in (
+        (cli_fix.main, ["HEAD"]),
+        (cli_edit.main, ["HEAD"]),
+        (cli_edit.main_reword, ["HEAD", "-m", "mine now"]),
+        (cli_rebase.main, []),
+        (cli_push.main, ["--dry-run"]),
+    ):
+        code, _out, err = run_cli(worktree, main, argv, monkeypatch, gerrit=store, catch_sys_exit=True)
+        assert (code, err.strip()) == (ExitCode.USAGE, message), main
+    assert git_out("rev-parse", "change-102", cwd=worktree) == shas[2], "nothing moved"
+    # Unstaged, the change is checked out on its branch: working on it is what you asked for.
+    _review(worktree, store, ["--unstage"], monkeypatch)
+    code, _out, err = run_cli(worktree, cli_push.main, ["--dry-run"], monkeypatch, gerrit=store, catch_sys_exit=True)
+    assert "staged review" not in err

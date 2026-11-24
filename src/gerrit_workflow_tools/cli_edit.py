@@ -40,6 +40,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_run import GitError, git_out
 from gerrit_workflow_tools.core.rebase_next_step import attention_stop_hint, rebase_refusal
 from gerrit_workflow_tools.core.rebase_state import RebaseAction, rebase_in_progress, unmerged_paths
+from gerrit_workflow_tools.core.review_checkout import staged_review_refusal
 from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import merge_base_with_target
@@ -255,6 +256,8 @@ def _run_interactive_stack_rebase(
     run = init_cli_runtime(args, gerrit=gerrit)
     cwd, settings = run.cwd, run.settings
     _validate_targeting_args(p, args)
+    if refusal := staged_review_refusal(run.worktree.repository_dir, cwd):
+        raise UsageError(refusal)
 
     branch = run.repo.working_branch
 

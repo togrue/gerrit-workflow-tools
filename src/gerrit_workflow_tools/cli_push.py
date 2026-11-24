@@ -22,6 +22,7 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name, ger_push_mode
 from gerrit_workflow_tools.core.push import PushRefusal, changes_nothing, execute, prepare, prepare_vanilla
 from gerrit_workflow_tools.core.push_checks import resolve_push_branch
+from gerrit_workflow_tools.core.review_checkout import staged_review_refusal
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.upstream import missing_upstream_error
@@ -270,6 +271,9 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     if args.i and not stdin_is_terminal():
         raise UsageError("-i requires an interactive terminal (stdin is not a TTY)")
 
+    # A staged review makes its change-<n> the working branch: a push without --branch would send it.
+    if not args.branch and (refusal := staged_review_refusal(run.worktree.repository_dir, cwd)):
+        raise UsageError(refusal)
     detached = run.worktree.branch is None
     branch = resolve_push_branch(run, args.branch)
     mode = ger_push_mode(cwd, branch, settings=settings)

@@ -18,6 +18,7 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.rebase_next_step import conflict_next_step
 from gerrit_workflow_tools.core.rebase_state import rebase_underway
+from gerrit_workflow_tools.core.review_checkout import staged_review_refusal
 from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal
 from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE, fixup_target_sha, get_stack_snapshot
 from gerrit_workflow_tools.core.usage import UsageError
@@ -128,6 +129,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     run = init_cli_runtime(args, gerrit=gerrit)
     cwd, settings = run.cwd, run.settings
 
+    if refusal := staged_review_refusal(run.worktree.repository_dir, cwd):
+        raise UsageError(refusal)
     if step := conflict_next_step(cwd):
         raise UsageError(f"the index has unresolved conflicts, and a fixup would commit them; {step}")
     # Same resolution as `ger edit` / `ger reword`: a fixup must name a commit a later

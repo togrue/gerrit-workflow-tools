@@ -13,7 +13,9 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_ch
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_state import resolve_rebase_onto_remote_ref
 from gerrit_workflow_tools.core.rebase_state import RebaseAction
+from gerrit_workflow_tools.core.review_checkout import staged_review_refusal
 from gerrit_workflow_tools.core.stack import merge_base_with_target
+from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.rebase_run import go_on_with_rebase, require_history_rewrite, run_interactive_rebase
 from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
@@ -116,6 +118,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     args = p.parse_args(argv)
     run = init_cli_runtime(args, gerrit=gerrit)
     cwd, settings = run.cwd, run.settings
+    if refusal := staged_review_refusal(run.worktree.repository_dir, cwd):
+        raise UsageError(refusal)
 
     if args.go_on:
         switches = (args.onto_remote, args.drop_merged_equivalent, args.autosquash)
