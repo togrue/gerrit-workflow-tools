@@ -455,7 +455,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `cli_reply.py` | `ger reply` |
 | `cli_comment.py` | `ger comment` |
 | `cli_review.py` | `ger review` |
-| `cli_checkout.py` | `ger checkout`: the update question and what it says |
+| `cli_checkout.py` | `ger checkout`: the update question |
 | `cli_push.py` | `ger push` |
 | `cli_edit.py` | `ger edit`, `ger reword` |
 | `cli_rebase.py` | `ger rebase` |
@@ -600,6 +600,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/comments_markdown.py` | Inline comment chains as Markdown: `ger show --ai` and the agent runbook (`format_comment_chain_markdown`, `format_unresolved_section_markdown`) |
 | `render/suggested_fixes.py` | Gerrit fix suggestions written out below a comment, one shape for the terminal and Markdown (`shown_fixes`, `fix_rows`, `fixes_markdown`), and a comment's whole text with them (`comment_text`, what `ger serve` sends) |
 | `render/wrap.py` | Word wrap for `ger show` prose: comment boxes and the commit message |
+| `render/checkout_text.py` | What `ger checkout` says once it checked a change out (`checkout_lines`) |
 | `render/show_text.py` | `ger show`'s human text for one commit (`commit_lines`), the brief one of a multi-commit view (`brief_commit_lines`) and the line between them (`commit_separator`) |
 | `render/show_markdown.py` | `ger show`'s Markdown (`--ai`) for one commit: `commit_markdown` |
 | `render/inbox_text.py` | `ger inbox`'s human text: a row per review chain by inbox section, and each section's summary (`render_inbox_text`) |
