@@ -440,7 +440,8 @@ def test_vote_on_the_chain_lists_each_change_with_its_drafts_and_votes_on_each(
     assert [line.split(":")[0] for line in out.splitlines() if line.startswith("change ")] == [
         f'change {n} "{subject}"' for n, subject in zip(range(100, 104), _subjects(store, keys), strict=True)
     ]
-    assert '  c.txt:1: "base nit"' in out and '  c.txt:1: "top nit"' in out and "  message: lgtm" in out
+    assert '  c.txt:1: "base nit"' in out and '  c.txt:1: "top nit"' in out
+    assert "  message (on each of 4 changes): lgtm" in out
     assert store.calls_to("publish_drafts") == []
     code, out, err = _review(stack_repo, store, ["--vote", "+1", "--chain", "-y", "-m", "lgtm"], monkeypatch)
     assert code == ExitCode.OK, err
@@ -561,3 +562,12 @@ def test_comment_from_your_checkout_on_a_file_only_the_reviewed_change_has_goes_
         "draft on c.txt:1 (patchset 1)",
     ]
     assert [d["message"] for rows in store.list_drafts(keys[2]).values() for d in rows] == ["nit"]
+
+
+def test_a_single_change_review_offers_no_walk(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, keys, _shas = gerrit
+    store.set_related(keys[1], [])  # no relation chain: a change of its own
+    _, out, _ = _review(stack_repo, store, ["101"], monkeypatch)
+    assert out.splitlines()[-1].endswith("ger reply ID -m … · ger review --vote +1 · ger review --done")

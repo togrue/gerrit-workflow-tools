@@ -57,7 +57,8 @@ def _print_plan(takes: list[VoteTarget], skipped: list[VoteTarget], voted: str, 
         print("\n".join(format_pending_drafts(_heading(target, voted), list(target.drafts))))
     if message:
         lines = message.splitlines()
-        print("\n".join([f"  message: {lines[0]}", *(f"           {line}" for line in lines[1:])]))
+        label = f"  message (on each of {len(takes)} changes): " if len(takes) > 1 else "  message: "
+        print("\n".join([label + lines[0], *(" " * len(label) + line for line in lines[1:])]))
     for target in skipped:
         print(f'skipped change {target.number} "{target.change.subject}": {", ".join(target.ruled_out)}')
 
@@ -104,4 +105,6 @@ def vote(args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritSe
     if args.json_:
         skips = [{"change": t.change.key, "ruled_out": list(t.ruled_out)} for t in skipped]
         print(json.dumps(rows[0] if len(targets) == 1 else {"changes": rows, "skipped": skips}, indent=2))
+    elif state is not None and not args.dry_run:
+        print("next: ger review --done" if args.chain else "next: ger review --next · ger review --done")
     return int(ExitCode.OK)

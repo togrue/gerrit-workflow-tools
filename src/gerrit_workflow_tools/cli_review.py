@@ -175,7 +175,7 @@ def next_steps(state: ReviewState, chain: list[int] | None, cwd: Path) -> str:
         [] if here == worktree.resolve() or worktree.resolve() in here.parents else [f"cd {shown_path(worktree, cwd)}"]
     )
     steps += ["ger show", "ger comment PATH:LINE -m …", "ger reply ID -m …"]
-    if chain is not None and chain[-1:] == [state.number]:  # the top: nothing left to walk to
+    if chain is not None and chain[-1:] in ([state.number], []):  # the top, or no chain: nowhere to walk
         steps += ["ger review --vote +1" + (" --chain" if len(chain) > 1 else ""), "ger review --done"]
     else:
         steps += ["ger review --next", "ger review --vote +1"]
@@ -293,6 +293,7 @@ def _act(args: argparse.Namespace, p: argparse.ArgumentParser, run: RunContext) 
             for branch in kept:
                 print(f"  kept {branch}: it has commits of yours")
         if left and not args.json_:
+            sys.stdout.flush()  # after what was done, also when both go to one pipe
             print(f"warning: {drafts_elsewhere(left)}", file=sys.stderr)
         return int(ExitCode.OK)
     if args.vote is None and args.changeish is None and not args.next and not args.prev:
