@@ -74,7 +74,8 @@ def test_a_missing_upstream_reads_the_same_in_log_and_push(
     assert "Set it with:\n  git branch --set-upstream-to=origin/feature feature  # nearest: " in err
 
 
-@pytest.mark.parametrize(("main_fn", "argv"), [(edit_main, ["HEAD~1"]), (main_reword, ["HEAD~1"]), (rebase_main, [])])
+# Not `ger reword`: it rewrites messages only, so uncommitted changes are no obstacle (tests/test_reword.py).
+@pytest.mark.parametrize(("main_fn", "argv"), [(edit_main, ["HEAD~1"]), (rebase_main, [])])
 def test_every_history_rewrite_refuses_a_dirty_tree_the_same_way(
     main_fn: Callable[..., int], argv: list[str], stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -153,7 +154,8 @@ def test_a_history_rewrite_counts_as_uncommitted_exactly_what_git_stash_would_sa
     assert code == (ExitCode.USAGE if git_would_stash else ExitCode.OK), err
 
 
-@pytest.mark.parametrize(("main_fn", "argv"), [(edit_main, ["HEAD~1"]), (main_reword, ["HEAD~1"]), (rebase_main, [])])
+# Not `ger reword`: it rewrites messages only, so uncommitted changes are no obstacle (tests/test_reword.py).
+@pytest.mark.parametrize(("main_fn", "argv"), [(edit_main, ["HEAD~1"]), (rebase_main, [])])
 def test_a_submodule_staged_at_another_commit_stops_a_history_rewrite_without_asking_for_a_stash(
     main_fn: Callable[..., int], argv: list[str], stack_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -189,7 +191,8 @@ def test_the_unstage_command_for_two_staged_submodules_runs_as_given(
     assert history_rewrite_refusal(stack_repo) is None
 
 
-@pytest.mark.parametrize(("main_fn", "argv"), [(edit_main, ["HEAD~1"]), (main_reword, ["HEAD~1"]), (rebase_main, [])])
+# Not `ger reword`: it rewrites messages only, so uncommitted changes are no obstacle (tests/test_reword.py).
+@pytest.mark.parametrize(("main_fn", "argv"), [(edit_main, ["HEAD~1"]), (rebase_main, [])])
 def test_a_submodule_staged_below_the_stack_stops_a_history_rewrite_up_front(
     main_fn: Callable[..., int], argv: list[str], stack_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -317,7 +320,7 @@ def _stop_on_a_conflict(repo: Path, monkeypatch: pytest.MonkeyPatch) -> str:
 def test_a_conflict_in_an_attention_walk_names_finishing_and_walking_on_apart(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``git rebase --continue`` only finishes; ``ger edit -n`` is named as the way on to the next stop.
+    """``ger rebase --continue`` only finishes; ``ger edit -n`` is named as the way on to the next stop.
 
     ``ger edit -n`` refuses as ``ger rebase --continue`` does, before git says it cannot go on.
     """
@@ -326,9 +329,9 @@ def test_a_conflict_in_an_attention_walk_names_finishing_and_walking_on_apart(
     assert code == ExitCode.USAGE
     assert err.rstrip().endswith(
         "error: the index has unresolved conflicts; resolve the conflicts in grow.txt, `git add` them, "
-        "then `git rebase --continue` to finish; "
+        "then `ger rebase --continue` to finish; "
         "`ger edit -n` finishes and goes on to the next commit needing attention; "
-        "`git rebase --abort` goes back to where the rebase started"
+        "`ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started"
     )
 
 
@@ -338,8 +341,8 @@ def test_a_rebase_stopped_on_a_conflict_says_how_on_and_nothing_commits_or_pushe
     """The next step names resolving and ``git add``; ``ger fix`` and ``ger push`` refuse until then."""
     err = _stop_on_a_conflict(stack_repo, monkeypatch)
     step = (
-        "resolve the conflicts in grow.txt, `git add` them, then `git rebase --continue` to finish; "
-        "`git rebase --abort` goes back to where the rebase started"
+        "resolve the conflicts in grow.txt, `git add` them, then `ger rebase --continue` to finish; "
+        "`ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started"
     )
     assert err.rstrip().endswith(f"next: {step}")
     head = git("rev-parse", "HEAD", cwd=stack_repo).stdout

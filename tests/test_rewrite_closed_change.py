@@ -64,12 +64,15 @@ def _run(
     if command == "fix":
         (repo / "a.txt").write_text("a fix\n", encoding="utf-8")
         git("add", "a.txt", cwd=repo)
-    return run_cli(repo, COMMANDS[command], [*extra, rows[0].sha], monkeypatch, gerrit=gerrit)
+    message = ["-m", "reworded"] if command == "reword" else []  # no terminal: the message is given
+    return run_cli(repo, COMMANDS[command], [*extra, *message, rows[0].sha], monkeypatch, gerrit=gerrit)
 
 
 def _rewrote(command: str, repo: Path, rebases: list[list[str]]) -> bool:
     if command == "fix":
         return git_out("log", "-1", "--format=%s", cwd=repo).startswith("fixup! ")
+    if command == "reword":  # a message-only rewrite, no rebase
+        return "reworded" in git_out("log", "--format=%s", "@{u}..", cwd=repo).splitlines()
     return bool(rebases)
 
 

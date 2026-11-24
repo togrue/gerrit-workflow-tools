@@ -1,8 +1,9 @@
-"""Running ``git rebase`` from a command: the refusal before it starts, the next step after a conflict.
+"""Running ``git rebase`` from a command: the refusal before it starts, the next step at a stop.
 
 Shared by ``ger edit`` / ``ger reword`` and ``ger rebase``, so every ger-started rebase refuses
-and stops the same way. The rebase talks to the terminal itself; this module only adds the
-one ``next:`` line from :func:`~gerrit_workflow_tools.core.rebase_state.conflict_next_step`.
+and stops the same way. The rebase talks to the terminal itself; this module only adds ger's own
+lines after it: where it stopped and the one ``next:`` step from
+:func:`~gerrit_workflow_tools.core.rebase_next_step.stop_next_step`.
 """
 
 from __future__ import annotations
@@ -10,17 +11,24 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Literal
 
 from gerrit_workflow_tools.cli_terminal import stdin_is_terminal
 from gerrit_workflow_tools.core.git_editor import module_editor_command
-from gerrit_workflow_tools.core.git_run import git
-from gerrit_workflow_tools.core.rebase_state import (
-    RebaseAction,
-    conflict_next_step,
-    go_on_refusal,
-)
+from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.rebase_next_step import ABORT, go_on_refusal, stop_next_step, where_head_is
+from gerrit_workflow_tools.core.rebase_state import RebaseAction, RebaseStop
 from gerrit_workflow_tools.core.rebasing_stack import stopped_rebase
+from gerrit_workflow_tools.core.rewrite_outcome import (
+    DroppedCommit,
+    RewriteOutcome,
+    dropped_commit,
+    rewrite_outcome,
+    stack_before,
+)
 from gerrit_workflow_tools.core.rewrite_refusal import history_rewrite_refusal
+from gerrit_workflow_tools.core.run_context import RunContext
+from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE
 from gerrit_workflow_tools.core.usage import UsageError
 
 
@@ -31,45 +39,155 @@ def require_history_rewrite(cwd: Path) -> None:
 
 
 def run_interactive_rebase(
-    cwd: Path,
+    run: RunContext,
     base: str,
     *,
     sequence_editor: str,
     env: dict[str, str],
     walk_on: str | None = None,
     autosquash: bool | None = False,
+    undo: Undo = "cherry-pick",
 ) -> int:
     """``git rebase -i`` with package module *sequence_editor* as editor; return git's exit code.
 
     *autosquash* ``False`` keeps every ``fixup!`` commit where it is whatever ``rebase.autosquash``
-    says, ``True`` folds them, ``None`` leaves it to git config. A stop on a conflict ends with the
-    shared next step, naming *walk_on* as the way on to the next attention stop.
+    says, ``True`` folds them, ``None`` leaves it to git config. A stop ends with the shared next
+    step, naming *walk_on* as the way on to the next attention stop; a finished rebase with what it
+    did (:func:`print_outcome`, getting a dropped commit back by *undo*).
     """
+    before = stack_before(run)
     env = {**env, "GIT_SEQUENCE_EDITOR": module_editor_command(f"gerrit_workflow_tools.{sequence_editor}")}
     squash = [] if autosquash is None else ["--autosquash" if autosquash else "--no-autosquash"]
-    code = git("rebase", "-i", *squash, base, cwd=cwd, env=env, check=False, capture=False).returncode
-    _print_conflict_next_step(cwd, walk_on)
+    code = git("rebase", "-i", *squash, base, cwd=run.cwd, env=env, check=False, capture=False).returncode
+    if not print_stop(run.cwd, walk_on) and code == 0:
+        previous = before[-1].short_sha if before else None  # HEAD before the rebase: the stack ends there
+        print_outcome(rewrite_outcome(run, before), walk_on=walk_on, undo=undo, previous_head=previous)
     return code
 
 
-def go_on_with_rebase(cwd: Path, action: RebaseAction, *, walk_on: str | None = None) -> int:
+def go_on_with_rebase(run: RunContext, action: RebaseAction, *, walk_on: str | None = None) -> int:
     """``git rebase --<action>`` of the rebase underway; return git's exit code. Output goes to the terminal.
 
     Refused first (:class:`UsageError`) where :func:`go_on_refusal` says git must not run: ``ger
     rebase --continue|--skip`` and ``ger edit -n`` go on the same way. Without a terminal nobody can
     edit a message (a resolved conflict's commit, a later ``reword`` or ``squash``), so it is taken as
-    it is, unless the caller set ``GIT_EDITOR``. A stop on the next conflict ends with the shared next
-    step, naming *walk_on* as the way on to the next attention stop.
+    it is, unless the caller set ``GIT_EDITOR``. A skip says which commit it dropped and how to get it
+    back; the next stop ends with the shared next step, naming *walk_on* as the way on to the next
+    attention stop; a finished rebase says what it did against the branch before it (``orig-head``),
+    and an abort where the branch is back at.
     """
-    if refusal := go_on_refusal(cwd, action, stopped_rebase(cwd), walk_on=walk_on):
+    cwd = run.cwd
+    progress = stopped_rebase(cwd)
+    if refusal := go_on_refusal(cwd, action, progress, walk_on=walk_on):
         raise UsageError(refusal)
+    assert progress is not None  # go_on_refusal refuses without one
+    before = stack_before(run, progress.orig_head) if progress.orig_head else None
     env = None if stdin_is_terminal() or "GIT_EDITOR" in os.environ else {"GIT_EDITOR": "true"}
     code = git("rebase", f"--{action.value}", cwd=cwd, env=env, check=False, capture=False).returncode
-    if action is not RebaseAction.ABORT:
-        _print_conflict_next_step(cwd, walk_on)
+    if action is RebaseAction.ABORT:
+        if code == 0:
+            print(f"rebase aborted: {where_head_is(cwd)}, as before the rebase", file=sys.stderr)
+        return code
+    now = stopped_rebase(cwd)
+    if now is not None:
+        skipped = action is RebaseAction.SKIP and progress.current and now.current != progress.current
+        if skipped and progress.current and not progress.committed_by_hand:
+            print_dropped(dropped_commit(run, progress.current), undo="cherry-pick", still_underway=True)
+        print_stop(cwd, walk_on)
+    elif code == 0 and before is not None:
+        print_outcome(rewrite_outcome(run, before), walk_on=walk_on, undo="cherry-pick")
     return code
 
 
-def _print_conflict_next_step(cwd: Path, walk_on: str | None) -> None:
-    if step := conflict_next_step(cwd, walk_on=walk_on):
-        print(f"next: {step}", file=sys.stderr)
+def print_stop(cwd: Path, walk_on: str | None) -> bool:
+    """Where the rebase underway stopped, and the next step; ``False``, and nothing said, when none is underway."""
+    if (progress := stopped_rebase(cwd)) is None:
+        return False
+    if progress.current and progress.stop is not RebaseStop.CONFLICT:  # git named a conflict's commit itself
+        print(f"stopped at {git_out('log', '-1', '--format=%h %s', progress.current, cwd=cwd)}", file=sys.stderr)
+    print(f"next: {stop_next_step(progress, walk_on=walk_on)}", file=sys.stderr)
+    return True
+
+
+Undo = Literal["cherry-pick", "reset"]
+"""How a dropped commit comes back: picked onto the branch, or the whole rewrite reset away (only a drop)."""
+
+
+def print_dropped(
+    dropped: DroppedCommit, *, undo: Undo, previous_head: str | None = None, still_underway: bool = False
+) -> None:
+    """The two lines every ger command says of a commit it dropped: which one, and how to get it back.
+
+    No question asked: the drop is said and can be taken back. *undo* ``reset`` (``ger edit --drop``,
+    which changed nothing else) resets to *previous_head*; ``cherry-pick`` picks the commit back on top,
+    once the rebase finished when it is *still_underway*.
+    """
+    change = f"; its change {dropped.change_number} stays open on Gerrit" if dropped.change_number else ""
+    print(f"dropped {dropped.short_sha} {dropped.subject}{change}", file=sys.stderr)
+    if undo == "reset" and previous_head:
+        back = f"git reset --keep {previous_head}"
+    elif still_underway:
+        back = f"once the rebase is finished, git cherry-pick {dropped.short_sha} (or {ABORT} now)"
+    else:
+        back = f"git cherry-pick {dropped.short_sha}"
+    print(f"to get it back: {back}", file=sys.stderr)
+
+
+def print_outcome(
+    outcome: RewriteOutcome,
+    *,
+    walk_on: str | None,
+    undo: Undo,
+    previous_head: str | None = None,
+    done: str = "rebase finished",
+) -> None:
+    """ger's closing lines after a rewrite finished: what it dropped, what it did in words, and the next step.
+
+    No ``next:`` during an attention walk (*walk_on*): the walk goes on to its next stop.
+    """
+    for dropped in outcome.dropped:
+        print_dropped(dropped, undo=undo, previous_head=previous_head)
+    print(f"{done}: {outcome_text(outcome)}", file=sys.stderr)
+    if walk_on:
+        return
+    if outcome.fixups_left:
+        print(f"next: {UNSQUASHED_FIXUP_ADVICE}", file=sys.stderr)
+    elif outcome.rewritten or outcome.dropped:
+        print("next: `ger push` uploads the stack as it is now", file=sys.stderr)
+
+
+def outcome_text(outcome: RewriteOutcome) -> str:
+    """What a finished rewrite did, in words: ``rewrote all 3 commits, now ahead of Gerrit; squashed 1 fixup``."""
+    rewritten, total = outcome.rewritten, outcome.commits
+    if not (rewritten or outcome.dropped or outcome.squashed or outcome.upstream):
+        return f"nothing changed, the local stack is as it was ({_count(total)})"
+    said = [f"dropped {_count(len(outcome.dropped))}"] if outcome.dropped else []
+    if rewritten:
+        whole = "all " if rewritten == total > 1 else ""
+        part = f" of {total}" if rewritten < total else ""
+        said.append(
+            f"rewrote {whole}{rewritten}{part} commit{'' if rewritten == total == 1 else 's'}{_on_gerrit(outcome)}"
+        )
+    elif total:
+        said.append(f"the other {_count(total)} as they were" if outcome.dropped else f"{_count(total)} as they were")
+    if outcome.squashed:
+        said.append(f"squashed {_count(outcome.squashed, 'fixup')}")
+    if outcome.upstream:
+        said.append(f"left out {_count(outcome.upstream)} already upstream")
+    return "; ".join(said)
+
+
+def _on_gerrit(outcome: RewriteOutcome) -> str:
+    """Where the rewritten commits stand against Gerrit, as the cache knows it; nothing without a Gerrit."""
+    ahead, rewritten = outcome.on_gerrit, outcome.rewritten
+    if ahead is None:
+        return ""
+    if ahead == rewritten:
+        return ", now ahead of Gerrit" if rewritten == 1 else ", all now ahead of Gerrit"
+    if ahead == 0:
+        return ", none on Gerrit yet"
+    return f": {ahead} now ahead of Gerrit, {rewritten - ahead} not on Gerrit yet"
+
+
+def _count(n: int, what: str = "commit") -> str:
+    return f"{n} {what}{'' if n == 1 else 's'}"

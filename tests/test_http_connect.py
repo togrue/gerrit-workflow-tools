@@ -171,3 +171,15 @@ def test_urlopen_connects_through_the_race(listeners: list[socket.socket], monke
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_an_https_request_to_a_plain_http_port_says_so() -> None:
+    """Not the TLS library's ``[SSL: WRONG_VERSION_NUMBER]``: what a user mistyped (``ger setup``)."""
+    import ssl
+    from urllib.error import URLError
+
+    from gerrit_workflow_tools.core.http_connect import why_unreachable
+
+    error = ssl.SSLError(1, "[SSL: WRONG_VERSION_NUMBER] wrong version number")
+    error.reason = "WRONG_VERSION_NUMBER"  # type: ignore[misc]
+    assert why_unreachable(URLError(error)) == "it does not speak https on that port: an http:// server?"

@@ -69,8 +69,10 @@ Without a terminal, the two ways ger runs a rebase set `GIT_EDITOR` differently:
 
 `--continue`, `--abort` and `--skip` act on the rebase underway, whoever started it, and take no
 `REV` or other option. They are what the VS Code extension's *Continue*, *Abort* and *Skip* run.
-Without a rebase they refuse (`no rebase is in progress`, naming a `git am` when one is underway
-instead). Each refusal exits `2` and changes nothing:
+Without a rebase they refuse and say where the branch is (`no rebase is in progress, nothing to
+continue: feature is at 98a454b Cleanup after experiment`), naming a `git am` when one is underway
+instead. A finished `--abort` says the same of the branch it put back: `rebase aborted: feature is
+at 6c07cc8 trig: add tan(), as before the rebase`. Each refusal exits `2` and changes nothing:
 
 - `--continue` refuses while the index holds unresolved conflicts, with the shared next step, and
   over unstaged changes to tracked files, which git would refuse with a misleading "You must edit
@@ -96,7 +98,54 @@ message as it is, and so is any later `reword` or `squash` message in the todo. 
 wants to write those sets `GIT_EDITOR`. `ger edit -n` goes on the same way. A stop on the next
 conflict ends with the shared next step, as below.
 
-A rebase that stops on a conflict ends with the shared next step ([edit.md](edit.md#behavior)): resolve the paths, `git add` them, then `git rebase --continue`, or `git rebase --abort`.
+A rebase that stops ends with ger's own lines after git's, the same for every ger-started rebase
+(`rebase_run.print_stop`, words from `rebase_next_step.stop_next_step`): where it stopped, unless git
+just named the commit of a conflict, and one `next:` step that names ger's way on, never raw git:
+
+| Stop | `next:` |
+|--|--|
+| conflict | resolve the conflicts in `<paths>`, `git add` them, then `ger rebase --continue` to finish; `ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started |
+| conflict resolved and added | its conflicts are resolved: `ger rebase --continue` commits it and goes on; … |
+| `edit` | amend it (`git commit --amend`), then `ger rebase --continue` to finish |
+| split | commit what is left of it, then `ger rebase --continue`; … |
+| `exec`, `break` | `ger rebase --continue` once you are done here; … |
+
+`ger rebase --continue` rather than `git rebase --continue`: it refuses over unstaged changes, which
+git misreports, and without a terminal takes a message as it is instead of failing on a missing
+editor. The refusals name the same commands (`ger rebase --skip goes on from HEAD`, …), and so does
+every history-moving command a rebase underway stops (`a rebase is already in progress; finish it
+(`ger rebase --continue`) or `ger rebase --abort` first`).
+
+### After a rebase finishes
+
+Git's `Successfully rebased and updated refs/heads/…` is not the last line. Every ger-started
+rebase that finishes (`ger rebase [REV]`, `--autosquash`, `--continue`, `--skip`, `ger edit`,
+`ger reword`, `ger edit -n`) ends with ger's own, against the local stack before it (the stack at
+`HEAD` when ger started the rebase, or at the rebase's `orig-head` for `--continue` / `--skip`);
+`core/rewrite_outcome.py` tells it as data, `rebase_run.print_outcome` says it:
+
+```text
+dropped 6c07cc8 trig: add tan(); its change 2116 stays open on Gerrit
+to get it back: git cherry-pick 6c07cc8
+rebase finished: dropped 1 commit; rewrote 1 commit, now ahead of Gerrit
+next: `ger push` uploads the stack as it is now
+```
+
+- Each commit the stack lost, unless squashed (a `fixup!` whose commit was rewritten) or already in
+  the upstream it was rebased onto, is **dropped**: named with its change when the cache has it
+  open on Gerrit (dropping abandons nothing), and the way to get it back, `git cherry-pick <sha>`.
+  `--skip` that stops on a further conflict says so at once, with `once the rebase is finished,
+  git cherry-pick <sha> (or `ger rebase --abort` now)`. Nothing is asked first: the drop is said
+  and can be taken back.
+- `rebase finished:` counts the commits rewritten (new ids) and, of them, how many are now ahead
+  of Gerrit and how many not on Gerrit yet; fixups squashed; commits left out as already upstream.
+  `nothing changed, the local stack is as it was (3 commits)` when it changed nothing. Whether a
+  change is on Gerrit comes from the cache a `ger log` or the todo's annotations left, never from a
+  request: a change's existence does not go stale the way its votes do. Without `ger.webUrl` the
+  Gerrit part is left out.
+- `next:` is `` `ger push` uploads the stack as it is now`` when anything changed, `squash it with
+  `ger rebase --autosquash`` while a fixup is left in the stack (`ger push` would stop at it), and
+  nothing during an attention walk, whose next stop is the next step.
 
 ---
 

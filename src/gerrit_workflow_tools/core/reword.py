@@ -1,6 +1,8 @@
 """Rewriting commit messages of the **local stack**, and nothing else.
 
-A message-only rewrite keeps every tree: the commits from the first changed message up are
+``ger reword`` and ``ger serve``'s reword are one rewrite; the message comes from ``-m`` /
+``-F``, an editor (:func:`message_to_edit`, :func:`message_from_edit`) or the request. A
+message-only rewrite keeps every tree: the commits from the first changed message up are
 recreated with ``git commit-tree`` on their new parents, and the branch is moved to the new
 tip. The index and the worktree are never touched, so uncommitted changes are no obstacle and
 nothing can conflict.
@@ -110,3 +112,17 @@ def reword_commit(
         raise ReorderRefusal(f"{target.short_sha} is not reachable from HEAD; the commit was left as it was")
     move_head(cwd, new_head)
     return StackRewrite(list(get_stack_snapshot(cwd, settings=settings).commits), head)
+
+
+def message_to_edit(body: str, commit: str) -> str:
+    """What an editor shows to reword *commit* (``<sha> <subject>``): its message, then git-style comment lines."""
+    return (
+        f"{body.strip()}\n\n"
+        f"# The message of {commit}. Lines starting with '#' are left out.\n"
+        "# Unchanged or empty, the commit stays as it is; a message without the Change-Id keeps it.\n"
+    )
+
+
+def message_from_edit(text: str) -> str:
+    """The message an editor left: comment lines (``#``) out, as git's default cleanup does."""
+    return "\n".join(line for line in text.splitlines() if not line.startswith("#")).strip()

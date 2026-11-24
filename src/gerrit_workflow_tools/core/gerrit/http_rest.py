@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import json
 import logging
-import socket
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -26,7 +25,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     resolve_gerrit_web_base,
     strip_terminal_controls,
 )
-from gerrit_workflow_tools.core.http_connect import urlopen
+from gerrit_workflow_tools.core.http_connect import urlopen, why_unreachable
 
 
 logger = logging.getLogger(__name__)
@@ -70,20 +69,6 @@ def _error_body(error: HTTPError) -> str:
         return error.read().decode("utf-8", errors="replace")
     except (OSError, ValueError):
         return ""
-
-
-def _why_unreachable(error: OSError) -> str:
-    """A few words on why a connection failed, without the platform's localized prose."""
-    reason = error.reason if isinstance(error, URLError) else error
-    if isinstance(reason, ConnectionRefusedError):
-        return "connection refused"
-    if isinstance(reason, (TimeoutError, socket.timeout)):
-        return "timed out"
-    if isinstance(reason, socket.gaierror):
-        return "unknown host"
-    if isinstance(reason, OSError) and reason.strerror:
-        return reason.strerror
-    return str(reason)
 
 
 @dataclass(frozen=True)
@@ -161,7 +146,21 @@ class HttpGerritRest:
         params: dict[str, str] | list[tuple[str, str]] | None = None,
         json_body: dict[str, Any] | None = None,
     ) -> Any:
-        url = self._url(path, params=params)
+        raw = self._request(self._url(path, params=params), method=method, json_body=json_body)
+        if not raw.strip():
+            return {}
+        try:
+            # The one place Gerrit text enters: cleaned here, the cache, every dataclass and
+            # ``ger serve`` see only printable text.
+            parsed = strip_terminal_controls(json.loads(_strip_magic_json_prefix(raw)))
+        except json.JSONDecodeError as e:
+            raise GerritApiError(f"invalid JSON from Gerrit: {e}") from e
+        if _LOG_RESPONSE_BODIES:
+            logger.debug("response body: %s", json.dumps(parsed, indent=2))
+        return parsed
+
+    def _request(self, url: str, *, method: str = "GET", json_body: dict[str, Any] | None = None) -> str:
+        """One request to *url* with the credentials; the answer's text. Every failure is a :class:`GerritApiError`."""
         headers = self._auth_headers()
         data: bytes | None = None
         if json_body is not None:
@@ -185,21 +184,10 @@ class HttpGerritRest:
             logger.info("%s %s -> HTTP %s: %s", method, url, e.code, reason)
             raise GerritApiError(f"Gerrit HTTP {e.code}: {reason}", status=e.code, reason=reason) from e
         except (URLError, OSError) as e:
-            raise GerritUnavailableError(f"Gerrit unreachable at {self.host} ({_why_unreachable(e)})") from e
+            raise GerritUnavailableError(f"Gerrit unreachable at {self.host} ({why_unreachable(e)})") from e
         finally:
             record_call("gerrit", label, time.perf_counter() - t0)
-
-        if not raw.strip():
-            return {}
-        try:
-            # The one place Gerrit text enters: cleaned here, the cache, every dataclass and
-            # ``ger serve`` see only printable text.
-            parsed = strip_terminal_controls(json.loads(_strip_magic_json_prefix(raw)))
-        except json.JSONDecodeError as e:
-            raise GerritApiError(f"invalid JSON from Gerrit: {e}") from e
-        if _LOG_RESPONSE_BODIES:
-            logger.debug("response body: %s", json.dumps(parsed, indent=2))
-        return parsed
+        return raw
 
     def get_json(
         self,
@@ -247,6 +235,10 @@ class HttpGerritRest:
     def get_account(self, account_id: int | str) -> dict[str, Any]:
         """GET account detail by Gerrit account id, username, email, or ``self``."""
         return self._request_dict("account detail", f"accounts/{encode_gerrit_path_segment(account_id)}/detail")
+
+    def get_commit_msg_hook(self) -> str:
+        """GET ``tools/hooks/commit-msg``, served outside ``/a/``: the script as text."""
+        return self._request(f"{self.web_base}/tools/hooks/commit-msg")
 
     def suggest_change_reviewers(
         self,

@@ -11,6 +11,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     LogCommit,
     gerrit_inline_comment_url,
 )
+from gerrit_workflow_tools.core.rebase_next_step import stop_refusal
 from gerrit_workflow_tools.core.rebase_state import RebaseAction, RebaseProgress
 from gerrit_workflow_tools.core.upstream_moved import UpstreamMoved
 from gerrit_workflow_tools.render.ci_content import ci_content_json
@@ -189,7 +190,7 @@ def rebase_json(stack: AnnotatedStack, progress: RebaseProgress | None) -> dict[
     rebase keeps no todo to show it live (the ``apply`` backend): ``ger log`` shows the branch as it
     was before it, unless an explicit range was asked for. ``actions`` are the ways on from this stop
     (:attr:`RebaseProgress.actions`), ``refused`` why each of the others is not
-    (:meth:`RebaseProgress.refusal`).
+    (:func:`~gerrit_workflow_tools.core.rebase_next_step.stop_refusal`).
     """
     if progress is None:
         return None
@@ -204,7 +205,7 @@ def rebase_json(stack: AnnotatedStack, progress: RebaseProgress | None) -> dict[
         "unmerged": list(progress.unmerged),
         "as_before": not progress.keeps_todo,
         "actions": [action.value for action in progress.actions],
-        "refused": {action.value: why for action in RebaseAction if (why := progress.refusal(action))},
+        "refused": {action.value: why for action in RebaseAction if (why := stop_refusal(progress, action))},
     }
 
 

@@ -10,6 +10,7 @@ from gerrit_workflow_tools.cli_common import (
     ExitCode,
     add_change_option,
     add_color_args,
+    add_message_args,
     add_output_format_args,
     add_verbose_and_debug_log_args,
     init_cli_runtime,
@@ -69,9 +70,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     add_change_option(p, "Comment on this change (default: the change under review here, else the commit at HEAD).")
     p.add_argument("--branch", metavar="NAME", default=None, help="Local branch whose stack to resolve in.")
-    text = p.add_argument_group("message")
-    text.add_argument("-m", "--message", action="append", default=None, help="Message; repeat for paragraphs.")
-    text.add_argument("-F", "--file", metavar="FILE", default=None, help="Read the message from FILE ('-': stdin).")
+    add_message_args(p)
     p.add_argument("--resolved", action="store_true", help="Start the chain resolved (an FYI).")
     local = p.add_mutually_exclusive_group()
     local.add_argument("--note", action="store_true", help="A note: local and private, never uploaded.")

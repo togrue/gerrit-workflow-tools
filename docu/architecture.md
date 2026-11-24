@@ -488,7 +488,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/editor_extension.py` | The VS Code extension that goes with ger: the one a release bundles (`bundled_extension`), a checkout's sources (`source_extension`) and packaging them (`build_extension`), the editor's CLI (`find_editor_cli`), and installing it |
 | `core/git_state.py` | Repository state: branch, HEAD, upstream, Gerrit push destination, and the branch a stopped rebase belongs to |
 | `core/tracked_changes.py` | What the index and work tree hold of yours, by what `git stash` saves of it (`tracked_changes`, `TrackedChanges`): changes to tracked files, submodules staged at another commit, submodules a file replaced. A submodule's own state is none of them |
-| `core/rebase_state.py` | A rebase underway: whether one is, how far it got and why it stopped (`rebase_progress`, `RebaseProgress`, `RebaseStop`), the refusal it causes (`rebase_refusal`) and the one next step after a conflict (`conflict_next_step`) |
+| `core/rebase_state.py` | A rebase underway: whether one is, how far it got and why it stopped (`rebase_progress`, `RebaseProgress`, `RebaseStop`), the refusal it causes (`rebase_refusal`) |
+| `core/rebase_next_step.py` | What to do at a rebase underway: the one next step after a conflict (`conflict_next_step`) or at an edit stop (`edit_stop_next_step`), and why a way on is refused (`stop_refusal` from the stop alone, `go_on_refusal` before every ger "go on") |
 | `core/rewrite_refusal.py` | Why rewriting the local stack, or a switch, cannot start: the one wording each rewrite shares (`history_rewrite_refusal`), its parts over what the index and work tree hold (`uncommitted_changes_refusal`, `submodule_refusal`), and a target whose change Gerrit already closed (`closed_change_refusal`, for `ger edit` / `reword` / `fix`) |
 | `core/rebasing_stack.py` | The **rebasing stack**: the local stack while a rebase is underway, each commit with its **rebase step** (`load_rebasing_stack`, `RebasingStack`, `RebaseStep`), and where the rebase stopped as `GET /stack` serves it, the stop `ger rebase --continue|--skip` refuses by (`stopped_rebase`) |
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log`, as text (`format_call_trace_summary`); `cli_common.print_call_trace_summary` prints it |
@@ -536,7 +537,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/ci_paths.py` | Resolving **CI finding** paths to the files of a commit (`tracked_paths`, `resolve_finding_paths`) |
 | `core/ci_jenkins.py` | The built-in Jenkins CI content provider |
 | `core/ci_http.py` | `CiHttp`: the HTTP seam CI content providers fetch through; `UrllibCiHttp`, CI credential headers |
-| `core/http_connect.py` | Opening connections to a host with several addresses: `connect` races them and remembers the one that answered, `urlopen` uses it and follows a redirect to another origin without the credentials |
+| `core/gerrit_setup.py` | The Gerrit connection a first run sets up, checked before `ger setup` saves it: the web URL's form (`web_url_problem`) and the plain-http opt-in (`needs_insecure_opt_in`), a run on the values as they would be saved (`run_with`) and who its credentials sign in as (`signed_in`, `SignedIn`), and Gerrit's commit-msg hook (`commit_msg_hook_path`, `install_commit_msg_hook`) |
+| `core/http_connect.py` | Opening connections to a host with several addresses: `connect` races them and remembers the one that answered, `urlopen` uses it and follows a redirect to another origin without the credentials, and why a connection failed, in a few words (`why_unreachable`) |
 | `core/ger_registry.py` | The shared two-tier loader for `.ger/<domain>/` extension registries; the local tier only when trusted. Imports a registry and its helpers only from its `RegistrySource`, never from disk or bytecode |
 | `core/registry_trust.py` | Whether a project-local registry may run: `ger.scriptsDir` from uncloned config, or a trusted digest of its code (`record_trust`, `untrusted_local_registries`); `RegistrySource` (`read_registry_source`: a registry's sources, read once, what is hashed is what runs); `source_digest` |
 | `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes; `load_shown_commits` (overlay, comment chains and CI content per target; a change that waits on your review leads with that) |
@@ -544,6 +546,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/commit_diff.py` | What one commit changed: `commit_diff` (files against the first parent), `diff_between` and `file_text` |
 | `core/review_delta.py` | The **review delta**: `last_reviewed_patch_set`, `load_review_delta` (the patchset you reviewed against the current one, another patchset, or the local commit) |
 | `core/reorder.py` | Rewriting the local stack, all or nothing: `rewrite_stack` (reorder, fold, drop; `autostash`), `undo_rewrite`, `ReorderRefusal`; also the sequence editor that run uses |
+| `core/rewrite_outcome.py` | What a finished rewrite of the local stack did, as data (`rewrite_outcome`, `RewriteOutcome`): commits rewritten, how many of them now ahead of Gerrit (from the cache, no request), fixups squashed, commits already upstream, and the commits it dropped (`DroppedCommit`, `dropped_commit`), against the stack before it (`stack_before`) |
 | `core/reword.py` | Message-only rewrites, every tree kept: `rewrite_messages` (recreate commits with new messages), `move_head`, `reword_commit` (one stack commit, its **Change-Id** kept) |
 | `core/reorder_preview.py` | Whether a rewrite would conflict (or a pick become empty), simulated with `git merge-tree`, worktree untouched: `first_conflict`, `swap_conflicts`, `replay_conflict`, `PickConflict`, `PickStop`, `PreviewUnavailable` |
 | `core/agent_runbook.py` | The **agent runbook**: `plan_runbook` (stops of the attention walk, what is the agent's and what is not) and **holds** (`load_holds`, `set_hold`) |
@@ -617,7 +620,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `reviewer_catalog.py` | Reviewer discovery and soft validation for the push prompt |
 | `rebase_enricher.py` | `GIT_SEQUENCE_EDITOR`: annotate the rebase todo with Gerrit status |
 | `rebase_sequence_editor.py` | `GIT_SEQUENCE_EDITOR`: patch one `pick` line for `ger edit` |
-| `rebase_run.py` | Running `git rebase` from a command: `require_history_rewrite` before, `run_interactive_rebase` / `go_on_with_rebase` (refused first by `rebase_state.go_on_refusal`, of the stop `rebasing_stack.stopped_rebase` reads) and the conflict next step after |
+| `rebase_run.py` | Running `git rebase` from a command: `require_history_rewrite` before, `run_interactive_rebase` / `go_on_with_rebase` (refused first by `rebase_next_step.go_on_refusal`, of the stop `rebasing_stack.stopped_rebase` reads) and the conflict next step after |
+| `reword_run.py` | Rewording a commit from a command (`ger reword`, `ger edit --reword`), with no rebase: the message from the user's editor (`message_from_editor`), the reword itself through `core/reword.py`, and what it says once done (`reword`) |
 | `bash_completion_generator.py` | Bash completion generated from live argparse definitions |
 
 ### Local service (`server/`)

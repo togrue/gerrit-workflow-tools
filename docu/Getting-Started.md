@@ -2,7 +2,7 @@
 
 First-run checklist for using **`ger`** in a Gerrit repository. Complete these steps once per machine (install, global config) and once per clone (hook, branch settings).
 
-**Quick path:** install → `ger setup` → upstream + branch config → commit-msg hook → `ger log`.
+**Quick path:** install → `ger setup` (in your clone: it installs the commit-msg hook too) → upstream + branch config → `ger log`.
 
 ---
 
@@ -54,7 +54,21 @@ ger setup              # writes to global ~/.gitconfig
 ger setup --local
 ```
 
-Prompts for `ger.webUrl`, `ger.user`, and `ger.token` (HTTP access token from Gerrit user settings).
+Asks for `ger.webUrl`, `ger.user` and `ger.token` (an HTTP password: Gerrit's web UI, *Settings*, *HTTP Credentials*), asks again when an answer will not do, and checks them with Gerrit before it saves anything:
+
+```text
+Signed in as Alice Reviewer <alice@example.com> on https://gerrit.example.com
+saved to your global git config: ger.webUrl, ger.user and ger.token
+installed Gerrit's commit-msg hook, so each new commit gets a Change-Id: /path/to/clone/.git/hooks/commit-msg
+to take it out: rm /path/to/clone/.git/hooks/commit-msg
+next: `ger log` shows your stack and its reviews; `ger inbox` the changes waiting for you
+```
+
+A test Gerrit on plain `http://` is explained and allowed only on your yes (`ger.allowInsecureHttp`). Without a terminal (scripts, provisioning) give it all as flags:
+
+```bash
+ger setup --url https://gerrit.example.com --user YOUR_USERNAME --token-file - < token.txt
+```
 
 ### Manual
 
@@ -92,20 +106,12 @@ Without an upstream, `ger` asks for one on a terminal (it suggests what the bran
 
 ---
 
-## 4. Install the Change-Id hook
+## 4. The Change-Id hook
 
-Gerrit requires a `Change-Id:` footer on each commit. Install once per clone:
-
-```bash
-HOOK_URL="$(git config --get ger.webUrl)/tools/hooks/commit-msg"
-
-curl -sfL -o .git/hooks/commit-msg "$HOOK_URL" \
-  || wget -q -O .git/hooks/commit-msg "$HOOK_URL"
-
-chmod +x .git/hooks/commit-msg
-```
-
-If `ger.webUrl` is not set yet, run step 2 first.
+Gerrit requires a `Change-Id:` footer on each commit. `ger setup` run inside a clone that has no
+`commit-msg` hook installs Gerrit's (from `<ger.webUrl>/tools/hooks/commit-msg`, honouring
+`core.hooksPath`) and says so. For another clone, run `ger setup --local` there, or `ger setup`
+again: it offers the values you saved as the defaults. `--no-hook` leaves the hooks alone.
 
 After the hook is in place, validate Change-Ids across the current stack (missing and duplicates):
 

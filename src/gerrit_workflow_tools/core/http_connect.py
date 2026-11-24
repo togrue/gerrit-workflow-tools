@@ -25,12 +25,14 @@ import http.client
 import os
 import selectors
 import socket
+import ssl
 import sys
 import threading
 import time
 import urllib.request
 from collections.abc import Callable, Sequence
 from typing import Any, cast
+from urllib.error import URLError
 from urllib.parse import urlsplit
 
 
@@ -229,3 +231,19 @@ _opener = urllib.request.build_opener(_HTTPHandler, _HTTPSHandler, _RedirectHand
 def urlopen(request: str | urllib.request.Request, *, timeout: float) -> Any:
     """:func:`urllib.request.urlopen`, its connections made by :func:`connect`."""
     return _opener.open(request, timeout=timeout)
+
+
+def why_unreachable(error: OSError) -> str:
+    """A few words on why a connection failed, without the platform's localized prose."""
+    reason = error.reason if isinstance(error, URLError) else error
+    if isinstance(reason, ConnectionRefusedError):
+        return "connection refused"
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return "timed out"
+    if isinstance(reason, socket.gaierror):
+        return "unknown host"
+    if isinstance(reason, ssl.SSLError) and getattr(reason, "reason", None) == "WRONG_VERSION_NUMBER":
+        return "it does not speak https on that port: an http:// server?"
+    if isinstance(reason, OSError) and reason.strerror:
+        return reason.strerror
+    return str(reason)

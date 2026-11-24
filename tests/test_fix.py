@@ -233,3 +233,18 @@ def test_fix_hint_folds_the_fixup_and_ger_edit_never_folds_it_behind_your_back(
     assert code == 0, err
     subjects = git_out("log", "--format=%s", "@{u}..HEAD", cwd=stack_repo).splitlines()
     assert target in subjects and not any(s.startswith("fixup!") for s in subjects)
+
+
+def test_fix_during_a_rebase_says_to_finish_it_the_ger_way(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """At an edit stop: finish with ``ger rebase --continue`` (it refuses unstaged changes), then squash."""
+    git("config", "ger.webUrl", "https://g.example", cwd=stack_repo)
+    git("rebase", "-q", "-i", "HEAD~2", cwd=stack_repo, env={"GIT_SEQUENCE_EDITOR": "sed -i -e 2s/^pick/edit/"})
+    (stack_repo / "fixup.txt").write_text("x", encoding="utf-8")
+    git("add", "fixup.txt", cwd=stack_repo)
+
+    code, _out, err = run_cli(stack_repo, ger_fix_main, ["HEAD~1"], monkeypatch)
+
+    assert code == 0, err
+    assert err.strip().endswith(
+        "next: finish the rebase (`ger rebase --continue`), then squash it with `ger rebase --autosquash`"
+    )
