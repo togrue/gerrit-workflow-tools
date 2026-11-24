@@ -555,3 +555,118 @@ def test_yes_answers_the_update_question(stack_repo: Path, gerrit: Gerrit, monke
     assert code == ExitCode.OK, err
     assert "updated feature from patchset 1 to change 102 patchset 2" in out
     assert git_out("rev-parse", "feature~1", cwd=stack_repo) == ps2
+
+
+def _web_edited_bottom(repo: Path, g: Gerrit, *, rebased_by_gerrit: bool = True) -> tuple[str, str]:
+    """s06: change 102 edited in Gerrit's web editor (patchset 2), and change 103 above it rebased by
+    Gerrit onto that (patchset 2), or left on patchset 1 of 102. Locally both are still patchset 1."""
+    bottom, top = g.shas[2], g.shas[3]
+    git("switch", "-q", "--detach", bottom, cwd=repo)
+    (repo / "web.txt").write_text("edited on the web\n", encoding="utf-8")
+    git("add", "web.txt", cwd=repo)
+    git("commit", "-q", "--amend", "--no-edit", cwd=repo)
+    bottom2 = git_out("rev-parse", "HEAD", cwd=repo)
+    git("cherry-pick", top, cwd=repo)
+    top2 = (
+        git_out("rev-parse", "HEAD", cwd=repo)
+        if rebased_by_gerrit
+        else git_out(
+            "commit-tree", f"{top}^{{tree}}", "-p", bottom, "-m", f"rebased\n\nChange-Id: {g.change_ids[3]}", cwd=repo
+        )
+    )
+    git("push", "-q", "origin", f"{bottom2}:{changes_ref(102, 2)}", f"{top2}:{changes_ref(103, 2)}", cwd=repo)
+    g.store.upload_patchset(g.keys[2], bottom2, 2, parent=g.shas[1])
+    g.store.upload_patchset(g.keys[3], top2, 2, parent=bottom2 if rebased_by_gerrit else bottom)
+    git("switch", "-q", "feature", cwd=repo)
+    return bottom2, top2
+
+
+def _statuses(repo: Path, g: Gerrit, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    code, out, err = run_cli(repo, log_main, ["--json"], monkeypatch, gerrit=g.store)
+    assert code == ExitCode.OK, err
+    return [c["patchset_status"] for c in json.loads(out)["commits"]]
+
+
+def _nothing_to_push(repo: Path, g: Gerrit, monkeypatch: pytest.MonkeyPatch) -> bool:
+    code, out, err = run_cli(repo, push_main, ["--dry-run"], monkeypatch, gerrit=g.store)
+    assert code == ExitCode.OK, err
+    return "nothing to push" in out
+
+
+def test_an_update_takes_the_commits_above_as_gerrit_rebased_them(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Following `next:` on s06 leaves the stack as Gerrit has it: no rebase of yours to push as a new patchset."""
+    bottom2, top2 = _web_edited_bottom(stack_repo, gerrit)
+    assert _statuses(stack_repo, gerrit, monkeypatch) == ["active", "active", "outdated", "outdated"]
+    code, out, err = _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert "updated feature from patchset 1 to change 102 patchset 2" in out
+    assert "took change 103 patchset 2 above it as Gerrit has it" in out and "rebased" not in out
+    assert git_out("rev-parse", "feature", "feature~1", cwd=stack_repo).split() == [top2, bottom2]
+    assert _statuses(stack_repo, gerrit, monkeypatch) == ["active"] * 4
+    assert _nothing_to_push(stack_repo, gerrit, monkeypatch)
+
+
+def test_a_commit_above_that_gerrit_left_on_the_old_patchset_is_rebased(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bottom2, top2 = _web_edited_bottom(stack_repo, gerrit, rebased_by_gerrit=False)
+    code, out, err = _checkout(stack_repo, gerrit, ["102", "--update"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert "rebased the 1 commit(s) above it" in out and "took" not in out
+    assert git_out("rev-parse", "feature~1", cwd=stack_repo) == bottom2
+    assert git_out("rev-parse", "feature", cwd=stack_repo) != top2
+
+
+def test_update_without_a_change_brings_the_whole_stack_up_to_date(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bottom2, top2 = _web_edited_bottom(stack_repo, gerrit)
+    code, out, err = _checkout(stack_repo, gerrit, ["--update"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert "updated feature from patchset 1 to change 102 patchset 2" in out
+    assert "took change 103 patchset 2 above it as Gerrit has it" in out
+    assert git_out("rev-parse", "feature", "feature~1", cwd=stack_repo).split() == [top2, bottom2]
+    assert _nothing_to_push(stack_repo, gerrit, monkeypatch)
+    code, out, _ = _checkout(stack_repo, gerrit, ["--update"], monkeypatch)
+    assert code == ExitCode.OK and "nothing to update: no commit of feature is outdated" in out
+
+
+def test_update_without_a_change_leaves_a_change_with_another_upload_to_merge(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gerrit's 103 has a patchset 2 on 102's patchset 1: yours is rebased onto 102's new patchset, and
+    stays diverged from that upload until you merge it (`ger checkout change:103 --update`)."""
+    bottom2, _top2 = _web_edited_bottom(stack_repo, gerrit, rebased_by_gerrit=False)
+    code, _out, err = _checkout(stack_repo, gerrit, ["--update"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert git_out("rev-parse", "feature~1", cwd=stack_repo) == bottom2
+    assert _statuses(stack_repo, gerrit, monkeypatch) == ["active", "active", "active", "newer"]
+    assert "diverged" in _log_reasons(stack_repo, gerrit, monkeypatch, gerrit.change_ids[3])
+
+
+@pytest.mark.parametrize("argv", [[], ["--no-update"], ["--update", "-b", "x"], ["--update", "--force"]])
+def test_without_a_change_only_update_is_accepted(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch, argv: list[str]
+) -> None:
+    code, _, err = _checkout(stack_repo, gerrit, argv, monkeypatch)
+    assert code == ExitCode.USAGE
+    assert "name the change to check out" in err
+
+
+def test_a_merge_that_adds_nothing_takes_gerrits_patchset_itself(
+    stack_repo: Path, gerrit: Gerrit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Your 103 rebased by hand onto 102's new patchset, as Gerrit did: the merge is Gerrit's commit."""
+    bottom2, top2 = _web_edited_bottom(stack_repo, gerrit)
+    later = {"GIT_COMMITTER_DATE": "2030-01-01T00:00:00"}
+    git("rebase", "-q", "--onto", bottom2, gerrit.shas[2], "feature", cwd=stack_repo, env=later)
+    mine = git_out("rev-parse", "feature", cwd=stack_repo)
+    assert mine != top2
+    code, out, err = _checkout(stack_repo, gerrit, ["103", "--update"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert 'your version on feature has nothing change 103 patchset 2 "subj" lacks: took it as Gerrit has it' in out
+    assert git_out("rev-parse", "feature", cwd=stack_repo) == top2
+    assert git_out("for-each-ref", "refs/ger/taken/", cwd=stack_repo) == "", "Gerrit's own commit: nothing to record"
+    assert _nothing_to_push(stack_repo, gerrit, monkeypatch)

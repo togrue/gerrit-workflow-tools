@@ -1,5 +1,6 @@
 """Doing what ``ger checkout`` decided (``core/change_checkout.py``): moving the **local version** onto
-the patchset, replaying the commits above it, merging your edits into it.
+the patchset, replaying the commits above it, merging your edits into it; and bringing every
+outdated commit of the local stack up to date (:func:`update_stack`).
 
 Spec: docu/spec/commands/checkout.md. Refuses before anything moves; nothing here prints or prompts.
 """
@@ -15,15 +16,21 @@ from gerrit_workflow_tools.core.change_checkout import (
     CheckoutResult,
     LocalState,
     gerrit_branch,
+    plan_checkout,
 )
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit_patchset import fetch_patchset
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
+from gerrit_workflow_tools.core.gerrit.changes import ChangeApi
+from gerrit_workflow_tools.core.gerrit.service import GerritService
+from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet
+from gerrit_workflow_tools.core.gerrit_change_status import PatchsetStatus, patchset_status
+from gerrit_workflow_tools.core.gerrit_patchset import fetch_patchset, resolve_change
 from gerrit_workflow_tools.core.git_run import git, git_out
-from gerrit_workflow_tools.core.git_state import resolve_upstream_abbrev_ref
+from gerrit_workflow_tools.core.git_state import checked_out_branch_name, resolve_upstream_abbrev_ref
 from gerrit_workflow_tools.core.patchset_history import record_taken
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict
 from gerrit_workflow_tools.core.review_checkout import refuse_own_edits
-from gerrit_workflow_tools.core.stack import merge_commits
+from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_commits
 from gerrit_workflow_tools.core.upstream import track_remote_branch
 
 
@@ -80,7 +87,8 @@ def _merged_commit(cwd: Path | str, plan: CheckoutPlan) -> str:
     """One commit: the patchset with your edits of the local version merged in (base: :attr:`CheckoutPlan.edit_base`).
 
     It carries the local version's message and author and sits where the patchset sits, so it
-    pushes as the next patchset. Nothing is written but objects: a conflict refuses, unchanged.
+    pushes as the next patchset; when that is the patchset's tree and message, it is the patchset
+    itself. Nothing is written but objects: a conflict refuses, unchanged.
     """
     local, patchset, edit_base = plan.local, plan.patchset, plan.edit_base
     assert local is not None and edit_base is not None
@@ -101,34 +109,43 @@ def _merged_commit(cwd: Path | str, plan: CheckoutPlan) -> str:
         raise _merge_conflict(plan, conflicted)
     fields = git_out("log", "-1", "--format=%an%x00%ae%x00%ad%x00%B", local.commit.sha, cwd=cwd).split("\x00", 3)
     name, email, date, message = fields
+    if git_out("log", "-1", "--format=%T%x00%B", patchset.commit, cwd=cwd) == f"{lines[0]}\x00{message}".rstrip():
+        return patchset.commit  # your version holds nothing it does not: take Gerrit's commit, nothing to push
     parents = git_out("rev-list", "--parents", "-n", "1", patchset.commit, cwd=cwd).split()[1:2]
     env = {"GIT_AUTHOR_NAME": name, "GIT_AUTHOR_EMAIL": email, "GIT_AUTHOR_DATE": date}
     argv = ["commit-tree", lines[0], *(arg for parent in parents for arg in ("-p", parent))]
     return git(*argv, cwd=cwd, env=env, input=message).stdout.strip()
 
 
-def _update(cwd: Path | str, plan: CheckoutPlan, target: str | None = None) -> int:
-    """Move the local version to *target* (default: the patchset), replaying the commits above it; how many."""
+def _update(cwd: Path | str, plan: CheckoutPlan, target: str | None = None) -> tuple[int, int]:
+    """Move the local version to *target* (default: the patchset), replaying the commits above it.
+
+    When it becomes the patchset, the commits above it that :attr:`CheckoutPlan.gerrit_above` names
+    become Gerrit's patchsets themselves, and only the rest are replayed. Returns ``(taken, replayed)``.
+    """
     local = plan.local
     target = target or plan.patchset.commit
     assert local is not None
-    if not local.above:
-        git("switch", "-q", "-C", plan.branch, target, cwd=cwd)
-        return 0
+    taken = plan.gerrit_above if target == plan.patchset.commit else ()
+    base = taken[-1].commit if taken else target
+    below, rest = (local.commit, *local.above)[len(taken)], local.above[len(taken) :]
+    if not rest:
+        git("switch", "-q", "-C", plan.branch, base, cwd=cwd)
+        return len(taken), 0
     try:
-        conflict: PickConflict | None = first_conflict(cwd, target, local.above, (local.commit, *local.above))
+        conflict: PickConflict | None = first_conflict(cwd, base, rest, (local.commit, *local.above))
     except PreviewUnavailable:
         conflict = None  # this git cannot tell beforehand: the rebase itself finds out
     if conflict is not None:
         files = ", ".join(conflict.files)
         raise _refusal_to_rebase(plan, f'"{conflict.commit.subject}" conflicts' + (f" in {files}" if files else ""))
-    done = git("rebase", "-q", "--onto", target, local.commit.sha, plan.branch, cwd=cwd, check=False)
+    done = git("rebase", "-q", "--onto", base, below.sha, plan.branch, cwd=cwd, check=False)
     if done.returncode != 0:
         git("rebase", "--abort", cwd=cwd, check=False)
         if plan.current_branch and plan.current_branch != plan.branch:
             git("switch", "-q", plan.current_branch, cwd=cwd, check=False)
         raise _refusal_to_rebase(plan, (done.stderr.strip() or "git rebase failed").partition("\n")[0])
-    return len(local.above)
+    return len(taken), len(rest)
 
 
 def apply_checkout(
@@ -147,11 +164,12 @@ def apply_checkout(
     refuse_own_edits(cwd, None, rerun="ger checkout")
     if action in (CheckoutAction.UPDATE, CheckoutAction.MERGE):
         _refuse_merge_above(cwd, plan)
-    rebased, moved_from, merged_from = 0, None, None
+    rebased, taken, moved_from, merged_from, same = 0, 0, None, None, False
     if action is CheckoutAction.SWITCH:
         git("switch", "-q", branch, cwd=cwd)
     else:
-        fetch_patchset(cwd, remote, patchset, with_target_branch=True)
+        above = plan.gerrit_above if action is not CheckoutAction.CREATE else ()
+        fetch_patchset(cwd, remote, patchset, with_target_branch=True, also=above)
     if action is CheckoutAction.CREATE:
         old = plan.existing_tip
         if old and git_out("rev-list", old, "--not", patchset.commit, cwd=cwd):
@@ -162,14 +180,66 @@ def apply_checkout(
         assert local is not None
         if plan.state is LocalState.EDITED:
             moved_from = (local.above[-1] if local.above else local.commit).sha
-        rebased = _update(cwd, plan)
+        taken, rebased = _update(cwd, plan)
     elif action is CheckoutAction.MERGE:
         merged = _merged_commit(cwd, plan)
-        rebased = _update(cwd, plan, merged)
-        why = f"ger checkout: change {patchset.number} patchset {patchset.patch_set} merged into {merged[:12]}"
-        record_taken(cwd, patchset.commit, merged, why=why)  # built on it, though not its child: ADR-0015
+        taken, rebased = _update(cwd, plan, merged)
+        same = merged == patchset.commit
+        if not same:  # built on the patchset, though not its child: ADR-0015
+            why = f"ger checkout: change {patchset.number} patchset {patchset.patch_set} merged into {merged[:12]}"
+            record_taken(cwd, patchset.commit, merged, why=why)
         merged_from = plan.edit_base[0] if plan.edit_base else None
     if action is CheckoutAction.CREATE or gerrit_branch(cwd, branch, settings) is None:
         track_remote_branch(cwd, branch, remote, patchset.target_branch)
     upstream = resolve_upstream_abbrev_ref(cwd, branch)
-    return CheckoutResult(action, branch, upstream, rebased=rebased, moved_from=moved_from, merged_from=merged_from)
+    return CheckoutResult(
+        action,
+        branch,
+        upstream,
+        rebased=rebased,
+        moved_from=moved_from,
+        merged_from=merged_from,
+        took=plan.gerrit_above[:taken],
+        same_as_patchset=same,
+    )
+
+
+def update_stack(
+    service: GerritService, cwd: Path | str, *, settings: Settings
+) -> list[tuple[CheckoutPlan, CheckoutResult]]:
+    """``ger checkout --update`` without a change: every outdated commit of the local stack to its current patchset.
+
+    The lowest outdated commit is updated like ``ger checkout change:N --update``, which takes the
+    commits above it Gerrit has on top of the new patchset as they are; then the next one, until none
+    is left, or one did not move (its update was refused, or it is no longer the branch's). An
+    outdated commit holds no edits of yours, so nothing is lost. Each step is one plan and result.
+    """
+    branch = checked_out_branch_name(cwd)
+    if branch is None:
+        raise CheckoutRefusal("HEAD is detached: switch to the branch whose stack to update, or name a change")
+    done: list[tuple[CheckoutPlan, CheckoutResult]] = []
+    tried: set[int] = set()
+    changes = service.changes.exact()
+    while (number := _lowest_outdated(service, changes, cwd, settings=settings)) is not None and number not in tried:
+        tried.add(number)
+        change = resolve_change(service, cwd, f"change:{number}")
+        plan = plan_checkout(cwd, change, None, settings=settings, branch=branch, changes=changes)
+        if plan.state is not LocalState.PUSHED:
+            break
+        done.append((plan, apply_checkout(cwd, plan, CheckoutAction.UPDATE, settings=settings)))
+    return done
+
+
+def _lowest_outdated(service: GerritService, changes: ChangeApi, cwd: Path | str, *, settings: Settings) -> int | None:
+    """The change number of the lowest commit of the local stack Gerrit has a newer patchset of, if any."""
+    stack, rows = service.stack_context(), get_stack_snapshot(cwd, settings=settings).commits
+    keys = {
+        r.sha: build_triplet(stack.project, stack.push_branch, r.valid_change_id) for r in rows if r.valid_change_id
+    }
+    payloads = changes.get_payloads(list(keys.values())) if keys else {}
+    for row in rows:
+        payload = payloads.get(keys.get(row.sha, ""))
+        view = ChangeView.from_payload(payload) if payload else None
+        if view is not None and view.is_open and patchset_status(row.sha, view) is PatchsetStatus.OUTDATED:
+            return view.number
+    return None

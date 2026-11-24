@@ -46,6 +46,7 @@ Status words: **ships**, **partial** (see the linked spec), **gap** (nothing doe
 |------|-----|-----------|-------|--------|
 | Find the commits that need attention | `ger log`, `ger show --first-attention` | *Local stack* view, *Open the Most Important Change* | `tests/test_log.py`, `tests/test_attention_agreement.py` | ships |
 | Work on a change that exists only on Gerrit | `ger checkout CHANGEISH` (a `change-<n>` branch tracking the target branch) | *Check Out to Work On* | `tests/test_checkout.py` | ships |
+| Take every newer patchset Gerrit has for the local stack | `ger checkout --update` | — | `tests/test_checkout.py` | ships |
 | Edit a commit: stop a rebase at it | `ger edit REV`, `ger edit --first-attention-commit`, `ger edit -n` | *Edit Commit Here* | `tests/test_edit.py`, `tests/test_edit_attention.py` | ships |
 | Rebase onto an upstream that moved on, its conflict previewed | `ger log` (the `next:` line), `ger rebase origin/main` | the *origin/main has N new commits* row, *Rebase onto origin/main* | `tests/test_upstream_moved.py`, `tests/test_serve.py` | ships |
 | Go on with a stopped rebase | `ger rebase --continue`, `ger rebase --abort`, `ger rebase --skip` | *Continue*, *Abort*, *Skip* on the *Local stack* banner, the conflicted files under it | `tests/test_rebase_go_on.py` | ships |

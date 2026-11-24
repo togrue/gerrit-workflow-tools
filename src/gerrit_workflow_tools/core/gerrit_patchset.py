@@ -7,6 +7,7 @@ checks it out to review, ``ger checkout`` to work on it, ``ger serve`` diffs it,
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -48,26 +49,30 @@ class ResolvedChange:
 
     def patchset(self, patch_set: int | None = None) -> GerritPatchset:
         """Patchset *patch_set*, else the one the changeish names, else the current one."""
-        view = self.view
-        wanted = patch_set or self.wanted or view.current_revision_number
-        sha = next((sha for sha, rev in view.revisions.items() if rev.number == wanted), None)
-        if view.number is None or wanted is None or sha is None:
-            raise ChangeResolutionError(f"change {view.number} has no patchset {wanted}")
-        return GerritPatchset(
-            number=view.number,
-            key=self.key,
-            change_id=view.change_id,
-            patch_set=wanted,
-            commit=sha,
-            subject=view.subject,
-            target_branch=view.branch,
-            private=view.private,
-        )
+        return patchset_of(self.view, self.key, patch_set or self.wanted)
 
     def patch_set_of(self, commit: str) -> int | None:
         """Which patchset of the change *commit* is; ``None`` when Gerrit never had it as one."""
         revision = self.view.revisions.get(commit)
         return revision.number if revision is not None else None
+
+
+def patchset_of(view: ChangeView, key: str, patch_set: int | None = None) -> GerritPatchset:
+    """Patchset *patch_set* (default: the current one) of the change *view* describes; *key* is its triplet."""
+    wanted = patch_set or view.current_revision_number
+    sha = next((sha for sha, rev in view.revisions.items() if rev.number == wanted), None)
+    if view.number is None or wanted is None or sha is None:
+        raise ChangeResolutionError(f"change {view.number} has no patchset {wanted}")
+    return GerritPatchset(
+        number=view.number,
+        key=key,
+        change_id=view.change_id,
+        patch_set=wanted,
+        commit=sha,
+        subject=view.subject,
+        target_branch=view.branch,
+        private=view.private,
+    )
 
 
 def changes_ref(number: int, patch_set: int) -> str:
@@ -109,8 +114,16 @@ def resolve_patchset(
     return change.patchset(patch_set), change.view.url(service.web_base)
 
 
-def fetch_patchset(cwd: Path | str, remote: str, patchset: GerritPatchset, *, with_target_branch: bool = False) -> None:
-    """Fetch *patchset* from *remote* by its ``refs/changes/…`` ref; it must bring the patchset's commit.
+def fetch_patchset(
+    cwd: Path | str,
+    remote: str,
+    patchset: GerritPatchset,
+    *,
+    with_target_branch: bool = False,
+    also: Sequence[GerritPatchset] = (),
+) -> None:
+    """Fetch *patchset* (and the patchsets *also*) from *remote* by their ``refs/changes/…`` refs, in one
+    ``git fetch``; it must bring each patchset's commit.
 
     *with_target_branch* also brings the change's target branch up to date in the same fetch,
     as ``refs/remotes/<remote>/<target>``: the upstream a branch holding the change tracks.
@@ -118,14 +131,16 @@ def fetch_patchset(cwd: Path | str, remote: str, patchset: GerritPatchset, *, wi
     ref = changes_ref(patchset.number, patchset.patch_set)
     target = patchset.target_branch
     tracking = [f"+refs/heads/{target}:refs/remotes/{remote}/{target}"] if with_target_branch else []
+    more = [changes_ref(other.number, other.patch_set) for other in also]
     try:
-        git("fetch", "-q", remote, ref, *tracking, cwd=cwd)
+        git("fetch", "-q", remote, ref, *more, *tracking, cwd=cwd)
     except GitError as error:
         if "couldn't find remote ref" not in error.stderr:
             raise
         raise GitError(f"{error}\n{_missing_ref_hint(remote, ref, patchset)}", returncode=error.returncode) from error
-    if commit_sha_or_none(cwd, patchset.commit) is None:
-        raise GitError(f"fetching {ref} did not bring {patchset.commit[:12]}")
+    for fetched, name in ((patchset, ref), *zip(also, more, strict=True)):
+        if commit_sha_or_none(cwd, fetched.commit) is None:
+            raise GitError(f"fetching {name} did not bring {fetched.commit[:12]}")
 
 
 def _missing_ref_hint(remote: str, ref: str, patchset: GerritPatchset) -> str:

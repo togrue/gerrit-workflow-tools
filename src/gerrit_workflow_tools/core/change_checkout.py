@@ -8,13 +8,18 @@ turns the user's flags into what to do (``None`` when only the user can say), an
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
-from gerrit_workflow_tools.core.gerrit_patchset import GerritPatchset, ResolvedChange
+from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet
+from gerrit_workflow_tools.core.gerrit_change_status import PatchsetStatus, patchset_status
+from gerrit_workflow_tools.core.gerrit_patchset import GerritPatchset, ResolvedChange, patchset_of
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none, git_out
 from gerrit_workflow_tools.core.git_state import (
     checked_out_branch_name,
@@ -25,6 +30,10 @@ from gerrit_workflow_tools.core.git_state import (
 from gerrit_workflow_tools.core.review_checkout import BRANCH_PREFIX
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, read_commit_rows
 from gerrit_workflow_tools.core.usage import Refusal
+
+
+if TYPE_CHECKING:
+    from gerrit_workflow_tools.core.gerrit.changes import ChangeApi
 
 
 class CheckoutRefusal(Refusal):
@@ -87,6 +96,10 @@ class CheckoutPlan:
     """For a local version Gerrit never had: ``(patchset, commit)`` of the newest patchset of the change
     this repository has, the one the edits were most likely made on. What :attr:`CheckoutAction.MERGE`
     merges from."""
+    gerrit_above: tuple[GerritPatchset, ...] = ()
+    """The lowest commits above the local version that take Gerrit's current patchset of their change
+    when the local version becomes the patchset: each is an older patchset of its change (no edits of
+    yours), and Gerrit's current one sits on the one below (:func:`gerrit_above`)."""
 
     @property
     def state(self) -> LocalState:
@@ -114,6 +127,11 @@ class CheckoutResult:
     """The old tip, when ``--force`` moved a branch off commits Gerrit does not have."""
     merged_from: int | None = None
     """For a merge: the patchset your edits were taken against."""
+    took: tuple[GerritPatchset, ...] = ()
+    """The commits above it that became Gerrit's current patchset of their change
+    (:attr:`CheckoutPlan.gerrit_above`)."""
+    same_as_patchset: bool = False
+    """For a merge: your version held nothing the patchset does not, so the branch has the patchset itself."""
 
 
 def gerrit_branch(cwd: Path | str, branch: str, settings: Settings) -> str | None:
@@ -174,12 +192,20 @@ def _pick(versions: list[LocalVersion], current: str | None, patchset: GerritPat
 
 
 def plan_checkout(
-    cwd: Path | str, change: ResolvedChange, patch_set: int | None, *, settings: Settings, branch: str | None = None
+    cwd: Path | str,
+    change: ResolvedChange,
+    patch_set: int | None,
+    *,
+    settings: Settings,
+    branch: str | None = None,
+    changes: ChangeApi | None = None,
 ) -> CheckoutPlan:
     """What checking patchset *patch_set* (default: current) of *change* out would meet. Reads only.
 
     *branch* is ``-b``: the branch to put the patchset on, and the one whose local version
-    counts. Without it, the change's local version decides, else ``change-<number>``.
+    counts. Without it, the change's local version decides, else ``change-<number>``. *changes*
+    asks Gerrit about the commits above the local version (:func:`gerrit_above`); without it none
+    are taken.
     """
     patchset = change.patchset(patch_set)
     versions = find_local_versions(cwd, change, settings=settings)
@@ -198,7 +224,34 @@ def plan_checkout(
         elsewhere=tuple(v for v in versions if v.branch != name),
         current_branch=current,
         edit_base=_edit_base(cwd, change, patchset) if edited else None,
+        gerrit_above=gerrit_above(changes, change.view, patchset, local.above) if changes and local else (),
     )
+
+
+def gerrit_above(
+    changes: ChangeApi, view: ChangeView, patchset: GerritPatchset, above: Sequence[Commit]
+) -> tuple[GerritPatchset, ...]:
+    """Gerrit's current patchsets for the lowest of *above*, when the commit below them becomes *patchset*.
+
+    One by one from the bottom, while the commit is an older patchset of its open change (so it holds
+    no edits of yours) and Gerrit's current patchset of that change sits on the one below: taking it
+    as Gerrit has it leaves nothing to push. The first that does not stops it; it and the rest are
+    rebased as before. *view* is the change being checked out: the others are on its project and branch.
+    """
+    keys = {c.sha: build_triplet(view.project, view.branch, c.valid_change_id) for c in above if c.valid_change_id}
+    payloads = changes.get_payloads(list(keys.values())) if keys else {}
+    taken: list[GerritPatchset] = []
+    below = patchset.commit
+    for commit in above:
+        payload = payloads.get(keys.get(commit.sha, ""))
+        other = ChangeView.from_payload(payload) if payload else None
+        if other is None or not other.is_open or patchset_status(commit.sha, other) is not PatchsetStatus.OUTDATED:
+            break
+        if other.first_parent != below:
+            break
+        taken.append(patchset_of(other, keys[commit.sha]))
+        below = taken[-1].commit
+    return tuple(taken)
 
 
 def _edit_base(cwd: Path | str, change: ResolvedChange, patchset: GerritPatchset) -> tuple[int, str] | None:

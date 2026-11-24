@@ -597,10 +597,16 @@ class ChangeStore:
             published.setdefault(path, []).extend({**row, "updated": stamp} for row in chosen)
         return {}
 
-    def upload_patchset(self, change_ref: str, sha: str, number: int) -> None:
-        """Make *sha* the change's new current patchset *number*, as a push from elsewhere would."""
+    def upload_patchset(self, change_ref: str, sha: str, number: int, *, parent: str | None = None) -> None:
+        """Make *sha* the change's new current patchset *number*, as a push from elsewhere would.
+
+        *parent* is its parent commit, as ``CURRENT_COMMIT`` reports it (the relation chain's parent).
+        """
         row = self._row_or_raise(change_ref)
-        row["revisions"] = {**row.get("revisions", {}), sha: {"_number": number}}
+        revision: dict[str, Any] = {"_number": number}
+        if parent is not None:
+            revision["commit"] = {"parents": [{"commit": parent}]}
+        row["revisions"] = {**row.get("revisions", {}), sha: revision}
         row["current_revision"] = sha
 
     def set_related(self, change_ref: str, rows: list[dict[str, Any]]) -> None:
