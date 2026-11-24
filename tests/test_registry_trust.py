@@ -16,7 +16,8 @@ from pathlib import Path
 import pytest
 
 from gerrit_workflow_tools.cli_log import main as log_main
-from gerrit_workflow_tools.core.config import ConfigScope, Settings
+from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.config_keys import ConfigScope
 from gerrit_workflow_tools.core.ger_registry import (
     RegistryLoadError,
     clear_extension_registry_cache,

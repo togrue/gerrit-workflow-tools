@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from gerrit_workflow_tools.core.config import SHOW_AFTER_EDIT_KEY, ConfigScope, Settings
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_editor_file import (
     parse_config_editor_text,
     planned_editor_writes,
     render_config_editor_text,
 )
 from gerrit_workflow_tools.core.config_form import ResolvedSetting, SettingKind, resolve_config_form
+from gerrit_workflow_tools.core.config_keys import SHOW_AFTER_EDIT_KEY, ConfigScope
 
 
 def _by_key(settings: Settings, *, branch: str | None = "feature") -> dict[str, ResolvedSetting]:

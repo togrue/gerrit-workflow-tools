@@ -9,14 +9,18 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from enum import Enum
 
-from gerrit_workflow_tools.core.config import SHOW_AFTER_EDIT_KEY, ConfigScope, Settings
+from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.config_keys import (
+    DEFAULT_STOP_PATTERN,
+    DEFAULT_WARNING_PATTERN,
+    REMOTE_POLICIES,
+    SHOW_AFTER_EDIT_KEY,
+    TRUTHY,
+    ConfigScope,
+)
 
 
-_TRUTHY = frozenset({"1", "true", "yes", "on"})
 _BOOL_CHOICES = ("true", "false")
-_DEFAULT_STOP_PATTERN = r"^(?:dropme!|todo\b|test!|wip\b)"
-_DEFAULT_WARNING_PATTERN = r"(?:^[^\s]+$|(?i:\b(?:wip|todo)\b))"
-_REMOTE_POLICY_CHOICES = ("ignore-not-rebased", "warn-not-rebased", "error-not-rebased")
 
 SECTION_TITLES: tuple[str, ...] = (
     "General",
@@ -120,14 +124,14 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         "General",
         "Regex matched against the commit subject. The first match starts the non-pushable tail.",
         SettingKind.TEXT,
-        _DEFAULT_STOP_PATTERN,
+        DEFAULT_STOP_PATTERN,
     ),
     _spec(
         "gerrit.warningPattern",
         "General",
         "Regex for warning highlighting in log, push, show, and inbox.",
         SettingKind.TEXT,
-        _DEFAULT_WARNING_PATTERN,
+        DEFAULT_WARNING_PATTERN,
     ),
     _spec(
         "gerrit.wrapWidth",
@@ -178,7 +182,7 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         "How to treat a branch that is not linear on the fetched target tip.",
         SettingKind.CHOICE,
         "ignore-not-rebased",
-        _REMOTE_POLICY_CHOICES,
+        REMOTE_POLICIES,
     ),
     _spec(
         "branch.{branch}.gerritTarget",
@@ -289,7 +293,7 @@ def _concrete_key(spec: SettingSpec, branch: str | None) -> str | None:
 
 def canonical_bool(raw: str) -> str:
     """Normalize a git-config truthy spelling to ``true`` or ``false``."""
-    return "true" if raw.strip().lower() in _TRUTHY else "false"
+    return "true" if raw.strip().lower() in TRUTHY else "false"
 
 
 def _display_value(spec: SettingSpec, stored: str | None) -> str:

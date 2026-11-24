@@ -133,7 +133,7 @@ per-host Gerrit cache, so they give the same answers. Details:
 Enforced by [`tests/test_architecture.py`](../tests/test_architecture.py), which runs in the pre-commit hook:
 
 - `core/` imports only `core/`, and never prints or prompts.
-- The substrate (`core/git_run.py`, `core/config.py`, `core/config_write.py`, `core/call_trace.py`, `core/changeish.py`, `core/change_id.py`) imports nothing above itself.
+- The substrate (`core/git_run.py`, `core/config.py`, `core/config_keys.py`, `core/config_write.py`, `core/call_trace.py`, `core/changeish.py`, `core/change_id.py`) imports nothing above itself.
 - `render/` does not import `cli_*`.
 - A command module is imported only by `cli_ger.py` and `bash_completion_generator.py`.
 - No module imports another module's `_private` name.
@@ -480,6 +480,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/usage.py` | `UsageError`: the command cannot run as asked (bad input, or a state it refuses to start from), exit `USAGE` |
 | `core/git_run.py` | Running git: the subprocess wrapper (`git`, `git_out`, `commit_sha_or_none`, `GitError`) |
 | `core/config.py` | `Settings`: one `git config --list --show-scope` snapshot (values + winning scope) |
+| `core/config_keys.py` | The git config keys ger owns: `ConfigScope`, how git spells a key, built-in defaults |
 | `core/config_write.py` | Write helpers for branch / attention-cursor git config keys |
 | `core/config_form.py` | Editable settings catalog for `ger config`: sections, defaults, resolution |
 | `core/config_editor_file.py` | Temp-file key=value render/parse/diff for `ger config` |

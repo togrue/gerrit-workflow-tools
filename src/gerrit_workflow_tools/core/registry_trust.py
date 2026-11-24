@@ -26,7 +26,8 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
-from gerrit_workflow_tools.core.config import ConfigError, ConfigScope, Settings
+from gerrit_workflow_tools.core.config import ConfigError, Settings
+from gerrit_workflow_tools.core.config_keys import ConfigScope
 from gerrit_workflow_tools.core.gerrit.paths import xdg_config_home
 
 

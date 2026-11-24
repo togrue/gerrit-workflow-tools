@@ -11,15 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from gerrit_workflow_tools.core.config import ConfigScope
+from gerrit_workflow_tools.core.config_keys import ConfigScope
 from gerrit_workflow_tools.core.git_run import git
-
-
-_SCOPE_FLAG = {
-    ConfigScope.LOCAL: "--local",
-    ConfigScope.GLOBAL: "--global",
-    ConfigScope.WORKTREE: "--worktree",
-}
 
 
 @dataclass(frozen=True)
@@ -45,7 +38,7 @@ def set_branch_config(
 
 def apply_config_write(cwd: Path | str | None, write: ConfigWrite) -> None:
     """Apply one scoped set/unset from the ``ger config`` editor."""
-    flag = _SCOPE_FLAG.get(write.scope)
+    flag = None if write.scope is ConfigScope.SYSTEM else write.scope.flag
     if flag is None:
         raise ValueError(f"cannot write {write.key} at scope {write.scope.value}")
     if write.action == "unset":

@@ -15,9 +15,20 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
 
+from gerrit_workflow_tools.core.config_keys import (
+    DEFAULT_REMOTE_POLICY,
+    DEFAULT_SCRIPTS_DIR,
+    DEFAULT_STOP_PATTERN,
+    DEFAULT_WARNING_PATTERN,
+    DEFAULT_WRAP_WIDTH,
+    REMOTE_POLICIES,
+    SHOW_AFTER_EDIT_KEY,
+    TRUTHY,
+    ConfigScope,
+    canonical_cfg_key,
+)
 from gerrit_workflow_tools.core.git_run import git
 
 
@@ -33,39 +44,11 @@ class ConfigError(ValueError):
     """
 
 
-class ConfigScope(Enum):
-    """Where an effective git config value was defined (``git config --show-scope``)."""
-
-    SYSTEM = "system"
-    GLOBAL = "global"
-    LOCAL = "local"
-    WORKTREE = "worktree"
-    COMMAND = "command"
-
-
 # Git lowercases variable names in `git config --list` output (e.g. gerrit.webUrl -> gerrit.weburl).
 _GERRIT_STOP_PATTERN_KEY = "gerrit.stopPattern"
 _GERRIT_WARNING_PATTERN_KEY = "gerrit.warningPattern"
-_DEFAULT_STOP_PATTERN = r"^(?:dropme!|todo\b|test!|wip\b)"
-_DEFAULT_WARNING_PATTERN = r"(?:^[^\s]+$|(?i:\b(?:wip|todo)\b))"
-_DEFAULT_SCRIPTS_DIR = ".ger"
-
-
-_TRUTHY = ("1", "true", "yes", "on")
-_REMOTE_POLICIES = ("error-not-rebased", "warn-not-rebased", "ignore-not-rebased")
-_DEFAULT_REMOTE_POLICY = "ignore-not-rebased"
-_DEFAULT_WRAP_WIDTH = 120
-SHOW_AFTER_EDIT_KEY = "ger.showAfterEdit"
 
 _SCOPE_BY_NAME = {scope.value: scope for scope in ConfigScope}
-
-
-def _canonical_cfg_key(key: str) -> str:
-    """Match key normalization used in `git config --list` (last segment lowercased)."""
-    if "." not in key:
-        return key.lower()
-    head, tail = key.rsplit(".", 1)
-    return f"{head}.{tail.lower()}"
 
 
 def _parse_show_scope_line(raw: str) -> tuple[ConfigScope, str, str] | None:
@@ -92,7 +75,7 @@ def _load_git_config(cwd: Path | str | None) -> tuple[dict[str, str], dict[str, 
         if parsed is None:
             continue
         scope, key, value = parsed
-        canon = _canonical_cfg_key(key)
+        canon = canonical_cfg_key(key)
         values[canon] = value
         scopes[canon] = scope
     return values, scopes
@@ -126,11 +109,11 @@ class Settings:
 
         Keys without an entry in *scopes* default to :attr:`ConfigScope.LOCAL`.
         """
-        values = {_canonical_cfg_key(k): v for k, v in raw.items()}
+        values = {canonical_cfg_key(k): v for k, v in raw.items()}
         if scopes is None:
             resolved_scopes = dict.fromkeys(values, ConfigScope.LOCAL)
         else:
-            resolved_scopes = {_canonical_cfg_key(k): scope for k, scope in scopes.items()}
+            resolved_scopes = {canonical_cfg_key(k): scope for k, scope in scopes.items()}
             for key in values:
                 resolved_scopes.setdefault(key, ConfigScope.LOCAL)
         return cls(values=values, scopes=resolved_scopes)
@@ -146,7 +129,7 @@ class Settings:
         A whitespace-only value reads as unset, not as the empty string, so the return type
         is honest: every caller already treated ``""`` as absent.
         """
-        v = self.values.get(_canonical_cfg_key(key))
+        v = self.values.get(canonical_cfg_key(key))
         if v is None:
             return None
         stripped = v.strip()
@@ -156,14 +139,14 @@ class Settings:
         """Return where the effective value for *key* was defined, or ``None`` when unset/blank."""
         if self.get(key) is None:
             return None
-        return self.scopes.get(_canonical_cfg_key(key))
+        return self.scopes.get(canonical_cfg_key(key))
 
     def flag(self, key: str, *, default: bool = False) -> bool:
         """Return whether *key* is truthy (``1``, ``true``, ``yes``, ``on``; case-insensitive)."""
         v = self.get(key)
         if v is None:
             return default
-        return v.lower() in _TRUTHY
+        return v.lower() in TRUTHY
 
     def _positive_int(self, key: str) -> int | None:
         """The value of *key* when it is a whole number of at least 1, else ``None``."""
@@ -205,7 +188,7 @@ class Settings:
         Relative values resolve from the repository toplevel. Absolute paths are allowed.
         Domain registries live at ``<scriptsDir>/<domain>/registry.py``.
         """
-        return self.get("gerrit.scriptsDir") or _DEFAULT_SCRIPTS_DIR
+        return self.get("gerrit.scriptsDir") or DEFAULT_SCRIPTS_DIR
 
     @property
     def gerrit_user(self) -> str | None:
@@ -327,7 +310,7 @@ class Settings:
     def event_stream(self) -> str:
         """``ger.eventStream``: ``auto`` (the default: try once, quietly), ``on`` or ``off``."""
         value = (self.get("ger.eventStream") or "").lower()
-        if value in _TRUTHY:
+        if value in TRUTHY:
             return "on"
         return "off" if value in ("0", "false", "no", "off") else "auto"
 
@@ -372,21 +355,21 @@ class Settings:
         """
         v = self.get("gerrit.push.remotePolicy")
         if not v:
-            return _DEFAULT_REMOTE_POLICY
+            return DEFAULT_REMOTE_POLICY
         s = v.lower()
-        return s if s in _REMOTE_POLICIES else _DEFAULT_REMOTE_POLICY
+        return s if s in REMOTE_POLICIES else DEFAULT_REMOTE_POLICY
 
     # -- Commit-message patterns ---------------------------------------------------
 
     @property
     def stop_pattern(self) -> str:
         """``gerrit.stopPattern`` regex, or the built-in default when unset."""
-        return self.get(_GERRIT_STOP_PATTERN_KEY) or _DEFAULT_STOP_PATTERN
+        return self.get(_GERRIT_STOP_PATTERN_KEY) or DEFAULT_STOP_PATTERN
 
     @property
     def warning_pattern(self) -> str:
         """``gerrit.warningPattern`` regex, or the built-in default when unset."""
-        return self.get(_GERRIT_WARNING_PATTERN_KEY) or _DEFAULT_WARNING_PATTERN
+        return self.get(_GERRIT_WARNING_PATTERN_KEY) or DEFAULT_WARNING_PATTERN
 
     @property
     def wrap_width(self) -> int:
@@ -396,4 +379,4 @@ class Settings:
         chain URL is not wrapped; comment text, context lines, the path
         header, and the commit message are.
         """
-        return self._positive_int("gerrit.wrapWidth") or _DEFAULT_WRAP_WIDTH
+        return self._positive_int("gerrit.wrapWidth") or DEFAULT_WRAP_WIDTH

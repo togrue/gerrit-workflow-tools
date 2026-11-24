@@ -2,12 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gerrit_workflow_tools.core.config import (
-    _DEFAULT_STOP_PATTERN,
-    _DEFAULT_WARNING_PATTERN,
-    ConfigScope,
-    Settings,
-)
+from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.config_keys import DEFAULT_STOP_PATTERN, DEFAULT_WARNING_PATTERN, ConfigScope
 from gerrit_workflow_tools.core.git_run import git
 
 
@@ -20,7 +16,7 @@ def test_stop_pattern_from_settings() -> None:
 
 
 def test_warning_pattern_defaults() -> None:
-    assert Settings.from_map({}).warning_pattern == _DEFAULT_WARNING_PATTERN
+    assert Settings.from_map({}).warning_pattern == DEFAULT_WARNING_PATTERN
 
 
 def test_warning_pattern_from_settings() -> None:
@@ -109,5 +105,5 @@ def test_from_cwd_is_a_snapshot_not_a_live_view(stack_repo: Path) -> None:
     before = Settings.from_cwd(stack_repo)
     git("config", "gerrit.stopPattern", r"^hold:", cwd=stack_repo)
 
-    assert before.stop_pattern == _DEFAULT_STOP_PATTERN
+    assert before.stop_pattern == DEFAULT_STOP_PATTERN
     assert Settings.from_cwd(stack_repo).stop_pattern == r"^hold:"

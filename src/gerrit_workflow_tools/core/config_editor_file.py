@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from gerrit_workflow_tools.core.config import ConfigScope
 from gerrit_workflow_tools.core.config_form import (
     ConfigSection,
     ResolvedSetting,
@@ -13,6 +12,7 @@ from gerrit_workflow_tools.core.config_form import (
     SettingSpec,
     canonical_bool,
 )
+from gerrit_workflow_tools.core.config_keys import ConfigScope
 from gerrit_workflow_tools.core.config_write import ConfigWrite
 
 
