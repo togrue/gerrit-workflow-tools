@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -40,6 +40,7 @@ from gerrit_workflow_tools.core.push_reviewers import (
     push_marks,
     unknown_reviewers,
 )
+from gerrit_workflow_tools.core.push_targets import NextPatchset
 from gerrit_workflow_tools.core.push_unchanged import (
     AbandonedChange,
     OutdatedChange,
@@ -74,6 +75,8 @@ class PushPlan:
     """Commits Gerrit already has as older patchsets: not sent, so Gerrit keeps its newer one."""
     abandoned: tuple[AbandonedChange, ...] = ()
     """Commits Gerrit has as patch sets of abandoned changes: not sent, and nothing is set on them."""
+    next_patchsets: Mapping[str, NextPatchset] | None = None
+    """What each sent commit becomes, by SHA (see :attr:`ExistingChanges.next_patchsets`)."""
     drafts: dict[str, int] = field(default_factory=dict)
     """Your unpublished drafts per pushed commit (short SHA -> count)."""
     wip_from: str | None = None
@@ -310,6 +313,7 @@ def prepare(
         unchanged=existing.unchanged,
         outdated=existing.outdated,
         abandoned=existing.abandoned,
+        next_patchsets=existing.next_patchsets,
         drafts=dict(existing.drafts),
         wip_from=wip_from,
         known_reviewers=existing.reviewers,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -25,6 +25,7 @@ from gerrit_workflow_tools.core.gerrit.stack_context import (
 from gerrit_workflow_tools.core.gerrit_change_status import PatchsetStatus, patchset_status
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, commit_sha_or_none, git, git_out
 from gerrit_workflow_tools.core.git_state import head_is_linear_on_remote_gerrit_target
+from gerrit_workflow_tools.core.push_targets import NextPatchset, next_patchsets
 from gerrit_workflow_tools.core.push_unchanged import AbandonedChange, OutdatedChange, UnchangedChange
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
 from gerrit_workflow_tools.core.rebase_state import AM_UNDERWAY, am_underway, rebase_underway
@@ -185,6 +186,9 @@ class ExistingChanges(NamedTuple):
     """Who already reviews one of these changes: accounts Gerrit has, known without asking."""
     abandoned: tuple[AbandonedChange, ...] = ()
     """Commits Gerrit has as a patch set of an abandoned change: a push sends them nowhere."""
+    next_patchsets: Mapping[str, NextPatchset] | None = None
+    """By SHA, the commits that become new patch sets of a change Gerrit has; the rest become new changes.
+    ``None``: Gerrit was not asked, so nobody knows."""
 
     def refusal(self) -> str | None:
         """Why a push without ``--force`` must not run: it would replace a newer patchset, or build on an old one."""
@@ -266,6 +270,7 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
         built_on_outdated=tuple(built_on_outdated),
         reviewers=frozenset(account.slug for view in views.values() for account in view.reviewers or ()),
         abandoned=tuple(abandoned),
+        next_patchsets=next_patchsets(run.cwd, commits, views, user=run.settings.get("ger.user")),
     )
 
 

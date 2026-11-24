@@ -83,7 +83,7 @@ Gerrit applies magic-ref options only to the changes a push gives a new patch se
 
 The preview is built from the plan (`sent_commits` and `state_updates` in `core/push.py`), and `--dry-run` from the same plan. Each commit is listed once, and a heading only appears over a list that has something in it:
 
-- `About to push commits:` lists only the commits the push sends, the ones Gerrit gets a new patchset for.
+- `About to push commits:` lists only the commits the push sends, the ones Gerrit gets a new patchset for. With Gerrit's view of the changes, each says what it becomes, from what the push loads anyway (no request of its own; `core/push_targets.py`): `new change`, or `change 2101, patchset 3 (code changed)`, where the parenthesis says `rebase only` or `code changed` when the repository has Gerrit's current patch set to compare with (`git patch-id`), and `owner <name>` when the change is not yours (`ger.user`).
 - `Gerrit already has these at that commit; set over REST instead:` lists the commits that only get options set, as `<sha> # <subject>  ready,topic=x`.
 - Commits Gerrit already has with nothing to set are one dim line under the list: `1 commit Gerrit already has is not sent again`.
 - When the push sends nothing and only sets options, there is no `About to push` block: the heading is `No new commits to push; set on Gerrit:`, the question is `Set these on Gerrit? [Y/n/r]:` (the options line says `Enter sets them on Gerrit`), and no `nothing to push` line is printed beside the sets.
@@ -132,7 +132,7 @@ The interactive prompt (the confirmation line, `-i`, and confirm-loop `r`) persi
 
 ## Confirmation output
 
-Prints: pushable commits, ready-boundary notice when a blocking commit exists, confirm status line, and `git push …`. The notice is two lines, the same on every path (`--dry-run`, `-y`, the prompt, and a push that has nothing to send, where it comes before `nothing to push`):
+Prints: pushable commits, ready-boundary notice when a blocking commit exists, confirm status line, and `git push …`. The status line's `Reviewers` field says what the push does to reviewers, not who the changes will have: `+alice, +bob`, `none added`, or with `overwrite` `set to alice`; then, dim, who reviews the pushed changes already (`, on Gerrit: pg-bob`). The notice is two lines, the same on every path (`--dry-run`, `-y`, the prompt, and a push that has nothing to send, where it comes before `nothing to push`):
 
 ```
 Stopped at commit "84e9a26  # wip: fmt: locale support, half done", because it matches the stop pattern `^(?:wip\b)`.

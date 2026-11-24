@@ -1545,4 +1545,54 @@ def test_gpush_dry_run_says_what_it_shows_before_what_it_would_not_do(stack_repo
         check=False,
     )
     assert proc.returncode == 0, proc.stdout
-    assert proc.stdout.index("About to push commits:") < proc.stdout.index("[dry-run] not executing push")
+    out = proc.stdout
+    assert (
+        out.index("About to push commits:") < out.index("git push origin") < out.index("[dry-run] not executing push")
+    )
+
+
+def test_gpush_preview_says_what_each_commit_becomes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Before: only `<sha> # <subject>`, and `Reviewers (none)` although the changes had reviewers."""
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    git("config", "ger.user", "me", cwd=stack_repo)
+    bob = [{"account": {"_account_id": 8, "username": "pg-bob"}, "state": "REVIEWER"}]
+    details = at_older_patchsets(
+        build_details_by_change_id(rows[:1], per_index_overrides=[{"reviewers": bob}]), stack_repo
+    )
+    for detail in details.values():
+        detail["owner"] = {"_account_id": 7, "name": "Alice", "username": "alice"}
+    code, out, _err = run_cli(
+        stack_repo, gpush_main, ["--dry-run", rows[1].sha], monkeypatch, gerrit=ChangeStore(details)
+    )
+    assert code == 0
+    lines = [line for line in out.splitlines() if line.startswith("    ")]
+    assert lines[0].endswith(f"# {rows[0].subject}  change 100, patchset 2 (owner Alice)")  # main: no patch-id
+    assert lines[1].endswith(f"# {rows[1].subject}  new change")
+    assert "Reviewers none added, on Gerrit: pg-bob  |" in out
+
+
+@pytest.mark.parametrize(("edited", "says"), [(False, "rebase only"), (True, "code changed")])
+def test_gpush_preview_says_rebase_only_or_code_changed(
+    edited: bool, says: str, stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gerrit's patch set on another parent: the same code is only rebased, as the overlay says too."""
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    git("checkout", "-q", "-b", "elsewhere", "main", cwd=stack_repo)
+    (stack_repo / "side.txt").write_text("side\n", encoding="utf-8")
+    git("add", "side.txt", cwd=stack_repo)
+    git("commit", "-q", "-m", "side", cwd=stack_repo)
+    git("cherry-pick", rows[0].sha, cwd=stack_repo)
+    if edited:  # Gerrit's patch set has code the local commit does not
+        (stack_repo / "side.txt").write_text("side, edited\n", encoding="utf-8")
+        git("commit", "-q", "-a", "--amend", "--no-edit", cwd=stack_repo)
+    rebased = git("rev-parse", "HEAD", cwd=stack_repo).stdout.strip()
+    git("checkout", "-q", "feature", cwd=stack_repo)
+    details = build_details_by_change_id(rows[:1])
+    for detail in details.values():
+        detail["current_revision"] = rebased
+        detail["revisions"] = {rebased: {"_number": 4}}
+    code, out, _err = run_cli(
+        stack_repo, gpush_main, ["--dry-run", rows[0].sha], monkeypatch, gerrit=ChangeStore(details)
+    )
+    assert code == 0
+    assert f"# {rows[0].subject}  change 100, patchset 5 ({says})" in out

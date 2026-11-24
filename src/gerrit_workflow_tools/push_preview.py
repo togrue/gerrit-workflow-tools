@@ -17,6 +17,7 @@ from gerrit_workflow_tools.core.push import (
 from gerrit_workflow_tools.core.push_checks import PushBoundary
 from gerrit_workflow_tools.core.push_result import NOTHING_TO_PUSH
 from gerrit_workflow_tools.core.push_reviewers import PushMark, needs_rest_assignment
+from gerrit_workflow_tools.core.push_targets import NEW_CHANGE
 from gerrit_workflow_tools.core.push_unchanged import StateUpdate
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.render.style import (
@@ -113,6 +114,9 @@ def _commit_lines(plan: PushPlan, summary_highlighter: SummaryHighlighter) -> li
         disp = summary_highlighter.highlight(commit.subject, sha=commit.sha)
         sha_p = commit.short_sha.ljust(8)
         line = f"    {color_short_sha(sha_p)}{color_text(' # ', ANSI_DIM)}{disp}"
+        if plan.next_patchsets is not None:  # Gerrit was asked: what the commit becomes there
+            becomes = plan.next_patchsets.get(commit.sha)
+            line += color_text(f"  {becomes.describe() if becomes else NEW_CHANGE}", ANSI_DIM)
         if plan.marks is not None and commit.change_id:
             mark = plan.marks.get(commit.change_id, PushMark(False, (), False, False))
             line += _attribute_suffix(mark, plan.options.reviewers)
@@ -183,6 +187,16 @@ def _wip_field(plan: PushPlan, yes_no: Callable[[bool], str]) -> str:
     return color_text("no (--ready)", ANSI_GREEN) if plan.options.ready else yes_no(plan.options.wip)
 
 
+def _reviewers_field(plan: PushPlan) -> str:
+    """What the push does to reviewers (``+alice``, ``none added``), then who the pushed changes have already."""
+    names = plan.options.reviewers
+    overwrite = plan.options.strategy == ReviewerStrategy.OVERWRITE
+    added = ("set to " if overwrite else "") + ", ".join(names if overwrite else (f"+{name}" for name in names))
+    field = color_text(added, ANSI_LIGHT_GREEN) if names else color_text("none added", ANSI_DIM)
+    has = sorted(plan.known_reviewers, key=str.casefold)
+    return field + (color_text(f", on Gerrit: {', '.join(has)}", ANSI_DIM) if has else "")
+
+
 def print_plan_status(plan: PushPlan) -> None:
     """One-line summary before the push confirmation prompt."""
     options = plan.options
@@ -194,7 +208,7 @@ def print_plan_status(plan: PushPlan) -> None:
     fields = [
         ("Branch", color_text(plan.branch, f"{ANSI_BOLD}{ANSI_CYAN}")),
         ("Target", color_text(f"refs/for/{plan.push_branch}", ANSI_GREEN)),
-        ("Reviewers", color_text(", ".join(options.reviewers), ANSI_LIGHT_GREEN) if options.reviewers else none),
+        ("Reviewers", _reviewers_field(plan)),
         ("Topic", color_text(options.topic, ANSI_CYAN) if options.topic else none),
         ("WIP", _wip_field(plan, _yes_no)),
         (
@@ -221,13 +235,11 @@ def print_dry_run(plan: PushPlan) -> None:
     """Status line and the ``git push`` that would run; what would happen after it on stderr."""
     print()
     print_plan_status(plan)
+    for argv in push_argvs(plan) if sent_commits(plan) else []:
+        print(color_text(" ".join(argv), ANSI_DIM_GRAY))
     sys.stdout.flush()  # what would run comes after what was shown, also when both go to one pipe
-    if not sent_commits(plan):  # what the real run does: no git push, REST only
-        if state_updates(plan):
-            print("[dry-run] no git push: Gerrit already has these commits", file=sys.stderr)
-    else:
-        for argv in push_argvs(plan):
-            print(color_text(" ".join(argv), ANSI_DIM_GRAY))
+    if not sent_commits(plan) and state_updates(plan):  # what the real run does: no git push, REST only
+        print("[dry-run] no git push: Gerrit already has these commits", file=sys.stderr)
     if needs_rest_assignment(plan.options.strategy, plan.options.reviewers):
         label = strategy_status_label(plan.options.strategy)
         print(
