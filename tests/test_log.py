@@ -338,6 +338,21 @@ def test_log_show_change_id_on_continuation_line(web_stack_repo: Path, monkeypat
         assert cid not in line
 
 
+def test_log_no_show_change_id_overrides_the_config(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """ger.logShowChangeId turns it on; --no-show-change-id turns it off again for one run."""
+    rows = stack_rows_mb_to_head(web_stack_repo)
+    git("config", "ger.logShowChangeId", "true", cwd=web_stack_repo)
+    store = ChangeStore(build_details_by_change_id(rows))
+    code, out, err = run_cli(web_stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    assert code == 0, err
+    assert f"Change-Id: {rows[0].change_id}" in out
+    code, out, err = run_cli(
+        web_stack_repo, log_main, ["--no-show-change-id", "--color=never"], monkeypatch, gerrit=store
+    )
+    assert code == 0, err
+    assert "Change-Id:" not in out
+
+
 def test_log_verbose_twice_shows_change_id(web_stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     rows = stack_rows_mb_to_head(web_stack_repo)
     details = build_details_by_change_id(rows)

@@ -33,7 +33,7 @@ ger log [options] [REV_RANGE]
 | `--color WHEN` | `always` \| `auto` \| `never`; `auto` honours `NO_COLOR` ([Configuration.md](../../Configuration.md#colour)) |
 | `--hyperlinks WHEN` | `always` \| `auto` \| `never`. When on, text URLs become a clickable `Open in gerrit` (OSC 8) and that compact link is shown by default. JSON always includes the raw `gerrit_url`. |
 | `--url`, `--show-url` | Gerrit web URL per line (forced on). Default: on when hyperlinks are on, otherwise `ger.logShowUrl`. |
-| `--show-change-id` | Show full Change-Id on an indented continuation line (default: `ger.logShowChangeId`) |
+| `--show-change-id` / `--no-show-change-id` | Show full Change-Id on an indented continuation line (default: `ger.logShowChangeId`; `-vv` shows it too) |
 | `-v`, `--verbose` | Add indented `CI:` pipeline lines and a `Reviewers:` line (`alice, bob (cc: carol)`; omitted when Gerrit lists nobody) below each commit; primary line unchanged. Repeat (`-vv`) to also show Change-Id. |
 | `--debug-log` | Standard helpers: diagnostics to stderr |
 | `--refresh` | Ask Gerrit again instead of serving the cache inside its trust window; same as `ger --refresh log` |

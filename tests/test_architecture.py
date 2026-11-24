@@ -578,7 +578,8 @@ def _help_texts() -> dict[str, str]:
                     if choice.help:
                         texts[f"{command} {choice.dest}"] = choice.help
             elif action.help and action.help != argparse.SUPPRESS and action.dest != "help":
-                texts[f"{command} {(action.option_strings or [action.dest])[-1]}"] = action.help
+                longs = [o for o in action.option_strings if o.startswith("--")] or [action.dest]
+                texts[f"{command} {longs[0]}"] = action.help
     return texts
 
 
@@ -608,8 +609,7 @@ def test_help_text_style() -> None:
         "help text off the house style",
         found,
         {
-            "log --show-change-id: RST markup (``code`` or **bold**)": "backlog 4",
-            "log --show-url: RST markup (``code`` or **bold**)": "backlog 4",
+            "log --url: RST markup (``code`` or **bold**)": "backlog 4",
             "log --verbose: RST markup (``code`` or **bold**)": "backlog 4",
             "push --reviewers: no final period": "backlog 4",
             "vscode action: starts lower case": "backlog 4",

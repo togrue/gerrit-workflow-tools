@@ -12,6 +12,7 @@ from pathlib import Path
 from gerrit_workflow_tools.cli_args import (
     add_branch_arg,
     add_color_args,
+    add_on_off_arg,
     add_output_format_args,
     add_stack_arg,
     add_verbose_and_debug_log_args,
@@ -116,11 +117,10 @@ The status columns are those of ger log (see ger log --help).""",
         metavar="N",
         help="Extra source lines before/after the comment (implies --context; default 2).",
     )
-    p.add_argument(
+    add_on_off_arg(
+        p,
         "--ci",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="Attach CI findings from failed CI links (fetches CI logs; default: ger.showCiContent, off).",
+        help_text="Attach CI findings from failed CI links (fetches CI logs; default: ger.showCiContent, off).",
     )
     add_output_format_args(p, ai_view="markdown")
     add_color_args(p)

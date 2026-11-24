@@ -235,7 +235,7 @@ _ger_log() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --json --format --ai --color --hyperlinks --url --show-url --show-change-id -v --verbose --debug-log --refresh --follow-merges
+        __gwt_flags "$cur" -h --help --json --format --ai --color --hyperlinks --url --show-url --show-change-id --no-show-change-id -v --verbose --debug-log --refresh --follow-merges
         return
     fi
     case "$prev" in
@@ -287,7 +287,7 @@ _ger_rebase() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --onto-remote --no-onto-remote --drop-merged-equivalent --autosquash --continue --abort --skip --debug-log --refresh
+        __gwt_flags "$cur" -h --help --onto-remote --no-onto-remote --drop-merged-equivalent --no-drop-merged-equivalent --autosquash --no-autosquash --continue --abort --skip --debug-log --refresh
         return
     fi
     if declare -F __git_complete_refs >/dev/null 2>&1; then

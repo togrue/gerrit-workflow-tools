@@ -9,6 +9,7 @@ import logging
 from gerrit_workflow_tools.cli_args import (
     add_color_args,
     add_follow_merges_args,
+    add_on_off_arg,
     add_output_format_args,
     add_verbose_and_debug_log_args,
     output_format,
@@ -74,10 +75,10 @@ def _build_parser() -> argparse.ArgumentParser:
             "Otherwise default: ``ger.logShowUrl``."
         ),
     )
-    parser.add_argument(
+    add_on_off_arg(
+        parser,
         "--show-change-id",
-        action="store_true",
-        help="Show full Change-Id on an indented continuation line. Default: ``ger.logShowChangeId``.",
+        help_text="Show full Change-Id on an indented continuation line. Default: ger.logShowChangeId.",
     )
     add_verbose_and_debug_log_args(
         parser,
@@ -113,7 +114,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:  # pylint
     gdef = settings.log_defaults
     verbose_level = int(args.verbose)
     show_url = bool(args.url) or gdef["show_url"] or is_hyperlink_enabled()
-    show_change_id = bool(args.show_change_id) or gdef["show_change_id"] or verbose_level >= 2
+    show_change_id = gdef["show_change_id"] if args.show_change_id is None else args.show_change_id
+    show_change_id = show_change_id or verbose_level >= 2
 
     branch = run.repo.stack_branch if args.rev_range else run.repo.require_stack_branch()
     rev_range = resolve_rev_range(args.rev_range, branch=branch)

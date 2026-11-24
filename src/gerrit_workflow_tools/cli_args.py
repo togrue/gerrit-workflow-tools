@@ -73,6 +73,15 @@ def add_patchset_arg(parser: argparse.ArgumentParser | argparse._ArgumentGroup) 
     parser.add_argument("--patchset", type=int, default=None, metavar="N", help="Take patchset N (default: current).")
 
 
+def add_on_off_arg(parser: argparse.ArgumentParser | argparse._ArgumentGroup, flag: str, *, help_text: str) -> None:
+    """Register ``--flag`` and ``--no-flag`` for a switch a config key (or git) can turn on by default.
+
+    The value is ``None`` when neither is given, so the command reads the default then:
+    ``args.x if args.x is not None else settings…``. The one idiom for such a pair.
+    """
+    parser.add_argument(flag, action=argparse.BooleanOptionalAction, default=None, help=help_text)
+
+
 def add_message_args(parser: argparse.ArgumentParser) -> argparse._ArgumentGroup:
     """Register ``-m``/``--message`` (repeatable) and ``-F``/``--file`` as a "message" group.
 

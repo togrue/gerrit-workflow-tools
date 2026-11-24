@@ -586,6 +586,28 @@ def test_cli_rebase_onto_remote_sets_drop_env_when_flag(stack_repo: Path, monkey
     assert captured.get("env", {}).get("GREBASE_DROP_MERGED_EQUIVALENT") == "1"
 
 
+def test_cli_rebase_no_forms_override_the_config(stack_repo: Path, monkeypatch):
+    """ger.rebaseOntoRemote and ger.rebaseDropMergedEquivalent default on; the --no- forms turn them off."""
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
+    from gerrit_workflow_tools.core.git_run import git
+
+    git("update-ref", "refs/remotes/origin/main", "main", cwd=stack_repo)
+    git("config", "ger.rebaseOntoRemote", "true", cwd=stack_repo)
+    git("config", "ger.rebaseDropMergedEquivalent", "true", cwd=stack_repo)
+    monkeypatch.chdir(stack_repo)
+    captured: dict = {}
+    with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
+        rebase_main([])
+    assert captured["cmd"] == ["git", "rebase", "-i", "origin/main"]
+    assert captured.get("env", {}).get("GREBASE_DROP_MERGED_EQUIVALENT") == "1"
+
+    captured = {}
+    with patch("subprocess.run", side_effect=_make_rebase_interceptor(captured)):
+        rebase_main(["--no-onto-remote", "--no-drop-merged-equivalent"])
+    assert captured["cmd"][:3] == ["git", "rebase", "-i"] and "origin/main" not in captured["cmd"]
+    assert captured.get("env", {}).get("GREBASE_DROP_MERGED_EQUIVALENT") != "1"
+
+
 def test_enrich_todo_drop_merged_equivalent_pick_to_drop(stack_repo: Path, monkeypatch):
     """GREBASE_DROP_MERGED_EQUIVALENT turns pick into drop when merged-same."""
     from gerrit_workflow_tools.rebase_enricher import _enrich_todo

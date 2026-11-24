@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 
-from gerrit_workflow_tools.cli_args import add_verbose_and_debug_log_args, changeish_help
+from gerrit_workflow_tools.cli_args import add_on_off_arg, add_verbose_and_debug_log_args, changeish_help
 from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.cli_notes import print_resolution_note
 from gerrit_workflow_tools.cli_terminal import stdin_is_terminal
@@ -45,34 +45,23 @@ def _build_parser() -> argparse.ArgumentParser:
             "The base to rebase from (default: the merge base with the target; not with --onto-remote)"
         ),
     )
-    p.add_argument(
+    add_on_off_arg(
+        p,
         "--onto-remote",
-        action="store_true",
-        help=(
-            "Rebase the current branch onto the fetched remote-tracking tip of the upstream "
-            "target on ger.remote. Default: ger.rebaseOntoRemote."
-        ),
+        help_text="Rebase the current branch onto the fetched remote-tracking tip of the upstream target on "
+        "ger.remote; --no-onto-remote: from the merge base with the target. Default: ger.rebaseOntoRemote.",
     )
-    p.add_argument(
-        "--no-onto-remote",
-        action="store_true",
-        help="Override ger.rebaseOntoRemote: use merge-base with the target (default behavior).",
-    )
-    p.add_argument(
+    add_on_off_arg(
+        p,
         "--drop-merged-equivalent",
-        action="store_true",
-        help=(
-            "Turn merged commits that are provably equivalent to the merged Gerrit revision into "
-            "drop lines in the todo. Default: ger.rebaseDropMergedEquivalent."
-        ),
+        help_text="Turn merged commits that are provably equivalent to the merged Gerrit revision into "
+        "drop lines in the todo. Default: ger.rebaseDropMergedEquivalent.",
     )
-    p.add_argument(
+    add_on_off_arg(
+        p,
         "--autosquash",
-        action="store_true",
-        help=(
-            "Squash the fixups `ger fix` made (fixup!/squash! commits) into the commits they fix. "
-            "Without it, git's rebase.autosquash decides, as for `git rebase -i`."
-        ),
+        help_text="Squash the fixups `ger fix` made (fixup!/squash! commits) into the commits they fix. "
+        "Without either, git's rebase.autosquash decides, as for `git rebase -i`.",
     )
     underway = p.add_mutually_exclusive_group()
     underway.add_argument(
@@ -129,7 +118,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     cwd, settings = run.cwd, run.settings
 
     if args.go_on:
-        if args.rev or args.onto_remote or args.no_onto_remote or args.drop_merged_equivalent or args.autosquash:
+        switches = (args.onto_remote, args.drop_merged_equivalent, args.autosquash)
+        if args.rev or any(switch is not None for switch in switches):
             p.error(f"--{args.go_on} goes on with the rebase underway: it takes no REV and no other option")
         return go_on_with_rebase(run, RebaseAction(args.go_on))
     if args.onto_remote and args.rev:
@@ -137,16 +127,14 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
 
     require_history_rewrite(cwd)
     rdef = settings.rebase_defaults
-    if args.no_onto_remote:
-        use_onto_remote = False
-    elif args.onto_remote:
-        use_onto_remote = True
+    if args.onto_remote is not None:
+        use_onto_remote = args.onto_remote
     elif args.rev:
         use_onto_remote = False
     else:
         use_onto_remote = rdef["onto_remote"]
 
-    drop_merged = bool(args.drop_merged_equivalent or rdef["drop_merged_equivalent"])
+    drop_merged = rdef["drop_merged_equivalent"] if args.drop_merged_equivalent is None else args.drop_merged_equivalent
 
     branch = run.repo.working_branch
     if use_onto_remote:
@@ -172,8 +160,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         env["GIT_EDITOR"] = "true"  # nobody to edit the todo: run it as annotated
 
     logger.debug("ger rebase: base=%s onto_remote=%s", base[:8], use_onto_remote)
-    autosquash = True if args.autosquash else None
-    return run_interactive_rebase(run, base, sequence_editor="rebase_enricher", env=env, autosquash=autosquash)
+    return run_interactive_rebase(run, base, sequence_editor="rebase_enricher", env=env, autosquash=args.autosquash)
 
 
 if __name__ == "__main__":
