@@ -15,17 +15,6 @@ from gerrit_workflow_tools.cli_common import (
     output_format,
     run_cli_command,
 )
-from gerrit_workflow_tools.cli_style import (
-    ANSI_BOLD,
-    ANSI_CYAN,
-    ANSI_DIM,
-    ANSI_RED,
-    ANSI_YELLOW,
-    color_short_sha,
-    color_stat,
-    color_text,
-    format_link,
-)
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.inbox import (
@@ -41,6 +30,17 @@ from gerrit_workflow_tools.render.ai_text import inbox_ai_lines
 from gerrit_workflow_tools.render.commit_row import fmt_code_review, fmt_comments, fmt_verified
 from gerrit_workflow_tools.render.review_json import chain_json, iso_utc
 from gerrit_workflow_tools.render.status_fmt import SECTION_HEADINGS, member_hints
+from gerrit_workflow_tools.render.style import (
+    ANSI_BOLD,
+    ANSI_CYAN,
+    ANSI_DIM,
+    ANSI_RED,
+    ANSI_YELLOW,
+    color_short_sha,
+    color_stat,
+    color_text,
+    format_link,
+)
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 

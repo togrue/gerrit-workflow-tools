@@ -16,7 +16,6 @@ import pytest
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_push import main as gpush_main
-from gerrit_workflow_tools.cli_style import ANSI_YELLOW
 from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.git_run import git, git_out
@@ -24,6 +23,7 @@ from gerrit_workflow_tools.core.ready_calc import compute_ready
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range
 from gerrit_workflow_tools.push_input_line import parse as parse_push_options_line
 from gerrit_workflow_tools.push_options_history import load_push_options_history
+from gerrit_workflow_tools.render.style import ANSI_YELLOW
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import (
     at_older_patchsets,

@@ -11,9 +11,9 @@ import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_show import main as gshow_main
-from gerrit_workflow_tools.cli_style import ANSI_YELLOW, GERRIT_LINK_LABEL, strip_ansi
 from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.render.style import ANSI_YELLOW, GERRIT_LINK_LABEL, strip_ansi
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import (
     build_details_by_change_id,

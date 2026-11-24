@@ -6,12 +6,12 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from gerrit_workflow_tools.cli_style import ANSI_RED, ANSI_YELLOW, color_text, is_color_enabled
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.stack_context import stack_project
 from gerrit_workflow_tools.core.git_state import repo_toplevel
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
 from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot
+from gerrit_workflow_tools.render.style import ANSI_RED, ANSI_YELLOW, color_text, is_color_enabled
 
 
 @dataclass(frozen=True)

@@ -15,14 +15,6 @@ import pytest
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_show import main as show_main
-from gerrit_workflow_tools.cli_style import (
-    ANSI_DIM_GRAY,
-    ANSI_GREEN,
-    ANSI_RED,
-    ANSI_YELLOW,
-    GERRIT_LINK_LABEL,
-    strip_ansi,
-)
 from gerrit_workflow_tools.core.annotated_stack import resolve_rev_range
 from gerrit_workflow_tools.core.attention import determine_attention
 from gerrit_workflow_tools.core.config import ConfigError
@@ -31,6 +23,14 @@ from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.ready_calc import compute_ready
 from gerrit_workflow_tools.core.reviewer import ReviewerAccount
 from gerrit_workflow_tools.core.stack import commits_in_range
+from gerrit_workflow_tools.render.style import (
+    ANSI_DIM_GRAY,
+    ANSI_GREEN,
+    ANSI_RED,
+    ANSI_YELLOW,
+    GERRIT_LINK_LABEL,
+    strip_ansi,
+)
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import (
     build_details_by_change_id,

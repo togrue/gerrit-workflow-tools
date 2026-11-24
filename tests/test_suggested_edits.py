@@ -10,11 +10,11 @@ from typing import Any
 import pytest
 
 from gerrit_workflow_tools.cli_show import main as gshow_main
-from gerrit_workflow_tools.cli_style import strip_ansi
 from gerrit_workflow_tools.core.comment_anchor import CommentRange
 from gerrit_workflow_tools.core.comment_chains import build_comment_chains
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.suggested_edits import FixReplacement, SuggestedEdit, message_suggestions
+from gerrit_workflow_tools.render.style import strip_ansi
 from gerrit_workflow_tools.render.suggested_fixes import comment_text
 from tests.change_store import ChangeStore
 from tests.conftest import run_cli

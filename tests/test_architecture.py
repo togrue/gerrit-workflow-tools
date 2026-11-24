@@ -144,11 +144,7 @@ def test_render_does_not_import_cli() -> None:
     _check(
         "render/ imports the CLI layer",
         found,
-        {
-            # Backlog: "Styling below the CLI" — ANSI helpers live in cli_style.py.
-            "render/comments.py -> cli_style.py": "styling below the CLI",
-            "render/commit_row.py -> cli_style.py": "styling below the CLI",
-        },
+        {},
         "render/ formats domain objects; it must not reach into cli_*.",
     )
 

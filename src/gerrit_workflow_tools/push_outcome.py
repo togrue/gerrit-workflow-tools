@@ -7,13 +7,13 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import ExitCode
-from gerrit_workflow_tools.cli_style import color_short_sha
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.push import PushPlan, PushRefusal
 from gerrit_workflow_tools.core.push_result import NOTHING_TO_PUSH, PushResult
 from gerrit_workflow_tools.core.push_reviewers import ReviewerApplyChangeOutcome
 from gerrit_workflow_tools.core.push_unchanged import StateUpdateFailure
 from gerrit_workflow_tools.push_preview import print_outdated, print_ready_boundary_notice, update_line
+from gerrit_workflow_tools.render.style import color_short_sha
 from gerrit_workflow_tools.summary_highlight import branch_summary_highlighter
 
 

@@ -17,7 +17,6 @@ from gerrit_workflow_tools.cli_common import (
     init_cli_runtime,
     run_cli_command,
 )
-from gerrit_workflow_tools.cli_style import ANSI_DIM_GRAY, color_text
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
@@ -51,6 +50,7 @@ from gerrit_workflow_tools.push_preview import (
     print_plan_status,
     prompt_initial_options,
 )
+from gerrit_workflow_tools.render.style import ANSI_DIM_GRAY, color_text
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, branch_summary_highlighter
 
 

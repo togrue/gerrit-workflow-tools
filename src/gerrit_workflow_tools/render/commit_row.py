@@ -2,7 +2,19 @@
 
 from __future__ import annotations
 
-from gerrit_workflow_tools.cli_style import (
+from gerrit_workflow_tools.core.attention import Attention
+from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
+from gerrit_workflow_tools.render.status_fmt import (
+    PRIVATE,
+    SUBMITTABLE,
+    attention_hints,
+    code_review_token,
+    comments_token,
+    patchset_token,
+    verified_token,
+)
+from gerrit_workflow_tools.render.style import (
     ANSI_DIM,
     ANSI_DIM_GRAY,
     ANSI_GREEN,
@@ -17,18 +29,6 @@ from gerrit_workflow_tools.cli_style import (
     is_color_enabled,
     is_hyperlink_enabled,
     visible_len,
-)
-from gerrit_workflow_tools.core.attention import Attention
-from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
-from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
-from gerrit_workflow_tools.render.status_fmt import (
-    PRIVATE,
-    SUBMITTABLE,
-    attention_hints,
-    code_review_token,
-    comments_token,
-    patchset_token,
-    verified_token,
 )
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 

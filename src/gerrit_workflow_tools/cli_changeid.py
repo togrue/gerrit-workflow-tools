@@ -12,7 +12,6 @@ from gerrit_workflow_tools.cli_common import (
     init_cli_runtime,
     run_cli_command,
 )
-from gerrit_workflow_tools.cli_style import color_short_sha
 from gerrit_workflow_tools.core.change_id import (
     ChangeIdIssueKind,
     ChangeIdRow,
@@ -34,6 +33,7 @@ from gerrit_workflow_tools.core.stack import (
     rev_spec_stack_base_to_end,
 )
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
+from gerrit_workflow_tools.render.style import color_short_sha
 
 
 class ChangeIdError(Exception):

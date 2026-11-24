@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
-from gerrit_workflow_tools.cli_style import (
+from gerrit_workflow_tools.core.comment_chains import CommentSelection
+from gerrit_workflow_tools.core.gerrit.rest import printable_path
+from gerrit_workflow_tools.core.gerrit_change_status import (
+    CommentChain,
+    ContextLine,
+    InlineComment,
+    gerrit_inline_comment_url,
+)
+from gerrit_workflow_tools.core.suggested_edits import SuggestedEdit
+from gerrit_workflow_tools.render.style import (
     ANSI_BLUE,
     ANSI_BOLD,
     ANSI_CYAN,
@@ -14,15 +23,6 @@ from gerrit_workflow_tools.cli_style import (
     format_link,
     visible_len,
 )
-from gerrit_workflow_tools.core.comment_chains import CommentSelection
-from gerrit_workflow_tools.core.gerrit.rest import printable_path
-from gerrit_workflow_tools.core.gerrit_change_status import (
-    CommentChain,
-    ContextLine,
-    InlineComment,
-    gerrit_inline_comment_url,
-)
-from gerrit_workflow_tools.core.suggested_edits import SuggestedEdit
 from gerrit_workflow_tools.render.suggested_fixes import fix_rows, fixes_markdown
 from gerrit_workflow_tools.render.wrap import fit_header, wrap_lines
 

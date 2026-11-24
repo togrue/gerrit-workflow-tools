@@ -1,10 +1,10 @@
-"""Tests for OSC 8 hyperlinks and ANSI stripping in ``cli_style``."""
+"""Tests for OSC 8 hyperlinks and ANSI stripping in ``render.style``."""
 
 from __future__ import annotations
 
 import pytest
 
-from gerrit_workflow_tools.cli_style import (
+from gerrit_workflow_tools.render.style import (
     ANSI_DIM,
     GERRIT_LINK_LABEL,
     color_text,
@@ -107,7 +107,7 @@ def test_visible_len_strips_osc8_and_sgr() -> None:
 
 def test_init_hyperlink_mode_always_and_never(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_hyperlink_env(monkeypatch)
-    monkeypatch.setattr("gerrit_workflow_tools.cli_style._stdout_is_tty", lambda: False)
+    monkeypatch.setattr("gerrit_workflow_tools.render.style._stdout_is_tty", lambda: False)
     assert init_hyperlink_mode(hyperlinks="always") is True
     assert init_hyperlink_mode(hyperlinks="never") is False
 
@@ -115,30 +115,30 @@ def test_init_hyperlink_mode_always_and_never(monkeypatch: pytest.MonkeyPatch) -
 def test_init_hyperlink_mode_auto_non_tty(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_hyperlink_env(monkeypatch)
     monkeypatch.setenv("WT_SESSION", "1")
-    monkeypatch.setattr("gerrit_workflow_tools.cli_style._stdout_is_tty", lambda: False)
+    monkeypatch.setattr("gerrit_workflow_tools.render.style._stdout_is_tty", lambda: False)
     assert init_hyperlink_mode(hyperlinks="auto") is False
 
 
 def test_init_hyperlink_mode_auto_tty_capable(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_hyperlink_env(monkeypatch)
     monkeypatch.setenv("WT_SESSION", "1")
-    monkeypatch.setattr("gerrit_workflow_tools.cli_style._stdout_is_tty", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.render.style._stdout_is_tty", lambda: True)
     assert init_hyperlink_mode(hyperlinks="auto") is True
 
 
 def test_init_hyperlink_mode_auto_tty_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_hyperlink_env(monkeypatch)
     monkeypatch.setenv("TERM", "xterm-256color")
-    monkeypatch.setattr("gerrit_workflow_tools.cli_style._stdout_is_tty", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.render.style._stdout_is_tty", lambda: True)
     assert init_hyperlink_mode(hyperlinks="auto") is False
 
 
 def test_init_hyperlink_mode_force_hyperlink(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_hyperlink_env(monkeypatch)
     monkeypatch.setenv("FORCE_HYPERLINK", "1")
-    monkeypatch.setattr("gerrit_workflow_tools.cli_style._stdout_is_tty", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.render.style._stdout_is_tty", lambda: True)
     assert init_hyperlink_mode(hyperlinks="auto") is True
-    monkeypatch.setattr("gerrit_workflow_tools.cli_style._stdout_is_tty", lambda: False)
+    monkeypatch.setattr("gerrit_workflow_tools.render.style._stdout_is_tty", lambda: False)
     assert init_hyperlink_mode(hyperlinks="auto") is False
 
 
@@ -146,7 +146,7 @@ def test_init_hyperlink_mode_no_hyperlinks(monkeypatch: pytest.MonkeyPatch) -> N
     _clear_hyperlink_env(monkeypatch)
     monkeypatch.setenv("WT_SESSION", "1")
     monkeypatch.setenv("NO_HYPERLINKS", "1")
-    monkeypatch.setattr("gerrit_workflow_tools.cli_style._stdout_is_tty", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.render.style._stdout_is_tty", lambda: True)
     assert init_hyperlink_mode(hyperlinks="auto") is False
 
 
@@ -154,7 +154,7 @@ def test_init_hyperlink_mode_force_off(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_hyperlink_env(monkeypatch)
     monkeypatch.setenv("WT_SESSION", "1")
     monkeypatch.setenv("FORCE_HYPERLINK", "0")
-    monkeypatch.setattr("gerrit_workflow_tools.cli_style._stdout_is_tty", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.render.style._stdout_is_tty", lambda: True)
     assert init_hyperlink_mode(hyperlinks="auto") is False
 
 
@@ -171,7 +171,7 @@ def test_init_hyperlink_mode_force_off(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_no_color_turns_auto_off_but_not_always(
     color: str, no_color: str | None, expected: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("gerrit_workflow_tools.cli_style._stdout_is_tty", lambda: True)
+    monkeypatch.setattr("gerrit_workflow_tools.render.style._stdout_is_tty", lambda: True)
     if no_color is None:
         monkeypatch.delenv("NO_COLOR", raising=False)
     else:

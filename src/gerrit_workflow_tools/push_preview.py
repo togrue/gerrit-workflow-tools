@@ -9,18 +9,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import ask_choice, confirm
-from gerrit_workflow_tools.cli_style import (
-    ANSI_BLUE,
-    ANSI_BOLD,
-    ANSI_CYAN,
-    ANSI_DIM,
-    ANSI_DIM_GRAY,
-    ANSI_GREEN,
-    ANSI_LIGHT_GREEN,
-    ANSI_YELLOW,
-    color_short_sha,
-    color_text,
-)
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.push import (
@@ -42,6 +30,18 @@ from gerrit_workflow_tools.core.push_unchanged import StateUpdate
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.upstream_interactive import prompt_toolkit_can_run
 from gerrit_workflow_tools.push_input_line import KW_PUBLISH_DRAFTS, ParseResult, PushLineState
+from gerrit_workflow_tools.render.style import (
+    ANSI_BLUE,
+    ANSI_BOLD,
+    ANSI_CYAN,
+    ANSI_DIM,
+    ANSI_DIM_GRAY,
+    ANSI_GREEN,
+    ANSI_LIGHT_GREEN,
+    ANSI_YELLOW,
+    color_short_sha,
+    color_text,
+)
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 
 

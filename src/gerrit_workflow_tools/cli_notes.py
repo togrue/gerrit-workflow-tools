@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import sys
 
-from gerrit_workflow_tools.cli_style import ANSI_DIM, color_text
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
     Resolution,
     StackCommit,
     format_local_sibling_note,
     format_resolution_note,
 )
+from gerrit_workflow_tools.render.style import ANSI_DIM, color_text
 
 
 def print_note(note: str | None) -> None:

@@ -1,4 +1,4 @@
-"""Shared terminal styling helpers for CLI commands."""
+"""Terminal styling: ANSI color, OSC 8 hyperlinks and the run's color mode, UTF-8 stdio."""
 
 from __future__ import annotations
 

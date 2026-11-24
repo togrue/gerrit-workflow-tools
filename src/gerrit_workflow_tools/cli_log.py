@@ -19,18 +19,6 @@ from gerrit_workflow_tools.cli_common import (
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_notes import print_note
-from gerrit_workflow_tools.cli_style import (
-    ANSI_BOLD,
-    ANSI_CYAN,
-    ANSI_DIM,
-    ANSI_GREEN,
-    ANSI_RED,
-    ANSI_YELLOW,
-    color_stat,
-    color_text,
-    is_hyperlink_enabled,
-    visible_len,
-)
 from gerrit_workflow_tools.core.annotated_stack import load_annotated_stack, resolve_rev_range
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
@@ -48,6 +36,18 @@ from gerrit_workflow_tools.render.commit_row import (
     oneline_line,
 )
 from gerrit_workflow_tools.render.show_json import log_commit_json, rebase_json, rebase_steps, upstream_json
+from gerrit_workflow_tools.render.style import (
+    ANSI_BOLD,
+    ANSI_CYAN,
+    ANSI_DIM,
+    ANSI_GREEN,
+    ANSI_RED,
+    ANSI_YELLOW,
+    color_stat,
+    color_text,
+    is_hyperlink_enabled,
+    visible_len,
+)
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, build_summary_highlighter
 
 

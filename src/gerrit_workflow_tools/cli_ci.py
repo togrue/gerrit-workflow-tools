@@ -16,7 +16,6 @@ from gerrit_workflow_tools.cli_common import (
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_notes import print_resolution_note
-from gerrit_workflow_tools.cli_style import ANSI_DIM, ANSI_RED, color_text
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.ci_content import BodyMode, CiContent, CiContentError
 from gerrit_workflow_tools.core.ci_content_service import CiContentService
@@ -33,6 +32,7 @@ from gerrit_workflow_tools.render.ci_content import (
 )
 from gerrit_workflow_tools.render.commit_row import show_headline
 from gerrit_workflow_tools.render.download_meter import DownloadMeter
+from gerrit_workflow_tools.render.style import ANSI_DIM, ANSI_RED, color_text
 
 
 def _build_parser() -> argparse.ArgumentParser:

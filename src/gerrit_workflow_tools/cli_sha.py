@@ -65,12 +65,12 @@ from gerrit_workflow_tools.cli_common import (
     init_cli_runtime,
     run_cli_command,
 )
-from gerrit_workflow_tools.cli_style import color_short_sha
 from gerrit_workflow_tools.core.change_id import CHANGE_ID_VALUE_RE
 from gerrit_workflow_tools.core.changeish import no_commit_with_change_id_message
 from gerrit_workflow_tools.core.git_state import current_branch
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, merge_base_with_target, read_commit_rows
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
+from gerrit_workflow_tools.render.style import color_short_sha
 
 
 logger = logging.getLogger(__name__)

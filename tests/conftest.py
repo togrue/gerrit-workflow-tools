@@ -60,7 +60,7 @@ def _reset_output_modes() -> Generator[None]:
     test in that worker is not the next one in the file.
     """
     yield
-    from gerrit_workflow_tools.cli_style import set_color_mode, set_hyperlink_mode
+    from gerrit_workflow_tools.render.style import set_color_mode, set_hyperlink_mode
 
     set_color_mode(False)
     set_hyperlink_mode(False)

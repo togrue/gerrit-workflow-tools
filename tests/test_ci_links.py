@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from gerrit_workflow_tools.cli_log import main as log_main
-from gerrit_workflow_tools.cli_style import ANSI_DIM_GRAY, init_color_mode, init_hyperlink_mode, strip_ansi
 from gerrit_workflow_tools.core.ci_links import (
     CiLink,
     CiPipeline,
@@ -21,6 +20,7 @@ from gerrit_workflow_tools.core.ci_strategy import LazyRows, clear_ci_strategy_c
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.render.commit_row import extra_detail_lines, format_ci_lines
+from gerrit_workflow_tools.render.style import ANSI_DIM_GRAY, init_color_mode, init_hyperlink_mode, strip_ansi
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli

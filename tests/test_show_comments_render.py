@@ -6,15 +6,6 @@ from typing import Any
 
 import pytest
 
-from gerrit_workflow_tools.cli_style import (
-    ANSI_BLUE,
-    ANSI_DIM_GRAY,
-    ANSI_YELLOW,
-    GERRIT_LINK_LABEL,
-    set_color_mode,
-    set_hyperlink_mode,
-    strip_ansi,
-)
 from gerrit_workflow_tools.core.comment_chains import build_comment_chains
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, ContextLine, InlineComment
@@ -22,6 +13,15 @@ from gerrit_workflow_tools.core.gerrit_show import parse_show_range
 from gerrit_workflow_tools.render.comments import (
     format_comment_chain_human,
     format_comment_chain_markdown,
+)
+from gerrit_workflow_tools.render.style import (
+    ANSI_BLUE,
+    ANSI_DIM_GRAY,
+    ANSI_YELLOW,
+    GERRIT_LINK_LABEL,
+    set_color_mode,
+    set_hyperlink_mode,
+    strip_ansi,
 )
 from tests.test_suggested_edits import BLOCK_COMMENT, FIX_COMMENT, _with_replacement
 
@@ -83,7 +83,7 @@ def test_format_comment_chain_human_hyperlink_label() -> None:
 
 
 def test_format_comment_chain_human_box_border_is_yellow() -> None:
-    from gerrit_workflow_tools.cli_style import ANSI_YELLOW, set_color_mode
+    from gerrit_workflow_tools.render.style import ANSI_YELLOW, set_color_mode
 
     chain = CommentChain(
         root_id="r1",

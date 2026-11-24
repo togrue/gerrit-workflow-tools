@@ -19,7 +19,7 @@ from gerrit_workflow_tools.cli_common import output_format
 from gerrit_workflow_tools.cli_resolve import main as resolve_main
 from gerrit_workflow_tools.cli_sha import main as sha_main
 from gerrit_workflow_tools.cli_show import main as show_main
-from gerrit_workflow_tools.cli_style import is_color_enabled, is_hyperlink_enabled, strip_ansi
+from gerrit_workflow_tools.render.style import is_color_enabled, is_hyperlink_enabled, strip_ansi
 from tests.change_store import ChangeStore
 from tests.cli_gerrit_mocks import build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli

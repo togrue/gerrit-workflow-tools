@@ -10,18 +10,6 @@ import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_inbox import main as inbox_main
-from gerrit_workflow_tools.cli_style import (
-    ANSI_BOLD,
-    ANSI_CYAN,
-    ANSI_DIM,
-    ANSI_GREEN,
-    ANSI_LIGHT_GREEN,
-    ANSI_RED,
-    ANSI_RESET,
-    ANSI_YELLOW,
-    GERRIT_LINK_LABEL,
-    strip_ansi,
-)
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import LIGHT_QUERY_OPTIONS, LOG_QUERY_OPTIONS
 from gerrit_workflow_tools.core.gerrit.service import GerritService
@@ -33,6 +21,18 @@ from gerrit_workflow_tools.core.inbox import (
     project_scope,
 )
 from gerrit_workflow_tools.core.run_context import RunContext
+from gerrit_workflow_tools.render.style import (
+    ANSI_BOLD,
+    ANSI_CYAN,
+    ANSI_DIM,
+    ANSI_GREEN,
+    ANSI_LIGHT_GREEN,
+    ANSI_RED,
+    ANSI_RESET,
+    ANSI_YELLOW,
+    GERRIT_LINK_LABEL,
+    strip_ansi,
+)
 from tests.change_store import ChangeStore
 from tests.conftest import json_stdout, run_cli
 

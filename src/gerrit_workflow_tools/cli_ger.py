@@ -8,7 +8,7 @@ import sys
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from gerrit_workflow_tools.cli_style import ensure_utf8_stdio
+from gerrit_workflow_tools.render.style import ensure_utf8_stdio
 
 
 if TYPE_CHECKING:

@@ -23,7 +23,6 @@ from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.lexers import Lexer
 from prompt_toolkit.validation import ValidationError, Validator
 
-from gerrit_workflow_tools.cli_style import is_color_enabled
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, branch_reviewers, resolve_push_reviewers
 from gerrit_workflow_tools.push_input_line import (
@@ -45,6 +44,7 @@ from gerrit_workflow_tools.push_options_history import (
     load_push_options_history,
     push_options_history_identity,
 )
+from gerrit_workflow_tools.render.style import is_color_enabled
 from gerrit_workflow_tools.reviewer_catalog import ReviewerCatalog
 
 
