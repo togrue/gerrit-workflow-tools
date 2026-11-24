@@ -30,6 +30,7 @@ from gerrit_workflow_tools.core.comment_target import MissingChangeIdError
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeAmbiguousError, ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
+from gerrit_workflow_tools.core.gerrit.stack_context import NoWorkingBranchError
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError
 from gerrit_workflow_tools.core.review_checkout import ReviewChainEndError
 from gerrit_workflow_tools.core.run_context import RunContext
@@ -40,6 +41,7 @@ from gerrit_workflow_tools.render.style import (
     ensure_utf8_stdio,
     init_color_mode,
     init_hyperlink_mode,
+    init_terminal_width,
 )
 from gerrit_workflow_tools.upstream_interactive import ask_for_needed_upstream, with_suggested_upstream
 
@@ -49,6 +51,10 @@ _T = TypeVar("_T")
 HELP_JSON = "Write machine-readable JSON to stdout."
 HELP_COLOR = "Colorize output: always, auto, or never."
 HELP_HYPERLINKS = "Emit OSC 8 terminal hyperlinks: always, auto, or never."
+HELP_REFRESH = (
+    "Ask Gerrit again instead of serving what the cache holds (its trust window), and refetch CI logs. "
+    "Same as `ger --refresh <command>`."
+)
 HELP_DEBUG_LOG = (
     "Log diagnostics to stderr (git commands, outcomes, resolved refs/URLs, decisions, Gerrit API "
     "response bodies, and a high-level request timing summary)."
@@ -91,11 +97,13 @@ class ExitCode(IntEnum):
     """A **CI link**'s content could not be fetched or parsed where a command required it (``ger ci``)."""
 
 
-# Ordered longest-subclass-first: ChangeAmbiguousError and MissingChangeIdError derive from ChangeResolutionError,
+# Ordered longest-subclass-first: ChangeAmbiguousError, MissingChangeIdError and NoWorkingBranchError derive from
+# ChangeResolutionError,
 # and ConfigError from ValueError, so the more specific entry has to be matched first.
 _FAILURE_EXITS: tuple[tuple[type[BaseException], ExitCode, str], ...] = (
     (ChangeAmbiguousError, ExitCode.AMBIGUOUS, "error"),
     (MissingChangeIdError, ExitCode.MISSING_CHANGE_ID, "error"),
+    (NoWorkingBranchError, ExitCode.USAGE, "error"),
     (ChangeResolutionError, ExitCode.NOT_FOUND, "error"),
     (GerritApiError, ExitCode.GERRIT, "gerrit error"),
     (ConfigError, ExitCode.CONFIG, "error"),
@@ -313,8 +321,9 @@ def add_verbose_and_debug_log_args(
     debug_log_help: str | None = None,
     verbose_help: str | None = None,
     verbose_count: bool = False,
+    refresh: bool = True,
 ) -> None:
-    """Register ``-v``/``--verbose`` and ``--debug-log``.
+    """Register ``-v``/``--verbose``, ``--debug-log`` and, for a command that reads Gerrit (*refresh*), ``--refresh``.
 
     Pass *verbose_help* when a command uses ``--verbose`` for richer output. Without it
     ``-v`` does nothing, so it is accepted (scripts may pass it) but not advertised: no help
@@ -334,6 +343,10 @@ def add_verbose_and_debug_log_args(
         action="store_true",
         help=debug_log_help or HELP_DEBUG_LOG,
     )
+    if refresh:
+        # `ger --refresh <command>` works anywhere on the line (cli_ger takes it out before the command's
+        # parser runs); it is listed here so each command's --help says so.
+        parser.add_argument("--refresh", action="store_true", help=HELP_REFRESH)
 
 
 # Set by `ger --refresh` (cli_ger) for this process and the git-run editors it starts,
@@ -376,10 +389,12 @@ def init_cli_runtime(
     plain = getattr(args, "format_", None) == "ai"  # Text for a model, Markdown or not: no colour, no links.
     init_color_mode(color="never" if plain else getattr(args, "color", "auto"))
     init_hyperlink_mode(hyperlinks="never" if plain else getattr(args, "hyperlinks", "auto"))
+    init_terminal_width(plain=plain)
     settings = Settings.from_cwd(cwd)
     _MAY_ASK_FOR_UPSTREAM.set(may_prompt(args) and not getattr(args, "dry_run", False))
     if repository and not settings.in_repository:
         raise GitError("not a git repository; run ger inside a clone")
-    run = RunContext.open(cwd, settings=settings, gerrit=gerrit, refresh=refresh_requested())
+    refresh = refresh_requested() or bool(getattr(args, "refresh", False))
+    run = RunContext.open(cwd, settings=settings, gerrit=gerrit, refresh=refresh)
     settle_registry_trust(run, confirm=confirm if may_prompt(args) else None)
     return run

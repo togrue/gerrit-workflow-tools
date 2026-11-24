@@ -364,7 +364,7 @@ export function upstreamRow(stack: Stack): StackInfo | undefined {
   const what = up.conflict ? upstreamStop(up.conflict) : undefined;
   const stops = up.conflict?.kind === "empty" ? UPSTREAM_WORDS.stopsEmpty : UPSTREAM_WORDS.stops;
   const n = up.dropped.length;
-  const dropped = n ? ` ${n} commit${n === 1 ? " is" : "s are"} already upstream and dropped.` : "";
+  const dropped = n ? ` ${n} commit${n === 1 ? " is" : "s are"} already upstream and will be dropped.` : "";
   const preview = what ? `Rebasing onto it, ${what}: ${stops}.` : up.preview ? "Every commit applies on it as it is now." : upstreamUnknown(up.reason);
   const command = `ger ${up.argv.join(" ")}`;
   return {

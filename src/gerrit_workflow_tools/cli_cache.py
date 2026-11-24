@@ -24,7 +24,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("info", help="Show cache path and row counts (the default).")
     sub.add_parser("clear", help="Delete cached Gerrit API payloads and CI content for this Gerrit host.")
     add_color_args(p)
-    add_verbose_and_debug_log_args(p, debug_log_help="Log cache administration diagnostics to stderr.")
+    add_verbose_and_debug_log_args(p, debug_log_help="Log cache administration diagnostics to stderr.", refresh=False)
     return p
 
 

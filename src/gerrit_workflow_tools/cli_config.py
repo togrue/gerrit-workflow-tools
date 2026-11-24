@@ -43,7 +43,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "in local and global config, and exit. Needs no terminal.",
     )
     add_color_args(parser)
-    add_verbose_and_debug_log_args(parser, debug_log_help="Log git config reads to stderr.")
+    add_verbose_and_debug_log_args(parser, debug_log_help="Log git config reads to stderr.", refresh=False)
     return parser
 
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from gerrit_workflow_tools.core.attention import Attention
-from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.inbox import OUTGOING, InboxSection
 from gerrit_workflow_tools.core.review_chain import ReviewChain, format_age
 from gerrit_workflow_tools.render.status_fmt import (
@@ -41,8 +41,6 @@ def _item(head: str, facts: Sequence[str]) -> str:
 def commit_facts(commit: LogCommit) -> list[str]:
     """What one annotated commit carries: change number, votes, ``ger log``'s hints (CI names with a failure)."""
     facts = [f"change {commit.number}"] if commit.number else []
-    if commit.patchset_status == PatchsetStatus.MERGED_SAME:
-        facts.append("merged")
     facts += vote_words(commit.verified, commit.code_review)
     for key, text in attention_hints(commit):
         failures = commit.ci_failures if key == Attention.CI_FAILED else []
@@ -50,15 +48,28 @@ def commit_facts(commit: LogCommit) -> list[str]:
     return facts
 
 
+def _uploads(commits: Sequence[LogCommit], upload: Sequence[LogCommit]) -> str:
+    """``ger push uploads 2: commits 4, 5``, by their line numbers; ``uploads nothing`` with none."""
+    if not upload:
+        return "ger push uploads nothing"
+    shas = {c.sha for c in upload}
+    numbers = ", ".join(str(i) for i, c in enumerate(commits, 1) if c.sha in shas)
+    return f"ger push uploads {len(upload)}: {'commit' if len(upload) == 1 else 'commits'} {numbers}"
+
+
 def stack_ai_lines(
-    commits: Sequence[LogCommit], *, project: str, branch: str, ready: int, next_lines: Sequence[str]
+    commits: Sequence[LogCommit],
+    *,
+    project: str,
+    branch: str,
+    upload: Sequence[LogCommit],
+    next_lines: Sequence[str],
 ) -> list[str]:
     """``ger log --ai``: the stack in one line, a numbered line per commit (oldest first), then the next steps.
 
-    *ready* is how many commits, from the first, sit below the **ready boundary**.
+    *upload* is what ``ger push`` would upload (``StackOverview.to_upload``).
     """
-    sends = {0: "nothing", 1: "1"}.get(ready, f"1-{ready}")
-    lines = [f"stack: {project}, branch {branch}, {_plural(len(commits), 'commit')}, ger push sends {sends}"]
+    lines = [f"stack: {project}, branch {branch}, {_plural(len(commits), 'commit')}, {_uploads(commits, upload)}"]
     lines += [_item(f"{i}. {c.short_sha} {c.summary}", commit_facts(c)) for i, c in enumerate(commits, 1)]
     return [*lines, *next_lines]
 

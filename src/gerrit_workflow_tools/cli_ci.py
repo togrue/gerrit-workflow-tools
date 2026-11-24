@@ -16,7 +16,8 @@ from gerrit_workflow_tools.cli_common import (
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_notes import print_resolution_note
-from gerrit_workflow_tools.core.annotated_stack import annotate
+from gerrit_workflow_tools.core.annotated_targets import annotate_targets, local_stack_or_none
+from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.ci_content import BodyMode, CiContent, CiContentError
 from gerrit_workflow_tools.core.ci_content_service import CiContentService
 from gerrit_workflow_tools.core.ci_http import CiHttp
@@ -40,6 +41,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="ger ci",
         description="Fetch the CI logs behind failed CI links and list the findings (why CI failed).",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""examples:
+  ger ci                 why CI failed on HEAD, or which commit below it failed
+  ger ci --stack         every commit of the local stack
+  ger ci 1a2b3c4 -v      one commit, with the last lines of each log
+  ger ci --full | less   the whole log after the findings
+
+The status columns are those of ger log (see ger log --help).""",
     )
     p.add_argument(
         "revs",
@@ -113,6 +122,7 @@ def _no_links_note(commit: LogCommit) -> str:
 
 def _emit_human(commit: LogCommit, contents: list[CiContent], *, warnings: bool) -> None:
     print(show_headline(commit))
+    print(f"    {commit.summary}")
     if not contents:
         print(color_text(f"    {_no_links_note(commit)}", ANSI_DIM))
         return
@@ -152,7 +162,15 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp |
         raise ChangeResolutionError("no commits to inspect")
     for resolved in targets:
         print_resolution_note(resolved.resolution)
-    commits = annotate([t.row for t in targets], service=service, cwd=cwd).require_gerrit()
+    snap = local_stack_or_none(cwd, branch, settings=settings)
+    annotated = annotate_targets(
+        [t.row for t in targets],
+        service=service,
+        stack=snap,
+        local=[t.is_local_commit for t in targets],
+        triplets=[t.shown_triplet for t in targets],
+    )
+    commits = annotated.require_gerrit()
 
     meter = DownloadMeter(sys.stderr, label="Fetching CI logs")
     ci = CiContentService.from_settings(
@@ -173,15 +191,33 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp |
             if index and out_fmt == "human":
                 print()
             (_emit_markdown if out_fmt == "markdown" else _emit_human)(commit, contents, warnings=args.warnings)
+        if not any(contents for _commit, contents in per_commit):
+            for line in _failed_elsewhere(annotated.around, commits, whole_stack=args.stack):
+                print(color_text(line, ANSI_DIM) if out_fmt == "human" else f"- {line}")
 
     failed = [c for _commit, contents in per_commit for c in contents if c.failed]
     if failed:
-        raise CiContentError(
-            f"could not fetch CI content for {len(failed)} link(s): "
-            + "; ".join(f"{c.link.url}: {c.provenance.error}" for c in failed)
-        )
+        # Each link's own error is above it, with its URL: this only says that some were not read.
+        total = sum(len(contents) for _commit, contents in per_commit)
+        count = f"{len(failed)} of {total} CI logs" if total > 1 else "the CI log"
+        raise CiContentError(f"{count} could not be fetched (see above)")
     return int(ExitCode.OK)
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+def _failed_elsewhere(around: list[LogCommit], shown: list[LogCommit], *, whole_stack: bool) -> list[str]:
+    """Where to look when the commits shown have no failed CI but others of the local stack do."""
+    if whole_stack:
+        return []
+    shas = [c.sha for c in around]
+    shown_at = [shas.index(c.sha) for c in shown if c.sha in shas]
+    failed = [
+        (i, c)
+        for i, c in enumerate(around)
+        if i not in shown_at and c.pushed and Attention.CI_FAILED in c.attention_reasons
+    ]
+    if not failed:
+        return []
+    at, first = failed[0]
+    where = "below" if shown_at and at < min(shown_at) else "in the stack"
+    more = f" (and {len(failed) - 1} more)" if len(failed) > 1 else ""
+    return [f"{first.short_sha}{more} {where} has failed CI: `ger ci {first.short_sha}`, or `ger ci --stack`"]

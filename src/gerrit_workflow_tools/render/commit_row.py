@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.ci_links import CiPipeline
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.render.status_fmt import (
+    MERGED,
     PRIVATE,
     SUBMITTABLE,
     attention_hints,
@@ -28,6 +31,7 @@ from gerrit_workflow_tools.render.style import (
     format_link,
     is_color_enabled,
     is_hyperlink_enabled,
+    truncate,
     visible_len,
 )
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
@@ -37,6 +41,9 @@ from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
 _STATUS_SHA_COL_WIDTH = 8
 
 _DETAIL_LABEL_WIDTH = len("Change-Id:")
+
+# A subject cut to fit the terminal keeps at least this much, even if the row then wraps.
+MIN_SUBJECT_WIDTH = 20
 
 _PATCHSET_COLOR: dict[str, str] = {
     "a": ANSI_DIM,
@@ -71,10 +78,13 @@ def _status_sha_column(short_sha: str) -> str:
 
 
 def fmt_summary_strike(summary: str) -> str:
-    """Strike through the commit summary (ANSI SGR 9, or combining chars without a TTY)."""
+    """Strike through the commit summary (ANSI SGR 9) when colour is on; else plain, so ``grep`` still finds it.
+
+    The ``# abandoned`` hint says it either way.
+    """
     if is_color_enabled():
         return f"{ANSI_STRIKE}{summary}{ANSI_RESET}"
-    return "".join(f"{c}̶" for c in summary)
+    return summary
 
 
 def fmt_patchset_column(commit: LogCommit) -> str:
@@ -241,7 +251,7 @@ _HINT_COLOR: dict[str, str] = {
     Attention.DIVERGED: ANSI_RED,
     Attention.OUTDATED_PATCHSET: ANSI_RED,
     Attention.REVIEW_ISSUES: ANSI_YELLOW,
-    Attention.CHAIN_BLOCKED: ANSI_DIM_GRAY,
+    MERGED: ANSI_GREEN,
 }
 """Colour per hint key; a terminal hint not listed (missing Change-Id, not-pushed, …) is yellow."""
 
@@ -301,10 +311,14 @@ def oneline_body(
     return base
 
 
-def attention_summary(commit: LogCommit) -> str:
-    """One line on what *commit* needs: its attention reasons, else whether Gerrit has it."""
+def attention_summary(commit: LogCommit, *, leave_out: frozenset[str] = frozenset()) -> str:
+    """One line on what *commit* needs: its attention reasons (but *leave_out*), else whether Gerrit has it.
+
+    Empty when every reason is left out (a line of its own says it).
+    """
     if commit.attention_reasons:
-        return "attention: " + ", ".join(commit.attention_reasons)
+        reasons = [reason for reason in commit.attention_reasons if reason not in leave_out]
+        return "attention: " + ", ".join(reasons) if reasons else ""
     if not commit.pushed:
         return "not on Gerrit"
     return "ok"
@@ -319,22 +333,18 @@ def votes_text(commit: LogCommit) -> str:
 
 
 def show_headline(commit: LogCommit) -> str:
-    """``commit <sha> <status cols>  # <attention>`` — same tokens as ``ger log``."""
-    sha = color_short_sha(commit.short_sha)
-    push = fmt_patchset_column(commit)
+    """``commit <sha> <status cols>  # <attention>`` — same tokens as ``ger log``, with no padding at the end."""
+    parts = [f"commit {color_short_sha(commit.short_sha)}", fmt_patchset_column(commit)]
     if commit.pushed:
-        verified = fmt_verified(commit.verified)
-        cr = fmt_code_review(commit.code_review)
-        comments = fmt_comments(commit.comments_unresolved)
-    else:
-        verified = "   "
-        cr = "    "
-        comments = "   "
-    base = f"commit {sha} {push} {verified} {cr} {comments}"
+        # A column's own padding (``v? ``) lines rows up in ger log; a headline stands alone.
+        v, cr = verified_token(commit.verified), code_review_token(commit.code_review)
+        parts += [color_text(v.strip(), _VERIFIED_COLOR.get(v, ANSI_DIM))]
+        parts += [color_text(cr.strip(), _CODE_REVIEW_COLOR.get(cr, ANSI_DIM))]
+        if commit.comments_unresolved > 0:
+            parts.append(fmt_comments(commit.comments_unresolved))
+    base = " ".join(parts)
     suffix = attention_suffix(commit)
-    if suffix:
-        return f"{base}  {suffix}"
-    return base
+    return f"{base}  {suffix}" if suffix else base
 
 
 def oneline_line(
@@ -357,3 +367,25 @@ def oneline_line(
             return f"{body}{' ' * pad}{url_text}"
         return f"{body}  {url_text}"
     return body
+
+
+def fit_subjects(commits: list[LogCommit], width: int, *, show_url: bool) -> list[LogCommit]:
+    """*commits* with each subject cut (``…``) so its row, hints and URL included, fits *width* columns.
+
+    Hints line up in one column and URLs in another, so a row leaves room for the widest of each.
+    A row without hints may use theirs.
+    """
+    if not commits:
+        return commits
+    prefix = max(visible_len(primary_line_prefix(c)) for c in commits)
+    hints = max((visible_len(attention_suffix(c)) + 2 for c in commits if attention_tokens(c)), default=0)
+    url = max(
+        (visible_len(format_link(c.gerrit_url)) + 2 for c in commits if show_url and c.gerrit_url),
+        default=0,
+    )
+    fitted: list[LogCommit] = []
+    for commit in commits:
+        room = max(width - prefix - url - (hints if attention_tokens(commit) else 0), MIN_SUBJECT_WIDTH)
+        cut = truncate(commit.summary, room)
+        fitted.append(replace(commit, summary=cut) if cut != commit.summary else commit)
+    return fitted

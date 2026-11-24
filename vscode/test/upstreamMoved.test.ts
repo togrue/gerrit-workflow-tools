@@ -59,7 +59,7 @@ test("the button runs core's one command, and the tooltip says what the rebase d
   const dropped = [{ sha: commits[0].sha, summary: "Refactor parser init" }];
   const row = upstreamRow(stack(commits, { upstream: moved({ argv: ["rebase", "origin/main", "--drop-merged-equivalent"], dropped }) }));
   assert.match(row?.actions?.[0].title ?? "", /^ger rebase origin\/main --drop-merged-equivalent, in the ger terminal/);
-  assert.match(row?.tooltip ?? "", /1 commit is already upstream and dropped\./);
+  assert.match(row?.tooltip ?? "", /1 commit is already upstream and will be dropped\./);
 });
 
 test("where the preview could not tell, the row says nothing of conflicts, and the tooltip gives core's reason", () => {

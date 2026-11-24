@@ -1,6 +1,8 @@
-"""Human and Markdown rendering for Gerrit inline comment chains."""
+"""Human rendering for Gerrit inline comment chains, and the words both views share (``comments_markdown``)."""
 
 from __future__ import annotations
+
+from datetime import datetime, timezone
 
 from gerrit_workflow_tools.core.comment_chains import CommentSelection
 from gerrit_workflow_tools.core.gerrit.rest import printable_path
@@ -10,7 +12,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     InlineComment,
     gerrit_inline_comment_url,
 )
-from gerrit_workflow_tools.core.suggested_edits import SuggestedEdit
+from gerrit_workflow_tools.core.review_chain import format_age
 from gerrit_workflow_tools.render.style import (
     ANSI_BLUE,
     ANSI_BOLD,
@@ -23,7 +25,7 @@ from gerrit_workflow_tools.render.style import (
     format_link,
     visible_len,
 )
-from gerrit_workflow_tools.render.suggested_fixes import fix_rows, fixes_markdown
+from gerrit_workflow_tools.render.suggested_fixes import fix_rows
 from gerrit_workflow_tools.render.wrap import fit_header, wrap_lines
 
 
@@ -31,15 +33,52 @@ from gerrit_workflow_tools.render.wrap import fit_header, wrap_lines
 _MIN_BOX_INNER = 40
 _BOX_INDENT = "    "
 _DEFAULT_WRAP_WIDTH = 120
-# ``│ `` before the row, so a row of `width` needs this many extra columns in the span.
-_ROW_TO_INNER = 1
+# ``│ `` before the row and a space before the closing ``│``: a row of `width` needs this many more in the span.
+_ROW_TO_INNER = 2
 # Top border is ``─ {heading} ─`` plus one trailing dash: 4 characters around the heading.
 _HEADING_CHROME = 4
+# A box is at most this wide, indent and borders included, however wide the terminal.
+BOX_MAX_COLUMNS = 100
+# What a box adds around its rows: the indent, ``│ `` and `` │``.
+BOX_CHROME = len("    ") + 4
+
+
+def box_width(wrap_width: int, terminal: int | None) -> int:
+    """The width a box wraps its rows to: the terminal's, at most :data:`BOX_MAX_COLUMNS`, within *wrap_width*."""
+    columns = min(terminal or BOX_MAX_COLUMNS, BOX_MAX_COLUMNS)
+    return max(_MIN_BOX_INNER - _ROW_TO_INNER, min(wrap_width, columns - BOX_CHROME))
+
+
+def comment_meta(comment: InlineComment, *, now: datetime | None = None) -> str:
+    """``PS1 · 2h ago``: which patchset it is on and how old it is; empty when neither is known."""
+    parts = [f"PS{comment.patch_set}"] if comment.patch_set else []
+    if comment.updated is not None:
+        age = ((now or datetime.now(timezone.utc)) - comment.updated).total_seconds()
+        parts.append(f"{format_age(int(age))} ago")
+    return " · ".join(parts)
+
+
+def _with_meta(label: str, comment: InlineComment) -> str:
+    meta = comment_meta(comment)
+    return f"{label} · {meta}" if meta else label
+
+
+# Gerrit's names for what is not a file, as a person reads them.
+SPECIAL_PATHS = {
+    "/PATCHSET_LEVEL": "Patchset-level comment",
+    "/COMMIT_MSG": "Commit message",
+    "/MERGE_LIST": "Merge list",
+}
 
 
 def chain_location(chain: CommentChain) -> str:
-    """``path:line`` when a line is known, ``path:start-end`` for a range, otherwise just the path."""
-    path = printable_path(chain.path)
+    """``path:line`` when a line is known, ``path:start-end`` for a range, otherwise just the path.
+
+    Gerrit's special paths are named in words: ``Patchset-level comment``, ``Commit message:12``.
+    """
+    if chain.path == "/PATCHSET_LEVEL":
+        return SPECIAL_PATHS[chain.path]
+    path = SPECIAL_PATHS.get(chain.path) or printable_path(chain.path)
     if chain.start_line is not None and chain.start_line != chain.line:
         return f"{path}:{chain.start_line}-{chain.line}"
     if chain.line is not None:
@@ -49,7 +88,6 @@ def chain_location(chain: CommentChain) -> str:
 
 # How a local comment is headed, human and Markdown.
 LOCAL_LABELS = {"note": "note (private)", "local-draft": "local draft (not on Gerrit)"}
-_LOCAL_LABELS_MARKDOWN = {"note": "Note (private)", "local-draft": "Local draft (not on Gerrit)"}
 
 
 def anchor_suffix(chain: CommentChain) -> str:
@@ -75,7 +113,7 @@ def chain_heading(chain: CommentChain) -> str:
     return loc
 
 
-def _chain_url(chain: CommentChain, gerrit_url: str | None) -> str | None:
+def chain_url(chain: CommentChain, gerrit_url: str | None) -> str | None:
     """The chain's Gerrit URL; a local chain has none."""
     if chain.local:
         return None
@@ -124,11 +162,11 @@ def _pad_inner(text: str, inner_width: int) -> str:
     return f"{text}{' ' * pad}"
 
 
-def _format_context_line(line: ContextLine) -> str:
+def format_context_line(line: ContextLine) -> str:
     return f"{line.line_number:>4}  {line.text}"
 
 
-def _chain_context_lines(chain: CommentChain) -> tuple[ContextLine, ...]:
+def chain_context_lines(chain: CommentChain) -> tuple[ContextLine, ...]:
     if chain.anchor is not None and chain.anchor.outdated and chain.anchor.text:
         # The lines it was written on are gone from this version: show them as they were.
         return chain.anchor.context_lines
@@ -154,14 +192,14 @@ def _box_content_rows(
 ) -> list[str]:
     """Inner lines of a comment box (no borders).
 
-    Comment text, authors, and context lines are wrapped to *width*. The chain
-    URL is left whole so it stays copyable, and may widen the box by itself.
+    Comment text, authors, and context lines are wrapped to *width*. The chain URL is not
+    among them (:func:`_url_row`).
     """
     rows: list[str] = []
-    context = _chain_context_lines(chain)
+    context = chain_context_lines(chain)
     if context:
         for line in context:
-            for part in wrap_lines(_format_context_line(line), width):
+            for part in wrap_lines(format_context_line(line), width):
                 rows.append(color_text(part, ANSI_DIM))
         rows.append("")
     for row_item in chain.comments:
@@ -171,13 +209,12 @@ def _box_content_rows(
                 rows.extend(color_text(part, ANSI_CYAN) for part in _prefixed_wrap(ln, width, prefix="  "))
             continue
         if row_item.draft:
-            rows.append(color_text(draft_label(chain, row_item), ANSI_BOLD + ANSI_BLUE))
+            rows.append(color_text(_with_meta(draft_label(chain, row_item), row_item), ANSI_BOLD + ANSI_BLUE))
             for ln in row_item.message.splitlines() or [""]:
                 rows.extend(color_text(part, ANSI_BLUE) for part in _prefixed_wrap(ln, width, prefix="  "))
         else:
-            if row_item.author:
-                for part in wrap_lines(row_item.author, width):
-                    rows.append(color_text(part, ANSI_DIM))
+            for part in wrap_lines(_with_meta(row_item.author or "anonymous", row_item), width):
+                rows.append(color_text(part, ANSI_DIM))
             for ln in row_item.message.splitlines() or [""]:
                 rows.extend(_prefixed_wrap(ln, width, prefix="  "))
         for fix in fix_rows(row_item.suggested_edits):
@@ -185,10 +222,15 @@ def _box_content_rows(
                 prefix = f"  {indent}"
                 parts = _prefixed_wrap(text, width, prefix=prefix) if wraps else [f"{prefix}{text}"]
                 rows.extend(color_text(part, ANSI_GREEN) for part in parts)
-    chain_url = _chain_url(chain, gerrit_url)
-    if chain_url:
-        rows.append(f"{color_text('url:', ANSI_DIM)} {color_text(format_link(chain_url), ANSI_YELLOW)}")
     return rows
+
+
+def _url_row(chain: CommentChain, gerrit_url: str | None, *, label: bool = True) -> str | None:
+    url = chain_url(chain, gerrit_url)
+    if not url:
+        return None
+    link = color_text(format_link(url), ANSI_YELLOW)
+    return f"{color_text('url:', ANSI_DIM)} {link}" if label else link
 
 
 def format_comment_chain_human(
@@ -196,93 +238,45 @@ def format_comment_chain_human(
     gerrit_url: str | None,
     *,
     width: int = _DEFAULT_WRAP_WIDTH,
+    min_inner: int = 0,
 ) -> list[str]:
-    """Return human-readable lines for one comment chain in a rounded box.
+    """Return human-readable lines for one comment chain in a rounded box, at least *min_inner* wide inside.
 
-    Unresolved chains use a yellow border; resolved chains use grey and a
-    ``(resolved)`` header so the state survives ``--color=never``.
+    The top border names where it is and, on the right, the id ``ger reply`` takes. Unresolved
+    chains use a yellow border; resolved chains use grey and a ``(resolved)`` header so the state
+    survives ``--color=never``.
     """
-    heading = fit_header(chain_heading(chain), max(1, width - _HEADING_CHROME))
-    loc_styled = color_text(heading, ANSI_BOLD + ANSI_CYAN)
+    chain_id = chain.root_id or ""
+    id_chrome = len(chain_id) + 3 if chain_id else 0  # `` {id} ─``
+    heading = fit_header(chain_heading(chain), max(1, width - _HEADING_CHROME - id_chrome))
     rows = _box_content_rows(chain, gerrit_url, width=width)
     resolved = chain.resolved
+    # The URL stays whole, to be copied: in the box when it fits, else on its own line below it.
+    url = _url_row(chain, gerrit_url)
+    url_inside = url is not None and visible_len(url) <= width
+    if url is not None and url_inside:
+        rows.append(url)
 
-    # Top mid is ``─ {heading} ─…`` (3 fixed chars around heading). Content lines
-    # use ``│ `` + row, so row width needs +1 vs the inner span between corners.
-    # A long chain URL is the only row allowed to push the box past *width*.
+    def border(text: str) -> str:
+        return _box_border(text, resolved=resolved)
+
     inner_width = max(
+        min_inner,
         min(_MIN_BOX_INNER, width),
-        _HEADING_CHROME + visible_len(heading),
+        _HEADING_CHROME + visible_len(heading) + id_chrome,
         *(_ROW_TO_INNER + visible_len(r) for r in rows),
     )
-    dashes = max(1, inner_width - 3 - visible_len(heading))
-    top_mid = f"{_box_border('─', resolved=resolved)} {loc_styled} {_box_border('─' * dashes, resolved=resolved)}"
-    top_line = f"{_BOX_INDENT}{_box_border('╭', resolved=resolved)}{top_mid}{_box_border('╮', resolved=resolved)}"
-    bottom_line = (
-        f"{_BOX_INDENT}{_box_border('╰', resolved=resolved)}"
-        f"{_box_border('─' * inner_width, resolved=resolved)}"
-        f"{_box_border('╯', resolved=resolved)}"
-    )
-
-    lines: list[str] = [top_line]
-    content_width = max(1, inner_width - 1)
-    for row in rows:
-        lines.append(
-            f"{_BOX_INDENT}{_box_border('│', resolved=resolved)} "
-            f"{_pad_inner(row, content_width)}"
-            f"{_box_border('│', resolved=resolved)}"
-        )
-    lines.append(bottom_line)
+    dashes = max(1, inner_width - 3 - visible_len(heading) - id_chrome)
+    top_mid = f"{border('─')} {color_text(heading, ANSI_BOLD + ANSI_CYAN)} {border('─' * dashes)}"
+    if chain_id:
+        top_mid += f" {color_text(chain_id, ANSI_DIM)} {border('─')}"
+    lines = [f"{_BOX_INDENT}{border('╭')}{top_mid}{border('╮')}"]
+    content_width = max(1, inner_width - _ROW_TO_INNER)
+    lines += [f"{_BOX_INDENT}{border('│')} {_pad_inner(row, content_width)} {border('│')}" for row in rows]
+    lines.append(f"{_BOX_INDENT}{border('╰')}{border('─' * inner_width)}{border('╯')}")
+    if not url_inside and (bare := _url_row(chain, gerrit_url, label=False)):
+        lines.append(f"{_BOX_INDENT}{bare}")
     return lines
-
-
-def format_comment_chain_markdown(
-    chain: CommentChain,
-    gerrit_url: str | None,
-) -> list[str]:
-    """Return Markdown lines for one comment chain (full bodies, no ANSI)."""
-    loc = chain_location(chain)
-    heading = f"### `{loc}`{anchor_suffix(chain)}"
-    if chain.resolved:
-        heading = f"{heading} (resolved)"
-    lines: list[str] = [heading]
-    chain_url = _chain_url(chain, gerrit_url)
-    if chain_url:
-        lines.append(chain_url)
-        lines.append("")
-
-    context = _chain_context_lines(chain)
-    if context:
-        lines.append("```")
-        for line in context:
-            lines.append(_format_context_line(line))
-        lines.append("```")
-        lines.append("")
-
-    for row_item in chain.comments:
-        if row_item.local is not None:
-            lines.append(f"**{_LOCAL_LABELS_MARKDOWN[row_item.local]}**")
-        elif row_item.draft:
-            lines.append(f"**{draft_label(chain, row_item, label='Draft reply (unpublished)')}**")
-        else:
-            lines.append(f"**{row_item.author or 'anonymous'}**")
-        body = row_item.message.rstrip("\n")
-        if body:
-            for ln in body.splitlines() or [""]:
-                lines.append(f"> {ln}" if ln else ">")
-        else:
-            lines.append(">")
-        lines.extend(_fix_suggestions_markdown(row_item.suggested_edits))
-        lines.append("")
-    # Drop the trailing blank between chains; caller adds separation.
-    if lines and lines[-1] == "":
-        lines.pop()
-    return lines
-
-
-def _fix_suggestions_markdown(edits: tuple[SuggestedEdit, ...]) -> list[str]:
-    """The Gerrit fix suggestions in *edits*, quoted under the comment, each replacement fenced."""
-    return [line for fix in fixes_markdown(edits) for line in (">", *(f"> {text}".rstrip() for text in fix))]
 
 
 def format_unresolved_section_human(
@@ -299,10 +293,12 @@ def format_unresolved_section_human(
     del pushed
     if not chains:
         return []
-    out: list[str] = []
-    for chain in chains:
-        out.extend(format_comment_chain_human(chain, gerrit_url, width=width))
-    return out
+    # One width for every box of a commit, so they line up: the widest one's.
+    boxes = [format_comment_chain_human(chain, gerrit_url, width=width) for chain in chains]
+    inner = max(visible_len(box[0]) for box in boxes) - len(_BOX_INDENT) - 2
+    return [
+        line for chain in chains for line in format_comment_chain_human(chain, gerrit_url, width=width, min_inner=inner)
+    ]
 
 
 def empty_comments_message(comments: CommentSelection) -> str:
@@ -312,41 +308,3 @@ def empty_comments_message(comments: CommentSelection) -> str:
     if comments == "all":
         return "(no comments)"
     return "(no unresolved comments)"
-
-
-def format_unresolved_section_markdown(
-    chains: list[CommentChain],
-    gerrit_url: str | None,
-    *,
-    pushed: bool,
-    comments: CommentSelection = "unresolved",
-) -> list[str]:
-    """Markdown comment blocks (full bodies), split by resolved state when needed."""
-    if not pushed and not chains:
-        return ["### Unresolved comments", "", "(not on Gerrit — no comments)"]
-    if not chains:
-        heading = "### Resolved comments" if comments == "resolved" else "### Unresolved comments"
-        if comments == "all":
-            heading = "### Comments"
-        return [heading, "", empty_comments_message(comments)]
-
-    unresolved = [chain for chain in chains if not chain.resolved]
-    resolved = [chain for chain in chains if chain.resolved]
-    out: list[str] = []
-    if unresolved:
-        out.append("### Unresolved comments")
-        out.append("")
-        for i, chain in enumerate(unresolved):
-            out.extend(format_comment_chain_markdown(chain, gerrit_url))
-            if i < len(unresolved) - 1:
-                out.append("")
-    if resolved:
-        if out:
-            out.append("")
-        out.append("### Resolved comments")
-        out.append("")
-        for i, chain in enumerate(resolved):
-            out.extend(format_comment_chain_markdown(chain, gerrit_url))
-            if i < len(resolved) - 1:
-                out.append("")
-    return out

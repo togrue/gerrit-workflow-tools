@@ -8,7 +8,7 @@ User guide for the default text output of `ger log`. For flags, JSON schema, and
 
 One line per **local commit** in your stack (default range: `branch@{upstream}..branch`). Each line compares that commit to its Gerrit change: patchset alignment, CI, code review votes, and unresolved comments.
 
-At the bottom, a **summary** line counts ready commits and outstanding issues.
+At the bottom, a **summary** line counts what a push would upload and what needs you, then `next:` lines name the command for each state the stack is in.
 
 When the **ready boundary** falls inside the stack, a plain line marks it, readable without
 colour (piped output, `NO_COLOR`):
@@ -35,10 +35,12 @@ Example (columns spaced for readability; actual output aligns columns across row
 a1b2c3d4 p  v+1 cr+2      # Add widget API               # submittable
 e5f6g7h8 n  v?  cr?       # Fix edge case in parser      # ahead of gerrit
 i9j0k1l2 p  v-1 cr+1 com  # Handle timeout               # build failed, 1 unresolved comment
-m3n4o5p6 -                # WIP: experiment              # not-pushed
+m3n4o5p6 -                # WIP: experiment              # not pushed
 ```
 
 When the terminal supports OSC 8 hyperlinks (`--hyperlinks auto`, or `--hyperlinks always`), a clickable `Open in gerrit` appears at the end of the primary line. The label is short enough to keep on by default. Without hyperlinks, the raw address appears only with `--url` or `ger.logShowUrl`. JSON still includes the full `gerrit_url`. Use `--hyperlinks never` to keep a copyable URL (with `--url`) or to omit the link.
+
+On a terminal, each row fits its width: a subject too long for it is cut with `…` so the row, its `# …` hints included, stays on one line; the `next:` lines below the summary wrap between words, never inside a `` `command` ``. Piped output (`ger log | grep …`) is never cut.
 
 With `--show-change-id` (or `-vv`), the full Change-Id appears on an indented continuation line below the commit — never truncated, and never on the primary line.
 
@@ -48,7 +50,7 @@ With `--show-change-id` (or `-vv`), the full Change-Id appears on an indented co
 
 ### Patchset (`p`, `n`, `o`, `-`, …)
 
-Single letter: is this local commit aligned with Gerrit?
+Single letter: is this local commit aligned with Gerrit? `ger log --help` lists every token in short.
 
 | Token | Meaning | Typical action |
 |-------|---------|----------------|
@@ -111,16 +113,17 @@ Right-aligned annotations summarize what needs action. Omitted when nothing stan
 | `missing Change-Id` | Commit message has no Change-Id footer; JSON reason `missing-change-id` |
 | `invalid Change-Id` | Commit message has a Change-Id footer whose value is not a valid Change-Id (`I` + 40 hex digits); JSON reason `invalid-change-id` |
 | `unsquashed fixup commit` | A `fixup!`/`squash!` commit with no Change-Id, the commit `ger push` stops at; squash it with `ger rebase --autosquash`. JSON reason `unsquashed-fixup` |
-| `not-pushed` | Commit not on Gerrit yet |
+| `not pushed` | Commit not on Gerrit yet |
 | `Gerrit state unknown` | Gerrit could not be asked; JSON reason `gerrit-unknown`. `ger log` exits `5` |
 | `build failed` | Verified −1 or named CI failure |
 | `N unresolved comment(s)` | Open review threads |
 | `no reviewers` | Change has no reviewers assigned |
 | `ahead of gerrit` | Local commit is newer than Gerrit's current patch set |
-| `diverged: Gerrit has a patchset you never had` | Ahead of Gerrit, but Gerrit's current patch set was uploaded from elsewhere (a web edit, another checkout) and is not in your history; JSON reason `diverged`. `ger push` refuses to replace it; `ger checkout <change> --update` merges it into your commit |
+| `diverged from Gerrit` | Ahead of Gerrit, but Gerrit's current patch set was uploaded from elsewhere (a web edit, another checkout) and is not in your history; JSON reason `diverged`. `ger push` refuses to replace it; `ger checkout <change> --update` merges it into your commit |
 | `outdated patchset` | Gerrit has a newer patch set than this commit |
 | `review issues` | A negative Code-Review vote |
-| `chain blocked` | An earlier commit in the stack keeps this one from being submitted |
+| `awaiting review` | Only on the commit that blocks the chain: it waits for votes, and the changes above it wait for it. The last line names it: `chain blocked by 1a2b3c4 (awaiting review)`; the rows above do not repeat it. When another reason is why (`build failed`, `review issues`, …), that hint is the one, and `not submittable` when none says |
+| `merged` | The change is merged on Gerrit, or the upstream already contains the commit |
 | `WIP` | Change is work-in-progress on Gerrit; JSON reason `wip`. Replaces `no-reviewers` and `awaiting-review`. `ger push --ready` marks the changes ready again; the summary line counts them and says so |
 | `private` | Change is private on Gerrit. Information only, not an attention reason |
 | `submittable` | Gerrit reports submittable and no blocking issues above |
@@ -138,7 +141,7 @@ When color is enabled, commit subjects may be highlighted:
 - **Stop pattern** (`ger.stopPattern`) — marks the ready-boundary tail (commits excluded from default push)
 - **Warning pattern** (`ger.warningPattern`) — flags WIP-like or single-word subjects
 
-Abandoned changes show a struck-through subject.
+Abandoned changes show a struck-through subject when colour is on; without colour (piped, `NO_COLOR`) the subject is plain, so `grep` still finds it, and the `# abandoned` hint says it.
 
 Configure patterns in [Configuration.md](Configuration.md).
 
@@ -147,18 +150,22 @@ Configure patterns in [Configuration.md](Configuration.md).
 ## Summary line
 
 ```text
-summary: ready 2/6 · CI 1 · comments 1 · on-gerrit 4
+summary: 4 on Gerrit · 1 to upload · 2 held back · 1 failed CI · 1 commit with comments
+next: 1 commit to upload with `ger push`
+chain blocked by 1a2b3c4 (build failed)
 ```
 
 | Part | Meaning |
 |------|---------|
-| `ready N/M` | **N** commits sit below the ready boundary, the ones `ger push` would send; **M** is total commits in range |
-| `CI` | Count of commits with failed Verified / CI |
-| `comments` | Count of commits with unresolved comments |
-| `on-gerrit` | Count of commits that exist on Gerrit |
-| `WIP` | Count of work-in-progress changes; a `next:` line below says ``ready them with `ger push --ready` `` |
+| `on Gerrit` | Open changes on Gerrit (merged and abandoned ones are counted apart) |
+| `to upload` | Commits `ger push` would upload: below the ready boundary, and new to Gerrit or ahead of it |
+| `held back` | Commits at or above the ready boundary, which `ger push` leaves out |
+| `merged` / `abandoned` | Changes Gerrit merged or abandoned |
+| `failed CI` | Commits with failed Verified / CI |
+| `commit(s) with comments` | Commits with unresolved comments (the row's hint counts the threads) |
+| `WIP` | Work-in-progress changes; a `next:` line says ``ready them with `ger push --ready` `` (`--all --ready` when one sits above the ready boundary) |
 
-Only non-zero categories after `ready` are shown.
+Only counts above zero are shown. The `next:` lines below it name the command for each state the stack is in (an abandoned change, commits to upload, the upstream moved on, …), and the last line names the commit that blocks the chain, if one does.
 
 ---
 

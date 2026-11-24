@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, ContextLine, InlineComment
-from gerrit_workflow_tools.render.comments import (
-    format_comment_chain_human,
-    format_comment_chain_markdown,
-)
+from gerrit_workflow_tools.render.comments import format_comment_chain_human
+from gerrit_workflow_tools.render.comments_markdown import format_comment_chain_markdown
 from gerrit_workflow_tools.render.style import strip_ansi
 from gerrit_workflow_tools.render.wrap import fit_header, wrap_lines
 

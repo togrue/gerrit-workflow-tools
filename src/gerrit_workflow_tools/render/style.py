@@ -17,8 +17,8 @@ ANSI_GREEN = "\033[32m"
 ANSI_RED = "\033[31m"
 ANSI_LIGHT_GREEN = "\033[92m"
 ANSI_YELLOW = "\033[33m"
-ANSI_BLUE = "\033[34m"
-"""Draft comments: unpublished, visible only to you."""
+ANSI_BLUE = "\033[94m"
+"""Draft comments: unpublished, visible only to you. Bright blue: plain blue (34) is unreadable on a dark terminal."""
 ANSI_BOLD = "\033[1m"
 ANSI_CYAN = "\033[36m"
 ANSI_DIM_GRAY = "\033[2;37m"
@@ -46,6 +46,7 @@ _FALSY = frozenset({"0", "false", "no", "off"})
 
 _COLOR_ENABLED = False
 _HYPERLINK_ENABLED = False
+_TERMINAL_WIDTH: int | None = None
 
 
 def ensure_utf8_stdio() -> None:
@@ -91,6 +92,29 @@ def init_color_mode(*, color: str = "auto") -> bool:
         enabled = _stdout_is_tty() and not os.environ.get("NO_COLOR")
     set_color_mode(enabled)
     return enabled
+
+
+def init_terminal_width(*, plain: bool = False) -> int | None:
+    """Set the run's terminal width: the columns of the terminal stdout is, ``None`` when piped or *plain*.
+
+    A view fits rows to it (truncating a subject with ``…``) only when there is one: what is piped
+    or written for a model (*plain*, ``--ai``) is never cut.
+    """
+    global _TERMINAL_WIDTH  # pylint: disable=global-statement
+    _TERMINAL_WIDTH = None if plain or not _stdout_is_tty() else shutil.get_terminal_size().columns
+    return _TERMINAL_WIDTH
+
+
+def terminal_width() -> int | None:
+    """The run's terminal width (:func:`init_terminal_width`): ``None`` when output is not cut to fit."""
+    return _TERMINAL_WIDTH
+
+
+def truncate(text: str, width: int) -> str:
+    """*text* cut to *width* characters, ending in ``…`` when it was cut."""
+    if len(text) <= width:
+        return text
+    return text[: max(width - 1, 0)].rstrip() + "…"
 
 
 def color_text(text: str, code: str) -> str:

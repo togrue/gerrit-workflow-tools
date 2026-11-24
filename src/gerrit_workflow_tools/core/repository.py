@@ -12,8 +12,8 @@ from functools import cached_property
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.stack_context import StackContext, resolve_stack_context
-from gerrit_workflow_tools.core.git_state import Worktree
+from gerrit_workflow_tools.core.gerrit.stack_context import NoWorkingBranchError, StackContext, resolve_stack_context
+from gerrit_workflow_tools.core.git_state import Worktree, rebase_underway
 
 
 class Repository:
@@ -42,6 +42,15 @@ class Repository:
     def stack_branch(self) -> str:
         """The branch whose upstream defines the stack: the working branch, else ``HEAD``."""
         return self.working_branch or "HEAD"
+
+    def require_stack_branch(self) -> str:
+        """:attr:`stack_branch` for a run that shows the stack: on a detached HEAD only while a rebase is underway.
+
+        Raises :class:`NoWorkingBranchError` on any other detached HEAD no branch points at.
+        """
+        if self.working_branch is None and not rebase_underway(self.worktree.repository_dir):
+            raise NoWorkingBranchError()
+        return self.stack_branch
 
     @cached_property
     def stack(self) -> StackContext:

@@ -234,7 +234,8 @@ The **annotated stack** of the working branch: `ger log --json`, plus per commit
 `needs_edit` (edit attention). `summary` counts `commits`, `ready`, `attention`, `needs_edit`
 and `not_on_gerrit`. `pipelines=1` adds `ci_pipelines`. When Gerrit could not be asked at all,
 the commits still come back with `patchset_status: "unknown"`, and `gerrit_unavailable` is the
-`{code, message}` saying why.
+`{code, message}` saying why. `next` is `ger log --json`'s: the stack's next steps, as
+[log.md](log.md#json-fields) describes them.
 
 For a view that draws the stack, each commit also says:
 

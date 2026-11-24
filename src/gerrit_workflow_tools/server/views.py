@@ -50,6 +50,7 @@ from gerrit_workflow_tools.render.review_json import (
 from gerrit_workflow_tools.render.show_json import (
     commit_json_payload,
     log_commit_json,
+    next_steps_json,
     rebase_json,
     rebase_steps,
     upstream_json,
@@ -146,6 +147,7 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
             "not_on_gerrit": sum(1 for c in view.commits if _NOT_ON_GERRIT.intersection(c.attention_reasons)),
         },
         "commits": commits,
+        "next": next_steps_json(overview),
         **({"gerrit_unavailable": error_json(view.gerrit_unavailable)} if view.gerrit_unavailable else {}),
     }
     return answer, rebase

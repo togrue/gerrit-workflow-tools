@@ -351,7 +351,7 @@ def test_module_size_ratchet() -> None:
 # ``# pylint: disable=too-many-*`` silences the signal that a function should be split.
 # Counts per file may only go down.
 TOO_MANY_BASELINE = {
-    "cli_log.py": 3,
+    "cli_log.py": 1,
     "cli_sha.py": 2,
     "cli_show.py": 3,
     "core/gerrit/change_view.py": 1,

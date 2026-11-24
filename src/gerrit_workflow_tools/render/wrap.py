@@ -6,6 +6,13 @@ Breaks on spaces and tabs. A token with no whitespace is sliced into
 
 from __future__ import annotations
 
+import re
+
+
+# Stands in for a space inside a `command` while wrapping, so a command is never broken.
+_KEPT_SPACE = "\ue000"
+_COMMAND_RE = re.compile(r"`[^`]*`")
+
 
 def wrap_lines(text: str, width: int) -> list[str]:
     """Split *text* into lines of at most *width* characters.
@@ -21,6 +28,20 @@ def wrap_lines(text: str, width: int) -> list[str]:
     for line in text.splitlines() or [""]:
         lines.extend(_wrap_one(line, width))
     return lines or [""]
+
+
+def wrap_hanging(text: str, width: int, *, indent: int) -> list[str]:
+    """*text* (one line) wrapped to *width*, each line after the first indented by *indent* spaces.
+
+    A `command` in backticks is kept on one line, so it can be copied whole.
+    """
+    kept = _COMMAND_RE.sub(lambda m: m.group(0).replace(" ", _KEPT_SPACE), text)
+    first = _wrap_one(kept, width)[0]
+    rest = kept[len(first) :].lstrip(" \t")
+    lines = [first]
+    if rest:
+        lines += [" " * indent + line for line in _wrap_one(rest, max(width - indent, 1))]
+    return [line.replace(_KEPT_SPACE, " ") for line in lines]
 
 
 def fit_header(text: str, width: int) -> str:

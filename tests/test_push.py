@@ -642,7 +642,7 @@ def test_gpush_forgets_changes_that_were_cached_as_missing(stack_repo: Path, mon
     """A change that did not exist before the push is visible right after it, without ``ger cache clear``."""
     commits = commits_in_range(stack_repo, "main..feature")[:2]
     code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore({}))
-    assert "not-pushed" in out
+    assert "not pushed" in out
 
     pushed = ChangeStore(build_details_by_change_id(commits))
     mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""))
@@ -651,7 +651,7 @@ def test_gpush_forgets_changes_that_were_cached_as_missing(stack_repo: Path, mon
     assert code == 0
 
     _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=pushed)
-    assert out.count("not-pushed") == 2 and "on-gerrit 2" in out
+    assert out.count("not pushed") == 2 and "2 on Gerrit" in out
 
 
 def test_gpush_reviewer_failure_is_a_warning_and_still_records_the_push(
@@ -1305,7 +1305,7 @@ def test_glog_names_a_diverged_commit(stack_repo: Path, monkeypatch: pytest.Monk
     first["current_revision"], first["revisions"] = elsewhere, {elsewhere: {"_number": 2}}
     _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=ChangeStore(details))
     line = next(line for line in out.splitlines() if line.startswith(rows[0].short_sha))
-    assert "diverged: Gerrit has a patchset you never had" in line
+    assert "diverged from Gerrit" in line
     assert "ahead of gerrit" not in line
 
 

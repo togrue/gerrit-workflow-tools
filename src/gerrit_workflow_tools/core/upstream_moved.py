@@ -67,7 +67,7 @@ class UpstreamMoved:
             where = f" in {', '.join(hit.files)}" if hit.files else ""
             stop = f'; "{hit.commit.subject}" would conflict{where}'
         n = len(self.dropped)
-        dropped = f"; {n} commit{' is' if n == 1 else 's are'} already upstream and dropped" if n else ""
+        dropped = f"; {n} commit{' is' if n == 1 else 's are'} already upstream and will be dropped" if n else ""
         return f"{said}; rebase onto it with `ger {' '.join(self.argv)}`{stop}{dropped}"
 
 

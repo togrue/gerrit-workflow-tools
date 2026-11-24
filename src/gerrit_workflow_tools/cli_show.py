@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from gerrit_workflow_tools.cli_attention import add_attention_query_args, show_revs_with_attention
@@ -20,19 +21,21 @@ from gerrit_workflow_tools.cli_common import (
     run_cli_command,
 )
 from gerrit_workflow_tools.cli_notes import print_resolution_note
-from gerrit_workflow_tools.core.ci_content import CiContent
+from gerrit_workflow_tools.core.annotated_targets import local_stack_or_none
+from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.ci_content_service import CiContentService
 from gerrit_workflow_tools.core.ci_http import CiHttp
 from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS, CommentSelection
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit
-from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
-from gerrit_workflow_tools.core.stack import get_stack_snapshot, read_commit_meta
-from gerrit_workflow_tools.core.upstream import branch_has_upstream
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
+from gerrit_workflow_tools.core.gerrit_show import ShownCommit, load_shown_commits, resolve_show_targets
+from gerrit_workflow_tools.core.review_chain import format_age
+from gerrit_workflow_tools.core.stack import read_commit_meta
 from gerrit_workflow_tools.render.ci_content import format_ci_section_human
 from gerrit_workflow_tools.render.comments import (
+    box_width,
     empty_comments_message,
     format_unresolved_section_human,
 )
@@ -40,7 +43,8 @@ from gerrit_workflow_tools.render.commit_row import attention_summary, continuat
 from gerrit_workflow_tools.render.download_meter import DownloadMeter
 from gerrit_workflow_tools.render.show_json import commit_json_payload
 from gerrit_workflow_tools.render.show_markdown import commit_markdown
-from gerrit_workflow_tools.render.style import ANSI_DIM, ANSI_YELLOW, color_text, format_link
+from gerrit_workflow_tools.render.status_fmt import chain_blocked_text
+from gerrit_workflow_tools.render.style import ANSI_DIM, ANSI_YELLOW, color_text, format_link, terminal_width
 from gerrit_workflow_tools.render.wrap import wrap_lines
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, run_summary_highlighter
 from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
@@ -75,6 +79,15 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="ger show",
         description="Show commit(s) and Gerrit status (labels, comments, CI).",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""examples:
+  ger show                  HEAD: votes, attention and unresolved comments (with their ids)
+  ger show HEAD~1 --context a commit, with the code around each comment
+  ger show change:1234      a change by number, whether or not you have it locally
+  ger show --stack          every commit of the local stack
+  ger reply ID --done       answer a comment by the id ger show prints
+
+The status columns are those of ger log (see ger log --help).""",
     )
     p.add_argument(
         "revs",
@@ -150,26 +163,26 @@ def _print_wrapped_body(
 
 def _emit_human_commit(
     cwd: Path | str | None,
-    commit: LogCommit,
+    item: ShownCommit,
     *,
-    is_local: bool,
-    chains: list[CommentChain],
-    ci_contents: list[CiContent] | None,
     summary_highlighter: SummaryHighlighter,
     wrap_width: int,
 ) -> None:
+    commit, chains, ci_contents = item.commit, item.chains, item.ci_contents
+    is_local = item.target.is_local_commit
     print(show_headline(commit))
-    if commit.attention_reasons:
-        print(color_text(attention_summary(commit), ANSI_DIM))
+    # A blocked commit names its blocker on a line of its own, so the reasons need not say chain-blocked too.
+    said = frozenset({Attention.CHAIN_BLOCKED}) if item.blocked_by is not None else frozenset()
+    if commit.attention_reasons and (summary := attention_summary(commit, leave_out=said)):
+        print(color_text(summary, ANSI_DIM))
+    if item.blocked_by is not None:
+        print(color_text(chain_blocked_text(item.blocked_by), ANSI_DIM))
 
     body = ""
     if is_local and commit.sha:
         meta_row = read_commit_meta(cwd, commit.sha)
         body = meta_row.body
-        meta = f"Author: {meta_row.author_line}"
-        if meta_row.date:
-            meta = f"{meta} [{meta_row.date}]"
-        print(meta)
+        print(f"Author: {meta_row.author_line}{_when(meta_row.date)}")
 
     if commit.gerrit_url:
         print(f"{color_text('url:', ANSI_DIM)} {color_text(format_link(commit.gerrit_url), ANSI_YELLOW)}")
@@ -197,12 +210,22 @@ def _emit_human_commit(
         chains,
         commit.gerrit_url,
         pushed=commit.pushed,
-        width=wrap_width,
+        width=box_width(wrap_width, terminal_width()),
     )
     if comment_lines:
         print()
         for line in comment_lines:
             print(line)
+
+
+def _when(iso_date: str) -> str:
+    """``, 3h ago (2026-11-24 04:39)`` for an ISO author date; empty when there is none."""
+    try:
+        when = datetime.fromisoformat(iso_date)
+    except ValueError:
+        return f", {iso_date}" if iso_date else ""
+    age = format_age(int((datetime.now(timezone.utc) - when).total_seconds()))
+    return f", {age} ago ({when:%Y-%m-%d %H:%M})"
 
 
 def _emit_brief_commit(commit: LogCommit, *, comments: CommentSelection) -> None:
@@ -265,6 +288,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
         ci = CiContentService.from_settings(
             cwd, settings, web_base=service.web_base, http=ci_http, refresh=service.refresh, progress=meter
         )
+    snap = local_stack_or_none(cwd, branch, settings=settings) if any(t.is_local_commit for t in targets) else None
     try:
         shown = load_shown_commits(
             targets,
@@ -273,17 +297,17 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
             context_padding=_requested_context_padding(args),
             fetch_ci_pipelines=verbose_level >= 1,
             ci=ci,
+            stack=snap,
         )
     finally:
         meter.close()
 
-    if any(t.is_local_commit for t in targets) and branch is not None and branch_has_upstream(cwd, branch):
+    if snap is not None and branch is not None:
         try:
             stack = resolve_stack_context(cwd, branch, settings=settings)
         except ChangeResolutionError:
             pass
         else:
-            snap = get_stack_snapshot(cwd, branch, first_parent=True, settings=settings)
             summary_highlighter = run_summary_highlighter(run, commits=list(snap.commits), project=stack.project)
 
     json_payloads: list[dict[str, object]] = []
@@ -303,7 +327,10 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
             )
         else:
             if out_fmt == "markdown":
-                for line in commit_markdown(commit, chains=chains, ci_contents=ci_contents, comments=args.comments):
+                markdown = commit_markdown(
+                    commit, chains=chains, ci_contents=ci_contents, comments=args.comments, blocked_by=item.blocked_by
+                )
+                for line in markdown:
                     print(line)
                 print()
                 continue
@@ -312,15 +339,7 @@ def _run(  # pylint: disable=too-many-branches,too-many-locals,too-many-statemen
             if multi and not chains and not ci_contents:
                 _emit_brief_commit(commit, comments=args.comments)
                 continue
-            _emit_human_commit(
-                cwd,
-                commit,
-                is_local=resolved.is_local_commit,
-                chains=chains,
-                ci_contents=ci_contents,
-                summary_highlighter=summary_highlighter,
-                wrap_width=settings.wrap_width,
-            )
+            _emit_human_commit(cwd, item, summary_highlighter=summary_highlighter, wrap_width=settings.wrap_width)
 
     if out_fmt == "json":
         if len(json_payloads) == 1:

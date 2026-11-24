@@ -78,6 +78,7 @@ def _context_lines_from_raw(comment: dict[str, Any]) -> tuple[ContextLine, ...]:
 
 
 def _inline_comment_from_raw(path: str, comment: dict[str, Any], *, draft: bool = False) -> InlineComment:
+    from gerrit_workflow_tools.core.gerrit.change_view import parse_gerrit_time
     from gerrit_workflow_tools.core.reviewer import format_gerrit_account_label
 
     raw_msg = comment.get("message")
@@ -99,6 +100,7 @@ def _inline_comment_from_raw(path: str, comment: dict[str, Any], *, draft: bool 
         unresolved=comment.get("unresolved") is True,
         draft=draft,
         suggested_edits=suggested_edits_from_raw(path, comment, start_line=_comment_start_line(comment), line=line),
+        updated=parse_gerrit_time(comment.get("updated")),
     )
 
 

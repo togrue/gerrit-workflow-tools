@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -77,6 +78,8 @@ class InlineComment:
     """Set for a note or local draft: it is in the local comment store, not on Gerrit."""
     suggested_edits: tuple[SuggestedEdit, ...] = ()
     """Edits the comment suggests: Gerrit fix suggestions and ``suggestion`` blocks of its text."""
+    updated: datetime | None = None
+    """When it was written or last edited (Gerrit's ``updated``, UTC); ``None`` for a local comment."""
 
     @property
     def state(self) -> CommentState:
@@ -194,6 +197,9 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     invalid_footer: str | None = None
     """The **footer value** when the commit has one that is not a valid **Change-Id** (``change_id``
     is then ``None``): what lets attention call the footer invalid rather than missing."""
+    blocks_chain: bool = False
+    """The first commit that holds the changes above it back (they carry ``chain-blocked``):
+    attention's verdict, and :func:`core.attention.blocking_reason` says why."""
 
 
 def overlay_code_facts(cwd: Path | str | None, pairs: Iterable[tuple[Commit, ChangeView | None]]) -> CodeFacts:

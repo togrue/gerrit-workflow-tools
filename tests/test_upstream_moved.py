@@ -210,7 +210,7 @@ def test_a_commit_already_upstream_is_left_out_as_git_rebase_leaves_it_out(stack
     assert moved is not None and moved.preview
     assert moved.conflict is None
     assert [c.subject for c in moved.dropped] == ["Refactor parser init"]
-    assert moved.advice().endswith("; 1 commit is already upstream and dropped")
+    assert moved.advice().endswith("; 1 commit is already upstream and will be dropped")
     assert _rebase_i(stack_repo) == 0, "the rebase it previews goes through"
 
 
@@ -294,7 +294,7 @@ def test_a_commit_merged_on_gerrit_is_dropped_by_the_one_rebase_ger_log_names(
     commands = [line for line in out.splitlines() if "`ger rebase" in line]
     assert commands == [
         "next: origin/main has 1 new commit; rebase onto it with "
-        "`ger rebase origin/main --drop-merged-equivalent`; 1 commit is already upstream and dropped"
+        "`ger rebase origin/main --drop-merged-equivalent`; 1 commit is already upstream and will be dropped"
     ], out
     # What that command runs: the todo with the merged commit dropped (as the enricher drops it), onto origin/main.
     assert _rebase_i(web_stack_repo, todo=f"sed -i 's/^pick {rows[0].short_sha}/drop {rows[0].short_sha}/'") == 0

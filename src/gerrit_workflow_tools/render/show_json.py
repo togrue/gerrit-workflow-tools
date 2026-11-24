@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from gerrit_workflow_tools.core.annotated_stack import AnnotatedStack
-from gerrit_workflow_tools.core.attention import attention_severity
+from gerrit_workflow_tools.core.annotated_stack import AnnotatedStack, NextStepKind, StackOverview
+from gerrit_workflow_tools.core.attention import attention_severity, blocking_reason
 from gerrit_workflow_tools.core.ci_content import CiContent
 from gerrit_workflow_tools.core.comment_write import ChangedComment, WrittenComment
 from gerrit_workflow_tools.core.gerrit_change_status import (
@@ -117,6 +117,7 @@ def log_commit_json(commit: LogCommit) -> dict[str, object]:
         "severity": attention_severity(commit.attention_reasons).value,
         "change_status": commit.change_status,
         "merged_equivalent": commit.merged_equivalent,
+        "blocks_chain": commit.blocks_chain,
     }
 
 
@@ -227,3 +228,16 @@ def rebase_steps(stack: AnnotatedStack) -> list[str | None]:
     if stack.rebase is None:
         return [None] * len(stack.commits)
     return [step.value if step else None for step in stack.rebase.steps]
+
+
+def next_steps_json(overview: StackOverview) -> list[dict[str, object]]:
+    """The stack's next steps (``StackOverview.next_steps``), as ``ger log --json`` and ``GET /stack`` serve them."""
+    return [
+        {
+            "kind": step.kind.value,
+            "shas": [c.sha for c in step.commits],
+            "beyond_boundary": step.beyond_boundary,
+            "reason": blocking_reason(step.commits[0]) if step.kind is NextStepKind.CHAIN_BLOCKED else None,
+        }
+        for step in overview.next_steps()
+    ]
