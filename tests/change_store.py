@@ -507,13 +507,6 @@ class ChangeStore:
         self._record("get_change", change_id)
         return shape_change_info(self._unique_row_or_raise(change_id), LOG_QUERY_OPTIONS)
 
-    commit_msg_hook = "#!/bin/sh\n# Gerrit's commit-msg hook, as ChangeStore serves it\n"
-
-    def get_commit_msg_hook(self) -> str:
-        """Return the ``commit-msg`` hook script (:attr:`commit_msg_hook`)."""
-        self._record("get_commit_msg_hook")
-        return self.commit_msg_hook
-
     def get_account(self, account_id: int | str) -> dict[str, Any]:
         """Return AccountInfo detail for one account."""
         self._record("get_account", account_id)

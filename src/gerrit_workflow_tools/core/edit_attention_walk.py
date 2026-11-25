@@ -40,22 +40,19 @@ from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.words import counted
 
 
-_NO_EDIT_ATTENTION = "no commit needs edit attention (unresolved comments or build failed)"
+_NO_EDIT_ATTENTION = "no commit needs edit attention (comments to answer, a failed build or a negative vote)"
 
 
 def _nothing_to_edit(commits: list[LogCommit]) -> NoEditAttentionError:
-    """The walk's end, naming what it passed over: a negative vote with nothing to answer is not
-    edit attention (the reviewer may say why only in a message, or keep the vote until a new
-    patchset), and neither is a comment waiting on the other side; ``ger log`` shows both."""
+    """The walk's end, naming what it passed over: a comment waiting on the other side is not
+    edit attention; ``ger log`` shows it."""
     lines = [_NO_EDIT_ATTENTION]
-    for reason, what in (
-        (Attention.REVIEW_ISSUES, "{} a negative vote"),
-        (Attention.AWAITING_REPLY, "{} comments waiting on a reply"),
-    ):
-        passed = [c for c in commits if reason in c.attention_reasons and not commit_needs_edit_attention(c)]
-        if passed:
-            have = f"{counted(len(passed), 'commit')} {'has' if len(passed) == 1 else 'have'}"
-            lines.append(f"{what.format(have)}: ger show {passed[0].short_sha}")
+    passed = [
+        c for c in commits if Attention.AWAITING_REPLY in c.attention_reasons and not commit_needs_edit_attention(c)
+    ]
+    if passed:
+        have = f"{counted(len(passed), 'commit')} {'has' if len(passed) == 1 else 'have'}"
+        lines.append(f"{have} comments waiting on a reply: ger show {passed[0].short_sha}")
     return NoEditAttentionError("\n".join(lines))
 
 
@@ -77,7 +74,7 @@ def load_edit_attention_stack(run: RunContext):
 
 
 def resolve_first_edit_attention_sha(run: RunContext) -> str:
-    """Return full SHA of the oldest commit with unresolved comments or a failed build."""
+    """Return full SHA of the oldest commit that needs edit attention."""
     stack_view = load_edit_attention_stack(run)
     target = first_commit_needing_edit_attention(stack_view.commits)
     if target is None:

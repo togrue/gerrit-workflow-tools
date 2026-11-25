@@ -10,6 +10,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import CommentChain
 from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.comments import chain_location, first_line
 from gerrit_workflow_tools.render.comments_markdown import format_comment_chain_markdown
+from gerrit_workflow_tools.render.status_fmt import review_issues_text
 
 
 _RULES = """\
@@ -92,6 +93,15 @@ def _stop_section(index: int, stop: RunbookStop) -> list[str]:
     return lines
 
 
+def _no_step_why(stop: RunbookStop) -> str:
+    """Why a stop of the walk has no work for an agent: what is left there, and for whom."""
+    if stop.held:
+        return "its comments are left for a human"
+    if stop.inherited:
+        return "its CI findings are fixed in an earlier commit"
+    return f"{review_issues_text(stop.commit)}: a vote is for a human to answer"
+
+
 def runbook_markdown(stops: Sequence[RunbookStop], *, branch: str | None) -> str:
     """The runbook: the rules, then one section per stop that has work for an agent."""
     work = [stop for stop in stops if stop.has_agent_work]
@@ -108,8 +118,7 @@ def runbook_markdown(stops: Sequence[RunbookStop], *, branch: str | None) -> str
     if waiting:
         lines += ["## No step for these commits", ""]
         for stop in waiting:
-            why = "its comments are left for a human" if stop.held else "its CI findings are fixed in an earlier commit"
-            lines.append(f"- {stop.commit.short_sha} {stop.commit.summary} — {why}")
+            lines.append(f"- {stop.commit.short_sha} {stop.commit.summary} — {_no_step_why(stop)}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 

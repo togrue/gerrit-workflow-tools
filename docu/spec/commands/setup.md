@@ -7,15 +7,14 @@
 | **Requires** | A terminal to ask in, or `--url`, `--user` and `--token-file` |
 
 Configure `ger.webUrl`, `ger.user` and `ger.token` in git config, check them with Gerrit before
-saving anything, install Gerrit's commit-msg hook in this repository when it has none, and say
-what comes next. A setup that cannot work says so here, not at the next command.
+saving anything, and say what comes next. A setup that cannot work says so here, not at the next command.
 
 ---
 
 ## Usage
 
 ```
-ger setup [--local] [--url URL --user USER --token-file FILE] [--allow-insecure-http] [--no-check] [--no-hook]
+ger setup [--local] [--url URL --user USER --token-file FILE] [--allow-insecure-http] [--no-check]
 ```
 
 | Flag | Effect |
@@ -27,7 +26,6 @@ ger setup [--local] [--url URL --user USER --token-file FILE] [--allow-insecure-
 | `--token-file FILE` | Read the HTTP password from `FILE` (`-`: stdin); never on the command line, where `ps` shows it |
 | `--allow-insecure-http` | Accept an `http://` URL: sets `ger.allowInsecureHttp true` at the same scope |
 | `--no-check` | Save without asking Gerrit whether the credentials work (Gerrit not reachable from here yet) |
-| `--no-hook` | Leave the repository's hooks alone |
 
 ## In a terminal
 
@@ -68,16 +66,11 @@ cannot reach, exit `5` with nothing saved, naming `--no-check`.
 
 ```text
 saved to your repository git config: ger.webUrl, ger.user and ger.token
-installed Gerrit's commit-msg hook, so each new commit gets a Change-Id: /work/clone/.git/hooks/commit-msg
-to take it out: rm /work/clone/.git/hooks/commit-msg
 next: `ger log` shows your stack and its reviews; `ger inbox` the changes waiting for you
 ```
 
-The hook: inside a repository whose `commit-msg` hook (where git runs it from, `core.hooksPath`
-honoured) does not exist, setup fetches Gerrit's (`tools/hooks/commit-msg`, through the run's
-Gerrit seam, `GerritRest.get_commit_msg_hook`) and installs it executable, without asking: it is
-said, and `rm` takes it out. An existing hook is never touched. A failed fetch is said and setup
-still ends saved, exit `0`.
+Setup leaves the repository's hooks alone: it installs no `commit-msg` hook. A commit without a
+Change-Id gets one from `ger change-id --fix` ([Getting-Started.md](../../Getting-Started.md#4-change-ids)).
 
 ---
 

@@ -291,7 +291,7 @@ def _publish(args: argparse.Namespace, run: RunContext, branch: str | None) -> i
     count = sum(len(drafts_in(chains)) for chains in with_drafts.values())
     what = f"{counted(count, 'draft')}{f' and {extras}' if extras else ''} on {counted(len(posts), 'change')}"
     if posts and not args.dry_run and not confirm_publish(args, what):
-        return int(ExitCode.REFUSED)
+        return int(ExitCode.OK)
 
     failed = False
     for change in posts:

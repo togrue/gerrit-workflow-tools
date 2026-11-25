@@ -69,8 +69,10 @@ def as_your_review(reasons: Sequence[str]) -> list[str]:
     return [Attention.WAITING_ON_YOU, *(reason for reason in reasons if reason not in _WAITING_FOR_REVIEWERS)]
 
 
-# Attention that warrants amending the commit (``ger edit --first-attention-commit``).
-EDIT_ATTENTION_REASONS = frozenset({Attention.UNRESOLVED_COMMENTS, Attention.CI_FAILED})
+# Attention that warrants amending the commit (``ger edit --first-attention-commit``): comments to
+# answer, a failed build (a negative ``Verified`` vote among it), or a negative Code-Review vote. A
+# vote on a patch set this commit replaced with other code is gone already (``LogCommit.votes``).
+EDIT_ATTENTION_REASONS = frozenset({Attention.UNRESOLVED_COMMENTS, Attention.CI_FAILED, Attention.REVIEW_ISSUES})
 
 
 class Severity(str, Enum):
@@ -290,7 +292,7 @@ def annotate_attention(
 
 
 def commit_needs_edit_attention(commit: LogCommit) -> bool:
-    """True when the commit has unresolved comments or a failed build (``ger log`` attention)."""
+    """True when the commit has comments to answer, a failed build or a negative vote (``ger log`` attention)."""
     return bool(EDIT_ATTENTION_REASONS.intersection(commit.attention_reasons))
 
 

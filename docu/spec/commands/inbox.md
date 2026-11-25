@@ -260,16 +260,7 @@ A member's `sha` is the commit of its current patch set (`null` when Gerrit did 
 
 ## Exit codes
 
-Shared table ([exit-codes.md](../exit-codes.md)) — no new codes.
-
-| Code | Meaning |
-|------|---------|
-| `0` | Ran fine, whether or not something wants you (a **headline** exists) |
-| `2` | `USAGE` — bad arguments |
-| `5` | `GERRIT` — query failed, auth, unreachable |
-| `6` | `CONFIG` — `ger.webUrl` or credentials missing |
-
-Consistent with `ger log` / `ger show`: a reported *state* is not a failure, so it exits `0`.
+`0` whether or not something wants you (a **headline** exists): a reported *state* is not a failure, as in `ger log` / `ger show`. `0` when the command completed, non-zero when something went wrong ([exit-codes.md](../exit-codes.md)); the non-zero value is not part of the contract.
 
 ---
 

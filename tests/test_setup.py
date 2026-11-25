@@ -7,7 +7,6 @@ reported "Configured" with exit 0: the next command failed instead.
 from __future__ import annotations
 
 import io
-import os
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -112,7 +111,7 @@ def test_ger_setup_treats_windows_nul_as_non_interactive(stack_repo: Path, monke
     assert "no terminal to ask in" in err
 
 
-def test_from_flags_it_checks_saves_installs_the_hook_and_says_what_next(
+def test_from_flags_it_checks_saves_and_says_what_next(
     stack_repo: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     token = tmp_path / "token"
@@ -124,13 +123,10 @@ def test_from_flags_it_checks_saves_installs_the_hook_and_says_what_next(
     assert code == 0, err
     assert _config(stack_repo, "ger.webUrl", "--local") == "https://gerrit.example.com"
     assert _config(stack_repo, "ger.token", "--local") == "secret-token"
-    hook = _hook(stack_repo)
-    assert hook.read_text(encoding="utf-8") == ChangeStore.commit_msg_hook and os.access(hook, os.X_OK)
+    assert not _hook(stack_repo).exists(), "ger setup installs no commit-msg hook"
     assert err.splitlines() == [
         "Signed in as Alice Reviewer <alice@example.com> on https://gerrit.example.com",
         "saved to your repository git config: ger.webUrl, ger.user and ger.token",
-        f"installed Gerrit's commit-msg hook, so each new commit gets a Change-Id: {hook}",
-        f"to take it out: rm {hook}",
         "next: `ger log` shows your stack and its reviews; `ger inbox` the changes waiting for you",
     ]
 
@@ -146,7 +142,6 @@ def test_rejected_credentials_save_nothing_and_exit_as_gerrit_failures(
     assert code == ExitCode.GERRIT
     assert "Gerrit at gerrit.example.com did not accept user alice with that token; nothing was saved" in err
     assert _config(stack_repo, "ger.token", "--local") is None
-    assert not _hook(stack_repo).exists()
 
 
 def test_plain_http_needs_the_opt_in_said_up_front(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -158,25 +153,10 @@ def test_plain_http_needs_the_opt_in_said_up_front(stack_repo: Path, monkeypatch
     assert "sends your user and token unencrypted" in err and "--allow-insecure-http" in err
 
     monkeypatch.setattr(sys, "stdin", io.StringIO("tok\n"))
-    code, _out, err = _setup(stack_repo, [*argv, "--allow-insecure-http", "--no-hook"], monkeypatch)
+    code, _out, err = _setup(stack_repo, [*argv, "--allow-insecure-http"], monkeypatch)
     assert code == 0, err
     assert _config(stack_repo, "ger.allowInsecureHttp", "--local") == "true"
     assert "saved to your repository git config: ger.webUrl, ger.user, ger.allowInsecureHttp and ger.token" in err
-    assert not _hook(stack_repo).exists()
-
-
-def test_an_existing_hook_is_left_alone(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    hook = _hook(stack_repo)
-    hook.parent.mkdir(parents=True, exist_ok=True)
-    hook.write_text("#!/bin/sh\n# mine\n", encoding="utf-8")
-    monkeypatch.setattr(sys, "stdin", io.StringIO("tok\n"))
-    argv = ["--local", "--url", "https://g.example", "--user", "alice", "--token-file", "-"]
-
-    code, _out, err = _setup(stack_repo, argv, monkeypatch)
-
-    assert code == 0, err
-    assert hook.read_text(encoding="utf-8") == "#!/bin/sh\n# mine\n"
-    assert "commit-msg" not in err
 
 
 def test_in_a_terminal_a_wrong_answer_is_asked_again(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -188,7 +168,7 @@ def test_in_a_terminal_a_wrong_answer_is_asked_again(stack_repo: Path, monkeypat
         def get_account(self, account_id: int | str) -> dict[str, Any]:
             return next(tries).get_account(account_id)
 
-    code, _out, err = _setup(stack_repo, ["--local", "--no-hook"], monkeypatch, _Flaky())
+    code, _out, err = _setup(stack_repo, ["--local"], monkeypatch, _Flaky())
 
     assert code == 0, err
     assert "the web URL must start with https://" in err
@@ -203,7 +183,7 @@ def test_in_a_terminal_a_wrong_answer_is_asked_again(stack_repo: Path, monkeypat
 def test_ger_setup_writes_global_config(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _answers(monkeypatch, ["https://gerrit.example.com", "alice", "secret-token"])
 
-    code, _out, err = _setup(stack_repo, ["--no-hook"], monkeypatch)
+    code, _out, err = _setup(stack_repo, [], monkeypatch)
 
     assert code == 0, err
     assert "saved to your global git config" in err
@@ -225,7 +205,7 @@ def test_an_empty_answer_stops_and_saves_nothing(stack_repo: Path, monkeypatch: 
 def test_declining_plain_http_asks_for_the_url_again(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _answers(monkeypatch, ["http://gerrit.test", "https://gerrit.test", "alice", "tok"], ["n"])
 
-    code, _out, err = _setup(stack_repo, ["--local", "--no-hook"], monkeypatch)
+    code, _out, err = _setup(stack_repo, ["--local"], monkeypatch)
 
     assert code == 0, err
     assert _config(stack_repo, "ger.webUrl", "--local") == "https://gerrit.test"

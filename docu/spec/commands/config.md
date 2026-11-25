@@ -65,12 +65,7 @@ Resolution lives in `resolve_config_form` (`core/config_form.py`); file format i
 
 ## Exit codes
 
-| Code | Meaning |
-|------|---------|
-| `0` | Applied (or no changes) |
-| `1` | `REFUSED` — not a TTY, empty file abort, or editor non-zero exit |
-| `2` | Usage / parse error |
-| `7` | `GIT` — editor binary not found |
+`0` when the command completed, non-zero when something went wrong ([exit-codes.md](../exit-codes.md)); the non-zero value is not part of the contract.
 
 ---
 

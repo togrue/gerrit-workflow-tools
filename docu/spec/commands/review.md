@@ -157,12 +157,4 @@ When you have reviewed an older patchset of the change (posted a vote, comment o
 
 ## Exit codes
 
-| Code | When |
-|------|------|
-| `0` | Done |
-| `1` | A `change-<number>` branch has your commits; Gerrit's patchset is newer than the one you voted on; the user declined (it says `cancelled`) |
-| `2` | Bad usage; `--vote` without a terminal and without `-y`; the worktree holds your edits; no review going on for `--next`, `--prev`, `--stage`, `--vote`; staging a root commit; `GER_NO_PUBLISH` with `--vote` |
-| `3` | The changeish or patchset resolves to nothing |
-| `5` | Gerrit failed |
-| `7` | A git command failed (fetch, worktree, switch) |
-| `10` | `--next` / `--prev` at the end of the chain |
+Declining the vote prompt says `cancelled` and exits `0`. `0` when the command completed, non-zero when something went wrong ([exit-codes.md](../exit-codes.md)); the non-zero value is not part of the contract.

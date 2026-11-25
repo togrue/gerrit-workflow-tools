@@ -199,9 +199,6 @@ class GerritRest(Protocol):
     def get_account(self, account_id: int | str) -> dict[str, Any]:
         """Return AccountInfo detail for one account."""
 
-    def get_commit_msg_hook(self) -> str:
-        """Return Gerrit's ``commit-msg`` hook script, the one that adds a Change-Id to each new commit."""
-
     def get_comments(
         self,
         change_id: str,

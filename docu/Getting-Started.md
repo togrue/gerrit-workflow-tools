@@ -1,8 +1,8 @@
 # Getting started
 
-First-run checklist for using **`ger`** in a Gerrit repository. Complete these steps once per machine (install, global config) and once per clone (hook, branch settings).
+First-run checklist for using **`ger`** in a Gerrit repository. Complete these steps once per machine (install, global config) and once per clone (branch settings).
 
-**Quick path:** install → `ger setup` (in your clone: it installs the commit-msg hook too) → upstream + branch config → `ger log`.
+**Quick path:** install → `ger setup` → upstream + branch config → `ger log`.
 
 ---
 
@@ -13,7 +13,7 @@ First-run checklist for using **`ger`** in a Gerrit repository. Complete these s
 | Python 3.10+ and [uv](https://docs.astral.sh/uv/getting-started/installation/) or pipx | Runs and installs the `ger` CLI |
 | A Git clone of a Gerrit-backed repo | `ger` reads git history and config from the current directory |
 | Gerrit HTTPS URL and API credentials | REST calls for review state (`ger log`, `ger show`, `ger push` preview) |
-| `commit-msg` hook | Gerrit Change-Ids on new commits |
+| A `Change-Id:` footer on each commit | Gerrit tells the patch sets of one change by it |
 | Upstream tracking branch | Default stack range is `branch@{upstream}..branch` |
 
 ---
@@ -59,8 +59,6 @@ Asks for `ger.webUrl`, `ger.user` and `ger.token` (an HTTP password: Gerrit's we
 ```text
 Signed in as Alice Reviewer <alice@example.com> on https://gerrit.example.com
 saved to your global git config: ger.webUrl, ger.user and ger.token
-installed Gerrit's commit-msg hook, so each new commit gets a Change-Id: /path/to/clone/.git/hooks/commit-msg
-to take it out: rm /path/to/clone/.git/hooks/commit-msg
 next: `ger log` shows your stack and its reviews; `ger inbox` the changes waiting for you
 ```
 
@@ -106,16 +104,14 @@ Without an upstream, `ger` asks for one on a terminal (it suggests what the bran
 
 ---
 
-## 4. The Change-Id hook
+## 4. Change-Ids
 
-Gerrit requires a `Change-Id:` footer on each commit. `ger setup` run inside a clone that has no
-`commit-msg` hook installs Gerrit's (from `<ger.webUrl>/tools/hooks/commit-msg`, honouring
-`core.hooksPath`) and says so. For another clone, run `ger setup --local` there, or `ger setup`
-again: it offers the values you saved as the defaults. `--no-hook` leaves the hooks alone.
-
-After the hook is in place, validate Change-Ids across the current stack (missing and duplicates):
+Gerrit requires a `Change-Id:` footer on each commit. `ger setup` installs no `commit-msg` hook, so
+a new commit has none until something adds it; `ger push` holds back a commit without one. Add the
+missing ones across the stack, and check it (missing, invalid and duplicate Change-Ids):
 
 ```bash
+ger change-id --fix
 ger change-id --check
 ```
 
@@ -132,7 +128,7 @@ ger push --dry-run       # preview what would be pushed
 |---------|-----|
 | `ger.webUrl` / auth errors | Run `ger setup` or set keys in [Configuration.md](Configuration.md) |
 | No upstream / empty range | `git branch --set-upstream-to=…` |
-| Missing Change-Id on commits | Install hook; amend or recommit |
+| Missing Change-Id on commits | `ger change-id --fix` |
 | API 401/403 | Check token and username |
 
 ---

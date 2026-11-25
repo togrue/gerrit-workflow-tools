@@ -118,7 +118,7 @@ An empty message exits `2`. Combining `--done` with `-m`, `-F` or `--unresolve` 
 
 With no `REV` and no draft on the local stack, it says where your drafts are instead, from one `has:draft` query over your changes (at most 25): `no drafts to publish on the local stack`, then `  unpublished drafts on c2142: ger reply --publish c2142` (`drafts_elsewhere` in `--json`). A review left with `ger review --done` warns the same way.
 
-Publishing first prints every draft that is about to go out, grouped by change. Then it asks `Publish N drafts[ and <votes>, a message] on M changes? [y/N]` (`1 draft`, `1 change` for one) (default **no**: this one sends mail). Declining publishes nothing and exits `1`. A run without `-y` that cannot prompt (no terminal, `--json` or `--ai`) publishes nothing and exits `2` (`USAGE`), like every command that needs an answer it cannot ask for. Each published change prints `published N drafts on <subject>`.
+Publishing first prints every draft that is about to go out, grouped by change. Then it asks `Publish N drafts[ and <votes>, a message] on M changes? [y/N]` (`1 draft`, `1 change` for one) (default **no**: this one sends mail). Declining publishes nothing, says `cancelled` and exits `0`: your choice. A run without `-y` that cannot prompt (no terminal, `--json` or `--ai`) publishes nothing and exits `2` (`USAGE`), like every command that needs an answer it cannot ask for. Each published change prints `published N drafts on <subject>`.
 
 Each change is one REST call. A failure on one change is reported, the others are still tried, and the exit is `5` if any failed. A partial publish is listed per change, never summarised away. A publish drops the change's cached rows, so the next `ger show` sees the published chains at once.
 
@@ -251,17 +251,7 @@ updated draft on src/app.py:42 (replaced: "Will do, after the refactor")
 
 ## Exit codes
 
-Shared table: [exit-codes.md](../exit-codes.md). No new codes.
-
-| Code | When |
-|------|------|
-| `0` | Draft written, discarded or published; `--dry-run` |
-| `1` | Publish declined: `cancelled` on stderr |
-| `2` | Publishing without a terminal (or with `--json` / `--ai`) and without `-y`: `no prompt to answer (non-interactive, --json or --ai): pass -y to publish`, the words of `ger review --vote` (`cli_common.confirm_publish`); empty message, conflicting flags, `CHAIN` with `--publish`, a comment URL together with `--change`, no `CHAIN` without a TTY, publishing while `GER_NO_PUBLISH` is set |
-| `3` | Chain or change not found; `--discard` with no draft |
-| `4` | `CHAIN` named more than one chain (a place with several open chains, a shared prefix); ambiguous changeish |
-| `5` | Gerrit rejected a write, including a partial publish |
-| `6` | Missing `ger.webUrl` or credentials |
+Declining the publish prompt says `cancelled` and exits `0`. `0` when the command completed, non-zero when something went wrong ([exit-codes.md](../exit-codes.md)); the non-zero value is not part of the contract.
 
 ---
 

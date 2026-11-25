@@ -40,15 +40,7 @@ Default range (Change-Id lookup): the local stack, `upstream..HEAD` of the worki
 
 ### Exit codes
 
-Shared table: **[exit-codes.md](../exit-codes.md)**.
-
-| Code | Meaning |
-|------|---------|
-| `0` | Exactly one match |
-| `2` | Usage / invalid Change-Id: `error: invalid Change-Id: 'HEAD'; ger sha takes a full Change-Id (I + 40 hex). For a commit, change number or other changeish: ger resolve` |
-| `3` | Not found |
-| `7` | Git error |
-| `8` | Duplicate Change-Id |
+`0` when the command completed, non-zero when something went wrong ([exit-codes.md](../exit-codes.md)); the non-zero value is not part of the contract.
 
 ---
 
@@ -74,18 +66,6 @@ Default `REV_OR_RANGE`: `HEAD`. Change-Id argument is echoed unchanged. A range 
 | `--color`, `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
 
 `--check` always covers the full current stack (`upstream_tip..HEAD`). A `REV_OR_RANGE` argument is a usage error in this mode. Formerly named `--check-duplicates`. It names every problem it finds, one `error: commit <sha>: …` line each, oldest commit first; the exit code is that of the first line. With none, it prints `N commits, all Change-Ids valid` on a terminal and nothing when piped.
-
-### Exit codes (`--check`)
-
-Shared table: **[exit-codes.md](../exit-codes.md)**.
-
-| Code | Meaning |
-|------|---------|
-| `0` | OK — all stack commits have unique, valid Change-Ids |
-| `8` | Duplicate Change-Id |
-| `9` | Missing (or invalid) Change-Id |
-
----
 
 ## See also
 

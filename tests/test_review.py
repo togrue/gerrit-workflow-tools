@@ -265,7 +265,7 @@ def test_vote_asks_first_and_never_publishes_without_yes_off_a_terminal(
     monkeypatch.setattr("gerrit_workflow_tools.cli_common.stdin_is_terminal", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt: "n")
     code, _out, err = _review(stack_repo, store, ["--vote", "CR+2"], monkeypatch)
-    assert (code, err.strip().splitlines()[-1]) == (ExitCode.REFUSED, "cancelled")
+    assert (code, err.strip().splitlines()[-1]) == (ExitCode.OK, "cancelled")
     assert _review(stack_repo, store, ["--vote", "CR+2", "--dry-run"], monkeypatch)[0] == ExitCode.OK
     monkeypatch.setenv("GER_NO_PUBLISH", "1")
     assert _review(stack_repo, store, ["--vote", "CR+2", "-y"], monkeypatch)[0] == ExitCode.USAGE

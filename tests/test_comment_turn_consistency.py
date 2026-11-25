@@ -127,15 +127,14 @@ def test_the_inbox_counts_a_chain_waiting_on_the_reviewer_as_not_needing_you(
     assert f"c{100}  v+1 cr+2 com  # 1 comment waits on the reviewer" in out
 
 
-def test_the_walk_ends_naming_what_it_passed_over(stack_repo: Path) -> None:
-    """``ger log`` marks a negative vote ``# review issues``; the walk does not stop there, but its
-    end says so, beside the commits whose comments wait on the reviewer."""
+def test_the_walk_ends_naming_the_comments_it_passed_over(stack_repo: Path) -> None:
+    """A comment waiting on the reviewer is no stop of the walk; its end says so."""
     from gerrit_workflow_tools.cli_edit import resolve_first_edit_attention_sha
     from gerrit_workflow_tools.core.attention import NoEditAttentionError
     from gerrit_workflow_tools.core.config import Settings
     from gerrit_workflow_tools.core.run_context import RunContext
 
-    store, keys, rows = _gerrit(stack_repo, [{"unresolved_comment_count": 1}, {"cr": -1}, {"cr": -2}, {}])
+    store, keys, rows = _gerrit(stack_repo, [{"unresolved_comment_count": 1}, {}, {}, {}])
     store.set_comments(
         keys[0],
         {
@@ -149,8 +148,7 @@ def test_the_walk_ends_naming_what_it_passed_over(stack_repo: Path) -> None:
     with pytest.raises(NoEditAttentionError) as ended:
         resolve_first_edit_attention_sha(run)
     assert str(ended.value).splitlines() == [
-        "no commit needs edit attention (unresolved comments or build failed)",
-        f"2 commits have a negative vote: ger show {rows[1].short_sha}",
+        "no commit needs edit attention (comments to answer, a failed build or a negative vote)",
         f"1 commit has comments waiting on a reply: ger show {rows[0].short_sha}",
     ]
 

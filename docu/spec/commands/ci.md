@@ -86,12 +86,7 @@ With `-v` / `--full`, each `ci_content` entry adds `body` and `body_omitted_line
 
 ## Exit codes
 
-| Code | Meaning |
-|------|---------|
-| `0` | Ran fine, whether or not some target's CI failed (the findings are the output) |
-| `1` | `REFUSED` — you declined the upstream prompt |
-| `3` / `4` | Changeish not found / ambiguous |
-| `11` | A CI link's content could not be fetched or parsed |
+`0` whether or not some target's CI failed: the findings are the output. `0` when the command completed, non-zero when something went wrong ([exit-codes.md](../exit-codes.md)); the non-zero value is not part of the contract.
 
 ---
 

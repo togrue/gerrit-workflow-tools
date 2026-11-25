@@ -282,7 +282,7 @@ def test_publish_prompt_defaults_to_no(
     monkeypatch.setattr("gerrit_workflow_tools.cli_common.stdin_is_terminal", lambda: True)
     monkeypatch.setattr("sys.stdin", io.StringIO(answer))
     code, _out, err = run_cli(web_stack_repo, reply_main, ["--publish"], monkeypatch, gerrit=store)
-    assert code == (ExitCode.OK if published else ExitCode.REFUSED)
+    assert code == ExitCode.OK, "a no is your choice: the command did what you asked"
     assert bool(store.calls_to("publish_drafts")) is published
     assert err.strip().endswith("cancelled") is not published, "a no says so, in the one word every command uses"
 

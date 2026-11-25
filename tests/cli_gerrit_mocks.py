@@ -24,6 +24,7 @@ def change_info_for_sha(
     branch: str = "main",
     number: int = 100,
     cr: int = 2,
+    cr_by: str | None = None,
     verified: int = 1,
     submittable: bool = True,
     unresolved_comment_count: int = 0,
@@ -50,7 +51,7 @@ def change_info_for_sha(
         "is_private": private,
         "labels": {
             "Verified": {"value": verified, "all": [{"value": verified}]},
-            "Code-Review": {"value": cr, "all": [{"value": cr}]},
+            "Code-Review": {"value": cr, "all": [{"value": cr, **({"name": cr_by} if cr_by else {})}]},
         },
     }
     if reviewers is None:
@@ -92,6 +93,7 @@ def build_details_by_change_id(
             cid,
             number=100 + i,
             cr=int(ov.get("cr", 2)),
+            cr_by=ov.get("cr_by"),
             verified=int(ov.get("verified", 1)),
             submittable=bool(ov.get("submittable", True)),
             unresolved_comment_count=int(ov.get("unresolved_comment_count", 0)),

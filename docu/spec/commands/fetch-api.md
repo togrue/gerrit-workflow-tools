@@ -35,10 +35,7 @@ A space or other character a URL cannot carry is percent-encoded. A full URL or 
 
 ## Exit codes
 
-| Code | Meaning |
-|------|---------|
-| `0` | Success |
-| `1` | Config or API error |
+`0` when the command completed, non-zero when something went wrong ([exit-codes.md](../exit-codes.md)); the non-zero value is not part of the contract.
 
 ---
 

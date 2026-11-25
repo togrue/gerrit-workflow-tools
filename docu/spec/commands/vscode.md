@@ -34,7 +34,7 @@ updating ger.
 
 ## Refusals
 
-All exit `2` ([exit codes](../exit-codes.md)):
+All exit non-zero ([exit codes](../exit-codes.md)):
 
 | Situation | Message says |
 |-----------|--------------|

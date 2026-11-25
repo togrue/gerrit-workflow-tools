@@ -97,13 +97,4 @@ The first line is one of: `checked out … on <branch>`, `updated <branch> from 
 
 ## Exit codes
 
-| Code | When |
-|------|------|
-| `0` | Done, including switching to a local version you chose not to update |
-| `1` | Needs your decision (`ger checkout --update` on a detached HEAD too): the local version holds edits Gerrit never had (and `--update` was not given, or its merge conflicts); several local versions no rule decides between; `-b NAME` is taken; the commits above would not rebase cleanly, or one of them is a merge commit |
-| `2` | Bad usage (no `CHANGEISH` without `--update`, or with another flag); the update question has no terminal to ask on; a rebase is in progress; changes to tracked files are in the way |
-| `3` | The changeish or patchset resolves to nothing |
-| `4` | The Change-Id names changes on several target branches and narrowing could not pick one |
-| `5` | Gerrit failed |
-| `6` | `ger.webUrl` or credentials missing |
-| `7` | A git command failed (fetch, switch). When the remote does not have the patchset's `refs/changes/…` ref, git's message is followed by one line saying what is most likely wrong: for a private change (the change data already says so; no extra call), that Gerrit does not serve a private change's refs to `ger.remote` as it signs in (anonymous, or an HTTP URL without `/a/`), so fetch over SSH or an authenticated `/a/` URL; otherwise that the remote does not have the ref and `ger.remote` should be checked (`core/gerrit_patchset.py`, shared with `ger review`) |
+`0` includes switching to a local version you chose not to update. `0` when the command completed, non-zero when something went wrong ([exit-codes.md](../exit-codes.md)); the non-zero value is not part of the contract.
