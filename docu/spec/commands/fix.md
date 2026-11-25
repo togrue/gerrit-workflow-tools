@@ -76,17 +76,7 @@ Default: only **staged** changes are committed. On a TTY with an empty index, an
 
 ## Exit codes
 
-Semantic codes come from the shared `ExitCode` table ([exit-codes.md](../exit-codes.md)); `3` is **not** a Gerrit API error, as this table previously claimed.
-
-| Code | Meaning |
-|------|---------|
-| `0` | Fixup commit created successfully |
-| `2` | Usage: bad arguments, nothing staged, unresolved conflicts in the index, or the target's change merged or abandoned on Gerrit |
-| `3` | `NOT_FOUND` — no commit on the local stack matches |
-| `4` | `AMBIGUOUS` — several stack commits share the Change-Id |
-| `5` | `GERRIT` — Gerrit answered badly, or not at all |
-| `6` | `CONFIG` — required git configuration missing |
-| `7` | `GIT` — a git command failed |
+`0` when the command completed, non-zero when something went wrong ([exit-codes.md](../exit-codes.md)); the non-zero value is not part of the contract.
 
 ---
 

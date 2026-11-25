@@ -54,7 +54,7 @@ def vote(args: argparse.Namespace, p: argparse.ArgumentParser, service: GerritSe
         _print_plan(takes, skipped, voted, message)
     on = ", ".join(str(t.number) for t in takes)
     if not args.dry_run and not confirm_publish(args, f"{counted(plan.draft_count, 'draft')} and {voted} on {on}"):
-        return int(ExitCode.REFUSED)
+        return int(ExitCode.OK)
 
     def sent(target: VoteTarget) -> None:
         if not args.json_:

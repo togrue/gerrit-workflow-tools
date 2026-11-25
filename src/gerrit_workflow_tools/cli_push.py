@@ -183,7 +183,7 @@ def _handle_vanilla_push(run: RunContext, args: argparse.Namespace, *, branch: s
         print()
         if not confirm("Do you want to run `git push`?", default=True):
             print("Push cancelled.", file=sys.stderr)
-            return int(ExitCode.REFUSED)  # a vanilla push; a Gerrit push's cancel exits OK (push.md)
+            return int(ExitCode.OK)  # your choice: the command did what you asked (exit-codes.md)
     logger.debug("ger push vanilla executing: %s (cwd=%s)", " ".join(cmd), cwd)
     return finish_push(execute(run, cmd), None)
 

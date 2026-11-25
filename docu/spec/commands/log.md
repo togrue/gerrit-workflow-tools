@@ -128,15 +128,9 @@ The first line names the project, the push branch, the commit count and what `ge
 
 ## Attention & exit codes
 
-| Code | Meaning |
-|------|---------|
-| `0` | Success, whether or not a commit requires attention |
-| `1` | `REFUSED` — you declined the upstream prompt |
-| `2` | Invalid usage, or a detached HEAD no local branch points at (outside a rebase): there is no working branch, so no stack and no Gerrit branch to compare with ([exit codes](../exit-codes.md)) |
-| `3` | A revision in the range does not exist |
-| `5` | Gerrit API error, or Gerrit could not be asked at all (see below) |
+`0` whether or not a commit requires attention. `0` when the command completed, non-zero when something went wrong ([exit-codes.md](../exit-codes.md)); the non-zero value is not part of the contract.
 
-**Gerrit unreachable or credentials rejected:** the local stack is still printed, but every change's Gerrit state is shown as unknown (patchset `~`, hint `Gerrit state unknown`, JSON `patchset_status: "unknown"` and reason `gerrit-unknown`), never as `not pushed`. One line on stderr says what happened (`gerrit error: Gerrit unreachable at host:port (connection refused)` or `gerrit error: Gerrit at host rejected the credentials (HTTP 401); …`), and the exit code is `5`. A batch that fails this way is not retried change by change. Cached state inside the [trust window](../../adr/0001-offline-is-a-trust-window-not-a-gerritrest.md) is still served as valid; once any change needs Gerrit, the whole overlay is unknown.
+**Gerrit unreachable or credentials rejected:** the local stack is still printed, but every change's Gerrit state is shown as unknown (patchset `~`, hint `Gerrit state unknown`, JSON `patchset_status: "unknown"` and reason `gerrit-unknown`), never as `not pushed`. One line on stderr says what happened (`gerrit error: Gerrit unreachable at host:port (connection refused)` or `gerrit error: Gerrit at host rejected the credentials (HTTP 401); …`), and it exits non-zero. A batch that fails this way is not retried change by change. Cached state inside the [trust window](../../adr/0001-offline-is-a-trust-window-not-a-gerritrest.md) is still served as valid; once any change needs Gerrit, the whole overlay is unknown.
 
 Attention rules: shared `determine_attention()` in `core/attention.py` (same family as `ger edit --first-attention-commit`). The trailing hints are a rendering of `attention_reasons`, so a project attention strategy changes both. `ci-failed` means a failed Checks run or `Verified <= -1`.
 

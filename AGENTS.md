@@ -67,8 +67,9 @@ Fixed obligations on every command:
 - Wrap the body in `cli_common.run_cli_command`. That is the only place errors map to codes.
 - Reach Gerrit through the run context's service: `init_cli_runtime(args, gerrit=gerrit)` returns the
   run, and `run.gerrit` is its `GerritService`. Never construct HTTP yourself.
-- Exit with the shared codes in `cli_common.ExitCode`
-  ([spec/exit-codes.md](docu/spec/exit-codes.md)). One reason, one code, every command.
+- Exit with `cli_common.ExitCode` members: `0` when the command completed, non-zero when
+  something went wrong ([spec/exit-codes.md](docu/spec/exit-codes.md)). Which non-zero value is
+  not part of the contract.
 
 What a run reads once (settings, worktree, working branch, stack context) lives on the run
 (`run.repo`); pass it, or the answer, down. Never add a process-wide memo of git or config

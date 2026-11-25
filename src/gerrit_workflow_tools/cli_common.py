@@ -41,20 +41,18 @@ from gerrit_workflow_tools.upstream_interactive import ask_for_needed_upstream, 
 
 
 class ExitCode(IntEnum):
-    """One exit code per distinct failure reason, shared by every ``ger`` command.
+    """The exit codes of every ``ger`` command: ``0``, it completed; any other, something went wrong.
 
-    Codes are semantic, not per-command: the same reason exits the same way whichever
-    command hit it. ``0`` means the command did what was asked, whatever state it reports;
-    every other code is a reason it did not. ``0``-``2`` are fixed by convention (argparse exits ``2`` on bad
-    arguments); the rest split what used to be lumped together or reused.
+    That is the contract. The non-zero members name the kind of failure for whoever reads the
+    code (and ``ger serve`` sends the name as an error's ``code``); their values are not a promise.
 
     Contract: [docu/spec/exit-codes.md](../../docu/spec/exit-codes.md).
     """
 
     OK = 0
     REFUSED = 1
-    """Did not go ahead: the user declined a prompt, or ger will not proceed without the
-    user's decision. A command that ran and merely reports attention exits ``OK``."""
+    """Did not go ahead: ger will not proceed without the user's decision. A no at a command's
+    own confirmation is the user's choice and exits ``OK``, as does a command that merely reports attention."""
     USAGE = 2
     NOT_FOUND = 3
     """A changeish, Change-Id or git revision resolved to nothing."""
@@ -176,7 +174,7 @@ def require_prompt(args: argparse.Namespace, *, instead: str) -> None:
 
 
 def say_cancelled() -> None:
-    """The one word a command says when the user declined its prompt; it then exits ``REFUSED``."""
+    """The one word a command says when the user declined its prompt; it then exits ``OK``: their choice."""
     sys.stdout.flush()
     print("cancelled", file=sys.stderr)
 
@@ -185,7 +183,7 @@ def confirm_publish(args: argparse.Namespace, what: str) -> bool:
     """Whether to publish *what*: ``-y`` (or ``GER_ASSUME_YES``), else a yes at ``Publish <what>?``.
 
     Without a prompt to answer (no terminal, ``--json``, ``--ai``) it raises :class:`UsageError`: pass ``-y``.
-    A no says ``cancelled``; the caller exits ``REFUSED``.
+    A no says ``cancelled``; the caller exits ``OK``.
     """
     if args.yes or assume_yes():
         return True

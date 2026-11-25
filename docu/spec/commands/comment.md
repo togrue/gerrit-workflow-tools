@@ -165,14 +165,7 @@ note on src/app.py (commit 1a2b3c4) id 0b6e2d7f8c9a4b13
 
 ## Exit codes
 
-| Code | When |
-|------|------|
-| `0` | Written, edited or discarded |
-| `2` | Bad usage: no message, a malformed or backwards LOCATION, a line past the end of the file, `--note` with `--local` |
-| `3` | The path is not in the commit; the changeish, or the id to edit or discard, resolves to nothing |
-| `5` | Gerrit rejected the draft |
-| `7` | Writing the local store failed (including five lost races in a row) |
-| `9` | The commit has no Change-Id |
+`0` when the command completed, non-zero when something went wrong ([exit-codes.md](../exit-codes.md)); the non-zero value is not part of the contract.
 
 ---
 

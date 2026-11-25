@@ -163,16 +163,8 @@ After success, optional `lastPush/<branch>` marker (`ger.lastPushedBranch`, defa
 
 ## Exit codes
 
-| Code | Meaning |
-|------|---------|
-| `0` | Success, dry-run OK, or user cancelled at prompt |
-| `1` | Nothing to push (no commit below the ready boundary), a **diverged** change or a commit above an **outdated** one without `--force`, or you declined the upstream prompt |
-| `2` | Usage: a rebase in progress, invalid option value (`--topic a,b`), a reviewer Gerrit has no account for under the `push` strategy (checked before anything is sent; see Confirmation output), non-interactive without `-y` (`no prompt to answer (non-interactive, --json or --ai): pass -y to push`, the words of every command), `-i` without a terminal, `REV` at or after the ready boundary (the message names the boundary and, when the stop pattern or a ready strategy set it, `--all`) |
-| `3` | `REV` names no commit, no change, or a change with no commit in the local stack |
-| `4` | `REV` names a Change-Id that more than one stack commit carries |
-| `5` | Push succeeded (or had nothing to send), but Gerrit refused what is set over REST: `lazy` / `overwrite` reviewers, or an option on a change Gerrit already had (printed as an error with Gerrit's reason) |
-| `6` | The branch has no upstream: the same message and hint as `ger log` |
-| other | `git push` exit code, passed through as [exit-codes.md](../exit-codes.md#what-is-not-remapped) records. When Gerrit rejects the push (`! [remote rejected] … (reason)`, exit `1` from git), git's output is printed untouched and ger adds one line after it with Gerrit's reason, its lines joined by `; `: `error: Gerrit rejected the push: Account 'nosuch' not found; nosuch does not identify a registered user or group` |
+`0` includes a dry run, nothing to send, and a push you cancelled at the prompt. `0` when the command completed, non-zero when something went wrong ([exit-codes.md](../exit-codes.md)); the non-zero value is not part of the contract. A failed `git push` returns git's own exit code ([exit-codes.md](../exit-codes.md#what-is-not-remapped)). When Gerrit rejects the push (`! [remote rejected] … (reason)`), git's output is printed untouched and ger adds one line after it with Gerrit's reason, its lines joined by `; `: `error: Gerrit rejected the push: Account 'nosuch' not found; nosuch does not identify a registered user or group`
+
 
 ---
 

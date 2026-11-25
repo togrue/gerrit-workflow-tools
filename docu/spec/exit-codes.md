@@ -1,27 +1,49 @@
 # Exit codes
 
-`0` when the command did what was asked; one non-zero code per failure **reason**, shared by every `ger` command. The same reason exits the same way whichever command hit it — so a script can branch on the code without knowing which command produced it.
+**`0`: the command completed. Non-zero: something went wrong running it.** That is the whole
+contract, for every `ger` command. Which non-zero value a failure exits with is not part of it:
+users and scripts should not rely on a specific value. Check for `0`, and read the message (or
+`--json` where a command has it) for what went wrong.
 
-Defined in `cli_common.ExitCode`; applied by `cli_common.run_cli_command`, which is the only place the error-to-code mapping lives.
+Two things follow from "completed":
+
+- **A reported state is not a failure.** A command that shows attention, a failed build or
+  nothing left to update has done its job and exits `0` ([below](#attention-is-not-failure)).
+- **Your own choice at a prompt is not a failure.** Answering no to a command's confirmation
+  (`Publish …?`, `Do you want to run git push?`, the push options line) or cancelling it with
+  Ctrl-C / Ctrl-D ends the command as you asked, with `cancelled` (or `Push cancelled.`) and
+  exit `0`. A prompt for a value the command needs and cannot go on without (an upstream, the
+  values `ger setup` asks for) left empty is different: the command could not run, and it
+  exits non-zero.
+
+A lookup that finds nothing exits non-zero: an unknown changeish, and an attention walk or a
+review chain walk with nothing left to visit (`no commit needs edit attention…`, printed
+without `error:`, since a script walking the stack stops on it).
+
+## The codes, for reading
+
+Failures exit with a code from `cli_common.ExitCode`, applied by `cli_common.run_cli_command`,
+the only place errors map to codes. They name the kind of failure, which helps when reading a
+log; they are not a promise.
 
 | Code | Name | Meaning |
 |------|------|---------|
 | `0` | `OK` | Success |
-| `1` | `REFUSED` | Did not go ahead: you declined a prompt, or ger will not go on without your decision because your commits or branches are in the way (`ger review`, `ger checkout`; raised as `core.usage.Refusal`). Uncommitted changes in the way are `2`: you fix that state and rerun |
-| `2` | `USAGE` | The command cannot run as asked: bad arguments, an invalid input format, an unknown command (`ger lgo` suggests `log`), or a state it refuses to start from and that you fix before running it again: no terminal for a required prompt (pass `-y`; `ger checkout`: `--update` or `--no-update`), in one message for every command, `no prompt to answer (non-interactive, --json or --ai): pass …` or for the editor a message needs (`ger reword` without `-m` / `-F` or `GIT_EDITOR`), nothing staged or unresolved conflicts (`ger fix`), changes to tracked files under `ger checkout` / `ger review`, a rebase in progress (`ger push`, `ger checkout`) or, under a history rewrite, a rebase in progress or uncommitted changes (`ger edit`, `ger reword`, `ger rebase`); a target whose change Gerrit already merged or abandoned (`ger edit`, `ger reword`, `ger fix`; not `ger edit --drop`); going on with a rebase (`ger rebase --continue` / `--abort` / `--skip`, `ger edit -n`) with none in progress, `--continue` over unresolved conflicts or unstaged changes or with nothing left to apply, or `--skip` at a stop that is not on a conflict not yet committed; a detached HEAD no local branch points at, outside a rebase and a staged `ger review`, for a command that needs the working branch (`ger log`, `ger show`, `ger ci`, …: one message, `HEAD is detached and no local branch points at it …; check out the branch you work on: git switch <branch>`, raised where the working branch is resolved as `NoWorkingBranchError`). Also what argparse itself exits with. Raised as `core.usage.UsageError` |
+| `1` | `REFUSED` | Did not go ahead: ger will not go on without your decision because your commits or branches are in the way (`ger review`, `ger checkout`; raised as `core.usage.Refusal`), or a value it needs was not given at its prompt |
+| `2` | `USAGE` | The command cannot run as asked: bad arguments, an invalid input, an unknown command (`ger lgo` suggests `log`), or a state you fix before running it again (no terminal for a required prompt, a rebase in progress, changes in the way, a detached HEAD where the working branch is needed). Also what argparse itself exits with. Raised as `core.usage.UsageError` |
 | `3` | `NOT_FOUND` | A changeish, Change-Id or git revision resolved to nothing |
 | `4` | `AMBIGUOUS` | Several candidates survived narrowing; the message lists them as `cN (triplet, status)` (how ger prints a change, accepted back as a changeish), `--json` under `alternatives` |
-| `5` | `GERRIT` | Gerrit answered badly or not at all: HTTP, auth, unreachable. Never reported as `NOT_FOUND`: only Gerrit's own 404 means "no such change". The message is one line ending in Gerrit's own reason from the response body (`Gerrit HTTP 400: nosuchuser does not identify a registered user or group`), else the HTTP status phrase. A command that can still show local state (`ger log`, `ger show`) shows it, with the Gerrit state unknown, then exits `5` |
-| `6` | `CONFIG` | Required git configuration is missing (`ger.webUrl`, credentials, or the branch's upstream when no prompt can set it; declining the prompt is `1`; see [SPEC § A missing upstream](../SPEC.md#a-missing-upstream)) |
+| `5` | `GERRIT` | Gerrit answered badly or not at all: HTTP, auth, unreachable. Never reported as `NOT_FOUND`: only Gerrit's own 404 means "no such change". The message is one line ending in Gerrit's own reason from the response body (`Gerrit HTTP 400: nosuchuser does not identify a registered user or group`), else the HTTP status phrase. A command that can still show local state (`ger log`, `ger show`) shows it, with the Gerrit state unknown, then exits non-zero |
+| `6` | `CONFIG` | Required git configuration is missing (`ger.webUrl`, credentials, or the branch's upstream when no prompt can set it; declining the prompt is `REFUSED`; see [SPEC § A missing upstream](../SPEC.md#a-missing-upstream)) |
 | `7` | `GIT` | A git command failed, or the command runs outside a git repository (`error: not a git repository`, checked once in `init_cli_runtime`; `ger inbox`, `setup`, `config`, `cache` and `fetch-api` run anywhere) |
 | `8` | `DUPLICATE_CHANGE_ID` | The same Change-Id appears on more than one local commit |
 | `9` | `MISSING_CHANGE_ID` | A local commit has no Change-Id footer |
-| `10` | `NO_EDIT_ATTENTION` | Printed without `error:`, since scripts loop until they see it. An attention walk (`ger edit`, `show` or `sha` with `-n` or first-attention targeting) has nothing left to visit. Also the end of a review chain walk (`ger review --next` / `--prev`), so scripts loop on one code |
+| `10` | `NO_EDIT_ATTENTION` | An attention walk (`ger edit`, `show` or `sha` with `-n` or first-attention targeting) or a review chain walk (`ger review --next` / `--prev`) has nothing left to visit. Printed without `error:` |
 | `11` | `CI_CONTENT` | A **CI link**'s content could not be fetched or parsed where the command required it (`ger ci`; `ger show --ci` reports it and carries on) |
 
 ## What is not remapped
 
-**Child process codes pass through.** `ger edit` and `ger rebase` return `git rebase`'s exit code; `ger push` returns `git push`'s. Those are git's codes, not ours, and the wrapper leaves them alone — so a non-zero exit from those commands may be git's meaning rather than the table above.
+**Child process codes pass through.** `ger edit` and `ger rebase` return `git rebase`'s exit code; `ger push` returns `git push`'s. Those are git's codes, not ours, and the wrapper leaves them alone — so a non-zero exit from those commands may be git's meaning rather than the table above. Either way it is non-zero, which is all the contract says.
 
 **Unmapped exceptions are bugs.** `run_cli_command` catches only the failures in the table. Anything else surfaces as a traceback rather than a tidy exit code, deliberately: a crash that exits `1` is a crash you never fix.
 
@@ -29,10 +51,4 @@ Defined in `cli_common.ExitCode`; applied by `cli_common.run_cli_command`, which
 
 `ger log`, `ger show`, `ger ci` and `ger inbox` exit `0` when a commit or change needs attention. That is the command working correctly and reporting a state; the state is in the output (`--json` for scripts), not the exit code. Any non-zero exit means the command did not do what was asked.
 
-## History
-
-This replaces three separate and mutually contradictory tables. `3` used to mean "Gerrit API / git resolution error" for resolution commands but "duplicate Change-Id" for `ger sha`; `4` meant "ambiguous" in one and "git error" in the other; `ger change-id --check` (formerly `--check-duplicates`) had a third scheme again. Codes for `ger sha` and `ger change-id` therefore **changed** when this table landed.
-
-Related: [change-and-commit-identifiers.md](change-and-commit-identifiers.md) for how changeishes resolve, and what `NOT_FOUND` and `AMBIGUOUS` mean in that context.
-
-Attention used to exit `1` (`ATTENTION`) from `ger log`, `show`, `ci` and `inbox`. It now exits `0`, so that `0` always means success; `1` was renamed `REFUSED` and keeps only its "did not go ahead" meanings.
+Related: [change-and-commit-identifiers.md](change-and-commit-identifiers.md) for how changeishes resolve.

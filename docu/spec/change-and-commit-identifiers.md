@@ -204,7 +204,7 @@ matches **more than one** open Gerrit change:
    (rare — e.g. an abandoned change plus a new one), prefer **open/active** over
    `ABANDONED`/`MERGED`. If that still leaves more than one, **stop and list the
    candidates** (each with its number and triplet) so the next invocation can be
-   exact. This is a resolution error (exit code for ambiguity), not a silent pick:
+   exact. This is a resolution error (a non-zero exit), not a silent pick:
 
    > `error: ambiguous Change-Id: matches changes on other branches (not 'main'): c120045 (proj~release-2.1~I8f3c…, NEW), c119870 (proj~release-2.0~I8f3c…, NEW). Name one by its number or triplet`
 4. **None on the target branch?** If the Change-Id matches only changes on *other*
@@ -268,7 +268,7 @@ ger resolve <changeish> [--json]
 ```
 
 Text output: the resolved local SHA (if any), the selected Gerrit change
-(number + triplet + branch + status), and any ambiguity note. Exit codes match
+(number + triplet + branch + status), and any ambiguity note. Exit codes:
 [§6](#6-exit-codes-resolution-related). With `--json`, prints the `resolution` block below and
 nothing else.
 
@@ -329,8 +329,9 @@ object so an agent never has to scrape human text:
   exit plus structured `alternatives`.
 - **Exact round-trips:** any `triplet` or `number` printed in `alternatives` is a
   valid changeish that resolves back to exactly that change.
-- **Stable exit codes** distinguish *not found* from *ambiguous* from *API error*
-  ([§6](#6-exit-codes-resolution-related)), so an agent can branch on the failure mode.
+- **Failures say what failed:** *not found*, *ambiguous* (with `alternatives`) and an API error
+  each have their own message; the exit code only says that it failed
+  ([§6](#6-exit-codes-resolution-related)).
 
 This is what lets an agent automate a rework loop safely: `ger log --json` to see
 the stack → for each commit needing work, `ger resolve --json` (or read the
@@ -341,12 +342,12 @@ pick, escalate instead of guessing.
 
 ## 6. Exit codes (resolution-related)
 
-A consistent family across commands, so tooling can rely on them:
+`0` when the changeish resolved to exactly one target, whatever attention it reports; non-zero
+when it did not: not found, ambiguous, malformed, or Gerrit or git failing
+([exit-codes.md](exit-codes.md)). The message says which, and an ambiguity lists the candidates
+(`alternatives` in `--json`). Scripts tell the cases apart by that, not by the exit value.
 
-Exit codes are shared across every command: see **[exit-codes.md](exit-codes.md)**. The ones resolution produces:
-
-| Code | Meaning |
-|------|---------|
+------|---------|
 | `0` | Resolved to exactly one target, whatever attention it reports |
 | `1` | Did not go ahead: you declined a prompt |
 | `2` | Usage error — malformed changeish, unknown prefix |

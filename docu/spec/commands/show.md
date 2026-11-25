@@ -73,19 +73,13 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 
 **Change-Id-only:** A change that matches a commit in the local stack renders as that commit, however it was addressed — provided that commit pushes to it (same project and push branch). A **sibling** on another target branch (`ger show proj~dev~I…` or `change:<dev's number>` from a branch pushing to `main`) is not that commit's change: it renders like any change with no local commit — its own number, patchset, votes, comments and URLs, in text, Markdown and JSON — and a note on stderr names the local stack commit with the same Change-Id and the branch it targets (`resolution.local_sibling` in JSON). When there is no local commit, the Author/date/message block is replaced by the change's subject.
 
-**Exit code:** `0` whether or not a listed target has attention reasons; `1` (`REFUSED`) only if the user declines the upstream prompt.
+**Exit code:** `0` whether or not a listed target has attention reasons.
 
 ---
 
 ## Exit codes
 
-| Code | Meaning |
-|------|---------|
-| `0` | Success, whether or not a target has attention reasons |
-| `1` | `REFUSED` — you declined the upstream prompt |
-| `3` | The changeish names no commit or change (Gerrit answered 404, or no such git revision) |
-| `4` | Ambiguous changeish after narrowing |
-| `5` | Gerrit failed: unreachable, credentials rejected, or another HTTP error. A local commit is still shown, its Gerrit state unknown, as in [`ger log`](log.md#attention--exit-codes) |
+`0` whether or not a target has attention reasons. `0` when the command completed, non-zero when something went wrong ([exit-codes.md](../exit-codes.md)); the non-zero value is not part of the contract.
 
 ---
 
@@ -107,7 +101,7 @@ Off by default: `ger show` never fetches CI logs unless asked. `--ci` (or `ger.s
 - **Markdown / `--ai`:** a `### CI findings` section with a `#### <label>` per label.
 - **JSON:** a `ci_content` array (same entries as `ger ci --json`, without `body`). The key is absent when CI content is off.
 
-**Fetch failure is soft:** the Gerrit and comment output is unchanged and the link's `error: …` is reported in the CI section (JSON: `provenance.error`). The exit code stays the attention code. Design: [ci-content.md](../ci-content.md).
+**Fetch failure is soft:** the Gerrit and comment output is unchanged and the link's `error: …` is reported in the CI section (JSON: `provenance.error`). The exit code stays `0`. Design: [ci-content.md](../ci-content.md).
 
 ---
 
