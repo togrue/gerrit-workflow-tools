@@ -17,12 +17,13 @@ from typing import Any
 
 from gerrit_workflow_tools.core.attention import Attention, Severity, attention_severity
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id, parallel_map
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
 from gerrit_workflow_tools.core.rebase_state import RebaseStop
-from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain
+from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain, your_turn_since
 
 
 DEFAULT_TO_REVIEW_QUERY = "is:open -is:wip -is:private -owner:self reviewer:self"
@@ -52,6 +53,17 @@ class InboxSection:
     ``--unready`` shows; ``None`` when not counted."""
     drafted: frozenset[int] = frozenset()
     """The section's changes that hold drafts of yours (asked with ``with_drafts``)."""
+
+    @property
+    def waiting_on_you(self) -> list[ReviewChain]:
+        """The chains that want you: under *to review* those where it is your turn, every other
+        section's all. What the summary, the count and the next step speak of."""
+        return [chain for chain in self.chains if chain.your_turn] if self.name == TO_REVIEW else list(self.chains)
+
+    @property
+    def waiting_on_author(self) -> list[ReviewChain]:
+        """The *to review* chains you have reviewed that wait on their author; none in another section."""
+        return [chain for chain in self.chains if not chain.your_turn] if self.name == TO_REVIEW else []
 
 
 @dataclass(frozen=True)
@@ -119,21 +131,24 @@ def to_review_needs_you_as_reviewer(settings: Settings) -> bool:
     return not settings.inbox_to_review_query
 
 
-def waiting_on_your_review(service: GerritService, numbers: Collection[int]) -> set[int]:
-    """Which of the changes *numbers* wait on your review: the ones the *to review* section's own
+def review_turns(service: GerritService, numbers: Collection[int]) -> dict[int, bool]:
+    """Of the changes *numbers*, those you review, each with whether it is your turn
+    (:func:`your_turn_since`) or its author's. You review the ones the *to review* section's own
     query (:func:`build_to_review_query`) matches, in any project, with no limit and without
     ``--unready``. One query; none for no *numbers*.
 
-    The Change view asks it, so that a change listed under *to review* says so there too. The list
+    The Change view asks it, so that a change listed under *to review* says the same there. The list
     is narrower (the clone's project, ``ger.inboxLimit``): a change of another project, or beyond the
     limit, waits on you without being listed.
     """
     if not numbers:
-        return set()
+        return {}
     query = build_to_review_query(service.settings, projects=[], include_unready=False)
     changes = " OR ".join(f"change:{number}" for number in sorted(set(numbers)))
-    found = {row.get("_number") for row in service.changes.query(f"({query}) ({changes})")}
-    return {number for number in numbers if number in found}
+    found = [ChangeView.from_payload(row) for row in service.changes.query(f"({query}) ({changes})")]
+    me = service.self_account_id()
+    turns = {view.number: your_turn_since(view, me) is not None for view in found}
+    return {number: turns[number] for number in numbers if number in turns}
 
 
 def project_scope(
@@ -168,9 +183,12 @@ def with_project_filter(query: str, projects: list[str]) -> str:
     return f"{query} ({inner})"
 
 
-def section_summary(chains: list[ReviewChain]) -> dict[str, int]:
-    """Counts over one section's chains: sizes, oldest clocks, chains with failed CI or comments."""
-    return {
+def section_summary(section: InboxSection) -> dict[str, int]:
+    """Counts over the chains of *section* that want you (:attr:`InboxSection.waiting_on_you`):
+    sizes, oldest clocks, chains with failed CI or comments. *To review* also counts the chains
+    that wait on their author."""
+    chains = section.waiting_on_you
+    summary = {
         "chains": len(chains),
         "changes": sum(chain.depth for chain in chains),
         "oldest_unreviewed_seconds": max((chain.unreviewed_age_seconds for chain in chains), default=0),
@@ -178,6 +196,7 @@ def section_summary(chains: list[ReviewChain]) -> dict[str, int]:
         "ci_failures": sum(1 for chain in chains if Attention.CI_FAILED in chain.attention_reasons),
         "comments": sum(1 for chain in chains if Attention.UNRESOLVED_COMMENTS in chain.attention_reasons),
     }
+    return {**summary, "waiting_on_author": len(section.waiting_on_author)} if section.name == TO_REVIEW else summary
 
 
 def _touches(chain: ReviewChain, change_ids: Collection[str]) -> bool:
@@ -280,9 +299,11 @@ def pick_headline(
     current: Collection[str] | None = None,
     rebase: RebaseHeadline | None = None,
 ) -> Headline | RebaseHeadline | None:
-    """The headline: a *rebase* underway in the checkout; else failed CI, then unresolved
-    comments, then a negative vote on an outgoing chain (its base-most such change); else the
-    *to review* chain that has waited longest.
+    """The headline: a *rebase* underway in the checkout; else failed CI on an outgoing chain;
+    else whichever waited longer of unresolved comments on an outgoing chain (since its last
+    activity) and the *to review* chain that waits on your turn longest; else a negative vote on
+    an outgoing chain. On an outgoing chain, its base-most such change; on a chain to review, the
+    base-most change whose turn is yours.
 
     *current* is the Change-Ids of the chain you work on (normalised, as
     :func:`norm_change_id` gives them). Given, failed CI is a headline only on a chain with one
@@ -292,14 +313,33 @@ def pick_headline(
         return rebase
     by_name = {section.name: section for section in sections}
     outgoing = by_name[OUTGOING].chains if OUTGOING in by_name else []
-    for reason in _HEADLINE_ORDER:
-        for chain in outgoing:
-            if reason == Attention.CI_FAILED and current is not None and not _touches(chain, current):
-                continue
-            for member in chain.members:
-                if reason in member.attention_reasons:
-                    return Headline(OUTGOING, reason, chain, member)
-    to_review = by_name[TO_REVIEW].chains if TO_REVIEW in by_name else []
-    if to_review:
-        return Headline(TO_REVIEW, Attention.WAITING_ON_YOU, to_review[0], to_review[0].top)
+    # (rank in the headline order, how long it waited, negated): the least wins; a tie keeps the first.
+    candidates: list[tuple[int, int, Headline]] = []
+    for rank, reason in enumerate(_HEADLINE_ORDER):
+        found = _first_with(outgoing, reason, current)
+        if found is not None:
+            waited = found[0].wait_age_seconds if reason == Attention.UNRESOLVED_COMMENTS else 0
+            candidates.append((rank, -waited, Headline(OUTGOING, reason, *found)))
+    yours = by_name[TO_REVIEW].waiting_on_you if TO_REVIEW in by_name else []
+    if yours:
+        chain = yours[0]
+        member = next((m for m in chain.members if m.your_turn), chain.top)
+        rank = _HEADLINE_ORDER.index(Attention.UNRESOLVED_COMMENTS)
+        candidates.append(
+            (rank, -chain.unreviewed_age_seconds, Headline(TO_REVIEW, Attention.WAITING_ON_YOU, chain, member))
+        )
+    return min(candidates, key=lambda candidate: candidate[:2])[2] if candidates else None
+
+
+def _first_with(
+    chains: Sequence[ReviewChain], reason: str, current: Collection[str] | None
+) -> tuple[ReviewChain, ChainMember] | None:
+    """The first of *chains* with a member that has *reason*, and that member (failed CI only on
+    the *current* chain, when it is given)."""
+    for chain in chains:
+        if reason == Attention.CI_FAILED and current is not None and not _touches(chain, current):
+            continue
+        for member in chain.members:
+            if reason in member.attention_reasons:
+                return chain, member
     return None

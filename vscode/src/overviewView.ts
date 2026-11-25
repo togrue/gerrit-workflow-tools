@@ -8,14 +8,15 @@ import { memberTarget } from "./changeLoad";
 import { CHAIN_SORTS, ChainSort, chainDescription, plural, reasonWords, sortedChains, votes } from "./format";
 import { attentionThemeIcon, icon } from "./icons";
 import { ChangeTarget, Model } from "./model";
-import { SECTION_TITLES, TREE_WORDS, changeRowContext } from "./rows";
+import { SECTION_TITLES, TREE_WORDS, changeRowContext, waitsOnYou } from "./rows";
 import { feedback, ui } from "./ui";
 
 type Node =
   | { kind: "headline"; headline: Headline }
   | { kind: "section"; section: Section }
+  | { kind: "waiting"; section: Section; chains: Chain[] }
   | { kind: "chain"; chain: Chain; section: Section }
-  | { kind: "member"; member: Member; chain: Chain }
+  | { kind: "member"; member: Member; chain: Chain; section: Section }
   | { kind: "info"; text: string; detail?: string; icon?: vscode.ThemeIcon };
 
 const SORT_KEY = "ger.chainSort";
@@ -78,14 +79,22 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
       return this.roots();
     }
     if (node.kind === "section") {
-      const chains = sortedChains(node.section.chains, this.sort);
-      return chains.length
-        ? chains.map((chain) => ({ kind: "chain", chain, section: node.section }))
-        : [{ kind: "info", text: node.section.name === "to-review" ? TREE_WORDS.nothingToReview : TREE_WORDS.noChanges }];
+      const all = sortedChains(node.section.chains, this.sort);
+      if (!all.length) {
+        return [{ kind: "info", text: node.section.name === "to-review" ? TREE_WORDS.nothingToReview : TREE_WORDS.noChanges }];
+      }
+      // To review lists what waits on you; the chains you reviewed wait on their author, folded below.
+      const yours = all.filter((chain) => waitsOnYou(chain, node.section.name));
+      const waiting = all.filter((chain) => !yours.includes(chain));
+      const rows: Node[] = yours.length ? yours.map((chain) => ({ kind: "chain", chain, section: node.section })) : [{ kind: "info", text: TREE_WORDS.nothingWaitsOnYou }];
+      return waiting.length ? [...rows, { kind: "waiting", section: node.section, chains: waiting }] : rows;
+    }
+    if (node.kind === "waiting") {
+      return node.chains.map((chain) => ({ kind: "chain", chain, section: node.section }));
     }
     if (node.kind === "chain" && node.chain.members.length > 1) {
       // Base first is push order; the list reads top-down like `git log`, newest first.
-      return [...node.chain.members].reverse().map((member) => ({ kind: "member", member, chain: node.chain }));
+      return [...node.chain.members].reverse().map((member) => ({ kind: "member", member, chain: node.chain, section: node.section }));
     }
     return [];
   }
@@ -106,8 +115,8 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
     if (!overview.headline) {
       nodes.push({ kind: "info", text: TREE_WORDS.nothingNeedsYou, icon: icon("pass", "testing.iconPassed") });
     }
-    // Your own chains first: failed CI and comments there are yours to fix.
-    const order = ["outgoing", "to-review"];
+    // What waits on your review first: somebody cannot go on without you. Your own chains below.
+    const order = ["to-review", "outgoing"];
     const sections = [...(overview.sections ?? [])].sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
     return nodes.concat(sections.map((section) => ({ kind: "section", section })));
   }
@@ -124,7 +133,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
       case "section": {
         const { name, chains, summary } = node.section;
         const item = new vscode.TreeItem(SECTION_TITLES[name] ?? name, vscode.TreeItemCollapsibleState.Expanded);
-        const notes = [plural(chains.length, "chain")];
+        const notes = [plural(chains.filter((chain) => waitsOnYou(chain, name)).length, "chain")];
         if (summary.ci_failures) {
           notes.push(`${summary.ci_failures} with failed CI`);
         }
@@ -138,10 +147,18 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
         item.tooltip = node.section.query;
         return item;
       }
+      case "waiting": {
+        const item = new vscode.TreeItem(TREE_WORDS.waitingOnAuthor, vscode.TreeItemCollapsibleState.Collapsed);
+        item.id = `${node.section.name}/waiting-on-author`;
+        item.description = plural(node.chains.length, "chain");
+        item.iconPath = icon("clock");
+        item.tooltip = "Chains you reviewed: their author's turn, as Gerrit's attention set says. A new patchset or a reply to you brings one back up.";
+        return item;
+      }
       case "chain":
         return this.chainItem(node.chain, node.section);
       case "member":
-        return this.memberItem(node.member, node.chain);
+        return this.memberItem(node.member, node.chain, node.section);
       case "info": {
         const item = new vscode.TreeItem(node.text);
         item.description = node.detail;
@@ -164,9 +181,10 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
       item.command = { command: "ger.openChange", title: "Show Change", arguments: [memberTarget(chain.members[0], chain, this.model.stack)] };
     }
     item.description = `${active ? "● new activity · " : ""}${chainDescription(chain, section.name)}`;
-    // To review, a clean chain is what wants you; outgoing, a clean chain is waiting on others.
-    const clean = chain.severity === "ok";
-    item.iconPath = section.name === "to-review" && clean ? icon("eye") : attentionThemeIcon(chain);
+    // To review, a clean chain whose turn is yours is what wants you, one you reviewed waits on its author;
+    // outgoing, a clean chain is waiting on others.
+    const toReview = section.name === "to-review";
+    item.iconPath = toReview && chain.severity === "ok" ? icon(waitsOnYou(chain, section.name) ? "eye" : "clock") : attentionThemeIcon(chain);
     const lines = [
       `**${chain.top.subject}**`,
       `${chain.project} · ${chain.branch} · ${chain.owner.name}`,
@@ -180,17 +198,17 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
     }
     item.tooltip = new vscode.MarkdownString(lines.join("\n\n"));
     const top = chainTop(chain);
-    const toReview = section.name === "to-review";
     item.contextValue = changeRowContext({ kind: single ? "change" : "chain", url: Boolean(chain.top.url), local: Boolean(top?.local_sha), toReview });
     return item;
   }
 
-  private memberItem(member: Member, chain: Chain): vscode.TreeItem {
+  private memberItem(member: Member, chain: Chain, section: Section): vscode.TreeItem {
     const item = new vscode.TreeItem(member.subject);
     item.id = `${chain.key}/${member.number}`;
     item.description = `${member.number} · ${votes(member)}${member.local_sha ? " · in your stack" : ""}`;
-    item.iconPath = attentionThemeIcon(member);
-    item.tooltip = reasonWords(member.attention_reasons) || "no open issues";
+    // Under To review, a change with nothing wrong shows whose turn it is: an eye while it is yours.
+    item.iconPath = section.name === "to-review" && member.severity === "ok" && member.your_turn ? icon("eye") : attentionThemeIcon(member);
+    item.tooltip = reasonWords(member.attention_reasons) || (member.your_turn ? "waiting for your review" : "no open issues");
     item.contextValue = changeRowContext({ kind: "change", url: Boolean(member.url), local: member.local_sha !== null });
     item.command = { command: "ger.openChange", title: "Show Change", arguments: [memberTarget(member, chain, this.model.stack)] };
     return item;

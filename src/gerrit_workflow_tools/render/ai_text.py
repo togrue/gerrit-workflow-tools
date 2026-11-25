@@ -76,7 +76,10 @@ def stack_ai_lines(
 def _chain_facts(chain: ReviewChain, *, outgoing: bool) -> list[str]:
     facts = [counted(chain.depth, "change")] if chain.depth > 1 else []
     if not outgoing:
-        facts += [f"by {chain.owner_name}", f"waiting on you {format_age(chain.unreviewed_age_seconds)}"]
+        turn = (
+            f"waiting on you {format_age(chain.unreviewed_age_seconds)}" if chain.your_turn else "waits on the author"
+        )
+        facts += [f"by {chain.owner_name}", turn]
     facts.append(f"last activity {format_age(chain.wait_age_seconds)}")
     facts += vote_words(chain.verified, chain.code_review)
     for member in chain.members:
@@ -94,6 +97,8 @@ def inbox_ai_lines(sections: Sequence[InboxSection], *, projects: Sequence[str])
         chains = section.chains
         changes = sum(chain.depth for chain in chains)
         count = f"{counted(len(chains), 'chain')}, {counted(changes, 'change')}" if chains else "none"
+        if waiting := len(section.waiting_on_author):
+            count += f", {waiting} of them wait{'s' if waiting == 1 else ''} on the author"
         lines.append(f"{name}: {count}")
         outgoing = section.name == OUTGOING
         lines += [_item(f"change {c.top.number} {c.top.subject}", _chain_facts(c, outgoing=outgoing)) for c in chains]

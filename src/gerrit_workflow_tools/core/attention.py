@@ -50,7 +50,10 @@ class Attention:  # pylint: disable=too-few-public-methods
     AWAITING_REPLY = "awaiting-reply"
     """Unresolved comment chains, every one waiting on the other side: your comment is the last word."""
     WAITING_ON_YOU = "waiting-on-you"
-    """Somebody else's change asks for your review: the *to review* section's query matches it."""
+    """Somebody else's change asks for your review, and it is your **turn**: the *to review*
+    section's query matches it, and Gerrit's attention set holds you (``your_turn_since``)."""
+    WAITING_ON_AUTHOR = "waiting-on-author"
+    """Somebody else's change you review, after your review: its author's **turn**, not yours."""
     WIP = "wip"
     GERRIT_UNKNOWN = "gerrit-unknown"
     """Gerrit could not be asked, so this commit's review state is unknown."""
@@ -60,13 +63,15 @@ class Attention:  # pylint: disable=too-few-public-methods
 _WAITING_FOR_REVIEWERS = frozenset({Attention.NO_REVIEWERS, Attention.AWAITING_REVIEW})
 
 
-def as_your_review(reasons: Sequence[str]) -> list[str]:
-    """*reasons* of somebody's change that waits on your review, as you see it.
+def as_your_review(reasons: Sequence[str], *, your_turn: bool = True) -> list[str]:
+    """*reasons* of somebody's change you review, as you see it.
 
-    :data:`Attention.WAITING_ON_YOU` leads; no reviewers and awaiting review are gone, as what
-    the author waits for is you. Everything else about the change (CI, comments, votes) stays.
+    Whose turn it is leads, :data:`Attention.WAITING_ON_YOU` or (*your_turn* false)
+    :data:`Attention.WAITING_ON_AUTHOR`; no reviewers and awaiting review are gone, as the
+    reviewer the author waits for is you. Everything else about the change (CI, comments, votes) stays.
     """
-    return [Attention.WAITING_ON_YOU, *(reason for reason in reasons if reason not in _WAITING_FOR_REVIEWERS)]
+    turn = Attention.WAITING_ON_YOU if your_turn else Attention.WAITING_ON_AUTHOR
+    return [turn, *(reason for reason in reasons if reason not in _WAITING_FOR_REVIEWERS)]
 
 
 # Attention that warrants amending the commit (``ger edit --first-attention-commit``): comments to
@@ -106,6 +111,7 @@ REASON_SEVERITY: dict[str, Severity] = {
     Attention.AWAITING_REPLY: Severity.PENDING,
     Attention.NO_REVIEWERS: Severity.PENDING,
     Attention.WAITING_ON_YOU: Severity.PENDING,
+    Attention.WAITING_ON_AUTHOR: Severity.PENDING,
     Attention.CHAIN_BLOCKED: Severity.PENDING,
     Attention.WIP: Severity.PENDING,
     Attention.GERRIT_UNKNOWN: Severity.PENDING,

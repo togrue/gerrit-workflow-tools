@@ -16,6 +16,7 @@
   "awaiting-reply": "pending",
   "no-reviewers": "pending",
   "waiting-on-you": "pending",
+  "waiting-on-author": "pending",
   "chain-blocked": "pending",
   "wip": "pending",
   "gerrit-unknown": "pending"

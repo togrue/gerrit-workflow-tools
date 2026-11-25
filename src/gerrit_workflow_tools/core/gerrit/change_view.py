@@ -189,7 +189,8 @@ def _label_meanings(labels: Mapping[str, Any]) -> dict[str, dict[int, str]]:
 
 
 def _attention_set(raw: object) -> dict[int, datetime | None]:
-    """``last_update`` per account id, from the key or from the entry's account."""
+    """``last_update`` per account id, from the key or from the entry's account (``attention_set``
+    and ``removed_from_attention_set`` alike)."""
     out: dict[int, datetime | None] = {}
     if not isinstance(raw, dict):
         return out
@@ -254,6 +255,9 @@ class ChangeView:  # pylint: disable=too-many-instance-attributes
     revision_info: bool = False
     """Gerrit sent ``current_revision`` and a ``revisions`` map (``CURRENT_REVISION`` asked)."""
     attention_set: Mapping[int, datetime | None] = field(default_factory=dict)
+    """Gerrit's attention set: the accounts whose turn it is, each since when."""
+    removed_from_attention_set: Mapping[int, datetime | None] = field(default_factory=dict)
+    """The accounts Gerrit took out of the attention set, each when it last did."""
     owner_username: str | None = None
     """The owner's Gerrit username, when Gerrit sent it (``DETAILED_ACCOUNTS``)."""
     owner_account_id: int | None = None
@@ -317,6 +321,7 @@ class ChangeView:  # pylint: disable=too-many-instance-attributes
             label_votes=_label_votes(labels),
             revision_info=isinstance(payload.get("current_revision"), str) and isinstance(raw_revisions, dict),
             attention_set=_attention_set(payload.get("attention_set")),
+            removed_from_attention_set=_attention_set(payload.get("removed_from_attention_set")),
             freshness=change_freshness_key(payload),
             owner_username=_str(owner.get("username")) if isinstance(owner, dict) else None,
             owner_account_id=_account_id(owner),

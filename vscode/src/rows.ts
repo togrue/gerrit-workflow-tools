@@ -45,5 +45,12 @@ export const SECTION_TITLES: Record<string, string> = { "to-review": "To review"
 export const TREE_WORDS = {
   nothingNeedsYou: "Nothing needs you right now",
   nothingToReview: "Nothing to review",
+  nothingWaitsOnYou: "Nothing waits on your review",
+  waitingOnAuthor: "Waiting on the author",
   noChanges: "No open changes",
 };
+
+/** Whether a chain of `section` wants you: under To review, a member's turn is yours (core's `your_turn`); every outgoing chain is yours. */
+export function waitsOnYou(chain: { your_turn?: boolean }, section: string): boolean {
+  return section !== "to-review" || chain.your_turn !== false;
+}

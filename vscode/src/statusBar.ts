@@ -7,6 +7,7 @@ import { EventFollower } from "./events";
 import { headlineIcon, markdownText, plural, rebaseItem, refreshMode } from "./format";
 import { Model } from "./model";
 import { pollSeconds } from "./poller";
+import { waitsOnYou } from "./rows";
 
 /** `note` says which repository it is about, when the window has several folders. */
 export function statusBar(model: Model, events: EventFollower, note: string | undefined): vscode.StatusBarItem {
@@ -56,7 +57,11 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
             : undefined;
       for (const section of overview.sections ?? []) {
         const title = section.name === "outgoing" ? "Outgoing" : "To review";
-        tooltip.appendMarkdown(`**${title}** — ${plural(section.chains.length, "chain")}`);
+        // To review counts the chains whose turn is yours; those waiting on their author come after.
+        tooltip.appendMarkdown(`**${title}** — ${plural(section.chains.filter((chain) => waitsOnYou(chain, section.name)).length, "chain")}`);
+        if (section.summary.waiting_on_author) {
+          tooltip.appendMarkdown(`, ${section.summary.waiting_on_author} waiting on the author`);
+        }
         if (section.summary.ci_failures) {
           tooltip.appendMarkdown(`, ${section.summary.ci_failures} with failed CI`);
         }

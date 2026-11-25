@@ -67,6 +67,8 @@ export interface Member {
   local_sha: string | null;
   /** The commit of the current patch set on Gerrit. */
   sha: string | null;
+  /** Somebody else's change whose turn is yours: Gerrit's attention set holds you (else: not reviewed since its last patchset). */
+  your_turn?: boolean;
 }
 
 export interface Chain {
@@ -88,6 +90,8 @@ export interface Chain {
   attention_reasons: string[];
   severity: Severity;
   partial_chain: boolean;
+  /** Under To review: a member's turn is yours. False: you reviewed it, and it waits on its author. */
+  your_turn?: boolean;
   members: Member[];
   local?: boolean;
 }
@@ -97,6 +101,7 @@ export type SectionName = "to-review" | "outgoing";
 export interface Section {
   name: SectionName;
   query: string;
+  /** Counts over the chains that want you (To review: those whose turn is yours); To review adds `waiting_on_author`. */
   summary: Record<string, number>;
   chains: Chain[];
 }

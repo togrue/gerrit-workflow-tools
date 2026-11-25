@@ -387,7 +387,7 @@ def test_inbox_hyperlinks_make_the_change_label_the_link(
     blank, summary = visible.splitlines()[4:6]
     assert blank == ""
     # The wait is counted from today: only its shape is pinned.
-    assert re.fullmatch(r"summary: 1 chains · 1 changes · longest wait \d+d", summary)
+    assert re.fullmatch(r"summary: 1 chain · 1 change · longest wait \d+d", summary)
     assert "https://gerrit.example.com" not in visible
 
 

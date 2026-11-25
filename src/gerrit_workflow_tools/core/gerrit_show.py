@@ -24,7 +24,7 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, G
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
-from gerrit_workflow_tools.core.inbox import to_review_needs_you_as_reviewer, waiting_on_your_review
+from gerrit_workflow_tools.core.inbox import review_turns, to_review_needs_you_as_reviewer
 from gerrit_workflow_tools.core.local_comments import local_chains_of
 from gerrit_workflow_tools.core.stack import (
     Commit,
@@ -299,7 +299,7 @@ class ShownCommit:
 
 
 def _mark_waiting_on_you(service: GerritService, commits: list[LogCommit]) -> None:
-    """Of *commits*, each that waits on your review leads with that (:func:`as_your_review`).
+    """Of *commits*, each you review leads with whose turn it is (:func:`as_your_review`).
 
     Commits of the local stack are asked too: a change checked out for review (``ger review``), or
     a colleague's change your work sits on, is in the stack and still waits on you. The query's own
@@ -319,12 +319,12 @@ def _mark_waiting_on_you(service: GerritService, commits: list[LogCommit]) -> No
         pushed = [c for c in pushed if any(r.account_id == me and not r.cc for r in c.reviewers)]
     numbers = [c.number for c in pushed if c.number is not None]
     try:
-        asked = waiting_on_your_review(service, numbers)
+        turns = review_turns(service, numbers)
     except GerritApiError:
         return
     for commit in commits:
-        if commit.number in asked:
-            commit.attention_reasons = as_your_review(commit.attention_reasons)
+        if commit.number in turns:
+            commit.attention_reasons = as_your_review(commit.attention_reasons, your_turn=turns[commit.number])
 
 
 def load_shown_commits(

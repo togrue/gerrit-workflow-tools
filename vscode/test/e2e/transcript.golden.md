@@ -7,14 +7,14 @@ status bar | $(error) CI failed: 102
 state  | ready
 events | live
 chains | CI failed on 102: test! temporary experiment
+chains | To review — 1 chain
+chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
 chains |     Cleanup after experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
 chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
 chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
-chains | To review — 1 chain
-chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 stack  | Cleanup after experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
@@ -68,10 +68,10 @@ picker: Sort review chains — "Applies to both sections"
     → picked "By last activity, oldest first"
 status bar message: $(check) Chains sorted by last activity, oldest first
 --- on screen:
-+ chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments · oldest first
-- chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 + chains | To review — 1 chain · oldest first
 - chains | To review — 1 chain
++ chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments · oldest first
+- chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 ```
 
 ## 4. Review chains › Sort Chains… › By chain state
@@ -86,10 +86,10 @@ picker: Sort review chains — "Applies to both sections"
     → picked "By chain state"
 status bar message: $(check) Chains sorted by chain state
 --- on screen:
-+ chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
-- chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments · oldest first
 + chains | To review — 1 chain
 - chains | To review — 1 chain · oldest first
++ chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
+- chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments · oldest first
 ```
 
 ## 5. Review chains › Refresh from Gerrit
@@ -275,14 +275,14 @@ notification (info): No review checkout is open here.
 - state  | ready
 - events | live
 - chains | CI failed on 102: test! temporary experiment
+- chains | To review — 1 chain
+- chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 - chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 - chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
 - chains |     Cleanup after experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
 - chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 - chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
 - chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
-- chains | To review — 1 chain
-- chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 - stack  | Cleanup after experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 - stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
@@ -330,14 +330,14 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 + state  | ready
 + events | live
 + chains | CI failed on 102: test! temporary experiment
++ chains | To review — 1 chain
++ chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 + chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 + chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
 + chains |     Cleanup after experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
 + chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 + chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
 + chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
-+ chains | To review — 1 chain
-+ chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 + stack  | Cleanup after experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
@@ -372,14 +372,14 @@ notification (warning): Refresh failed: ger.webUrl must use https:// (got 'http:
 - state  | ready
 + stack  | Your local stack shows here once ger can ask Gerrit. ger says: ger.webUrl must use https:// (got 'http://gerrit.example'): credentials go with every request. For a local test Gerrit on plain http, opt in with `git config ger.allowInsecureHttp true`
 - chains | CI failed on 102: test! temporary experiment
+- chains | To review — 1 chain
+- chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 - chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 - chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
 - chains |     Cleanup after experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
 - chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 - chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
 - chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
-- chains | To review — 1 chain
-- chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 - stack  | Cleanup after experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 - stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
@@ -418,14 +418,14 @@ status bar message: $(check) Refreshed from Gerrit
 + state  | ready
 + events | live
 + chains | CI failed on 102: test! temporary experiment
++ chains | To review — 1 chain
++ chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 + chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 + chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
 + chains |     Cleanup after experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
 + chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 + chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
 + chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
-+ chains | To review — 1 chain
-+ chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 + stack  | Cleanup after experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
@@ -1307,11 +1307,11 @@ notification (warning): Still out of date: fake ger: down for this test
 - chains |     Cleanup after experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
 - chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 + chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
-- chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
 + stack  | test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 + stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 + stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
+- chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
 - stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | Refactor parser init — <sha> · only rebased since the last push  [review +2, ci good]
 - stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
@@ -1326,24 +1326,24 @@ notification (warning): Still out of date: fake ger: down for this test
 + status bar | $(warning) Gerrit
 + state  | incompatible
 + events | (not said)
-+ stack  | ger serve speaks API 2.0, the extension needs 1.1: update the extension, or install the ger release that matches it.
++ stack  | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
 - status bar | $(error) CI failed: 102
 - state  | ready
 - events | live
 - chains | CI failed on 102: Refactor parser init
+- chains | To review — 1 chain
+- chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 - chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 - chains |   test! temporary experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
 - chains |     test! temporary experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
 - chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 - chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
 - chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
-- chains | To review — 1 chain
-- chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 - stack  | test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
-+ change | ger serve speaks API 2.0, the extension needs 1.1: update the extension, or install the ger release that matches it.
++ change | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
 - change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 - change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | Commit message — test! temporary experiment  (editable)
@@ -1364,14 +1364,14 @@ status bar message: $(check) Refreshed from Gerrit
 + state  | ready
 + events | live
 + chains | CI failed on 102: Refactor parser init
++ chains | To review — 1 chain
++ chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 + chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 + chains |   test! temporary experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
 + chains |     test! temporary experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
 + chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 + chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
 + chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
-+ chains | To review — 1 chain
-+ chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 + stack  | test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 + stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
@@ -1390,9 +1390,9 @@ status bar message: $(check) Refreshed from Gerrit
 - status bar | $(warning) Gerrit
 - state  | incompatible
 - events | (not said)
-- stack  | ger serve speaks API 2.0, the extension needs 1.1: update the extension, or install the ger release that matches it.
+- stack  | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
 - change | title: Change 102
-- change | ger serve speaks API 2.0, the extension needs 1.1: update the extension, or install the ger release that matches it.
+- change | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
 ```
 
 ## Meanwhile: a reviewer comments on change 900 on Gerrit, and its event stream says so
@@ -2807,14 +2807,14 @@ status bar | $(error) CI failed: 102
 state  | ready
 events | live
 chains | CI failed on 102: Refactor parser init
+chains | To review — 1 chain · 1 with comments
+chains |   Add retry to the uploader — alice · 1 change · V+1 CR+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 chains |   test! temporary experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
 chains |     test! temporary experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
 chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
 chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
-chains | To review — 1 chain · 1 with comments
-chains |   Add retry to the uploader — alice · 1 change · V+1 CR+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]

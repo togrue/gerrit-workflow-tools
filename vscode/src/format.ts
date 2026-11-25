@@ -17,6 +17,7 @@ const WORDS: Record<string, string> = {
   "awaiting-review": "awaiting review",
   "no-reviewers": "no reviewers",
   "waiting-on-you": "waiting for your review",
+  "waiting-on-author": "waiting on the author",
   "chain-blocked": "blocked by an earlier change",
   "missing-change-id": "no Change-Id",
   "invalid-change-id": "invalid Change-Id",
@@ -201,7 +202,9 @@ export function chainDescription(chain: Chain, section: string): string {
   const parts = [plural(chain.depth, "change"), votes(chain)];
   if (section === "to-review") {
     parts.unshift(chain.owner.name);
-    parts.push(`waiting ${age(chain.unreviewed_age_seconds)}`);
+    if (chain.your_turn !== false) {
+      parts.push(`waiting ${age(chain.unreviewed_age_seconds)}`);
+    }
   }
   parts.push(`active ${age(chain.wait_age_seconds)} ago`);
   return parts.join(" · ");

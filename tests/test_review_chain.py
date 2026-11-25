@@ -10,8 +10,8 @@ from gerrit_workflow_tools.core.review_chain import (
     ReviewChain,
     assemble_review_chains,
     format_age,
-    member_unreviewed_since,
     missing_parent_shas,
+    your_turn_since,
 )
 
 
@@ -252,7 +252,7 @@ def test_unreviewed_falls_back_to_current_patchset_after_old_vote() -> None:
         created="2026-08-16 12:00:00.000000000",
         my_vote_date="2026-08-10 12:00:00.000000000",
     )
-    stamp = member_unreviewed_since(ChangeView.from_payload(payload), SELF)
+    stamp = your_turn_since(ChangeView.from_payload(payload), SELF)
     assert stamp == datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
 
 
@@ -266,7 +266,7 @@ def test_current_vote_means_not_waiting_on_me() -> None:
         created="2026-08-10 12:00:00.000000000",
         my_vote_date="2026-08-18 07:00:00.000000000",
     )
-    assert member_unreviewed_since(ChangeView.from_payload(payload), SELF) is None
+    assert your_turn_since(ChangeView.from_payload(payload), SELF) is None
     chains = _assemble([payload], [], web_base=WEB, now=NOW, self_account_id=SELF)
     assert chains[0].unreviewed_age_seconds == 0
     assert chains[0].wait_age_seconds == 4 * 3600

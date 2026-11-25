@@ -36,6 +36,7 @@ def member_json(member: ChainMember) -> dict[str, object]:
         "severity": attention_severity(member.attention_reasons).value,
         "url": member.url,
         "sha": member.sha,
+        "your_turn": member.your_turn,
     }
 
 
@@ -64,6 +65,7 @@ def chain_json(chain: ReviewChain) -> dict[str, object]:
         "attention_reasons": list(chain.attention_reasons),
         "severity": attention_severity(chain.attention_reasons).value,
         "partial_chain": chain.partial_chain,
+        "your_turn": chain.your_turn,
         "members": [member_json(member) for member in chain.members],
     }
 
@@ -128,7 +130,7 @@ def sections_json(sections: list[InboxSection]) -> list[dict[str, object]]:
         {
             "name": section.name,
             "query": section.query,
-            "summary": section_summary(section.chains),
+            "summary": section_summary(section),
             "chains": [chain_json(chain) for chain in section.chains],
         }
         for section in sections

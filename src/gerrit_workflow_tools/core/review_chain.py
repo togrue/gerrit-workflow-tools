@@ -46,6 +46,8 @@ class ChainMember:  # pylint: disable=too-many-instance-attributes
     comments_awaiting_reply: int = 0
     """Of :attr:`comments_unresolved`, the chains whose last published comment is yours: they wait
     on the other side (``ChainTurn.THEIRS``)."""
+    your_turn: bool = False
+    """It is your turn to review it (:func:`your_turn_since`); never on a change of yours."""
 
 
 @dataclass(frozen=True)
@@ -73,6 +75,9 @@ class ReviewChain:  # pylint: disable=too-many-instance-attributes
     """The member updated last was updated by you (your push, your vote): not news to you."""
     comments_awaiting_reply: int = 0
     """Of :attr:`comments_unresolved`, the chains that wait on the other side, over all members."""
+    your_turn: bool = False
+    """It is your turn to review a member: the chain waits on you. Otherwise a chain you review
+    waits on its author; :attr:`unreviewed_age_seconds` is then 0."""
 
     @property
     def work_in_progress(self) -> bool:
@@ -111,27 +116,33 @@ def missing_parent_shas(changes: list[ChangeView]) -> list[str]:
     return list(dict.fromkeys(parent for parent in parents if parent not in known))
 
 
-def _self_vote_date(change: ChangeView, self_account_id: int | None) -> datetime | None:
-    if self_account_id is None:
-        return None
+def _self_vote_date(change: ChangeView, self_account_id: int) -> datetime | None:
     dates = [vote.date for vote in change.code_review_votes if vote.account_id == self_account_id and vote.date]
     return max(dates, default=None)
 
 
-def member_unreviewed_since(change: ChangeView, self_account_id: int | None) -> datetime | None:
-    """When this change last started waiting for *self*'s review, or ``None`` if current.
+def your_turn_since(change: ChangeView, self_account_id: int | None) -> datetime | None:
+    """Since when it is your **turn** on somebody else's *change*; ``None`` while it is not. Never
+    on a change of yours. The one place that decides it.
 
-    Prefers the attention-set clock (Gerrit's "your turn"). Falls back to "current
-    patch set uploaded after my last Code-Review vote", then to change creation
-    when I have never voted.
+    Gerrit's attention set decides wherever it holds you: in it, your turn since Gerrit put you
+    there (an upload, a reply to you); taken out of it (your reply), not yours. With neither, a
+    server with the attention set switched off or one that never had you in it: your turn while
+    the current patch set came after your last Code-Review vote, or since the change was created
+    when you never voted.
     """
-    attention_at = change.attention_set.get(self_account_id) if self_account_id is not None else None
-    if attention_at is not None:
-        return attention_at
-    last_vote = _self_vote_date(change, self_account_id)
+    me = self_account_id
+    if me is None or change.owned_by(me):
+        return None
+    created = parse_gerrit_time(change.created)
+    if me in change.attention_set:
+        return change.attention_set[me] or change.current_revision_created() or created
+    if me in change.removed_from_attention_set:
+        return None
+    last_vote = _self_vote_date(change, me)
     patch_created = change.current_revision_created()
     if last_vote is None:
-        return patch_created or parse_gerrit_time(change.created)
+        return patch_created or created
     if patch_created is not None and last_vote < patch_created:
         return patch_created
     return None
@@ -186,6 +197,7 @@ def _to_member(
         private=change.private,
         updated_by_you=change.updated_by(self_account_id),
         comments_awaiting_reply=awaiting_reply,
+        your_turn=your_turn_since(change, self_account_id) is not None,
     )
 
 
@@ -220,7 +232,7 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
     top_member = next((member for member in members if member.number == top_number), members[-1])
     last_activity = max((member.updated for member in members if member.updated is not None), default=None)
     last = [member for member in members if member.updated == last_activity]
-    stamps = (member_unreviewed_since(payloads[member_id], self_account_id) for member_id in ordered_ids)
+    stamps = (your_turn_since(payloads[member_id], self_account_id) for member_id in ordered_ids)
     unreviewed_at = min((stamp for stamp in stamps if stamp is not None), default=None)
     project = top_member.project
     return ReviewChain(
@@ -243,6 +255,7 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
         partial_chain=any(payloads[member_id].first_parent in unmatched for member_id in ordered_ids),
         url=top_member.url,
         last_activity_yours=last_activity is not None and all(member.updated_by_you for member in last),
+        your_turn=unreviewed_at is not None,
     )
 
 
@@ -284,5 +297,13 @@ def assemble_review_chains(  # pylint: disable=too-many-arguments,too-many-local
         )
         if chain is not None:
             chains.append(chain)
-    chains.sort(key=lambda chain: (-chain.unreviewed_age_seconds, -chain.wait_age_seconds, chain.top.number))
+    # Your turn first, longest waited first; then the chains that wait on their author.
+    chains.sort(
+        key=lambda chain: (
+            not chain.your_turn,
+            -chain.unreviewed_age_seconds,
+            -chain.wait_age_seconds,
+            chain.top.number,
+        )
+    )
     return chains
