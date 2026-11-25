@@ -95,6 +95,7 @@ A **gap** names the work that would close it.
 | `ger.checkout` | `ger checkout CHANGEISH` | runs in a terminal, as it may ask to update an existing branch |
 | `ger.stack.edit` | `ger edit REV` | |
 | `ger.reviewDone` | `ger review --done` | |
+| `ger.reviewUpdate` | `ger review CHANGEISH` (again, once Gerrit has a newer patchset) | offered on the Change view's "newer patchset" line in a staged review; it then opens on what is new since your review |
 | `ger.reviewNext` | `ger review --next` | the change it moves to is shown, all its files in one editor |
 | `ger.reviewPrev` | `ger review --prev` | |
 | `ger.vote` | `ger review --vote +1 --change CHANGEISH -m MSG`; a *To review* chain row: `ger review --vote +1 --chain --change CHANGEISH` | the votes on offer and what each means are Gerrit's; one confirmation lists what goes out |

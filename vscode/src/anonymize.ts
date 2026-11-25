@@ -14,7 +14,7 @@
 
 import { randomInt } from "node:crypto";
 
-import { DISCARD, LOADING, MODES, NOTHING_SHOWN, NOT_FILES, NO_CI_LINK, READ_ONLY, STOPPED_WORDS, YOURS } from "./changeRows";
+import { DISCARD, LOADING, MODES, NOTHING_SHOWN, NOT_FILES, NO_CI_LINK, READ_ONLY, REVIEW_UPDATE, STOPPED_WORDS, YOURS } from "./changeRows";
 import { Names, Random } from "./fakes";
 import { ATTENTION_ICONS, FILE_STATES, REASON_WORDS } from "./format";
 import { SECTION_TITLES, TREE_WORDS, allRowContexts } from "./rows";
@@ -285,8 +285,17 @@ const CHANGE: Shape = {
     {
       icon: ICON,
       tone: TONE,
-      text: ours(["This commit is ahead of Gerrit", "Gerrit has a newer patchset than this commit"]),
+      text: ours(["This commit is ahead of Gerrit", "Gerrit has a newer patchset than this commit", "Gerrit has a newer patchset than the one checked out"]),
       detail: ours([...Object.values(SYNC_WORDS), "comments and CI below are about Gerrit's version"]),
+      /** Update to patchset N, in a staged review behind Gerrit. */
+      actions: [
+        {
+          label: ours([new RegExp(`Update to patchset ${PATCHSET}`), "Update to the newest patchset"]),
+          title: ours([REVIEW_UPDATE.title]),
+          command: { id: ours([REVIEW_UPDATE.command]), args: [TEXT] },
+          primary: KEEP,
+        },
+      ],
     },
   ],
   message: { key: KEY, text: TEXT, changeId: FOOTER_CHANGE_ID, author: PERSON, readOnly: READ_ONLY_WORDS, plain: KEEP },

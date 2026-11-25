@@ -454,6 +454,9 @@
     }
     for (const note of vm.notes || []) {
       parts.push(h("div", { class: "head note", title: `${note.text} — ${note.detail}` }, icon(note.icon, note.tone), h("span", { class: "label" }, note.text), h("span", { class: "detail" }, note.detail)));
+      if (note.actions && note.actions.length) {
+        parts.push(actions(note.actions));
+      }
     }
     if (vm.message) {
       parts.push(messageBlock(vm.message));

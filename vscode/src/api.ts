@@ -472,6 +472,8 @@ export interface ReviewState {
   commit: string;
   subject: string;
   staged: boolean;
+  /** In the review worktree, or in place on a branch (`ger.reviewCheckout`). */
+  mode: "worktree" | "branch";
   worktree: string;
   branch: string;
   /** The review chain's open changes, base first; null unless asked for. */
@@ -662,8 +664,9 @@ export class GerClient {
     return (await this.call<{ review: ReviewState | null }>("GET", "/review", chain ? { chain: "1" } : undefined)).review;
   }
 
-  async reviewOpen(change: number | string): Promise<ReviewState> {
-    return (await this.call<{ review: ReviewState }>("POST", "/review/open", undefined, { change })).review;
+  /** `ger review CHANGE`; `mode` as the review going on has it, else `ger.reviewCheckout` decides. */
+  async reviewOpen(change: number | string, mode?: ReviewState["mode"]): Promise<ReviewState> {
+    return (await this.call<{ review: ReviewState }>("POST", "/review/open", undefined, { change, mode })).review;
   }
 
   /** `ger review --next` (1) or `--prev` (-1): the review moves along its chain. At its end a `GerApiError` with reason `chain-end`. */

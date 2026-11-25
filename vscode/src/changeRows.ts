@@ -70,9 +70,18 @@ export interface ChangeState {
    * the files still conflicted), or with the conflicts resolved. Core's verdict, from the stack.
    */
   stopped?: Stopped;
+  /**
+   * The change a staged review holds here (core's `staged_review`): read as somebody else's change,
+   * with what is new since your review; `behind` when Gerrit has a newer patchset than the one
+   * checked out, `newest` its number when known.
+   */
+  reviewing?: { behind: boolean; newest: number | null };
   /** What has not come yet; absent once everything has. */
   loading?: Loading;
 }
+
+/** The way on from a staged review behind Gerrit: `ger review` checks the newest patchset out. */
+export const REVIEW_UPDATE = { command: "ger.reviewUpdate", title: "ger review: check Gerrit's newest patchset out for review, staged, in place of this one" };
 
 export interface Icon {
   icon: string;
@@ -162,7 +171,7 @@ export interface ChangeVm {
   loading?: { message: boolean; readOnly: string; plain: boolean };
   /** `badges` as the Local stack draws them; `detail` says them in words (or that the change is not on Gerrit). `actions`: the way on from a rebase stopped here, as Local stack's banner offers it. */
   head?: Icon & { text: string; detail: string; badges: Badge[]; actions?: StackAction[] };
-  notes?: (Icon & { text: string; detail: string })[];
+  notes?: (Icon & { text: string; detail: string; actions?: StackAction[] })[];
   /**
    * `text` without the Change-Id footer, which `changeId` names (empty when there is none): the page
    * shows it read-only under the message, and core puts it back on Apply (`keep_change_id`). `plain`: a message
@@ -425,11 +434,24 @@ export function changeVm(state: ChangeState): ChangeVm {
       // Only rebased, Gerrit keeps the votes on the push; with new code it may not. The row says the same.
       detail: SYNC_WORDS[sync({ ...commit, diverged: false })],
     });
+  } else if (status === "outdated" && state.reviewing) {
+    // Checked out for review, and the author has pushed since: the one obvious thing to do.
+    const newest = state.reviewing.newest;
+    const label = newest ? `Update to patchset ${newest}` : "Update to the newest patchset";
+    notes.push({
+      icon: "history",
+      tone: "warn",
+      text: "Gerrit has a newer patchset than the one checked out",
+      detail: "comments and CI below are about Gerrit's version",
+      actions: [{ label, title: REVIEW_UPDATE.title, command: { id: REVIEW_UPDATE.command, args: [] }, primary: true }],
+    });
   } else if (status === "outdated") {
     notes.push({ icon: "history", tone: "warn", text: "Gerrit has a newer patchset than this commit", detail: "comments and CI below are about Gerrit's version" });
   }
   const since = state.delta?.since;
-  const reviewed = !state.local && state.mode === "base" && since && since.patch_set !== null;
+  // Someone's change, also one checked out for review (unless it is behind: the update says it).
+  const theirs = !state.local || (state.reviewing !== undefined && !state.reviewing.behind);
+  const reviewed = theirs && state.mode === "base" && since && since.patch_set !== null;
   const open = chains.filter((chain) => !chain.resolved && !isYours(chain)).length;
   const fromGerrit = chains.filter((chain) => !isYours(chain)).length;
   const yours = chains.length - fromGerrit;
@@ -509,7 +531,10 @@ export function changeLines(vm: ChangeVm): string[] {
     const buttons = actionsText(vm.head.actions);
     add(0, vm.head.text, `${vm.head.detail}${buttons ? `  ${buttons}` : ""}`);
   }
-  vm.notes?.forEach((note) => add(0, note.text, note.detail));
+  vm.notes?.forEach((note) => {
+    const buttons = actionsText(note.actions);
+    add(0, note.text, `${note.detail}${buttons ? `  ${buttons}` : ""}`);
+  });
   if (vm.message) {
     add(0, "Commit message", `${vm.message.text.split("\n")[0]}${vm.message.readOnly ? "  (read-only)" : "  (editable)"}`);
   } else if (vm.loading?.message) {

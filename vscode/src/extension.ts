@@ -20,7 +20,7 @@ import { Poller } from "./poller";
 import { push, rebaseOntoUpstream, rebaseStep } from "./rebase";
 import { RepoWatcher } from "./repoWatcher";
 import { reportIssue } from "./reportIssue";
-import { ReviewWalk, checkout, editCommit, leaveReview, review, stepReview } from "./review";
+import { ReviewWalk, checkout, editCommit, leaveReview, review, stepReview, updateReview } from "./review";
 import { GerProcess } from "./server";
 import { CommitArg, StackView, commitTarget } from "./stackView";
 import { waitsForYou } from "./state";
@@ -213,6 +213,9 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     }
     await openChange(commitTarget(commit), true);
     await changeView.idle();
+    // Reviewed at an earlier patchset: what is new since is what to read, in the view and the combined diff.
+    await changeView.preferReviewDelta();
+    await changeView.idle();
     if (all) {
       await changeView.openAll();
     }
@@ -314,6 +317,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       const target = targetOf(arg);
       return voteAndPublish(model, target, { chain: isChainRow(arg), after: afterVote, next: isChainRow(arg) ? undefined : nextAfterVote(target) });
     },
+    "ger.reviewUpdate": () => updateReview(model, reviewWalk),
     "ger.reviewNext": () => stepReview(model, 1, reviewWalk),
     "ger.reviewPrev": () => stepReview(model, -1, reviewWalk),
     "ger.publishDrafts": (arg: unknown) => voteAndPublish(model, targetOf(arg), { draftsOnly: true, after: afterVote }),

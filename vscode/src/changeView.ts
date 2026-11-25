@@ -9,7 +9,7 @@ import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
 import { ChangeDetail, ciRevs, sameChange, stoppedHere } from "./changeLoad";
-import { ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, changeHeading, changeLines, changeVm, isYours } from "./changeRows";
+import { ChangeState, ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, changeHeading, changeLines, changeVm, isYours } from "./changeRows";
 import { fileUri, openDiff } from "./diffTabs";
 import { ChangeTarget, Model, describeError } from "./model";
 import { openConflict } from "./rebase";
@@ -147,6 +147,43 @@ export class ChangeView extends WebView<ChangeVm> {
     return number ? `change:${number}` : target.local ? undefined : target.rev;
   }
 
+  /**
+   * Whether the change shown is the one a staged review holds here: then it is read as somebody
+   * else's (what is new since your review), and when Gerrit has moved on, updating it is offered.
+   */
+  private holdsReview(target: ChangeTarget | undefined = this.target): boolean {
+    const review = this.model.stack?.staged_review;
+    return Boolean(review && target?.local && target.number === review.number);
+  }
+
+  private reviewing(): ChangeState["reviewing"] {
+    if (!this.holdsReview()) {
+      return undefined;
+    }
+    const shown = this.detail.commit();
+    return { behind: shown?.patchset_status === "outdated", newest: this.patchsets?.current ?? null };
+  }
+
+  /**
+   * In a staged review, start on what is new since your review when you reviewed an earlier
+   * patchset than the one checked out: the re-review is about that. Asks for the patchsets.
+   */
+  async preferReviewDelta(): Promise<void> {
+    const target = this.target;
+    const change = target && this.change(target);
+    if (!target || !change || !this.holdsReview(target) || this.mode !== "base") {
+      return;
+    }
+    const patchsets = this.patchsets ?? (await (await this.model.client()).patchsets(change).catch(() => undefined));
+    const review = this.model.stack?.staged_review;
+    if (patchsets && this.target === target) {
+      this.patchsets = patchsets;
+      if (patchsets.reviewed !== null && review && patchsets.reviewed < review.patch_set) {
+        await this.choose("local", "reviewed");
+      }
+    }
+  }
+
   /** Your commit, not a patchset of it: its files are in this worktree. */
   private showsLocal(): boolean {
     return Boolean(this.target?.local) && this.version === "local";
@@ -274,8 +311,8 @@ export class ChangeView extends WebView<ChangeVm> {
     if (this.mode === "gerrit") {
       return local ? client.diff(change, { since: "current", local }, signal) : undefined;
     }
-    // Someone's change: asked either way, as what is new since your review is offered up front.
-    if (this.mode === "reviewed" || !target.local) {
+    // Someone's change (also one checked out for review): asked either way, as what is new since your review is offered up front.
+    if (this.mode === "reviewed" || !target.local || this.holdsReview(target)) {
       return client.diff(change, { since: "reviewed", patchset: typeof this.version === "number" ? this.version : undefined, local }, signal);
     }
     return undefined;
@@ -372,6 +409,7 @@ export class ChangeView extends WebView<ChangeVm> {
       ci: this.ci,
       // Which commit a rebase stopped at is in the stack ger serve sent: the Change view reads it there, as Local stack does.
       stopped: this.target && stoppedHere(this.target, this.model.stack),
+      reviewing: this.reviewing(),
     });
     if (!state) {
       return { empty: this.target && this.detail.loading() ? `Loading ${this.target.title}…` : NOTHING_SHOWN };

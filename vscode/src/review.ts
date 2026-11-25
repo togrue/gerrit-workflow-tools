@@ -134,3 +134,28 @@ export async function stepReview(model: Model, step: 1 | -1, walk: ReviewWalk): 
 }
 
 const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/**
+ * Update to patchset N: the change a staged review holds here, behind Gerrit, is checked out
+ * again at its newest patchset (`ger review CHANGE`, in the review's own mode), then shown from
+ * what is new since your review, with all its files.
+ */
+export async function updateReview(model: Model, walk: ReviewWalk): Promise<void> {
+  const here = model.stack?.staged_review;
+  if (!here) {
+    void ui().message("info", "No staged review here to update.", {}, []);
+    return;
+  }
+  let opened: ReviewState;
+  try {
+    const client = await model.client();
+    opened = await ui().progress(vscode.ProgressLocation.Notification, `Checking out the newest patchset of ${here.number}`, () => client.reviewOpen(here.number, here.mode));
+  } catch (error) {
+    void ui().message("warning", `Not updated: ${describeError(error)}`, {}, []);
+    return;
+  }
+  await walk.leave();
+  await model.refresh();
+  feedback(`Reviewing ${opened.number}: patchset ${opened.patch_set}, staged`, { icon: "eye" });
+  await walk.show();
+}

@@ -102,7 +102,7 @@ test("during a rebase the tab is judged against the branch being rebased", () =>
 
 test("in a staged review, a diff with your file on its right is true while the review holds its change", () => {
   const [base, change, next] = [commit("Base"), commit("Change"), commit("Next")];
-  const review = (held: typeof change) => ({ number: 2155, patch_set: 1, commit: held.sha, subject: held.summary, staged: true, worktree: "/r", branch: "change-2155" });
+  const review = (held: typeof change) => ({ number: 2155, patch_set: 1, commit: held.sha, subject: held.summary, staged: true, mode: "worktree" as const, worktree: "/r", branch: "change-2155" });
   // HEAD sits at the change's parent; the change is what it stands for.
   const staged = stack([base, change], { branch: null, head: base.sha, staged_review: review(change) });
   assert.equal(stackNow(staged).head, change.sha);

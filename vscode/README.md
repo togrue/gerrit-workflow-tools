@@ -279,6 +279,14 @@ The commits above your upstream, newest first. One row per commit:
   (*Open All Changes*), and the combined diff of the change it left closes. At the top of the chain it
   says so and offers what `ger review` suggests there: **Vote on the Chain…** and **Leave Review**.
   With edits of yours in the way, nothing moves, and it says what to do in `ger review`'s words.
+- **Update to patchset N**: when the author has pushed since you checked their change out, the
+  Change view of the change under review says *Gerrit has a newer patchset than the one checked
+  out*, with this button (also *Update the Review to the Newest Patchset* in the palette). It runs
+  `ger review` again on the change, in the same place. Whenever a staged review shows a change you
+  reviewed at an earlier patchset (after the update, *Review Next Change*, the review window
+  opening), it starts on **Since my last review**, and so does the combined diff; *Show* and
+  *Compare* switch back as usual. The line *Since your review: patchset 1 → 2* is said for the
+  change under review as for anyone's change.
 - **Check Out to Work On** (download icon, changes that are not in your stack): `ger checkout` in
   the *ger* terminal puts the change on a `change-<n>` branch here that tracks its target branch, so
   the change is your local stack and *Push to Gerrit* uploads a new patchset. It may ask before it
