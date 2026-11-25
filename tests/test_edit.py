@@ -500,3 +500,11 @@ def test_reword_warning_says_how_to_keep_the_old_change(web_stack_repo: Path, mo
     assert code == 0
     assert "The old change stays open on Gerrit" in err
     assert f"put `Change-Id: {tip.change_id}` back with `ger reword" in err
+
+
+def test_edit_takes_color_as_log_and_show_do(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`--color never` is the shared flag (cli_args.add_color_args): accepted, not an unknown argument."""
+    code, _out, err = run_cli(
+        stack_repo, edit_main, ["--color", "never", "--cursor"], monkeypatch, gerrit=ChangeStore({})
+    )
+    assert code == 0 and "unrecognized arguments" not in err, err

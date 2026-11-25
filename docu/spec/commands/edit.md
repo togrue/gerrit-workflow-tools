@@ -41,6 +41,7 @@ A **Change-Id** or **triplet** matches offline; `change:<n>`, a URL or a `q:` qu
 | `--reword` / `--edit` / `--drop` | Override action (mutually exclusive per command) |
 | `-m MSG` / `-F FILE` | A reword's new message without an editor: `-m` repeated for paragraphs (as `ger reply` / `ger comment` take it, `cli_args.add_message_args`), `-F -` reads stdin. A message without a `Change-Id:` footer keeps the commit's. Refused with any other action |
 | `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
+| `--color WHEN`, `--hyperlinks WHEN` | `always` \| `auto` \| `never`, as for `ger log` and `ger show`; `auto` honours `NO_COLOR` ([Configuration.md](../../Configuration.md#colour)) |
 
 ---
 
