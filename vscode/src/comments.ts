@@ -302,11 +302,16 @@ export class CommentThreads implements vscode.Disposable {
     }
   }
 
-  /** Step through the unresolved chains of the shown change, in the Change view's order. */
+  /**
+   * Step through the unresolved chains of the shown change, in the Change view's order. On a change
+   * you review (not yours), your own drafts, local drafts and notes too: what you are about to
+   * publish is read again the same way.
+   */
   async step(direction: 1 | -1): Promise<void> {
-    const chains = this.view.unresolved();
+    const reviewing = this.view.shown?.own === false;
+    const chains = reviewing ? this.view.openChains() : this.view.unresolved();
     if (!chains.length) {
-      ui().status("$(pass) No unresolved comments on this change", 4000);
+      ui().status(`$(pass) No unresolved comments${reviewing ? " or drafts of yours" : ""} on this change`, 4000);
       return;
     }
     this.cursor = (this.cursor + direction + chains.length) % chains.length;

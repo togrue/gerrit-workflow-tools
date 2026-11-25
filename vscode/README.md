@@ -227,7 +227,8 @@ The commits above your upstream, newest first. One row per commit:
   of the change it left, as its right side is your file. VS Code before 1.86 has no multi-diff
   editor: the first file's diff opens instead.
 - **Comments**: unresolved first. Click one to open its file at the line, its thread expanded there. The chevron shows a chain whole: every comment in full; one about the whole change (no line in a file) opens that way on a click and has a box to reply right there. *Next / Previous Unresolved Comment* (command palette) step
-  through the unresolved ones, across files. `Alt+F9` / `Shift+Alt+F9` do it too while the Change view or a
+  through the unresolved ones, across files; on a change you review (not yours), your own drafts,
+  local drafts and notes too, so you can read again what you are about to publish. `Alt+F9` / `Shift+Alt+F9` do it too while the Change view or a
   diff of the change has focus; anywhere else they stay VS Code's own next / previous comment thread, which only
   walks the open file. For a local commit they also appear as comment threads in the
   editor. Reply, or reply "Done" and resolve — saved as **drafts** on Gerrit, published later:
