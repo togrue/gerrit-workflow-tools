@@ -384,7 +384,10 @@ def test_inbox_hyperlinks_make_the_change_label_the_link(
     visible = strip_ansi(out)
     assert GERRIT_LINK_LABEL not in visible and "/c/myproject/+/4321" not in visible
     assert visible.splitlines()[3].startswith("c4321")
-    assert visible.splitlines()[4:6] == ["", "summary: 1 chains · 1 changes · longest wait 100d"]
+    blank, summary = visible.splitlines()[4:6]
+    assert blank == ""
+    # The wait is counted from today: only its shape is pinned.
+    assert re.fullmatch(r"summary: 1 chains · 1 changes · longest wait \d+d", summary)
     assert "https://gerrit.example.com" not in visible
 
 
