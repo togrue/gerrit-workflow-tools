@@ -237,3 +237,26 @@ def test_edit_and_discard_take_the_comment_url_and_its_change(
     assert code == ExitCode.OK, err
     assert _drafts(store, first) == []
     assert _comment(stack_repo, store, ["--discard", url, "--change", str(number)], monkeypatch)[0] == ExitCode.USAGE
+
+
+def test_show_with_context_shows_the_code_around_a_new_draft_too(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finding 20 of the 2026-11-25 review walk: drafts came without their code; Gerrit's drafts
+    listing takes enable-context as its comments listing does."""
+    store, key = _store(stack_repo)
+    context = [{"line_number": 1, "context_line": "the first line of d.txt"}]
+    store.set_drafts(
+        key,
+        {
+            "d.txt": [
+                {"id": "d1", "line": 1, "message": "why?", "patch_set": 1, "unresolved": True, "context_lines": context}
+            ]
+        },
+    )
+    code, out, err = run_cli(stack_repo, show_main, ["--context", "--color=never"], monkeypatch, gerrit=store)
+    assert code == ExitCode.OK, err
+    assert "1  the first line of d.txt" in out
+    assert [call.kwargs for call in store.calls_to("list_drafts")][-1] == {"context_padding": 2}
+    code, out, err = run_cli(stack_repo, show_main, ["--color=never"], monkeypatch, gerrit=store)
+    assert "the first line of d.txt" not in out

@@ -208,8 +208,9 @@ class GerritRest(Protocol):
     ) -> dict[str, list[dict[str, Any]]]:
         """Return inline comments grouped by file path."""
 
-    def list_drafts(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
-        """Return the caller's draft comments on every patchset, grouped by file path."""
+    def list_drafts(self, change_id: str, *, context_padding: int | None = None) -> dict[str, list[dict[str, Any]]]:
+        """Return the caller's draft comments on every patchset, grouped by file path; with
+        *context_padding*, each with its ``context_lines`` (Gerrit's ``enable-context``)."""
 
     def put_draft(
         self, change_id: str, revision: int | str, comment: dict[str, Any], *, draft_id: str | None = None

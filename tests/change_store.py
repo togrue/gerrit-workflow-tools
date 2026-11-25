@@ -538,11 +538,13 @@ class ChangeStore:
             return payload
         return {path: [_without_comment_context(row) for row in rows] for path, rows in payload.items()}
 
-    def list_drafts(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
-        """Return the caller's drafts grouped by file path, like ``GET changes/<id>/drafts``."""
-        self._record("list_drafts", change_id)
+    def list_drafts(self, change_id: str, *, context_padding: int | None = None) -> dict[str, list[dict[str, Any]]]:
+        """Return the caller's drafts grouped by file path, like ``GET changes/<id>/drafts``; their
+        seeded ``context_lines`` only when asked with *context_padding*, as Gerrit sends them."""
+        self._record("list_drafts", change_id, context_padding=context_padding)
+        drop = set() if context_padding is not None else {"context_lines"}
         return {
-            path: [dict(row) for row in rows]
+            path: [{k: v for k, v in row.items() if k not in drop} for row in rows]
             for path, rows in self._drafts.get(self._require_unique_change_ref(change_id), {}).items()
         }
 
