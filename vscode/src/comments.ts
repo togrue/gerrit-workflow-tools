@@ -6,7 +6,7 @@
 import * as vscode from "vscode";
 
 import { Comment, CommentChain, NewCommentState, ShownCommit } from "./api";
-import { ownComment } from "./changeRows";
+import { NOT_FILES, answeredByDraft, ownComment } from "./changeRows";
 import { ChangeView } from "./changeView";
 import { FILE_SCHEME, filePath, repoPath } from "./diffTabs";
 import { commentLocation } from "./format";
@@ -99,6 +99,31 @@ function yourDraft(chain: CommentChain): Comment | undefined {
   return chain.comments.slice(1).find((comment) => comment.state === "draft");
 }
 
+/** Which change a walk position belongs to: its Change-Id, or its commit before the first push. */
+function changeKey(target: { changeId?: string | null; rev: string } | undefined): string {
+  return target?.changeId ?? target?.rev ?? "";
+}
+
+/**
+ * The index in `ids` (the walk now) one step in `direction` from `position` (the chain shown last,
+ * in the walk then); may be out of range, the caller wraps it. Still in the walk, the chain next to
+ * it; gone from it (answered), the first of those after it (before it, stepping back) that is still
+ * there. Nowhere yet, the first (the last).
+ */
+function stepFrom(position: { id: string; order: string[] } | undefined, ids: string[], direction: 1 | -1): number {
+  if (!position) {
+    return direction === 1 ? 0 : -1;
+  }
+  const at = ids.indexOf(position.id);
+  if (at >= 0) {
+    return at + direction;
+  }
+  const from = position.order.indexOf(position.id);
+  const passed = direction === 1 ? position.order.slice(from + 1) : position.order.slice(0, Math.max(0, from)).reverse();
+  const next = passed.map((id) => ids.indexOf(id)).find((index) => index >= 0);
+  return next ?? (direction === 1 ? ids.length : -1);
+}
+
 interface Anchor {
   rev: string;
   chain: CommentChain;
@@ -115,7 +140,12 @@ export class CommentThreads implements vscode.Disposable {
   private readonly toldAbout = new Set<string>();
   private outdated = false;
   private readonly listeners: vscode.Disposable[] = [];
-  private cursor = -1;
+  /**
+   * Where Next / Previous Unresolved Comment stands: the chain it showed last, by identity, and the
+   * walk's order then. A reload (a reply saved) keeps it; a chain that left the walk (your draft
+   * answers it now) is stepped on from where it was. Another change starts the walk afresh.
+   */
+  private position: { change: string; id: string; order: string[] } | undefined;
   /** Shows the commit you are standing on in the Change view, if the stack has it. Set by the extension. */
   showHead: () => Promise<unknown> = () => Promise.resolve();
 
@@ -268,8 +298,10 @@ export class CommentThreads implements vscode.Disposable {
       thread.dispose();
     }
     this.anchors.clear();
-    this.cursor = -1;
     const target = this.view.target;
+    if (this.position && this.position.change !== changeKey(target)) {
+      this.position = undefined;
+    }
     for (const box of this.boxes) {
       // A box on lines the shown change no longer has (another change is shown) has nowhere to save to.
       if (this.pathOf(box.uri) === undefined) {
@@ -303,22 +335,34 @@ export class CommentThreads implements vscode.Disposable {
   }
 
   /**
-   * Step through the unresolved chains of the shown change, in the Change view's order. On a change
-   * you review (not yours), your own drafts, local drafts and notes too: what you are about to
-   * publish is read again the same way.
+   * Step through the shown change's comments. On your own change, what is left for you to answer
+   * (`toAnswer`), in the Change view's order: a chain your draft answers is not walked again, and
+   * the count is of what is left. On a change you review (not yours), every open chain, your own
+   * drafts, local drafts and notes too: what you are about to publish is read again the same way.
+   * A chain about the whole change (no line in a file) is shown in the Change view, its reply box
+   * focused.
    */
   async step(direction: 1 | -1): Promise<void> {
     const reviewing = this.view.shown?.own === false;
-    const chains = reviewing ? this.view.openChains() : this.view.unresolved();
+    const chains = reviewing ? this.view.openChains() : this.view.toAnswer();
     if (!chains.length) {
-      ui().status(`$(pass) No unresolved comments${reviewing ? " or drafts of yours" : ""} on this change`, 4000);
+      this.position = undefined;
+      const answered = reviewing ? 0 : this.view.chains().filter((chain) => !chain.resolved && answeredByDraft(chain)).length;
+      const drafts = answered ? ` · ${answered} answered by your drafts (${publishing(this.view.shown).words.replace(/ it$/, " them")})` : "";
+      ui().status(`$(pass) ${reviewing ? "No unresolved comments or drafts of yours" : "No comments left to answer"} on this change${drafts}`, 4000);
       return;
     }
-    this.cursor = (this.cursor + direction + chains.length) % chains.length;
-    const chain = chains[this.cursor];
+    const ids = chains.map((chain) => chain.root_id);
+    const index = (stepFrom(this.position, ids, direction) + ids.length) % ids.length;
+    const chain = chains[index];
+    this.position = { change: changeKey(this.view.target), id: chain.root_id, order: ids };
     this.reveal(chain);
-    await this.show(chain);
-    ui().status(`Comment ${this.cursor + 1} of ${chains.length}`, 4000);
+    if (NOT_FILES.includes(chain.path)) {
+      await this.view.focusThread(chain);
+    } else {
+      await this.show(chain);
+    }
+    ui().status(`Comment ${index + 1} of ${chains.length}${reviewing ? "" : " to answer"}`, 4000);
   }
 
   /**

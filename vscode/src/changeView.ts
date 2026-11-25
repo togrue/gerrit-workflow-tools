@@ -9,7 +9,7 @@ import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
 import { ChangeDetail, ciRevs, sameChange, stoppedHere } from "./changeLoad";
-import { ChangeState, ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, changeHeading, changeLines, changeVm, isYours } from "./changeRows";
+import { ChangeState, ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, changeHeading, changeLines, changeVm, isYours, toAnswer } from "./changeRows";
 import { fileUri, openDiff } from "./diffTabs";
 import { ChangeTarget, Model, describeError } from "./model";
 import { openConflict } from "./rebase";
@@ -377,6 +377,11 @@ export class ChangeView extends WebView<ChangeVm> {
     return this.openChains().filter((chain) => !isYours(chain));
   }
 
+  /** What is left for you to answer (`toAnswer`): not what your draft answers, nor what waits on a reply. */
+  toAnswer(): CommentChain[] {
+    return this.chains().filter(toAnswer);
+  }
+
   // --- The view ---------------------------------------------------------------------
 
   private readOnly(): string {
@@ -435,6 +440,15 @@ export class ChangeView extends WebView<ChangeVm> {
   revealThread(chain: CommentChain): void {
     this.show(true);
     this.post({ type: "reveal", id: chain.root_id });
+  }
+
+  /**
+   * Show a chain with no line in a file (about the whole change) where it is answered: here, its
+   * text whole, the keyboard in its reply box (on the row, when there is nothing to reply to).
+   */
+  async focusThread(chain: CommentChain): Promise<void> {
+    await vscode.commands.executeCommand("ger.change.focus");
+    this.post({ type: "reveal", id: chain.root_id, open: true });
   }
 
   protected receive(message: Message): unknown {

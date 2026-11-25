@@ -550,10 +550,17 @@
     } else if (message.type === "reveal") {
       revealed = message.id;
       toggled.comments = true;
+      if (message.open) {
+        expanded.add(message.id); // about the whole change: its text whole, and its reply box
+      }
       draw(vm);
       const row = document.querySelector(`.thread[data-id="${CSS.escape(message.id)}"]`);
       if (row) {
         row.scrollIntoView({ block: "nearest" });
+        if (message.open) {
+          const box = replyBoxes.get(message.id);
+          (box && box.text.isConnected ? box.text : row).focus();
+        }
       }
     }
   });

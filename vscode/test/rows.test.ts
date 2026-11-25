@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { CommentChain, Rebase, RebaseAction, StackCommit } from "../src/api";
-import { ChangeState, READ_ONLY, changeHeading, changeLines, changeVm } from "../src/changeRows";
+import { ChangeState, READ_ONLY, answeredByDraft, changeHeading, changeLines, changeVm, toAnswer } from "../src/changeRows";
 import { attentionIcon, reasonWords } from "../src/format";
 import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, rebaseNotNowFresh, reviewerWords, skipQuestion, stackLines, stoppedAt, sync, stackVm, stackWhere } from "../src/stackRows";
 import { waitingFor } from "../src/state";
@@ -564,4 +564,16 @@ test("a comment chain whose last published word is yours waits on a reply: a pla
   assert.deepEqual([badge({ comments_unresolved: 2, comments_awaiting_reply: 2 })?.icon, badge({ comments_unresolved: 2, comments_awaiting_reply: 2 })?.title], ["comment", "2 comments wait on a reply"]);
   assert.deepEqual([badge({ comments_unresolved: 2, comments_awaiting_reply: 1 })?.icon, badge({ comments_unresolved: 2, comments_awaiting_reply: 1 })?.title], ["comment-unresolved", "1 of 2 comments to answer"]);
   assert.equal(reasonWords(["awaiting-reply"]), "comments wait on a reply");
+});
+
+test("what is left to answer: not a chain your draft answers, nor one waiting on a reply, nor your own", () => {
+  const chains = [
+    chain("open", [comment("Please rename this.")], { turn: "yours" }),
+    chain("answered", [comment("Typo."), comment("Done", { state: "draft", author: undefined })], { turn: "draft", resolved_after_publish: true }),
+    chain("waiting", [comment("Why?"), comment("Because.", { author: "Me" })], { turn: "theirs" }),
+    chain("mine", [comment("Check the docs.", { state: "note", author: undefined })]),
+    chain("closed", [comment("Nit.")], { resolved: true }),
+  ];
+  assert.deepEqual(chains.filter(toAnswer).map((c) => c.root_id), ["open"]);
+  assert.deepEqual(chains.filter(answeredByDraft).map((c) => c.root_id), ["answered"]);
 });

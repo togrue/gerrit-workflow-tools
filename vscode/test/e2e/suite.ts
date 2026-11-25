@@ -430,6 +430,11 @@ export async function run(): Promise<void> {
       [{ type: "Renamed it." }],
     );
     await press(
+      "Next Unresolved Comment (Alt+F9) after the reply",
+      "Your draft answers \"Please rename this.\", so the walk leaves it out and goes on where it stood, not back at 1: Comment 1 of 1 to answer, \"Is this the right design?\".",
+      exec("ger.nextComment"),
+    );
+    await press(
       "Inline Reply as Draft… on \"Please rename this.\" again",
       "The box opens with your draft in it, to edit; saving updates that draft, nothing you wrote is lost unseen.",
       exec("ger.reply", await threadRow(/^Please rename this/)),
@@ -439,6 +444,11 @@ export async function run(): Promise<void> {
       "Inline Reply Done and Resolve as Draft on \"Is this the right design?\"",
       "A \"Done\" draft that resolves the thread is saved at once; the thread shows that your draft resolves it.",
       exec("ger.replyDone", await threadRow(/^Is this the right design/)),
+    );
+    await press(
+      "Next Unresolved Comment (Alt+F9) once both are answered",
+      "Nothing is left to answer: the status bar says so, and that 2 are answered by your drafts, which your next push publishes.",
+      exec("ger.nextComment"),
     );
     await press(
       "Inline Reply Done and Resolve as Draft on \"Please rename this.\", which has your draft",
@@ -452,7 +462,7 @@ export async function run(): Promise<void> {
     );
     await press(
       "Click \"Please rename this.\" in the Change view again",
-      "b.txt comes back in front of the runbook with that thread expanded: Alice's comment and its suggested fix, your draft reply under it, the reply box, and the Resolved toggle on in its header.",
+      "b.txt is in front (the walk brought it back before the runbook) with that thread expanded: Alice's comment and its suggested fix, your draft reply under it, the reply box, and the Resolved toggle on in its header.",
       async () => {
         await page.receive({ type: "thread", id: chain(/^Please rename this/).root_id, action: "open" });
         const thread = api.threads.threadOf(chain(/^Please rename this/));

@@ -245,6 +245,16 @@ export function isYours(chain: CommentChain): boolean {
   return (chain.comments[0]?.state ?? "published") !== "published";
 }
 
+/** A chain somebody started on Gerrit that your draft reply answers (or resolves): published, it is no longer yours to answer. */
+export function answeredByDraft(chain: CommentChain): boolean {
+  return !isYours(chain) && chain.comments.slice(1).some((comment) => comment.state === "draft");
+}
+
+/** Left for you to answer: open, somebody started it on Gerrit, your draft does not answer it, and your published comment is not its last word. */
+export function toAnswer(chain: CommentChain): boolean {
+  return !chain.resolved && !isYours(chain) && !answeredByDraft(chain) && chain.turn !== "theirs";
+}
+
 /** Your unpublished comment in `chain` that can be edited or deleted: the chain itself when you started it, else your draft reply. */
 export function ownComment(chain: CommentChain): Comment | undefined {
   const own = isYours(chain) ? chain.comments[0] : chain.comments.slice(1).find((comment) => comment.state === "draft");
