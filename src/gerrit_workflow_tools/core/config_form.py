@@ -171,6 +171,12 @@ SETTING_SPECS: tuple[SettingSpec, ...] = (
         default="true",
     ),
     _bool(
+        "ger.pushChainReviewers",
+        "ger push",
+        "A change the push creates in a reviewed chain gets the chain's reviewers (bots left out).",
+        default="true",
+    ),
+    _bool(
         "ger.lastPushedBranch",
         "ger push",
         "After a successful push, move local branch lastPush/<branch> to the pushed commit.",

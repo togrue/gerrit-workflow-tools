@@ -5,11 +5,11 @@ from __future__ import annotations
 from gerrit_workflow_tools.core.annotated_stack import AnnotatedStack, NextStepKind, StackOverview
 from gerrit_workflow_tools.core.attention import attention_severity, blocking_reason
 from gerrit_workflow_tools.core.ci_content import CiContent
+from gerrit_workflow_tools.core.comment_chains import gerrit_inline_comment_url
 from gerrit_workflow_tools.core.comment_write import ChangedComment, WrittenComment
 from gerrit_workflow_tools.core.gerrit_change_status import (
     CommentChain,
     LogCommit,
-    gerrit_inline_comment_url,
 )
 from gerrit_workflow_tools.core.rebase_next_step import stop_refusal
 from gerrit_workflow_tools.core.rebase_state import RebaseAction, RebaseProgress
@@ -90,6 +90,8 @@ def log_commit_json(commit: LogCommit) -> dict[str, object]:
         "code_review": commit.code_review,
         "comments_unresolved": commit.comments_unresolved,
         "comments_awaiting_reply": commit.comments_awaiting_reply,
+        "comments_drafted": commit.comments_drafted,
+        "comments_to_answer": commit.comments_to_answer,
         "ci_failures": commit.ci_failures,
         "ci_links": [
             {

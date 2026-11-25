@@ -52,7 +52,7 @@ def _attended(payload: dict[str, Any]) -> None:
 
 
 def test_every_served_list_of_reasons_has_its_severity_beside_it(stack_repo: Path) -> None:
-    store, _keys, _rows = _gerrit(stack_repo, [{}, {"unresolved_comment_count": 1}, {"verified": -1}, {}])
+    store, _keys, _rows = _gerrit(stack_repo, [{}, {"verified": -1}, {"unresolved_comment_count": 1}, {}])
     api = GerApi(stack_repo, gerrit=store)
     overview = _get(api, "/overview")
     commits = overview["local"]["commits"]

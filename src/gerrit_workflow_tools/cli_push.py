@@ -87,6 +87,14 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--no-chain-reviewers",
+        action="store_true",
+        help=(
+            "A change the push creates in a chain whose other changes have reviewers gets nobody "
+            "(default: the chain's reviewers, bots left out, when the push names none; ger.pushChainReviewers)."
+        ),
+    )
+    parser.add_argument(
         "--reviewer-strategy",
         choices=[strategy.value for strategy in ReviewerStrategy],
         default=None,
@@ -216,6 +224,7 @@ def _push_gerrit(run: RunContext, args: argparse.Namespace, *, branch: str) -> i
             publish_comments=bool(args.publish_comments),
             force=bool(args.force),
             wip_from=args.wip_from and resolve_in_stack(run, args.wip_from, branch=branch).sha,
+            chain_reviewers=defaults["chain_reviewers"] and not args.no_chain_reviewers,
         )
 
     prepared = prepare_push()

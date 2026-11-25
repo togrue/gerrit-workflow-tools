@@ -40,6 +40,8 @@ def member_json(member: ChainMember, *, to_review: bool = False) -> dict[str, ob
         "code_review": member.code_review,
         "comments_unresolved": member.comments_unresolved,
         "comments_awaiting_reply": member.comments_awaiting_reply,
+        "comments_drafted": member.comments_drafted,
+        "comments_to_answer": member.comments_to_answer,
         "attention_reasons": list(member.attention_reasons),
         "severity": attention_severity(member.attention_reasons).value,
         "url": member.url,
@@ -73,6 +75,8 @@ def chain_json(chain: ReviewChain, *, to_review: bool = False) -> dict[str, obje
         "votes_missing": {"verified": chain.verified_tally.missing, "code_review": chain.code_review_tally.missing},
         "comments_unresolved": chain.comments_unresolved,
         "comments_awaiting_reply": chain.comments_awaiting_reply,
+        "comments_drafted": chain.comments_drafted,
+        "comments_to_answer": chain.comments_to_answer,
         "attention_reasons": list(chain.attention_reasons),
         "severity": attention_severity(chain.attention_reasons).value,
         "partial_chain": chain.partial_chain,
@@ -93,8 +97,7 @@ def _headline_text(headline: Headline) -> str:
     if headline.reason == Attention.CI_FAILED:
         return f"CI failed on {what}"
     if headline.reason == Attention.UNRESOLVED_COMMENTS:
-        yours = member.comments_unresolved - member.comments_awaiting_reply
-        return f"{unresolved_comments_text(yours)} on {what}"
+        return f"{unresolved_comments_text(member.comments_to_answer)} on {what}"
     if headline.reason == Attention.REVIEW_ISSUES:
         return f"Negative vote on {what}"
     return f"{chain.owner_name} has waited {format_age(chain.unreviewed_age_seconds)} for your review of {what}"

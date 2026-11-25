@@ -27,6 +27,7 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, branch_reviewers, resolve_push_reviewers
 from gerrit_workflow_tools.push_input_line import (
     KEYWORDS_HINT,
+    KW_CHAIN_REVIEWERS,
     KW_LAZY,
     KW_OVERWRITE,
     KW_PRIVATE,
@@ -59,6 +60,7 @@ The push options line: words separated by spaces; Enter runs the line.
   topic=NAME  -topic   set or drop the topic
   wip  private         mark the changes (-wip, -private: don't)
   publish-drafts       publish your drafts with the push (-publish-drafts: keep them)
+  chain-reviewers      a new change in a reviewed chain gets its reviewers (-chain-reviewers: none)
   push lazy overwrite  how reviewers are added (see ger push --help)
 Up and Down recall earlier lines; Tab completes keywords and reviewer names."""
 """What ``?`` / ``help`` on the push options line prints: the grammar of :mod:`push_input_line`."""
@@ -74,6 +76,7 @@ _STYLE_BY_KIND: dict[SpanKind, str] = {
     "keyword_lazy": "fg:#4a7ebb bold",
     "keyword_overwrite": "fg:#4a7ebb bold",
     "keyword_publish_drafts": "fg:ansiblue bold",
+    "keyword_chain_reviewers": "fg:ansigreen bold",
     "keyword_answer": "fg:ansimagenta bold",
     "equals": "fg:ansiwhite",
     "comma": "fg:ansiwhite",
@@ -156,6 +159,7 @@ class PushOptionsCompleter(Completer):
             (KW_LAZY, "reviewers via REST only when missing"),
             (KW_OVERWRITE, "reviewers via REST on all changes"),
             (KW_PUBLISH_DRAFTS, "publish your drafts with the push"),
+            (KW_CHAIN_REVIEWERS, "a new change gets the chain's reviewers"),
         ]
         seed_names = list(self._reviewer_seeds)
         if self._catalog is not None:

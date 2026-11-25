@@ -249,6 +249,8 @@ A section line counts its chains and changes (`none` when empty). A chain line i
           "votes_missing": { "verified": 0, "code_review": 2 },  // members without a vote
           "comments_unresolved": 2,
           "comments_awaiting_reply": 0,
+          "comments_drafted": 0,
+          "comments_to_answer": 2,
           "attention_reasons": ["ci-failed", "unresolved-comments"],
           "severity": "error",
           "partial_chain": false,
@@ -268,7 +270,7 @@ A section line counts its chains and changes (`none` when empty). A chain line i
 
 A member's `sha` is the commit of its current patch set (`null` when Gerrit did not send it). `your_turn` is [whose turn](#your-turn) it is, per member and for the chain; never true on a change of yours, nor on a member that is not ready. Under *to review*, `not_ready` says why a member of a listed chain is not ready (`not verified yet`, `WIP`, `private`, `not asked of you`); `null` for one that is. The *to review* `summary` counts the chains whose turn is yours, and `waiting_on_author` the others.
 
-`attention_reasons` reuses the vocabulary from `ger log` ([Reading-ger-log.md](../../Reading-ger-log.md#attention-hints-trailing--)) so one consumer handles both. Inbox members only emit `ci-failed`, `unresolved-comments` (a comment chain waits on you), `awaiting-reply` (every one waits on the other side: your published comment is its last word) and `review-issues` — there is no local patchset to align. `comments_awaiting_reply` beside `comments_unresolved` counts those waiting on the other side; telling them apart reads each commented change's comments once, from the cache while the change has not moved. `severity` is the most urgent of them, as `ger log --json` says it ([log](log.md#json-fields)).
+`attention_reasons` reuses the vocabulary from `ger log` ([Reading-ger-log.md](../../Reading-ger-log.md#attention-hints-trailing--)) so one consumer handles both. Inbox members only emit `ci-failed`, `unresolved-comments` (a comment chain waits on you), `awaiting-reply` (every one waits on the other side: your published comment is its last word), `drafts-to-publish` (a draft of yours answers one: it waits on your push or `ger reply --publish`) and `review-issues` — there is no local patchset to align. `comments_awaiting_reply` beside `comments_unresolved` counts those waiting on the other side, `comments_drafted` those your drafts answer, and `comments_to_answer` what is left to answer; telling them apart reads each commented change's comments once, from the cache while the change has not moved, and asks once per run which changes hold drafts of yours (one `has:draft` query), then the drafts of those. `severity` is the most urgent of them, as `ger log --json` says it ([log](log.md#json-fields)).
 
 ---
 

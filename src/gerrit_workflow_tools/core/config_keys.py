@@ -53,6 +53,7 @@ _FORMERLY_GERRIT = (
     "rebaseDropMergedEquivalent",
     "pushShowAttributes",
     "pushPublishDrafts",
+    "pushChainReviewers",
     "lastPushedBranch",
     "logShowUrl",
     "logShowChangeId",

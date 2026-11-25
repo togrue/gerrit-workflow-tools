@@ -16,20 +16,26 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.push import (
     PushPlan,
+    chain_reviewers_with,
     publish_drafts_with,
     publishable_drafts,
-    push_argv,
     revise,
     sent_commits,
     unknown_plan_reviewers,
 )
-from gerrit_workflow_tools.core.push_options import PushOptions
+from gerrit_workflow_tools.core.push_options import PushOptions, push_argv
 from gerrit_workflow_tools.core.push_reviewers import change_ref_of
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.core.words import counted
-from gerrit_workflow_tools.push_input_line import KW_PUBLISH_DRAFTS, ParseResult, PushLineState, format_canonical
+from gerrit_workflow_tools.push_input_line import (
+    KW_CHAIN_REVIEWERS,
+    KW_PUBLISH_DRAFTS,
+    ParseResult,
+    PushLineState,
+    format_canonical,
+)
 from gerrit_workflow_tools.push_input_prompt import LINE_HELP
 from gerrit_workflow_tools.push_preview import print_dry_run, print_plan_status, print_push_preview
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter
@@ -179,7 +185,8 @@ def confirm_with_options_line(
 
     An empty line keeps the options *plan* already has, as the status line shows them. When the
     push sends no commit, Enter sets them on Gerrit, and the line says that instead. With *drafts*, the
-    line starts with ``publish-drafts`` when *plan* publishes them, and the keyword decides whether it does.
+    line starts with ``publish-drafts`` when *plan* publishes them, and the keyword decides whether it does;
+    so does ``chain-reviewers`` for the chain's people *plan* proposes for a change it creates.
     ``n`` / ``q`` cancel, ``?`` / ``help`` print the grammar and ask again. A reviewer Gerrit has no account
     for asks again too, with the line as typed: a refused line sets nothing.
     """
@@ -195,7 +202,14 @@ def confirm_with_options_line(
                 session_strategy=_session_strategy(args),
                 message=_CONFIRM_LINE_MESSAGE.format("pushes" if sent_commits(plan) else "sets them on Gerrit"),
                 prefill=False,
-                suffix=KW_PUBLISH_DRAFTS if drafts and plan.options.publish_comments else "",
+                suffix=" ".join(
+                    word
+                    for word, on in (
+                        (KW_PUBLISH_DRAFTS, drafts and plan.options.publish_comments),
+                        (KW_CHAIN_REVIEWERS, plan.options.chain_reviewers),
+                    )
+                    if on
+                ),
                 text=text,
             )
         except (EOFError, KeyboardInterrupt):
@@ -208,6 +222,7 @@ def confirm_with_options_line(
             continue
         revised = revise(plan, _options_from_line(state), settings=run.settings) if _line_sets_options(state) else plan
         revised = publish_drafts_with(revised, state.publish_drafts) if drafts else revised
+        revised = chain_reviewers_with(revised, state.chain_reviewers)
         if unknown := unknown_plan_reviewers(run, revised):
             print(f"error: {_no_account(unknown)}. Fix the name, or drop it with -{unknown[0]}", file=sys.stderr)
             continue

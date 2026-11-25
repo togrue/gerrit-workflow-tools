@@ -10,7 +10,8 @@ from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.push import PushPlan, PushRefusal, changes_nothing, unsent_short_shas
 from gerrit_workflow_tools.core.push_result import NOTHING_TO_PUSH, PushResult
-from gerrit_workflow_tools.core.push_reviewers import ReviewerApplyChangeOutcome
+from gerrit_workflow_tools.core.push_reviewers import ReviewerApplyChangeOutcome, ReviewerApplyResult
+from gerrit_workflow_tools.core.push_targets import PushedChange
 from gerrit_workflow_tools.core.push_unchanged import StateUpdateFailure
 from gerrit_workflow_tools.push_preview import (
     print_not_sent,
@@ -94,6 +95,18 @@ def print_push_outcome(result: PushResult, plan: PushPlan | None) -> None:
         print(result.warning, file=sys.stderr)
     if plan is not None and result.pushed:
         print_pushed(result, plan)
+    if result.chain_reviewers is not None:
+        print_chain_reviewers(result.chain_reviewers, result.pushed)
+
+
+def print_chain_reviewers(added: ReviewerApplyResult, pushed: Sequence[PushedChange]) -> None:
+    """Who the changes the push created got as reviewers: the people of the rest of their chain."""
+    for issue in added.issues:
+        print(f"{issue.level}: {issue.message}", file=sys.stderr)
+    numbers = {change.commit.valid_change_id: change.number for change in pushed}
+    for outcome in added.outcomes:
+        change = numbers.get(outcome.change_id) or outcome.change_id[:9]
+        print(f"added {', '.join(outcome.reviewers_assigned)} to change {change}, as on the rest of the chain")
 
 
 def print_pushed(result: PushResult, plan: PushPlan) -> None:

@@ -148,7 +148,8 @@ def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monk
     assert list(stack["summary"]) == ["commits", "ready", "attention", "needs_edit", "not_on_gerrit"]
     shared = [
         *("sha", "change_id", "summary", "pushed", "patchset_status", "verified", "code_review"),
-        *("comments_unresolved", "comments_awaiting_reply", "ci_failures", "ci_links", "ci_pipelines"),
+        *("comments_unresolved", "comments_awaiting_reply", "comments_drafted", "comments_to_answer"),
+        *("ci_failures", "ci_links", "ci_pipelines"),
         *(
             "gerrit_url",
             "number",
@@ -263,11 +264,24 @@ def test_overview_joins_both_sections_the_headline_and_the_local_stack(stack_rep
     assert [m["local_sha"] for m in chain["members"]] == [row.sha for row in rows]
     # And every member names its current patch set, local or not.
     assert [m["sha"] for m in chain["members"]] == [row.sha for row in rows]
-    # Failed CI outranks unresolved comments, wherever each sits in the chain.
+    # Within the chain, the headline is where the attention walk stops first: the oldest change
+    # needing an edit (101's comments), not the failed CI above it, as ger log names the blocker.
     headline = overview["headline"]
-    assert (headline["section"], headline["reason"], headline["number"]) == ("outgoing", "ci-failed", 102)
-    assert headline["text"] == "CI failed on 102: test! temporary experiment"
+    assert (headline["section"], headline["reason"], headline["number"]) == ("outgoing", "unresolved-comments", 101)
+    assert headline["text"] == "1 unresolved comment on 101: Extract command routing"
     assert overview["local"]["summary"]["commits"] == 4
+    assert next(c for c in overview["local"]["commits"] if c["needs_edit"])["sha"] == rows[1].sha
+
+
+def test_the_headline_names_the_oldest_blocker_with_its_own_most_urgent_reason(stack_repo: Path) -> None:
+    """The walk's first stop failed CI and has comments: CI it is, there; across chains CI still ranks first."""
+    both = {"verified": -1, "unresolved_comment_count": 1}
+    store, _keys, _rows = _gerrit(stack_repo, [{}, both, {"unresolved_comment_count": 1}, {}])
+    headline = _get(GerApi(stack_repo, gerrit=store), "/overview")["headline"]
+    assert (headline["reason"], headline["number"]) == ("ci-failed", 101)
+    store, _keys, _rows = _gerrit(stack_repo, [{"cr": -1}, {}, {"verified": -1}, {}])
+    headline = _get(GerApi(stack_repo, gerrit=store), "/overview", refresh="1")["headline"]
+    assert (headline["reason"], headline["number"]) == ("review-issues", 100)
 
 
 def test_your_own_push_or_vote_is_the_chains_last_activity_and_no_news(stack_repo: Path) -> None:
@@ -1053,7 +1067,7 @@ def _http(
 def test_http_answers_only_with_the_token_on_a_loopback_host(served: GerHttpServer) -> None:
     status, body = _http(served, f"{V1}/health")
     assert status == 200
-    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.3.0", "feature", "g.example")
+    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.4.0", "feature", "g.example")
     assert _http(served, f"{V1}/health", token=None)[0] == 401
     assert _http(served, f"{V1}/health", token="wrong")[0] == 401
     # A page that rebinds its own name to 127.0.0.1 still sends its name as Host.

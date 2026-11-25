@@ -3,10 +3,10 @@
 ## On start
 
 ```
-status bar | $(error) CI failed: 102
+status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing
 state  | ready
 events | live
-chains | CI failed on 102: test! temporary experiment
+chains | 2 unresolved comments on 101: Extract command routing
 chains | To review — 1 chain
 chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
@@ -26,21 +26,21 @@ editor | (none)
 
 ## 1. Click the status bar item
 
-**Expect:** The Change view opens on the change the status bar names (CI failed on 102).
+**Expect:** The Change view opens on the change the status bar names (the comments on 101: the oldest change that needs an edit, below the failed CI on 102).
 
 ```
 (nothing said or done outside the views)
 --- on screen:
-+ change | title: Change 102
-+ change | CI failed — V-1 CR+2
-+ change | Commit message — test! temporary experiment  (editable)
++ change | title: Change 101
++ change | Unresolved comments — V+1 CR+2 💬2
++ change | Commit message — Extract command routing  (editable)
 + change | Showing — Local commit <sha> · Against its base commit
 + change | Files — 1 · +1 −0
-+ change |   c.txt — added +1 −0
-+ change | Comments — none
-+ change | CI
-+ change |   Widget #55 — 1 finding
-+ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · introduced here
++ change |   b.txt — added +1 −0
++ change | Comments — 2 to answer
++ change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer  [open]
++ change |   Is this the right design? — b.txt:1 · Bob Architect  [open]
++ change |   Looks good overall. — whole change · Alice Reviewer  [resolved]
 - change | title: (nothing shown)
 - change | Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.
 ```
@@ -114,18 +114,18 @@ status bar message: $(check) Refreshed from Gerrit
 + change | Waiting for your review — V+1
 + change | Commit message — Add retry to the uploader  (read-only)
 + change | Showing — Patchset 1 (current) · Against its base commit
-- change | title: Change 102
-- change | CI failed — V-1 CR+2
-- change | Commit message — test! temporary experiment  (editable)
+- change | title: Change 101
+- change | Unresolved comments — V+1 CR+2 💬2
+- change | Commit message — Extract command routing  (editable)
 - change | Showing — Local commit <sha> · Against its base commit
 + change |   uploader.txt — added +1 −0
 + change | Comments — 1 unresolved of 1
 + change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
-- change |   c.txt — added +1 −0
-- change | Comments — none
-- change | CI
-- change |   Widget #55 — 1 finding
-- change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · introduced here
+- change |   b.txt — added +1 −0
+- change | Comments — 2 to answer
+- change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer  [open]
+- change |   Is this the right design? — b.txt:1 · Bob Architect  [open]
+- change |   Looks good overall. — whole change · Alice Reviewer  [resolved]
 ```
 
 ## 7. Inline Open in Gerrit on change 900
@@ -269,10 +269,10 @@ notification (info): No review checkout is open here.
 + state  | no-executable
 + events | (not said)
 + stack  | Your local stack shows here once ger runs. Review chains says what is missing and what to do next.
-- status bar | $(error) CI failed: 102
+- status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing
 - state  | ready
 - events | live
-- chains | CI failed on 102: test! temporary experiment
+- chains | 2 unresolved comments on 101: Extract command routing
 - chains | To review — 1 chain
 - chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 - chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
@@ -324,10 +324,10 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 ```
 (nothing said or done outside the views)
 --- on screen:
-+ status bar | $(error) CI failed: 102
++ status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing
 + state  | ready
 + events | live
-+ chains | CI failed on 102: test! temporary experiment
++ chains | 2 unresolved comments on 101: Extract command routing
 + chains | To review — 1 chain
 + chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 + chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
@@ -366,10 +366,10 @@ notification (warning): Refresh failed: ger.webUrl must use https:// (got 'http:
 + status bar | $(warning) Gerrit
 + state  | setup
 + chains | (welcome text for setup: insecure-http)
-- status bar | $(error) CI failed: 102
+- status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing
 - state  | ready
 + stack  | Your local stack shows here once ger can ask Gerrit. ger says: ger.webUrl must use https:// (got 'http://gerrit.example'): credentials go with every request. For a local test Gerrit on plain http, opt in with `git config ger.allowInsecureHttp true`
-- chains | CI failed on 102: test! temporary experiment
+- chains | 2 unresolved comments on 101: Extract command routing
 - chains | To review — 1 chain
 - chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 - chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
@@ -412,10 +412,10 @@ notification (warning): Still not working: ger.webUrl must use https:// (got 'ht
 progress (notification): Restarting ger serve
 status bar message: $(check) Refreshed from Gerrit
 --- on screen:
-+ status bar | $(error) CI failed: 102
++ status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing
 + state  | ready
 + events | live
-+ chains | CI failed on 102: test! temporary experiment
++ chains | 2 unresolved comments on 101: Extract command routing
 + chains | To review — 1 chain
 + chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 + chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
@@ -624,6 +624,18 @@ reply box: Reply to Alice Reviewer — b.txt:1
 notification (info): Draft saved, visible only to you: your next push publishes it.  [Publish Drafts…]
     → dismissed
 --- on screen:
++ status bar | $(comment-unresolved) 1 unresolved comment on 101: Extract command routing
+- status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing
++ chains | 1 unresolved comment on 101: Extract command routing
+- chains | 2 unresolved comments on 101: Extract command routing
++ chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬1 ✎1 · active <age> ago  [ger.chain.url.local]
+- chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
++ chains |     Extract command routing — 101 · V+1 CR+2 💬1 ✎1 · in your stack  [ger.change.url.local]
+- chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
++ stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 1 · draft, review +2, ci good]
+- stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
++ change | Unresolved comments, drafts to publish with the push — V+1 CR+2 💬1 ✎1
+- change | Unresolved comments — V+1 CR+2 💬2
 + change | Comments — 1 to answer · 1 answered by your drafts (push publishes them)
 + change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
 + change |     you — [draft] Renamed it.
@@ -666,6 +678,20 @@ status bar message: $(check) Draft updated, visible only to you: your next push 
 ```
 status bar message: $(check) Draft saved, resolving the comment, visible only to you: your next push publishes it.
 --- on screen:
++ status bar | $(error) CI failed: 102
+- status bar | $(comment-unresolved) 1 unresolved comment on 101: Extract command routing
++ chains | CI failed on 102: test! temporary experiment
+- chains | 1 unresolved comment on 101: Extract command routing
++ chains | Outgoing — 1 chain · 1 with failed CI
++ chains |   Cleanup after experiment — 4 changes · V-1 CR+2 ✎2 · active <age> ago  [ger.chain.url.local]
+- chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
+- chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬1 ✎1 · active <age> ago  [ger.chain.url.local]
++ chains |     Extract command routing — 101 · V+1 CR+2 ✎2 · in your stack  [ger.change.url.local]
+- chains |     Extract command routing — 101 · V+1 CR+2 💬1 ✎1 · in your stack  [ger.change.url.local]
++ stack  | Extract command routing — <sha> · the same as on Gerrit  [comments draft, review +2, ci good]
+- stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 1 · draft, review +2, ci good]
++ change | Drafts to publish with the push — V+1 CR+2 ✎2
+- change | Unresolved comments, drafts to publish with the push — V+1 CR+2 💬1 ✎1
 + change | Comments — 2 answered by your drafts (push publishes them)
 - change | Comments — 1 to answer · 1 answered by your drafts (push publishes them)
 + change |   Is this the right design? — your draft resolves it · b.txt:1 · Bob Architect · 1 reply  [open]
@@ -915,7 +941,7 @@ browser opens: https://g.example/c/testproj/+/101
 + change | CI failed — V-1 CR+2
 + change | Commit message — test! temporary experiment  (editable)
 - change | title: Change 101
-- change | Unresolved comments — V+1 CR+2 💬2
+- change | Drafts to publish with the push — V+1 CR+2 ✎2
 - change | Commit message — Extract command routing  (editable)
 + change |   c.txt — added +1 −0
 + change | Comments — none
@@ -994,10 +1020,10 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 + stack  | Cleanup after experiment — HEAD · <sha> · held back · only rebased since the last push  [review +2, ci bad]
 + stack  | test! temporary experiment — <sha> · held back · only rebased since the last push  [review +2, ci bad]
 + stack  | Refactor parser init — <sha> · only rebased since the last push  [review +2, ci good]
-+ stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
++ stack  | Extract command routing — <sha> · only rebased since the last push  [comments draft, review +2, ci good]
 - stack  | Cleanup after experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 - stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
-- stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
+- stack  | Extract command routing — <sha> · the same as on Gerrit  [comments draft, review +2, ci good]
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci good]
 + change | Local changes not pushed, CI failed — V-1 CR+2
 + change | This commit is ahead of Gerrit — only rebased since the last push: the same code, by patch-id (whitespace and the message aside), so Gerrit usually keeps the votes when you push
@@ -1315,27 +1341,33 @@ notification (warning): Still out of date: fake ger: down for this test
 **Expect:** The warning mark goes and the views show what Gerrit says now (the fake Gerrit starts afresh from the repository, so the amended top commit is no longer ahead of it); its event stream is followed again.
 
 ```
-+ status bar | $(error) CI failed: 102
+notification (info): 2 unresolved comments on 101: Extract command routing  [Open]
+    → dismissed
++ status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing
 - status bar | $(error) CI failed: 102 $(warning)
 + events | live
-+ chains | CI failed on 102: Refactor parser init
++ chains | 2 unresolved comments on 101: Extract command routing
 - events | (not said)
 - chains | CI failed on 102: test! temporary experiment
++ chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 + chains |   test! temporary experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
 + chains |     test! temporary experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
 + chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
-- chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
-- chains |     Cleanup after experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
-- chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
++ chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
 + chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
 + stack  | test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 + stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 + stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
+- chains | Outgoing — 1 chain · 1 with failed CI
+- chains |   Cleanup after experiment — 4 changes · V-1 CR+2 ✎2 · active <age> ago  [ger.chain.url.local]
+- chains |     Cleanup after experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
+- chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
+- chains |     Extract command routing — 101 · V+1 CR+2 ✎2 · in your stack  [ger.change.url.local]
 - chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
 - stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | Refactor parser init — <sha> · only rebased since the last push  [review +2, ci good]
-- stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
+- stack  | Extract command routing — <sha> · only rebased since the last push  [comments draft, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci bad]
 ```
 
@@ -1347,11 +1379,11 @@ notification (warning): Still out of date: fake ger: down for this test
 + status bar | $(warning) Gerrit
 + state  | incompatible
 + events | (not said)
-+ stack  | ger serve speaks API 2.0, the extension needs 1.3: update the extension, or install the ger release that matches it.
-- status bar | $(error) CI failed: 102
++ stack  | ger serve speaks API 2.0, the extension needs 1.4: update the extension, or install the ger release that matches it.
+- status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing
 - state  | ready
 - events | live
-- chains | CI failed on 102: Refactor parser init
+- chains | 2 unresolved comments on 101: Extract command routing
 - chains | To review — 1 chain
 - chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 - chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
@@ -1364,7 +1396,7 @@ notification (warning): Still out of date: fake ger: down for this test
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
-+ change | ger serve speaks API 2.0, the extension needs 1.3: update the extension, or install the ger release that matches it.
++ change | ger serve speaks API 2.0, the extension needs 1.4: update the extension, or install the ger release that matches it.
 - change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 - change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | Commit message — test! temporary experiment  (editable)
@@ -1384,10 +1416,10 @@ notification (warning): Still out of date: fake ger: down for this test
 ```
 progress (notification): Restarting ger serve
 status bar message: $(check) Refreshed from Gerrit
-+ status bar | $(error) CI failed: 102
++ status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing
 + state  | ready
 + events | live
-+ chains | CI failed on 102: Refactor parser init
++ chains | 2 unresolved comments on 101: Extract command routing
 + chains | To review — 1 chain
 + chains |   Add retry to the uploader — alice · 1 change · V+1 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 + chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
@@ -1413,9 +1445,9 @@ status bar message: $(check) Refreshed from Gerrit
 - status bar | $(warning) Gerrit
 - state  | incompatible
 - events | (not said)
-- stack  | ger serve speaks API 2.0, the extension needs 1.3: update the extension, or install the ger release that matches it.
+- stack  | ger serve speaks API 2.0, the extension needs 1.4: update the extension, or install the ger release that matches it.
 - change | title: Change 102
-- change | ger serve speaks API 2.0, the extension needs 1.3: update the extension, or install the ger release that matches it.
+- change | ger serve speaks API 2.0, the extension needs 1.4: update the extension, or install the ger release that matches it.
 ```
 
 ## Meanwhile: a reviewer comments on change 900 on Gerrit, and its event stream says so
@@ -1423,8 +1455,8 @@ status bar message: $(check) Refreshed from Gerrit
 **Expect:** With no click and no poll, Review chains shows the new unresolved comment on 900 within a few seconds; nothing is said.
 
 ```
-+ status bar | $(error) CI failed: 102  $(bell-dot) 1
-- status bar | $(error) CI failed: 102
++ status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
+- status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing
 + chains | To review — 1 chain · 1 with comments
 + chains |   Add retry to the uploader — ● new activity · alice · 1 change · V+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 - chains | To review — 1 chain
@@ -1457,9 +1489,9 @@ status bar message: $(check) Refreshed from Gerrit
 
 ```
 + status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
-- status bar | $(error) CI failed: 102  $(bell-dot) 1
+- status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 + chains | Rebase stopped at 103: test! temporary experiment
-- chains | CI failed on 102: Refactor parser init
+- chains | 2 unresolved comments on 101: Extract command routing
 + stack  | A rebase is in progress  [Continue] [Abort]
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 + stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
@@ -1617,9 +1649,9 @@ terminal "ger": runs `ger rebase --continue`
 status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
 notification (info): The rebase is finished. 2 commits of your stack still need edits.  [Work on Next] [Push to Gerrit…]
     → dismissed
-+ status bar | $(error) CI failed: 102  $(bell-dot) 1
++ status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 - status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
-+ chains | CI failed on 102: Refactor parser init
++ chains | 2 unresolved comments on 101: Extract command routing
 - chains | Rebase stopped at 103: test! temporary experiment
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 + stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -1629,7 +1661,7 @@ notification (info): The rebase is finished. 2 commits of your stack still need 
 + change | Commit message — test! temporary experiment  (editable)
 - change | Commit message — test! temporary experiment  (read-only)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -1661,9 +1693,9 @@ change | (the commit shown is below HEAD)
 
 ```
 + status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
-- status bar | $(error) CI failed: 102  $(bell-dot) 1
+- status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 + chains | Rebase stopped at 102: Refactor parser init
-- chains | CI failed on 102: Refactor parser init
+- chains | 2 unresolved comments on 101: Extract command routing
 + stack  | A rebase is in progress  [Continue] [Abort]
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 + stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
@@ -1856,9 +1888,9 @@ terminal "ger": runs `ger rebase --continue`
 status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
 notification (info): The rebase is finished. 1 commit of your stack still needs edits.  [Work on Next] [Push to Gerrit…]
     → dismissed
-+ status bar | $(error) CI failed: 102  $(bell-dot) 1
++ status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 - status bar | $(warning) Conflict resolved in "Add e.txt"  $(bell-dot) 1
-+ chains | CI failed on 102: Refactor parser init
++ chains | 2 unresolved comments on 101: Extract command routing
 - chains | Conflict resolved in "Add e.txt"
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 + stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -1874,7 +1906,7 @@ notification (info): The rebase is finished. 1 commit of your stack still needs 
 - change | Files, as before the rebase — 1 · +1 −0
 - change |   e.txt — added +1 −0
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -1903,7 +1935,7 @@ change | (the commit shown is HEAD)
 ```
 + stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
@@ -1934,9 +1966,9 @@ change | (the commit shown is HEAD)
 terminal "ger": runs `ger rebase origin/main`
 status bar message: $(terminal) ger rebase origin/main runs in the ger terminal: it shows the todo, then replays the stack onto origin/main
 + status bar | $(error) Conflict in 103  $(bell-dot) 1
-- status bar | $(error) CI failed: 102  $(bell-dot) 1
+- status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 + chains | Conflict in 103: test! temporary experiment
-- chains | CI failed on 102: Refactor parser init
+- chains | 2 unresolved comments on 101: Extract command routing
 + stack  | A rebase stopped on a conflict  [Abort] [Skip]
 + stack  |   ⚠ c.txt — conflicted
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -2044,9 +2076,9 @@ dialog (warning): Finish the rebase first  [Abort] [Cancel]
     → pressed "Abort"
 terminal "ger": runs `ger rebase --abort`
 status bar message: $(terminal) ger rebase --abort runs in the ger terminal: the branch goes back to where it was before the rebase
-+ status bar | $(error) CI failed: 102  $(bell-dot) 1
++ status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 - status bar | $(error) Conflict in 103  $(bell-dot) 1
-+ chains | CI failed on 102: Refactor parser init
++ chains | 2 unresolved comments on 101: Extract command routing
 - chains | Conflict in 103: test! temporary experiment
 + stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
@@ -2071,7 +2103,7 @@ status bar message: $(terminal) ger rebase --abort runs in the ger terminal: the
 - change |   ⚠ c.txt — conflicted
 - change | Files, as before the rebase — 1 · +2 −0
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
@@ -2104,9 +2136,9 @@ change | (the commit shown is below HEAD)
 
 ```
 + status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
-- status bar | $(error) CI failed: 102  $(bell-dot) 1
+- status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 + chains | Rebase stopped at 102: Refactor parser init
-- chains | CI failed on 102: Refactor parser init
+- chains | 2 unresolved comments on 101: Extract command routing
 + stack  | A rebase is in progress  [Continue] [Abort]
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 + stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
@@ -2400,9 +2432,9 @@ diff tab | e.txt (<sha>) (ger-file on the right)
 **Expect:** The rebase finishes: "Refactor parser init" and the two above it have new SHAs. The diff tab of "Add e.txt" stays open, as it still shows that commit as it was, and its title says it is stale.
 
 ```
-+ status bar | $(error) CI failed: 102  $(bell-dot) 1
++ status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 - status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
-+ chains | CI failed on 102: Refactor parser init
++ chains | 2 unresolved comments on 101: Extract command routing
 - chains | Rebase stopped at 102: Refactor parser init
 + stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
@@ -2419,7 +2451,7 @@ diff tab | e.txt (<sha>) (ger-file on the right)
 + change |   e.txt — added +2 −0
 - change |   e.txt — added +1 −0
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
@@ -2455,7 +2487,7 @@ diff tab | e.txt (<sha>) — stale (ger-file on the right)
 ```
 (no change)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
@@ -2504,7 +2536,7 @@ change | (the commit shown is below HEAD)
 - change |   Widget #55 — from patchset 1, before your local changes · 1 finding
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
@@ -2535,7 +2567,7 @@ change | (the commit shown is HEAD)
 + editor | e.txt (<sha>) (diff, ger-file ↔ file)
 - editor | e.txt (file, line 2)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
@@ -2566,7 +2598,7 @@ diff tab | e.txt (<sha>) (file on the right, active)
 ```
 (no change)
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
@@ -2598,9 +2630,9 @@ diff tab | e.txt (<sha>) (file on the right, unsaved, active)
 
 ```
 + status bar | $(error) Conflict in 103  $(bell-dot) 1
-- status bar | $(error) CI failed: 102  $(bell-dot) 1
+- status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 + chains | Conflict in 103: test! temporary experiment
-- chains | CI failed on 102: Refactor parser init
+- chains | 2 unresolved comments on 101: Extract command routing
 + stack  | A rebase stopped on a conflict  [Abort] [Skip]
 + stack  |   ⚠ c.txt — conflicted
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
@@ -2858,9 +2890,9 @@ terminal "ger": runs `ger rebase --continue`
 status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
 notification (info): The rebase is finished. 1 commit of your stack still needs edits.  [Work on Next] [Push to Gerrit…]
     → dismissed
-+ status bar | $(error) CI failed: 102  $(bell-dot) 1
++ status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 - status bar | $(warning) Conflict resolved in 103  $(bell-dot) 1
-+ chains | CI failed on 102: Refactor parser init
++ chains | 2 unresolved comments on 101: Extract command routing
 - chains | Conflict resolved in 103: test! temporary experiment
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 + stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -2879,7 +2911,7 @@ notification (info): The rebase is finished. 1 commit of your stack still needs 
 - change | Files, as before the rebase — 1 · +2 −0
 - change |   c.txt — added +2 −0
 --- shown now:
-status bar | $(error) CI failed: 102  $(bell-dot) 1
+status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
@@ -2912,8 +2944,8 @@ change | (the commit shown is below HEAD)
 ```
 (nothing said or done outside the views)
 --- on screen:
-+ status bar | $(error) CI failed: 102
-- status bar | $(error) CI failed: 102  $(bell-dot) 1
++ status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing
+- status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 + chains |   Add retry to the uploader — alice · 1 change · V+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 - chains |   Add retry to the uploader — ● new activity · alice · 1 change · V+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 + change | title: Change 900
@@ -3057,9 +3089,9 @@ progress (notification): Checking out 900: Add retry to the uploader
 notification (info): Change 900 (patchset 1) is checked out for review: this checkout was switched to change-900, with its changes staged. Leave Review Checkout switches back.
 --- on screen:
 + status bar | $(eye) alice has waited <age> for your review of 900: Add retry to t…
-- status bar | $(error) CI failed: 102
+- status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing
 + chains | alice has waited <age> for your review of 900: Add retry to the uploader
-- chains | CI failed on 102: Refactor parser init
+- chains | 2 unresolved comments on 101: Extract command routing
 + chains |   Add retry to the uploader — alice · 1 change · V+1 CR+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.local.toreview]
 - chains |   Add retry to the uploader — alice · 1 change · V+1 CR+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 + chains |   test! temporary experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url]
@@ -3136,9 +3168,9 @@ notification (info): Change 900 has no review chain to walk.  [Vote on the Chain
 ```
 notification (info): Left the review of change 900.
 --- on screen:
-+ status bar | $(error) CI failed: 102
++ status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing
 - status bar | $(eye) alice has waited <age> for your review of 900: Add retry to t…
-+ chains | CI failed on 102: Refactor parser init
++ chains | 2 unresolved comments on 101: Extract command routing
 - chains | alice has waited <age> for your review of 900: Add retry to the uploader
 + chains |   Add retry to the uploader — alice · 1 change · V+1 CR+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 - chains |   Add retry to the uploader — alice · 1 change · V+1 CR+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.local.toreview]
@@ -3176,10 +3208,10 @@ notification (info): Left the review of change 900.
 ## At the end
 
 ```
-status bar | $(error) CI failed: 102
+status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing
 state  | ready
 events | live
-chains | CI failed on 102: Refactor parser init
+chains | 2 unresolved comments on 101: Extract command routing
 chains | To review — 1 chain · 1 with comments
 chains |   Add retry to the uploader — alice · 1 change · V+1 CR+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.toreview]
 chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments

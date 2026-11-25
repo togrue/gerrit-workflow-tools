@@ -8,7 +8,6 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
-from urllib.parse import quote
 
 from gerrit_workflow_tools.core.ci_links import CiLink, CiPatchset, CiPipeline
 from gerrit_workflow_tools.core.code_facts import (
@@ -221,9 +220,17 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     comments_awaiting_reply: int = 0
     """Of :attr:`comments_unresolved`, the chains whose last published comment is yours
     (:attr:`ChainTurn.THEIRS`): they wait on the other side, not on you."""
+    comments_drafted: int = 0
+    """Of :attr:`comments_unresolved`, the chains a draft of yours answers (:attr:`ChainTurn.DRAFT`):
+    they wait on your push, which publishes it."""
     blocks_chain: bool = False
     """The first commit that holds the changes above it back (they carry ``chain-blocked``):
     attention's verdict, and :func:`core.attention.blocking_reason` says why."""
+
+    @property
+    def comments_to_answer(self) -> int:
+        """Of :attr:`comments_unresolved`, the chains left to answer: neither waiting on the other side nor drafted."""
+        return max(0, self.comments_unresolved - self.comments_awaiting_reply - self.comments_drafted)
 
 
 def overlay_code_facts(cwd: Path | str | None, pairs: Iterable[tuple[Commit, ChangeView | None]]) -> CodeFacts:
@@ -269,20 +276,6 @@ def patchset_status(local_sha: str, change: ChangeView) -> PatchsetStatus:
     if cur_n or rev_keys:
         return PatchsetStatus.NEWER
     return PatchsetStatus.ABSENT
-
-
-def gerrit_inline_comment_url(change_page_url: str | None, comment_id: str | None) -> str | None:
-    """Build a PolyGerrit URL that opens the diff view focused on one inline comment.
-
-    Matches the ``/c/<project>/+/<changeNum>/comment/<commentId>/`` route (see Gerrit
-    ``gr-router`` COMMENT pattern). *comment_id* is the REST ``CommentInfo.id`` (URL-encoded
-    UUID string).
-    """
-    if not change_page_url or not comment_id or not str(comment_id).strip():
-        return None
-    base = change_page_url.rstrip("/")
-    cid_enc = quote(str(comment_id), safe="")
-    return f"{base}/comment/{cid_enc}/"
 
 
 def local_log_commit(row: Commit, status: PatchsetStatus) -> LogCommit:

@@ -506,7 +506,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/code_facts.py` | What the repository knows about the code an overlay compares (`CodeFacts`, `read_code_facts`: one git batch) merged equivalence (`merged_equivalent`), and the files a commit ahead of Gerrit no longer changes (`files_dropped`) |
 | `core/patchset_history.py` | Whether Gerrit's patchset is in a local commit's history (`built_on`: branch, reflog, `lastPush/<branch>`), and ger's record of a patchset it took over (`refs/ger/taken/`, `record_taken`); ADR-0015 |
 | `core/annotated_targets.py` | Commits named on the command line (`ger show`, `ger ci`) judged as the local stack sees them: within the whole stack, and merged when the upstream contains them (`annotate_targets`, `local_stack_or_none`) |
-| `core/attention.py` | Attention: reason names, `determine_attention()`, `ci_failed()`, `comment_reason()` (unresolved comments or awaiting a reply, by whose turn), chain-blocking (the commit that blocks, `LogCommit.blocks_chain`, and why: `blocking_reason()`), edit attention |
+| `core/attention.py` | Attention: reason names, `determine_attention()`, `ci_failed()`, `comment_reasons()` (unresolved comments, drafts to publish or awaiting a reply, by whose turn), chain-blocking (the commit that blocks, `LogCommit.blocks_chain`, and why: `blocking_reason()`), edit attention |
 | `core/attention_cursor.py` | Attention cursor: Change-Id walk position, TTL, lazy adopt, history |
 | `core/edit_attention_walk.py` | Edit-attention walk: load stack, resume/next/first target, cursor status |
 | `core/attention_strategy.py` | Loading attention strategies from `.ger/attention/` |
@@ -519,7 +519,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/change_checkout.py` | Checking a change out to work on it: the **local version** (`find_local_versions`), what to do with it (`plan_checkout`, `choose_action`), which commits above it take Gerrit's patchset (`gerrit_above`) |
 | `core/change_checkout_apply.py` | Doing what `ger checkout` decided (`apply_checkout`): moving the local version onto the patchset, taking the commits above as Gerrit has them or rebasing them, merging your edits into it; every outdated commit of the local stack (`update_stack`) |
 | `core/review_checkout.py` | Review checkout: the review worktree, `change-<number>` branches, staging, review state, walking a chain |
-| `core/comment_chains.py` | Inline comment threads, resolved and unresolved; whose **turn** each is (`chain_turn`, `unresolved_chain_counts`); how a chain is named (`ChainRef`: id, id prefix, `PATH:LINE`, URL) |
+| `core/comment_chains.py` | Inline comment threads, resolved and unresolved; whose **turn** each is (`chain_turn`, `chain_turns`: to answer, answered by your drafts, waiting on the other side); how a chain is named (`ChainRef`: id, id prefix, `PATH:LINE`, URL) |
 | `core/suggested_edits.py` | A comment's suggested edits: Gerrit fix suggestions and ```` ```suggestion ```` blocks of its text, in one shape |
 | `core/comment_anchor.py` | Where a new comment sits: the LOCATION grammar, its check against a commit, the anchored text |
 | `core/anchor_mapping.py` | Re-anchoring: where a local comment's anchor lands on another version of its file, moved or outdated (ADR-0011); the same line mapping between two commits (`map_commit_lines`) for CI findings of the last pushed patchset |
@@ -576,7 +576,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit/change_queries.py` | Batched change queries over the seam: `OR` chunks under a URL budget, halving, per-ref fallback, freshness probe (`change_freshness_key`) |
 | `core/gerrit/service.py` | `GerritService`: cache-aware batching, trust window, `fetch_gerrit_data`, `fetch_review_chains` |
 | `core/gerrit/changes.py` | `ChangeApi`: ChangeInfo payloads through the cache (`get_payloads` by id, `query` for a listing, `by_commit`: light request first, details only for what moved), footer lookups, reviewer writes |
-| `core/gerrit/comments.py` | `CommentApi`: inline comments for a change through the follow-up cache; which changes hold drafts of yours (`drafted_changes`, one `has:draft` query; `draft_counts`) |
+| `core/gerrit/comments.py` | `CommentApi`: inline comments for a change through the follow-up cache; which changes hold drafts of yours (`drafted_changes`, one `has:draft` query, `DraftedChanges` asked once per call; `draft_counts`); whose turn a change's unresolved chains are, your drafts counted (`turns`, `turns_by_change`) |
 | `core/gerrit/cache.py` | `GerritCache`: SQLite persistence of ChangeInfo keyed by triplet; the trust window (`load_changes`), `reconcile` (which rows are current, from freshness tokens), invalidation |
 | `core/gerrit/cache_follow_ups.py` | `FollowUpCache` (mixed into `GerritCache`): a change's comments and Checks rows, valid while its freshness token stands; `DEFAULT_CHANGE_TRUST_WINDOW_SECONDS` |
 | `core/gerrit/cache_facts.py` | `RememberedFacts` (mixed into `GerritCache`): host capabilities, the user's account id, settled commits, each with its lifetime |

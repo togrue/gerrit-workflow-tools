@@ -2,7 +2,7 @@
 // package version against the extension's. No `vscode` import: unit-tested.
 
 /** The serve API this extension is written against (`api` in `/health`; bump rules in docu/spec/commands/serve.md). */
-export const REQUIRED_API = "1.3.0";
+export const REQUIRED_API = "1.4.0";
 
 /** `[major, minor, patch]` of a version, or undefined when it does not start with one. A bare `1` (ger before semver API versions) is `1.0.0`. */
 function parts(version: string | number | undefined): [number, number, number] | undefined {

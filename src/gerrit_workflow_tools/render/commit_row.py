@@ -105,10 +105,11 @@ def fmt_code_review(cr: int | None) -> str:
     return color_text(tok, _CODE_REVIEW_COLOR.get(tok, ANSI_DIM))
 
 
-def fmt_comments(count: int, awaiting: int = 0) -> str:
-    """Three-char comment indicator with ANSI color: dim when every one of them waits on the other side."""
+def fmt_comments(count: int, to_answer: int | None = None) -> str:
+    """Three-char comment indicator with ANSI color: dim when none of them is left to answer (*to_answer*,
+    else every one is): each waits on the other side or on your push."""
     tok = comments_token(count)
-    return color_text(tok, ANSI_YELLOW if count > awaiting else ANSI_DIM)
+    return color_text(tok, ANSI_YELLOW if (count if to_answer is None else to_answer) > 0 else ANSI_DIM)
 
 
 def primary_line_prefix(commit: LogCommit) -> str:
@@ -118,7 +119,7 @@ def primary_line_prefix(commit: LogCommit) -> str:
     if commit.pushed:
         verified = fmt_verified(commit.verified)
         cr = fmt_code_review(commit.code_review)
-        comments = fmt_comments(commit.comments_unresolved, commit.comments_awaiting_reply)
+        comments = fmt_comments(commit.comments_unresolved, commit.comments_to_answer)
     else:
         verified = "   "
         cr = "    "
@@ -251,6 +252,7 @@ _HINT_COLOR: dict[str, str] = {
     PRIVATE: ANSI_DIM_GRAY,
     Attention.CI_FAILED: ANSI_RED,
     Attention.UNRESOLVED_COMMENTS: ANSI_YELLOW,
+    Attention.DRAFTS_TO_PUBLISH: ANSI_DIM_GRAY,
     Attention.NO_REVIEWERS: ANSI_DIM_GRAY,
     SUBMITTABLE: ANSI_GREEN,
     Attention.AHEAD_OF_GERRIT: ANSI_YELLOW,
@@ -347,7 +349,7 @@ def show_headline(commit: LogCommit) -> str:
         parts += [color_text(v.strip(), _VERIFIED_COLOR.get(v, ANSI_DIM))]
         parts += [color_text(cr.strip(), _CODE_REVIEW_COLOR.get(cr, ANSI_DIM))]
         if commit.comments_unresolved > 0:
-            parts.append(fmt_comments(commit.comments_unresolved, commit.comments_awaiting_reply))
+            parts.append(fmt_comments(commit.comments_unresolved, commit.comments_to_answer))
     base = " ".join(parts)
     suffix = attention_suffix(commit)
     return f"{base}  {suffix}" if suffix else base

@@ -1569,7 +1569,8 @@ def test_push_dry_run_says_what_it_shows_before_what_it_would_not_do(stack_repo:
 
 
 def test_push_preview_says_what_each_commit_becomes(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Before: only `<sha> # <subject>`, and `Reviewers (none)` although the changes had reviewers."""
+    """Before: only `<sha> # <subject>`, and `Reviewers (none)` although the changes had reviewers.
+    The new change on top gets the chain's people (tests/test_push_chain_reviewers.py)."""
     rows = commits_in_range(stack_repo, "main..feature")[:2]
     git("config", "ger.user", "me", cwd=stack_repo)
     bob = [{"account": {"_account_id": 8, "username": "pg-bob"}, "state": "REVIEWER"}]
@@ -1585,7 +1586,7 @@ def test_push_preview_says_what_each_commit_becomes(stack_repo: Path, monkeypatc
     lines = [line for line in out.splitlines() if line.startswith("    ")]
     assert lines[0].endswith(f"# {rows[0].subject}  change 100, patchset 2 (owner Alice)")  # main: no patch-id
     assert lines[1].endswith(f"# {rows[1].subject}  new change")
-    assert "Reviewers none added, on Gerrit: pg-bob  |" in out
+    assert "Reviewers none added, on Gerrit: pg-bob; new change: +pg-bob  |" in out
 
 
 @pytest.mark.parametrize(("edited", "says"), [(False, "rebase only"), (True, "code changed")])

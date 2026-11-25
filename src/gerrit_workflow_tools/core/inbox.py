@@ -15,7 +15,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from gerrit_workflow_tools.core.attention import Attention, Severity, attention_severity
+from gerrit_workflow_tools.core.attention import EDIT_ATTENTION_REASONS, Attention, Severity, attention_severity
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id, parallel_map
@@ -37,7 +37,7 @@ LOCAL = "local"
 REBASE = "rebase"
 """The reason of a :class:`RebaseHeadline`."""
 
-# What the author has to act on, most urgent first.
+# What the author has to act on, most urgent first: the reasons the attention walk stops for.
 _HEADLINE_ORDER = (Attention.CI_FAILED, Attention.UNRESOLVED_COMMENTS, Attention.REVIEW_ISSUES)
 
 
@@ -253,8 +253,9 @@ def load_inbox(
     false). Its built-in query is asked beside the same query without the readiness terms, which
     finds them; the chains of that one alone are counted as not ready
     (:attr:`InboxSection.not_ready`). Not with ``--unready`` or a custom query, which leave
-    nothing out. *with_drafts* asks, beside them, which changes hold drafts of yours (one light
-    ``has:draft`` query, :attr:`InboxSection.drafted`).
+    nothing out. Which changes hold drafts of yours is asked once (one light ``has:draft`` query)
+    where a comment chain may be answered by one (:attr:`ChainMember.comments_drafted`), and
+    with *with_drafts*, beside the sections, for :attr:`InboxSection.drafted`.
 
     Both are narrowed to :func:`project_scope` of the service's directory. *To review* keeps the
     inbox order (longest unreviewed first) and honours *limit*, else ``ger.inboxLimit``.
@@ -273,14 +274,16 @@ def load_inbox(
     gated = TO_REVIEW in queries and not include_unready and not settings.inbox_to_review_query
     context = {TO_REVIEW: build_to_review_query(settings, projects=names, include_unready=True)} if gated else {}
     account = service.self_account_id()
-    fetch = partial(service.fetch_review_chains, now=moment, self_account_id=account)
+    # Which changes hold drafts of yours: asked once for both sections, when first wanted.
+    drafts = service.comments.drafted_lazily(None, n=100)
+    fetch = partial(service.fetch_review_chains, now=moment, self_account_id=account, drafted=drafts)
     jobs: list[Callable[[], Any]] = [
         partial(fetch, query, context_query=context.get(name)) for name, query in queries.items()
     ]
     if with_drafts:  # beside the sections, not after them: no wait added
-        jobs.append(partial(service.comments.drafted_changes, None, n=100))
+        jobs.append(drafts.numbers)
     answers = parallel_map(jobs)
-    drafted = frozenset(view.number for view in answers.pop()) if with_drafts else frozenset()
+    drafted = answers.pop() if with_drafts else frozenset()
     fetched: dict[str, list[ReviewChain]] = dict(zip(queries, answers, strict=True))
     not_ready = None
     if TO_REVIEW in fetched:
@@ -312,8 +315,10 @@ def pick_headline(
     """The headline: a *rebase* underway in the checkout; else failed CI on an outgoing chain;
     else whichever waited longer of unresolved comments on an outgoing chain (since its last
     activity) and the *to review* chain that waits on your turn longest; else a negative vote on
-    an outgoing chain. On an outgoing chain, its base-most such change; on a chain to review, the
-    base-most change whose turn is yours.
+    an outgoing chain. That ranks the chains. Within the outgoing chain it picks, the headline is
+    the change the attention walk stops at first (:func:`walk_stop`), with its own most urgent
+    reason: the oldest change that needs an edit, as ``ger log`` names the chain's blocker. On a
+    chain to review, the base-most change whose turn is yours.
 
     *current* is the Change-Ids of the chain you work on (normalised, as
     :func:`norm_change_id` gives them). Given, failed CI is a headline only on a chain with one
@@ -329,7 +334,7 @@ def pick_headline(
         found = _first_with(outgoing, reason, current)
         if found is not None:
             waited = found[0].wait_age_seconds if reason == Attention.UNRESOLVED_COMMENTS else 0
-            candidates.append((rank, -waited, Headline(OUTGOING, reason, *found)))
+            candidates.append((rank, -waited, _walk_headline(found[0], current) or Headline(OUTGOING, reason, *found)))
     yours = by_name[TO_REVIEW].waiting_on_you if TO_REVIEW in by_name else []
     if yours:
         chain = yours[0]
@@ -339,6 +344,22 @@ def pick_headline(
             (rank, -chain.unreviewed_age_seconds, Headline(TO_REVIEW, Attention.WAITING_ON_YOU, chain, member))
         )
     return min(candidates, key=lambda candidate: candidate[:2])[2] if candidates else None
+
+
+def walk_stop(chain: ReviewChain) -> ChainMember | None:
+    """The member of *chain* the attention walk stops at first: the base-most one needing an edit
+    (:data:`EDIT_ATTENTION_REASONS`, as :func:`first_commit_needing_edit_attention` decides for a commit)."""
+    return next((m for m in chain.members if EDIT_ATTENTION_REASONS.intersection(m.attention_reasons)), None)
+
+
+def _walk_headline(chain: ReviewChain, current: Collection[str] | None) -> Headline | None:
+    """The headline on outgoing *chain*: its :func:`walk_stop`, for that member's most urgent reason
+    (failed CI only on the *current* chain, when it is given)."""
+    member = walk_stop(chain)
+    reasons = [r for r in _HEADLINE_ORDER if member is not None and r in member.attention_reasons]
+    if reasons[:1] == [Attention.CI_FAILED] and current is not None and not _touches(chain, current):
+        reasons = reasons[1:]
+    return Headline(OUTGOING, reasons[0], chain, member) if member is not None and reasons else None
 
 
 def _first_with(

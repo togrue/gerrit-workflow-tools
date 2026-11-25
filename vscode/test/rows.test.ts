@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 import { CommentChain, Rebase, RebaseAction, StackCommit } from "../src/api";
 import { ChangeState, READ_ONLY, answeredByDraft, changeHeading, changeLines, changeVm, toAnswer } from "../src/changeRows";
-import { attentionIcon, reasonWords } from "../src/format";
+import { attentionIcon, reasonWords, votes } from "../src/format";
 import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, workOnNext, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, rebaseNotNowFresh, reviewerWords, skipQuestion, stackLines, stoppedAt, sync, stackVm, stackWhere } from "../src/stackRows";
 import { waitingFor } from "../src/state";
 import { attended, chain, comment, commit, content, diff, finding, never, patchsets, shown, stack, state } from "./fixtures";
@@ -579,6 +579,19 @@ test("a comment chain whose last published word is yours waits on a reply: a pla
   assert.deepEqual([badge({ comments_unresolved: 2, comments_awaiting_reply: 2 })?.icon, badge({ comments_unresolved: 2, comments_awaiting_reply: 2 })?.title], ["comment", "2 comments wait on a reply"]);
   assert.deepEqual([badge({ comments_unresolved: 2, comments_awaiting_reply: 1 })?.icon, badge({ comments_unresolved: 2, comments_awaiting_reply: 1 })?.title], ["comment-unresolved", "1 of 2 comments to answer"]);
   assert.equal(reasonWords(["awaiting-reply"]), "comments wait on a reply");
+});
+
+test("a row counts what is left to answer; chains your drafts answer are a small mark, waiting on your push", () => {
+  const badge = (extra: Partial<StackCommit>) => badges(shown(extra))[0];
+  const done = badge({ comments_unresolved: 3, comments_drafted: 3, comments_to_answer: 0, attention_reasons: ["drafts-to-publish"] });
+  assert.deepEqual([done?.icon, done?.tone, done?.text, done?.title], ["edit", "plain", "draft", "3 answered by your drafts: push publishes them"]);
+  const mixed = badge({ comments_unresolved: 3, comments_drafted: 1, comments_to_answer: 2 });
+  assert.deepEqual([mixed?.icon, mixed?.text, mixed?.title], ["comment-unresolved", "2 · draft", "2 of 3 comments to answer; 1 answered by your draft: push publishes it"]);
+  // A ger serve before API 1.4 sends no drafted count: every chain not waiting on a reply is left to answer.
+  assert.equal(badge({ comments_unresolved: 3, comments_awaiting_reply: 1 })?.text, "2");
+  assert.equal(votes({ verified: 1, code_review: null, comments_unresolved: 3, comments_drafted: 1, comments_to_answer: 2 }), "V+1 💬2 ✎1");
+  assert.equal(votes({ verified: null, code_review: null, comments_unresolved: 3, comments_drafted: 3, comments_to_answer: 0 }), "✎3");
+  assert.equal(reasonWords(["drafts-to-publish"]), "drafts to publish with the push");
 });
 
 test("what is left to answer: not a chain your draft answers, nor one waiting on a reply, nor your own", () => {

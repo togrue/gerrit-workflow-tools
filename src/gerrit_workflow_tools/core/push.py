@@ -28,11 +28,12 @@ from gerrit_workflow_tools.core.push_checks import (
     push_ready,
     rebase_check,
 )
-from gerrit_workflow_tools.core.push_options import PushOptions, push_refspec
+from gerrit_workflow_tools.core.push_options import PushOptions, push_argvs
 from gerrit_workflow_tools.core.push_result import PushResult, gerrit_rejection, push_rejected_no_new_changes, result_of
 from gerrit_workflow_tools.core.push_reviewers import (
     PushMark,
     ReviewerApplyResult,
+    add_chain_people,
     apply_reviewer_strategy_after_push_service,
     change_refs_for_commits,
     credential_error,
@@ -84,6 +85,9 @@ class PushPlan:
     decide for every commit."""
     known_reviewers: frozenset[str] = frozenset()
     """Who already reviews one of the pushed changes: names Gerrit has an account for, known without asking."""
+    chain_people: tuple[str, ...] = ()
+    """The people who review the rest of the chain, proposed for the changes the push creates when it
+    names no reviewers (:func:`chain_people`); :attr:`PushOptions.chain_reviewers` says whether they get them."""
 
 
 @dataclass(frozen=True)
@@ -93,51 +97,26 @@ class PushRefusal:
     warnings: tuple[str, ...] = ()
 
 
-def push_argv(plan: PushPlan) -> list[str]:
-    return ["git", "push", plan.remote, push_refspec(plan.tip_sha, plan.push_branch, plan.options)]
-
-
-def wip_commits(plan: PushPlan) -> tuple[Commit, ...]:
-    """The commits *plan* pushes as work-in-progress: from :attr:`PushPlan.wip_from` up, else all or none."""
-    if plan.wip_from is None:
-        return plan.commits if plan.options.wip else ()
-    shas = [commit.sha for commit in plan.commits]
-    return plan.commits[shas.index(plan.wip_from) :]
-
-
-def push_argvs(plan: PushPlan) -> list[list[str]]:
-    """The ``git push`` runs for *plan*: one, or two when only its top is WIP.
-
-    Gerrit applies ``%wip`` to every change a push creates or updates, so a ready lower part
-    goes first and the WIP top second (where the lower commits are already Gerrit's, unchanged).
-    """
-    wip = wip_commits(plan)
-    if plan.wip_from is None or not wip:
-        return [push_argv(plan)]
-    as_wip = replace(plan.options, wip=True, ready=False)
-    if len(wip) == len(plan.commits):
-        return [["git", "push", plan.remote, push_refspec(plan.tip_sha, plan.push_branch, as_wip)]]
-    ready_tip = plan.commits[len(plan.commits) - len(wip) - 1].sha
-    as_ready = replace(plan.options, wip=False)
-    return [
-        ["git", "push", plan.remote, push_refspec(ready_tip, plan.push_branch, as_ready)],
-        ["git", "push", plan.remote, push_refspec(plan.tip_sha, plan.push_branch, as_wip)],
-    ]
-
-
 def run_git_push(cmd: list[str], cwd: Path | str | None) -> Any:
     return git(*cmd[1:], cwd=cwd, check=False)
 
 
 def revise(plan: PushPlan, options: PushOptions, *, settings: Settings) -> PushPlan:
-    """Take new push options; the drafts decision, ``--ready`` and ``--no-private`` (the options line says
-    none of them) are kept.
+    """Take new push options; the drafts and chain reviewers decisions, ``--ready`` and ``--no-private``
+    (the options line says none of them) are kept.
 
     A line asking for WIP drops ``--ready``, one asking for private drops ``--no-private``: each pair contradicts.
     """
     ready = plan.options.ready and not options.wip
     public = plan.options.remove_private and not options.private
-    options = replace(options, publish_comments=plan.options.publish_comments, ready=ready, remove_private=public)
+    kept = plan.options
+    options = replace(
+        options,
+        publish_comments=kept.publish_comments,
+        chain_reviewers=kept.chain_reviewers,
+        ready=ready,
+        remove_private=public,
+    )
     return replace(
         plan,
         options=options,
@@ -162,6 +141,18 @@ def sent_commits(plan: PushPlan) -> tuple[Commit, ...]:
     known = {change.commit.sha for change in plan.unchanged} | {change.commit.sha for change in plan.outdated}
     known |= {change.commit.sha for change in plan.abandoned}
     return tuple(commit for commit in plan.commits if commit.sha not in known)
+
+
+def created_commits(plan: PushPlan) -> tuple[Commit, ...]:
+    """The commits *plan* makes new changes of; none while Gerrit was not asked (nobody knows)."""
+    if plan.next_patchsets is None:
+        return ()
+    return tuple(commit for commit in sent_commits(plan) if commit.sha not in plan.next_patchsets)
+
+
+def chain_reviewers_with(plan: PushPlan, on: bool) -> PushPlan:
+    """*plan* giving the changes it creates the chain's people (:attr:`PushPlan.chain_people`), or not."""
+    return replace(plan, options=replace(plan.options, chain_reviewers=on and bool(plan.chain_people)))
 
 
 def unsent_short_shas(plan: PushPlan) -> set[str]:
@@ -235,6 +226,7 @@ def prepare(
     publish_comments: bool = False,
     force: bool = False,
     wip_from: str | None = None,
+    chain_reviewers: bool = True,
 ) -> PushPlan | PushRefusal:
     cwd, settings = run.cwd, run.settings
     if topic and "," in topic:
@@ -318,6 +310,9 @@ def prepare(
         wip_from=wip_from,
         known_reviewers=existing.reviewers,
     )
+    # A change created in a reviewed chain gets its people, unless the push names reviewers of its own.
+    if not options.reviewers and created_commits(plan) and existing.people:
+        plan = chain_reviewers_with(replace(plan, chain_people=existing.people), chain_reviewers)
     return publish_drafts_with(plan, publish_comments)
 
 
@@ -339,17 +334,21 @@ def execute(run: RunContext, plan: PushPlan | Sequence[str]) -> PushResult:
     _forget_pushed_changes(run, plan)
     pushed = () if rejected else pushed_changes(run, sent_commits(plan))
     reviewers, error = _apply_reviewers(run, plan)
+    people = None
+    if plan.options.chain_reviewers and not rejected and (created := created_commits(plan)):
+        people = add_chain_people(run.gerrit, plan.chain_people, change_refs_for_commits(run, created))
     updates = state_updates(plan)
     failures = apply_updates(run.gerrit, updates) if updates else []
     failed_updates = {failure.update for failure in failures}
     unreached = unreached_options_warning(plan.options, plan.unchanged, plan.outdated, rejected=rejected)
     note = "\n".join(filter(None, (_update_last_pushed(cwd, plan), unreached)))
-    failed = bool(error) or bool(failures) or (reviewers is not None and not reviewers.ok)
+    failed = bool(error) or bool(failures) or any(r is not None and not r.ok for r in (reviewers, people))
     return replace(
         captured,
         returncode=int(failed),
         error_message=error,
         reviewers=reviewers,
+        chain_reviewers=people,
         warning=note or None,
         updated=tuple(update for update in updates if update not in failed_updates),
         update_failures=tuple(failures),

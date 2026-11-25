@@ -3,7 +3,7 @@
 // it, the end-to-end suite prints it. Pure: no `vscode`, no I/O.
 
 import { CodeChange, CommitStatus, MoveConflict, Overview, Rebase, RebaseAction, Reviewer, Stack, StackCommit, UpstreamChoice, UpstreamStop } from "./api";
-import { blockedMove, reasonWords, sentence, wouldConflict } from "./format";
+import { blockedMove, commentTurns, reasonWords, sentence, wouldConflict } from "./format";
 import { Waiting } from "./state";
 
 /** How a commit relates to what Gerrit has: its icon and its colour. */
@@ -88,13 +88,28 @@ export function reviewerWords(reviewers: readonly Reviewer[] | undefined): strin
  * Comments, review vote, CI vote, in that order; a slot with nothing to say is null. The Change view shows them too.
  * The review slot without a vote says when nobody is assigned to review (core's `no-reviewers`).
  */
-/** `2 unresolved comments`; `1 of 2 comments to answer`; `2 comments wait on a reply`. */
-function commentsTitle(count: number, awaiting: number): string {
-  const waits = `${awaiting === 1 ? "waits" : "wait"} on a reply`;
-  if (!awaiting) {
+/** `2 unresolved comments`; `1 of 2 comments to answer`; `2 answered by your drafts: push publishes them`; `2 comments wait on a reply`. */
+function commentsTitle(count: number, awaiting: number, drafted: number): string {
+  if (!awaiting && !drafted) {
     return `${count} unresolved comment${count === 1 ? "" : "s"}`;
   }
-  return awaiting === count ? `${count} comment${count === 1 ? "" : "s"} ${waits}` : `${count - awaiting} of ${count} comments to answer`;
+  const left = count - awaiting - drafted;
+  const parts = left > 0 ? [`${left} of ${count} comments to answer`] : [];
+  if (drafted) {
+    parts.push(`${drafted} answered by your draft${drafted === 1 ? "" : "s"}: push publishes ${drafted === 1 ? "it" : "them"}`);
+  }
+  if (left <= 0 && awaiting) {
+    parts.push(`${awaiting} comment${awaiting === 1 ? "" : "s"} ${awaiting === 1 ? "waits" : "wait"} on a reply`);
+  }
+  return parts.join("; ");
+}
+
+/** A comment badge's text: what is left to answer, with a small mark for the drafts that wait on your push. */
+function commentsText(left: number, drafted: number, count: number): string {
+  if (left > 0) {
+    return drafted ? `${left} · draft` : String(left);
+  }
+  return drafted ? "draft" : String(count);
 }
 
 export function badges(commit: CommitStatus): (Badge | null)[] {
@@ -107,18 +122,18 @@ export function badges(commit: CommitStatus): (Badge | null)[] {
   // Every build that failed only marked itself unstable (core's verdict per CI link): a warning, still CI to look at.
   const verdicts = commit.ci_links.map((link) => link.verdict).filter(Boolean);
   const unstable = verdicts.length > 0 && verdicts.every((verdict) => verdict === "unstable");
-  const count = commit.comments_unresolved;
-  const awaiting = Math.min(commit.comments_awaiting_reply ?? 0, count);
+  const { count, left, drafted, awaiting } = commentTurns(commit);
   const who = reviewerWords(commit.reviewers);
   return [
     count > 0
       ? {
           kind: "comments",
-          // Every one waits on the other side (core's `awaiting-reply`): a plain bubble, nothing for you to do.
-          icon: awaiting < count ? "comment-unresolved" : "comment",
-          tone: awaiting < count ? "warn" : "plain",
-          text: String(count),
-          title: commentsTitle(count, awaiting),
+          // None left to answer (core's `drafts-to-publish`, `awaiting-reply`): a plain bubble, nothing to answer.
+          // Answered only by your drafts: the pen the Change view gives a thread your draft answers.
+          icon: left > 0 ? "comment-unresolved" : drafted > 0 ? "edit" : "comment",
+          tone: left > 0 ? "warn" : "plain",
+          text: commentsText(left, drafted, count),
+          title: commentsTitle(count, awaiting, drafted),
           stale: false,
         }
       : null,

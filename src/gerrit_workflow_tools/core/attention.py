@@ -49,6 +49,8 @@ class Attention:  # pylint: disable=too-few-public-methods
     """Unresolved comment chains, at least one waiting on you: somebody else spoke last."""
     AWAITING_REPLY = "awaiting-reply"
     """Unresolved comment chains, every one waiting on the other side: your comment is the last word."""
+    DRAFTS_TO_PUBLISH = "drafts-to-publish"
+    """Unresolved comment chains your drafts answer: they wait on your push (or reply), which publishes them."""
     WAITING_ON_YOU = "waiting-on-you"
     """Somebody else's change asks for your review, and it is your **turn**: the *to review*
     section's query matches it, and Gerrit's attention set holds you (``your_turn_since``)."""
@@ -109,6 +111,7 @@ REASON_SEVERITY: dict[str, Severity] = {
     Attention.AHEAD_OF_GERRIT: Severity.PENDING,
     Attention.AWAITING_REVIEW: Severity.PENDING,
     Attention.AWAITING_REPLY: Severity.PENDING,
+    Attention.DRAFTS_TO_PUBLISH: Severity.PENDING,
     Attention.NO_REVIEWERS: Severity.PENDING,
     Attention.WAITING_ON_YOU: Severity.PENDING,
     Attention.WAITING_ON_AUTHOR: Severity.PENDING,
@@ -135,15 +138,21 @@ def ci_failed(verified: int | None, ci_failures: Sequence[str] = ()) -> bool:
     return bool(ci_failures) or (verified is not None and verified <= -1)
 
 
-def comment_reason(unresolved: int, awaiting_reply: int) -> str | None:
-    """What *unresolved* comment chains ask, *awaiting_reply* of them waiting on the other side.
+def comment_reasons(unresolved: int, awaiting_reply: int, drafted: int = 0) -> list[str]:
+    """What *unresolved* comment chains ask, *awaiting_reply* of them waiting on the other side and
+    *drafted* of them answered by drafts of yours.
 
-    Unresolved comments while any one is yours to answer; awaiting a reply when every one is
-    the other side's; ``None`` without any. The count stays Gerrit's either way.
+    Unresolved comments while any one is left to answer; drafts to publish while a draft of yours
+    answers one; awaiting a reply when none is left to answer and one is the other side's. The
+    count stays Gerrit's either way.
     """
-    if unresolved > awaiting_reply:
-        return Attention.UNRESOLVED_COMMENTS
-    return Attention.AWAITING_REPLY if unresolved else None
+    yours = unresolved - awaiting_reply - drafted
+    reasons = [Attention.UNRESOLVED_COMMENTS] if yours > 0 else []
+    if drafted:
+        reasons.append(Attention.DRAFTS_TO_PUBLISH)
+    if yours <= 0 and awaiting_reply:
+        reasons.append(Attention.AWAITING_REPLY)
+    return reasons
 
 
 _MERGED_REASON = {
@@ -196,8 +205,7 @@ def determine_attention(commit: LogCommit, *, chain_blocked: bool) -> list[str]:
         reasons.append(Attention.REVIEW_ISSUES)
     if commit.code_review != 2 and not commit.wip:
         reasons.append(Attention.AWAITING_REVIEW)
-    if comments := comment_reason(commit.comments_unresolved, commit.comments_awaiting_reply):
-        reasons.append(comments)
+    reasons += comment_reasons(commit.comments_unresolved, commit.comments_awaiting_reply, commit.comments_drafted)
     if chain_blocked:
         reasons.append(Attention.CHAIN_BLOCKED)
     return reasons
@@ -232,6 +240,7 @@ _BLOCKING_ORDER = (
     Attention.CI_FAILED,
     Attention.REVIEW_ISSUES,
     Attention.UNRESOLVED_COMMENTS,
+    Attention.DRAFTS_TO_PUBLISH,
     Attention.AWAITING_REPLY,
     Attention.WIP,
     Attention.NO_REVIEWERS,

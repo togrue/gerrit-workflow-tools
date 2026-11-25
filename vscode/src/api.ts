@@ -60,6 +60,10 @@ export interface Member {
   comments_unresolved: number;
   /** Of `comments_unresolved`, the chains whose last published comment is yours: they wait on the other side. */
   comments_awaiting_reply?: number;
+  /** Of `comments_unresolved`, the chains a draft of yours answers: they wait on your push (API 1.4). */
+  comments_drafted?: number;
+  /** Of `comments_unresolved`, what is left to answer: neither waiting on the other side nor drafted (API 1.4). */
+  comments_to_answer?: number;
   attention_reasons: string[];
   severity: Severity;
   url: string | null;
@@ -89,6 +93,8 @@ export interface Chain {
   code_review: number | null;
   comments_unresolved: number;
   comments_awaiting_reply?: number;
+  comments_drafted?: number;
+  comments_to_answer?: number;
   attention_reasons: string[];
   severity: Severity;
   partial_chain: boolean;
@@ -175,6 +181,10 @@ export interface CommitStatus {
   comments_unresolved: number;
   /** Of `comments_unresolved`, the chains whose last published comment is yours: they wait on the other side. */
   comments_awaiting_reply?: number;
+  /** Of `comments_unresolved`, the chains a draft of yours answers: they wait on your push (API 1.4). */
+  comments_drafted?: number;
+  /** Of `comments_unresolved`, what is left to answer: neither waiting on the other side nor drafted (API 1.4). */
+  comments_to_answer?: number;
   ci_failures: string[];
   ci_links: CiLink[];
   gerrit_url: string | null;

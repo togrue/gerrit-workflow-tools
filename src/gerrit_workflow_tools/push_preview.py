@@ -6,21 +6,16 @@ import re
 import sys
 from collections.abc import Callable
 
-from gerrit_workflow_tools.core.push import (
-    PushPlan,
-    push_argvs,
-    sent_commits,
-    state_updates,
-    unsent_short_shas,
-    wip_commits,
-)
+from gerrit_workflow_tools.core.push import PushPlan, created_commits, sent_commits, state_updates, unsent_short_shas
 from gerrit_workflow_tools.core.push_checks import PushBoundary
+from gerrit_workflow_tools.core.push_options import push_argvs, wip_commits
 from gerrit_workflow_tools.core.push_result import NOTHING_TO_PUSH
 from gerrit_workflow_tools.core.push_reviewers import PushMark, needs_rest_assignment
 from gerrit_workflow_tools.core.push_targets import NEW_CHANGE
 from gerrit_workflow_tools.core.push_unchanged import StateUpdate
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.stack import Commit
+from gerrit_workflow_tools.push_input_line import KW_CHAIN_REVIEWERS
 from gerrit_workflow_tools.render.style import (
     ANSI_BLUE,
     ANSI_BOLD,
@@ -111,6 +106,7 @@ def print_ready_boundary_notice(
 def _commit_lines(plan: PushPlan, summary_highlighter: SummaryHighlighter) -> list[str]:
     lines: list[str] = []
     wip = {c.sha for c in wip_commits(plan)} if plan.wip_from else set()
+    created = created_commits(plan)
     for commit in sent_commits(plan):
         disp = summary_highlighter.highlight(commit.subject, sha=commit.sha)
         sha_p = commit.short_sha.ljust(8)
@@ -124,11 +120,27 @@ def _commit_lines(plan: PushPlan, summary_highlighter: SummaryHighlighter) -> li
         if commit.sha in wip:
             line += color_text("  [WIP]", ANSI_YELLOW)
         lines.append(line)
+        if commit in created and (note := new_change_note(plan)):
+            lines.append(f"      {note}")
         # Seen, not refused: a file this change's last patch set changed, gone from it now.
         if (becomes := (plan.next_patchsets or {}).get(commit.sha)) and (note := becomes.dropped_note()):
             who = f"c{becomes.number}" if becomes.number else commit.short_sha
             lines.append(color_text(f"      {who}: {note}", ANSI_YELLOW))
     return lines
+
+
+def new_change_note(plan: PushPlan) -> str | None:
+    """Who a change the push creates in a reviewed chain gets as reviewers: the chain's people, or nobody.
+
+    ``None`` when it gets the reviewers the push names, or when no other change of the chain has any.
+    """
+    people = ", ".join(plan.chain_people)
+    if plan.options.chain_reviewers:
+        return color_text(f"new change: reviewers {people}, as on the rest of the chain", ANSI_LIGHT_GREEN)
+    if plan.options.reviewers or not plan.known_reviewers:
+        return None
+    hint = f" ({KW_CHAIN_REVIEWERS} on the options line adds {people})" if people else ""
+    return color_text("new change: no reviewers", ANSI_YELLOW) + color_text(hint, ANSI_DIM)
 
 
 def _commits(count: int) -> str:
@@ -203,7 +215,11 @@ def _reviewers_field(plan: PushPlan) -> str:
     added = ("set to " if overwrite else "") + ", ".join(names if overwrite else (f"+{name}" for name in names))
     field = color_text(added, ANSI_LIGHT_GREEN) if names else color_text("none added", ANSI_DIM)
     has = sorted(plan.known_reviewers, key=str.casefold)
-    return field + (color_text(f", on Gerrit: {', '.join(has)}", ANSI_DIM) if has else "")
+    field += color_text(f", on Gerrit: {', '.join(has)}", ANSI_DIM) if has else ""
+    if plan.options.chain_reviewers:
+        return field + color_text(f"; new change: {', '.join(f'+{n}' for n in plan.chain_people)}", ANSI_LIGHT_GREEN)
+    created = has and not names and created_commits(plan)
+    return field + (color_text("; new change: none", ANSI_YELLOW) if created else "")
 
 
 def print_plan_status(plan: PushPlan) -> None:
@@ -255,4 +271,7 @@ def print_dry_run(plan: PushPlan) -> None:
             f"[dry-run] after a successful push would apply reviewers via {plan.options.strategy.value} ({label})",
             file=sys.stderr,
         )
+    if plan.options.chain_reviewers and (created := created_commits(plan)):
+        where = "the new change" if len(created) == 1 else f"the {len(created)} new changes"
+        print(f"[dry-run] after a successful push would add {', '.join(plan.chain_people)} to {where}", file=sys.stderr)
     print("[dry-run] not executing push", file=sys.stderr)

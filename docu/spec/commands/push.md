@@ -70,6 +70,28 @@ No upstream and no `gerTarget` → error; set upstream (e.g. `git branch --set-u
 
 `lazy` / `overwrite` may run REST assignment after push when git reports no new changes. Topic/WIP/ready/private/remove-private use magic ref options for all strategies.
 
+### A new change in a reviewed chain
+
+`%r=` names reviewers for every change a push sends, so a push that names none gives a change it
+creates nobody, though the rest of its chain is under review. When a push creates a change
+(`new change` in the preview) in a chain whose other changes have reviewers, and names no
+reviewers itself (no `--reviewers`, no `branch.<name>.gerReviewers`, nothing the registry gives),
+the new change gets the chain's **people**: the `REVIEWER` accounts of the pushed changes Gerrit
+has, in order, without CCs, without you, and without bots, which are accounts Gerrit tags
+`SERVICE_USER` and accounts whose only votes there are on the CI label (`ger.inboxVerifiedLabel`,
+`Verified`): a CI votes Verified and never Code-Review (`chain_people` in
+`core/push_reviewers.py`). They are added over REST right after the push, to the new changes only
+(`POST /changes/{id}/reviewers` batch), and the push says so: `added pg-alice, pg-bob to change
+2179, as on the rest of the chain`. A failure warns (`pushed, but could not add …`) and exits
+non-zero, as other reviewer failures do. The preview names them in a line under the new change,
+`new change: reviewers pg-alice, pg-bob, as on the rest of the chain`, and the status line's
+`Reviewers` field ends `; new change: +pg-alice, +pg-bob`. The push options line starts with
+`chain-reviewers`: Enter keeps them, deleting the word (or `-chain-reviewers`) drops them, and
+typing it brings them back. `--no-chain-reviewers` and `ger.pushChainReviewers = false` start
+without them; the preview then says `new change: no reviewers (chain-reviewers on the options line
+adds pg-alice, pg-bob)` and the status line `; new change: none`, also when nobody but a bot reviews
+the chain.
+
 ### Changes Gerrit already has at that commit
 
 Gerrit applies magic-ref options only to the changes a push gives a new patch set. A commit that already is its change's current patch set gets them over REST instead (`core/push_unchanged.py`), after the push and also when Gerrit rejects it as `no new changes` (printed as `nothing to push: Gerrit already has these commits`). A commit Gerrit already has as an older patch set of its change (**outdated**: a web edit or a Gerrit rebase came after) is not sent either, and gets nothing over REST, reviewers included: Gerrit keeps its newer patch set. The preview and the `nothing to push` line name each one, dim: `` <sha> outdated: Gerrit keeps patchset 2 of change N (`ger checkout change:N --update`) ``, the next step `ger log` names. Options asked for there warn `push options not applied to <sha>…: Gerrit has newer patchsets of these changes`, not about credentials. Drafts on an outdated change stay drafts, as on an unchanged one. A commit Gerrit has as a patch set of an **abandoned** change is not sent and gets nothing over REST either; it is not listed under `About to push commits:`, and one line names it: `` <sha> not sent: change N is abandoned (restore it in the web UI, or `ger edit --drop <sha>`) ``. A commit that would be a *new* patch set of an abandoned change is sent, and Gerrit refuses the push; a warning says so before it runs. When Gerrit already has every commit, no `git push` runs at all, since Gerrit would refuse it; with nothing to set over REST either, `ger push` only prints that line and exits `0`: no preview, no question, and no `-y` needed off a terminal (`changes_nothing` in `core/push.py`).
@@ -132,7 +154,7 @@ The interactive prompt (the confirmation line, `-i`, and confirm-loop `r`) persi
 
 ## Confirmation output
 
-Prints: pushable commits, ready-boundary notice when a blocking commit exists, confirm status line, and `git push …`. The status line's `Reviewers` field says what the push does to reviewers, not who the changes will have: `+alice, +bob`, `none added`, or with `overwrite` `set to alice`; then, dim, who reviews the pushed changes already (`, on Gerrit: pg-bob`). The notice is two lines, the same on every path (`--dry-run`, `-y`, the prompt, and a push that has nothing to send, where it comes before `nothing to push`):
+Prints: pushable commits, ready-boundary notice when a blocking commit exists, confirm status line, and `git push …`. The status line's `Reviewers` field says what the push does to reviewers, not who the changes will have: `+alice, +bob`, `none added`, or with `overwrite` `set to alice`; then, dim, who reviews the pushed changes already (`, on Gerrit: pg-bob`), and for a change the push creates in a reviewed chain who it gets (`; new change: +pg-bob`, or `; new change: none`; [above](#a-new-change-in-a-reviewed-chain)). The notice is two lines, the same on every path (`--dry-run`, `-y`, the prompt, and a push that has nothing to send, where it comes before `nothing to push`):
 
 ```
 Stopped at commit "84e9a26  # wip: fmt: locale support, half done", because it matches the stop pattern `^(?:wip\b)`.
@@ -141,7 +163,7 @@ Stopped at commit "84e9a26  # wip: fmt: locale support, half done", because it m
 
 Held back means this push leaves them as they are; Gerrit may have them already. When a Change-Id problem set the boundary, `--all` does not pass it, so the second line names the fix instead, which needs no commit-msg hook: `` `ger change-id --fix` gives it a new one `` for an invalid or duplicate Change-Id. A **missing** Change-Id holds nothing back on the branch checked out: before its preview, `ger push` adds one to every commit of the stack that has none (`ger change-id --fix`'s rewrite, message only, as the commit-msg hook would have at commit time), says so (`Added a Change-Id to 2 commits, as a commit-msg hook would: "…", "…"`) and goes on with those commits, which are new commits now. The ids stay when the push is then cancelled. `--dry-run` changes nothing and says `ger push (without --dry-run) adds the missing Change-Ids first`; pushing another branch (`--branch`) only names the fix, `` `ger change-id --fix` adds one (ger push does, on the branch checked out here) ``. Prompt, on a terminal: the push-options input line (`Push options (Enter pushes, Up: history, Ctrl-C cancels):`). Enter on the empty line pushes with the options the status line shows (no reviewers unless `--reviewers`/config gave some); a typed line (`r=alice,bob topic=x wip …`, with completion and history) sets them first; Ctrl-C / Ctrl-D cancels (exit `0`).
 
-The line also answers the prompt itself, and these words are never reviewers (a reviewer named like one is written `r=y`): `y` / `yes` push, like Enter; `n` / `no` / `q` / `quit` cancel, like Ctrl-C; `?` / `help` print the line's grammar and open the line again with what was typed. They can end a line (`r=alice y`). A line that starts filled in (`publish-drafts`, or `-i`'s reviewers) ends in a space, so what is typed next is a word of its own.
+The line also answers the prompt itself, and these words are never reviewers (a reviewer named like one is written `r=y`): `y` / `yes` push, like Enter; `n` / `no` / `q` / `quit` cancel, like Ctrl-C; `?` / `help` print the line's grammar and open the line again with what was typed. They can end a line (`r=alice y`). A line that starts filled in (`publish-drafts`, `chain-reviewers`, or `-i`'s reviewers) ends in a space, so what is typed next is a word of its own.
 
 **Reviewers are checked before anything is sent.** Under the `push` strategy, each reviewer the push would send (typed, `--reviewers`, or from config) that is not already on one of the pushed changes is looked up once with `GET /accounts/{name}` when the line is accepted, after the prompt has closed ([ADR-0006](../../adr/0006-push-prompt-gerrit-io-is-background.md)). A name Gerrit has no account for keeps you at the prompt: `` error: Gerrit has no account `nosuch`; nothing was pushed or set. Fix the name, or drop it with -nosuch ``, and the line opens again as typed; nothing of a refused line is applied. Off a terminal (`-y`, `GER_ASSUME_YES`, `--dry-run`) the same message is a usage error (exit `2`), before any `git push` or REST call. `lazy` and `overwrite` add reviewers over REST after the push, where a group is a reviewer too, so their names are left for Gerrit to judge (see the strategies above). Without credentials, or when Gerrit cannot be asked, nothing is checked. Without a terminal on stdout, the question is `Do you want to push these commits? [Y/n/r]:`. A push that sends no commit and only sets options over REST asks `Set these on Gerrit? [Y/n/r]:` instead (see above). No prompt with `--dry-run` / `-y` / non-TTY without `-y`, nor when the push would change nothing on Gerrit (see above).
 

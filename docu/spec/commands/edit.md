@@ -47,7 +47,7 @@ A **Change-Id** or **triplet** matches offline; `change:<n>`, a URL or a `q:` qu
 
 ## Attention walk
 
-**Edit attention** = unresolved comments waiting on you, a failed build (a `Verified -1` among it), or a negative Code-Review vote (`core.attention.EDIT_ATTENTION_REASONS`). A vote, like a failed build, belongs to the patch set it was given on: once you have amended the commit with other code (push pending), Gerrit's vote is on a patch set you replaced, so the walk no longer stops there. Only rebasing it keeps the vote, as Gerrit carries it over. A comment chain stops the walk until it is answered, a draft reply included ([reply.md](reply.md)).
+**Edit attention** = unresolved comments waiting on you, a failed build (a `Verified -1` among it), or a negative Code-Review vote (`core.attention.EDIT_ATTENTION_REASONS`). A vote, like a failed build, belongs to the patch set it was given on: once you have amended the commit with other code (push pending), Gerrit's vote is on a patch set you replaced, so the walk no longer stops there. Only rebasing it keeps the vote, as Gerrit carries it over. A comment chain stops the walk until it is answered: a draft reply of yours (a reply or Done, [reply.md](reply.md)) answers it, and the commit then waits on your push, which publishes the draft (`drafts-to-publish`), not on an edit.
 
 Bare `ger edit` (**resume**):
 
@@ -55,7 +55,7 @@ Bare `ger edit` (**resume**):
 2. No usable cursor → oldest edit-attention commit; set cursor.
 3. Cursor still has edit attention → stop there; refresh `touchedAt`.
 4. Cursor no longer has edit attention → next tip-ward; advance cursor.
-5. None left → `no commit needs edit attention…`, a non-zero exit, then, when the walk passed over commits whose comments all wait on the other side (`ger log` still marks them), a line naming the first of them: `1 commit has comments waiting on a reply: ger show 4583d2f`. The normal end of a walk, so it carries no `error:` prefix; after `-n` finished a stopped rebase it follows that rebase's closing line (`rebase finished: …`, [rebase.md](rebase.md#after-a-rebase-finishes)), with no `next:`: the walk is the next step.
+5. None left → `no commit needs edit attention…`, a non-zero exit, then, when the walk passed over commits whose comments all wait on the other side (`ger log` still marks them), a line naming the first of them: `1 commit has comments waiting on a reply: ger show 4583d2f`; before it, for commits whose comments your drafts answer, `1 commit has drafts to publish: ger push`. The normal end of a walk, so it carries no `error:` prefix; after `-n` finished a stopped rebase it follows that rebase's closing line (`rebase finished: …`, [rebase.md](rebase.md#after-a-rebase-finishes)), with no `next:`: the walk is the next step.
 
 Before the editor opens, a walk-chosen target is announced on stderr, e.g. `rewording 89d87be Add feature 3 (next needing attention: 1 unresolved comment)` or `editing 33e6b1b Add feature 2 (attention walk: Code-Review -1 from Bob)`. An explicit `REV` is not announced: you named it.
 

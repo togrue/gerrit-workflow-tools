@@ -29,6 +29,8 @@ class PushResult:
     """The changes Gerrit got a new patch set for, as it has them now (empty when it was not asked)."""
     nothing_sent: bool = False
     """Gerrit took no new patch set: every commit was already on it, or it answered ``no new changes``."""
+    chain_reviewers: ReviewerApplyResult | None = None
+    """The chain's people added to the changes the push created (``PushPlan.chain_people``)."""
 
     @property
     def set_nothing(self) -> bool:
@@ -38,7 +40,8 @@ class PushResult:
     @property
     def gerrit_failed(self) -> bool:
         """Gerrit refused what the push sets over REST: reviewers, or options on changes it already had."""
-        return bool(self.update_failures) or (self.reviewers is not None and not self.reviewers.ok)
+        failed = [r for r in (self.reviewers, self.chain_reviewers) if r is not None and not r.ok]
+        return bool(self.update_failures) or bool(failed)
 
 
 def push_rejected_no_new_changes(stdout: str, stderr: str) -> bool:

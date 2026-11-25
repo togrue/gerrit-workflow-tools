@@ -251,7 +251,7 @@ export async function run(): Promise<void> {
     const page = api.changeView as unknown as { receive(message: { type: string; [field: string]: unknown }): Promise<unknown> };
 
     // --- The overview -------------------------------------------------------------
-    await press("Click the status bar item", "The Change view opens on the change the status bar names (CI failed on 102).", exec("ger.openHeadline"));
+    await press("Click the status bar item", "The Change view opens on the change the status bar names (the comments on 101: the oldest change that needs an edit, below the failed CI on 102).", exec("ger.openHeadline"));
     await press("Review chains › Mark All Activity as Seen", "Every \"● new activity\" marker goes; nothing else changes.", exec("ger.markSeen"));
     await press(
       "Review chains › Sort Chains… › By last activity, oldest first",
