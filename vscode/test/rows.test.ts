@@ -610,3 +610,17 @@ test("a thread of your local commit says where its lines are in your file now, o
     ],
   );
 });
+
+test("a fixup row names the commit it folds into, and that commit how many wait for it", () => {
+  const target = commit("Add median", { number: 2168 });
+  const fix = commit("fixup! Add median", { fixup_of: target.sha, change_id: null, pushed: false });
+  const vm = stackVm(stack([target, commit("Other"), fix, { ...fix, sha: "f".repeat(40), short_sha: "fffffff" }]), undefined, never);
+  const notes = (summary: string) => vm.rows?.filter((row) => row.summary === summary).map((row) => row.notes);
+  assert.deepEqual(notes("Add median"), [[target.short_sha, "2 fixups pending"]]);
+  // Newest first: the second fixup, then the first.
+  assert.deepEqual(notes("fixup! Add median"), [
+    ["fffffff", "→ 2168"],
+    [fix.short_sha, "→ 2168"],
+  ]);
+  assert.deepEqual(notes("Other"), [[commit("Other").short_sha]]);
+});

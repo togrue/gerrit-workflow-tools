@@ -35,6 +35,7 @@ from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import find_review, staged_review
 from gerrit_workflow_tools.core.review_target import drafts_published_by, related_chain_numbers
 from gerrit_workflow_tools.core.stack import (
+    fixup_targets,
     get_stack_snapshot,
     merge_commits,
     pinned_below,
@@ -122,6 +123,7 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
     steps = rebase_steps(view)
     merges = merge_commits(cwd, [c.sha for c in view.commits])
     pinned = pinned_below([c.sha for c in view.commits], merges)
+    fixups = fixup_targets([(c.sha, c.summary) for c in view.commits])
     commits = [
         {
             **log_commit_json(c),
@@ -135,6 +137,7 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
             "is_head": c.sha == head,
             "held_back": c.sha in blocked,
             "needs_edit": commit_needs_edit_attention(c),
+            "fixup_of": fixups.get(c.sha),
             **({"resolution_note": view.notes_by_sha[c.sha]} if c.sha in view.notes_by_sha else {}),
         }
         for index, c in enumerate(view.commits)

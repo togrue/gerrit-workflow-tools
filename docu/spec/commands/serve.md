@@ -257,6 +257,10 @@ For a view that draws the stack, each commit also says:
 - `pinned` — it is the newest merge or below it (`pinned_count`). It cannot be moved, folded
   or dropped here, as `POST /stack/rewrite` refuses and `GET /stack/moves` leaves out; the
   commits above the newest merge can.
+- `fixup_of` — for an unsquashed `fixup!`/`squash!` commit, the id of the commit below it that it
+  folds into: the nearest one with the subject it names, as `ger fix` writes it
+  (`core/stack.py`, `fixup_targets`); `null` for any other commit, and for a fixup whose original
+  is not below it.
 - `rebase` — while a rebase is underway (`rebase_in_progress`), the stack is the one `ger log`
   shows then: the commits on `HEAD` above the upstream, as they are now (a replayed or amended
   commit has its new id and its new relation to Gerrit), then the commit it stopped at while

@@ -61,6 +61,11 @@ const KEEP: Leaf = (value, names) => (typeof value === "boolean" || typeof value
 const TEXT = string((text, names) => names.text(text));
 const PERSON = string((text, names) => names.person(text));
 const SHA = string((text, names) => names.hex(text));
+/** A short commit id, or `→ 2168` / `→ 1a2b3c4` (the commit a fixup folds into). */
+const FIXUP_OR_SHA = string((text, names) => {
+  const target = /^→ (.*)$/.exec(text)?.[1];
+  return target === undefined ? names.hex(text) : `→ ${/^\d+$/.test(target) ? names.number(target) : names.hex(target)}`;
+});
 const CHANGE_ID = string((text, names) => names.changeId(text));
 const KEY = string((text, names) => names.key(text));
 /** The Change-Id beside the commit message: none stays none. */
@@ -224,7 +229,8 @@ const STACK: Shape = {
       merge: KEEP,
       pinned: KEEP,
       /** Our words, and the short commit id. */
-      notes: [ours(["HEAD", "under review", "merge", "code changed", "held back", "abandoned"], SHA)],
+      /** Our words, the short commit id, and the commit a fixup folds into (its change number or short id). */
+      notes: [ours(["HEAD", "under review", "merge", "code changed", "held back", "abandoned", new RegExp(`${COUNT} fixups? pending`)], FIXUP_OR_SHA)],
       badges: [BADGE],
       tooltip: TOOLTIP,
       squash: KEEP,

@@ -165,7 +165,7 @@ def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monk
     assert list(stack["commits"][0]) == [
         *shared,
         *("short_sha", "abandoned", "diverged", "merge", "pinned", "rebase", "updated", "is_head", "held_back"),
-        "needs_edit",
+        *("needs_edit", "fixup_of"),
     ]
     assert (log["stack"], log["upstream"], log["rebase"]) == (stack["stack"], stack["upstream"], stack["rebase"])
     assert log["next"] == stack["next"]
@@ -988,6 +988,14 @@ def test_reorder_off_the_branch_says_so_instead_of_missing_the_commits_it_was_sh
     assert rebase_in_progress(stack_repo)
     with pytest.raises(ReorderRefusal, match="a rebase is already in progress"):
         rewrite_stack(stack_repo, [StackStep(sha) for sha in order], settings=settings)
+
+
+def test_stack_names_the_commit_each_fixup_folds_into(stack_repo: Path) -> None:
+    store, _keys, rows = _gerrit(stack_repo)
+    git("commit", "-q", "--allow-empty", "-m", f"fixup! {rows[1].subject}", cwd=stack_repo)
+    git("commit", "-q", "--allow-empty", "-m", "fixup! no such commit", cwd=stack_repo)
+    commits = _get(GerApi(stack_repo, gerrit=store), "/stack")["commits"]
+    assert [c["fixup_of"] for c in commits] == [None, None, None, None, rows[1].sha, None]
 
 
 def test_rebase_refusal_is_the_check_every_go_on_makes_unstaged_changes_too(stack_repo: Path) -> None:

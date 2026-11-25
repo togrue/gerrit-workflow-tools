@@ -74,7 +74,9 @@ The commits above your upstream, newest first. One row per commit:
   reviewers (and who is CC'd). A pushed change with nobody to review it shows a **person +** icon
   where the review vote goes.
 - `HEAD`, the short commit id, *code changed* (see above), and *held back* where `ger push` would
-  stop at the ready boundary.
+  stop at the ready boundary. A `fixup!` commit (`ger fix`) names the commit it folds into, *→ 2168*
+  (its change number, else its short id), and that commit says *1 fixup pending* until
+  `ger rebase --autosquash` folds it in. They stay in commit order: a row's place is where the commit is.
 - Click a row, or walk the list with **↑ / ↓**: the *Change* view follows, with the commit
   message, while the keyboard stays in the list. It shows what the row knows at once (what the
   change needs, its votes) and fills in the message, files and comments as they arrive. `Enter` (or a double click) moves to the Change view.

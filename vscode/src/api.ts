@@ -200,6 +200,8 @@ export interface StackCommit extends CommitStatus {
   pinned?: boolean;
   /** Where a rebase underway stands on this commit; null without one, or when it does not replay it. */
   rebase?: "done" | "current" | "todo" | null;
+  /** An unsquashed `fixup!`/`squash!` commit: the commit below it that it folds into (core's pairing); null otherwise. */
+  fixup_of?: string | null;
 }
 
 /** Why a rebase underway is stopped: core's verdict, the shell's words. */
