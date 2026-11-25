@@ -511,6 +511,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/attention_strategy.py` | Loading attention strategies from `.ger/attention/` |
 | `cli_attention.py` | Shared CLI helpers for `--first-attention` / `--next-attention` queries and the attention cursor (`--cursor`, `--cursor-history`, `--set-cursor`) |
 | `core/review_chain.py` | Review chains from `ChangeView`s; unreviewed age, wait age |
+| `core/review_chain_graph.py` | A review chain's relation graph: changes linked along first-parent SHAs, base-to-top order, the chain top (`chain_components`) |
 | `core/inbox.py` | The inbox: **inbox section** queries (`build_to_review_query`), `load_inbox` (both sections), `section_summary`, the **headline** (`pick_headline`; a rebase underway, handed in as a `RebaseHeadline`, leads it), and which changes wait on your review (`waiting_on_your_review`: the *to review* query, narrowed to them; `to_review_needs_you_as_reviewer`: whether only changes that list you can match) |
 | `core/gerrit_patchset.py` | One Gerrit patchset: which one a changeish names (`resolve_change`, `resolve_patchset`, `GerritPatchset`), its `refs/changes/…` ref, fetching it |
 | `core/review_target.py` | What a review acts on: the review chain it walks (`related_chain_numbers`), the changes a vote goes to (`vote_changes`, `changes_by_number`, `vote_targets`: drafts and ruled-out votes per change), and the vote: `plan_vote` (a `VotePlan`), `send_vote`. `ger review --vote` and `ger serve` share both |

@@ -10,7 +10,6 @@ Pure functions over :class:`ChangeView` values, so unit tests drive them from
 
 from __future__ import annotations
 
-from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -18,6 +17,7 @@ from urllib.parse import urlparse
 
 from gerrit_workflow_tools.core.attention import Attention, ci_failed, comment_reason
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView, parse_gerrit_time
+from gerrit_workflow_tools.core.review_chain_graph import ChainComponent, chain_components
 
 
 @dataclass(frozen=True)
@@ -189,89 +189,6 @@ def _to_member(
     )
 
 
-def _index_payloads(changes: list[ChangeView]) -> dict[str, ChangeView]:
-    """Key changes by Gerrit ``id``; last write wins for a duplicate id."""
-    return {change.key: change for change in changes if change.key}
-
-
-class _UnionFind:
-    """Disjoint-set of change ids used while grouping a query result into chains."""
-
-    def __init__(self) -> None:
-        self._parent: dict[str, str] = {}
-
-    def add(self, item: str) -> None:
-        """Ensure *item* is a set of its own."""
-        self._parent.setdefault(item, item)
-
-    def find(self, item: str) -> str:
-        """Return the representative for *item*'s set."""
-        parent = self._parent[item]
-        if parent != item:
-            parent = self.find(parent)
-            self._parent[item] = parent
-        return parent
-
-    def union(self, left: str, right: str) -> None:
-        """Merge the sets containing *left* and *right*."""
-        root_left, root_right = self.find(left), self.find(right)
-        if root_left != root_right:
-            self._parent[root_right] = root_left
-
-
-def _parent_id(change: ChangeView, sha_to_id: dict[str, str]) -> str | None:
-    return sha_to_id.get(change.first_parent) if change.first_parent else None
-
-
-def _order_members(
-    component: set[str],
-    payloads: dict[str, ChangeView],
-    sha_to_id: dict[str, str],
-) -> list[str]:
-    """Base-to-top order along first-parent links; siblings by change number."""
-    children: dict[str, list[str]] = defaultdict(list)
-    bases: list[str] = []
-    for member_id in component:
-        parent_id = _parent_id(payloads[member_id], sha_to_id)
-        if parent_id and parent_id in component:
-            children[parent_id].append(member_id)
-        else:
-            bases.append(member_id)
-    for child_ids in children.values():
-        child_ids.sort(key=lambda item: payloads[item].number or 0)
-    bases.sort(key=lambda item: payloads[item].number or 0)
-    ordered: list[str] = []
-    seen: set[str] = set()
-
-    def _walk(member_id: str) -> None:
-        if member_id in seen:
-            return
-        seen.add(member_id)
-        ordered.append(member_id)
-        for child_id in children.get(member_id, []):
-            _walk(child_id)
-
-    for base_id in bases:
-        _walk(base_id)
-    for member_id in sorted(component, key=lambda item: payloads[item].number or 0):
-        _walk(member_id)
-    return ordered
-
-
-def _pick_top(
-    ordered_ids: list[str],
-    component: set[str],
-    payloads: dict[str, ChangeView],
-    sha_to_id: dict[str, str],
-) -> str:
-    """Member whose current revision is not the parent of any other member."""
-    parent_ids = {_parent_id(payloads[member_id], sha_to_id) for member_id in component}
-    tips = [member_id for member_id in ordered_ids if member_id not in parent_ids]
-    if not tips:
-        return ordered_ids[-1]
-    return max(tips, key=lambda item: payloads[item].number or 0)
-
-
 def _seconds_since(moment: datetime | None, now: datetime) -> int:
     """Seconds from *moment* to *now*, floored at zero. Missing *moment* is zero."""
     if moment is None:
@@ -280,9 +197,8 @@ def _seconds_since(moment: datetime | None, now: datetime) -> int:
 
 
 def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
-    component: set[str],
-    payloads: dict[str, ChangeView],
-    sha_to_id: dict[str, str],
+    component: ChainComponent,
+    payloads: Mapping[str, ChangeView],
     *,
     web_base: str,
     host: str,
@@ -292,7 +208,7 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
     awaiting_reply: Mapping[str, int],
 ) -> ReviewChain | None:
     """Build one ReviewChain from a connected component, or None if it has no numbers."""
-    ordered_ids = _order_members(component, payloads, sha_to_id)
+    ordered_ids = component.ordered
     members = [
         member
         for member_id in ordered_ids
@@ -300,8 +216,7 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
     ]
     if not members:
         return None
-    top_id = _pick_top(ordered_ids, component, payloads, sha_to_id)
-    top_number = payloads[top_id].number
+    top_number = payloads[component.top].number
     top_member = next((member for member in members if member.number == top_number), members[-1])
     last_activity = max((member.updated for member in members if member.updated is not None), default=None)
     last = [member for member in members if member.updated == last_activity]
@@ -325,7 +240,7 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
         comments_unresolved=sum(member.comments_unresolved for member in members),
         comments_awaiting_reply=sum(member.comments_awaiting_reply for member in members),
         attention_reasons=tuple(dict.fromkeys(reason for member in members for reason in member.attention_reasons)),
-        partial_chain=any(payloads[member_id].first_parent in unmatched for member_id in component),
+        partial_chain=any(payloads[member_id].first_parent in unmatched for member_id in ordered_ids),
         url=top_member.url,
         last_activity_yours=last_activity is not None and all(member.updated_by_you for member in last),
     )
@@ -352,32 +267,14 @@ def assemble_review_chains(  # pylint: disable=too-many-arguments,too-many-local
     """
     queried_ids = {change.key for change in queried if change.key}
     open_follow_up = [change for change in follow_up if change.is_open and change.key not in queried_ids]
-    payloads = _index_payloads(list(queried) + open_follow_up)
-    if not payloads:
-        return []
-
-    sha_to_id = {change.current_revision: key for key, change in payloads.items() if change.current_revision}
-
-    union = _UnionFind()
-    for member_id in payloads:
-        union.add(member_id)
-    for member_id, change in payloads.items():
-        parent_id = _parent_id(change, sha_to_id)
-        if parent_id:
-            union.union(member_id, parent_id)
-
-    groups: dict[str, set[str]] = defaultdict(set)
-    for member_id in payloads:
-        groups[union.find(member_id)].add(member_id)
-
+    payloads = {change.key: change for change in [*queried, *open_follow_up] if change.key}  # last one wins
     unmatched = follow_up_unmatched or set()
     host = host_from_web_base(web_base)
     chains: list[ReviewChain] = []
-    for component in groups.values():
+    for component in chain_components(payloads):
         chain = _chain_from_component(
             component,
             payloads,
-            sha_to_id,
             web_base=web_base,
             host=host,
             now=now,
