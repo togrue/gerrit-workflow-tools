@@ -162,7 +162,8 @@ An *outgoing* line is yours: it has no waiting clock and no owner, and ends in `
 |--------|---------|
 | `c<n>` | Chain top's Gerrit change number, as every changeish argument takes it back |
 | `N changes` | Chain depth (member count) |
-| `v…` / `cr…` / `com` | One change: its votes. Several: `worst`, then the worst label across members (not the top's own): a negative vote, else a missing one (`cr?` while any member has no vote: one +1 at the bottom of five does not read as approved), else the lowest; the members that cause it follow indented. `com` when any member has unresolved comments. Right-aligned, so the tokens line up. Tokens: [Reading-ger-log.md](../../Reading-ger-log.md#status-columns) |
+| `v…` / `cr…` / `com` | One change: its votes. Several: `worst`, then the worst vote of each label cast on any member (not the top's own; `v?` when no member has one); the members that cause it follow indented. `com` when any member has unresolved comments. Right-aligned, so the tokens line up. Tokens: [Reading-ger-log.md](../../Reading-ger-log.md#status-columns) |
+| `v missing on 2, cr on 1` | The labels some members of a chain have no vote on, and on how many: one +1 at the bottom of five does not read as approved, nor three V+1 of four as "no votes". Yellow; empty when every member has a vote or none has |
 | `waiting` | Unreviewed age — how long the chain has waited for you (*to review*); `, active …` follows when the wait age (last activity) reads differently |
 | `active` | Wait age — last activity on any member (*outgoing*) |
 | owner | Chain-top owner, cut at 18 characters |
@@ -211,7 +212,7 @@ change 4390 docs: the scheduler — by dave, waits on the author, last activity 
 outgoing: none
 ```
 
-A section line counts its chains and changes (`none` when empty). A chain line is the chain top's number and subject, then only facts with a value: its size when more than one change, the owner and unreviewed age (*to review* only), the wait age, the worst votes cast, and each member that needs something with the indented lines' hint words.
+A section line counts its chains and changes (`none` when empty). A chain line is the chain top's number and subject, then only facts with a value: its size when more than one change, the owner and unreviewed age (*to review* only), the wait age, the worst votes cast, the labels some members have no vote on (`V missing on 2`), and each member that needs something with the indented lines' hint words.
 
 ---
 
@@ -243,7 +244,9 @@ A section line counts its chains and changes (`none` when empty). A chain line i
           "wait_age_seconds": 14400,
           "unreviewed_age_seconds": 259200,
           "last_activity": "2026-08-18T08:00:00Z",
-          "verified": -1, "code_review": 0,
+          "verified": -1, "code_review": 0,   // the worst, a missing vote counted as worse than any cast
+          "votes_cast": { "verified": -1, "code_review": 1 },    // the worst cast on any member
+          "votes_missing": { "verified": 0, "code_review": 2 },  // members without a vote
           "comments_unresolved": 2,
           "comments_awaiting_reply": 0,
           "attention_reasons": ["ci-failed", "unresolved-comments"],

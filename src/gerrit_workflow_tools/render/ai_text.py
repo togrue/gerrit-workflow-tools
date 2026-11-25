@@ -81,7 +81,12 @@ def _chain_facts(chain: ReviewChain, *, outgoing: bool) -> list[str]:
         )
         facts += [f"by {chain.owner_name}", turn]
     facts.append(f"last activity {format_age(chain.wait_age_seconds)}")
-    facts += vote_words(chain.verified, chain.code_review)
+    facts += vote_words(chain.verified_tally.cast, chain.code_review_tally.cast)
+    facts += [
+        f"{label} missing on {tally.missing}"
+        for label, tally in (("V", chain.verified_tally), ("CR", chain.code_review_tally))
+        if 0 < tally.missing < chain.depth
+    ]
     for member in chain.members:
         hints = member_hints(member, side=REVIEWER if outgoing else AUTHOR)
         if hints:

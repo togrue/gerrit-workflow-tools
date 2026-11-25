@@ -37,7 +37,9 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
   they sit in the collapsed *Waiting on the author* group below, with a clock, and come back up
   when it is your turn again. The activity bar's badge counts the chains whose turn is yours.
   *Outgoing*: your open chains.
-- One row per chain, showing its top change, worst votes, unresolved comments and age. Expand
+- One row per chain, showing its top change, the worst vote cast of each label and what is missing
+  (*V+1 CR+1 💬5 · V missing on 2, CR on 1*; *no votes* only when no change of it has any),
+  unresolved comments and age. Expand
   it for the chain's changes: all of them, also those not ready for review yet (greyed out, with
   why: *not verified yet*, *WIP*). A `●` marks new activity.
 - The icon in front is the most urgent thing about the chain or change: an error for failed CI or

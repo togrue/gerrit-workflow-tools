@@ -55,6 +55,14 @@ class ChainMember:  # pylint: disable=too-many-instance-attributes
 
 
 @dataclass(frozen=True)
+class LabelTally:
+    """One label over a chain's members: the worst vote cast on any of them, and how many have none."""
+
+    cast: int | None = None
+    missing: int = 0
+
+
+@dataclass(frozen=True)
 class ReviewChain:  # pylint: disable=too-many-instance-attributes
     """One review unit: the chain you decide to start or not start."""
 
@@ -79,6 +87,9 @@ class ReviewChain:  # pylint: disable=too-many-instance-attributes
     """The member updated last was updated by you (your push, your vote): not news to you."""
     comments_awaiting_reply: int = 0
     """Of :attr:`comments_unresolved`, the chains that wait on the other side, over all members."""
+    verified_tally: LabelTally = LabelTally()
+    code_review_tally: LabelTally = LabelTally()
+    """What :attr:`verified` and :attr:`code_review` sum up: the worst vote cast, and the members without one."""
     your_turn: bool = False
     """It is your turn to review a member: the chain waits on you. Otherwise a chain you review
     waits on its author; :attr:`unreviewed_age_seconds` is then 0."""
@@ -173,6 +184,11 @@ def _worst_label(values: list[int | None]) -> int | None:
     if any(value < 0 for value in known) or len(known) == len(values):
         return min(known, default=None)
     return None
+
+
+def _tally(values: list[int | None]) -> LabelTally:
+    known = [value for value in values if value is not None]
+    return LabelTally(min(known, default=None), len(values) - len(known))
 
 
 def _to_member(
@@ -270,6 +286,8 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
         partial_chain=any(payloads[member_id].first_parent in unmatched for member_id in ordered_ids),
         url=top_member.url,
         last_activity_yours=last_activity is not None and all(member.updated_by_you for member in last),
+        verified_tally=_tally([member.verified for member in members]),
+        code_review_tally=_tally([member.code_review for member in members]),
         your_turn=unreviewed_at is not None,
     )
 

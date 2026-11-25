@@ -198,8 +198,22 @@ export function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
+/**
+ * A chain's votes: the worst cast of each label, then the labels some members have no vote on
+ * (`V+1 CR+1 💬5 · V missing on 2, CR on 1`). A label no member has a vote on is left out, as
+ * for one change; `no votes` only when no member has any.
+ */
+export function chainVotes(chain: Chain): string {
+  const cast = chain.votes_cast ?? chain;
+  const missing = chain.votes_missing ?? { verified: 0, code_review: 0 };
+  const shown = votes({ verified: cast.verified, code_review: cast.code_review, comments_unresolved: chain.comments_unresolved });
+  const gaps = ([["V", missing.verified], ["CR", missing.code_review]] as const).filter(([, n]) => n > 0 && n < chain.depth);
+  const words = gaps.map(([label, n], i) => (i === 0 ? `${label} missing on ${n}` : `${label} on ${n}`));
+  return words.length ? `${shown} · ${words.join(", ")}` : shown;
+}
+
 export function chainDescription(chain: Chain, section: string): string {
-  const parts = [plural(chain.depth, "change"), votes(chain)];
+  const parts = [plural(chain.depth, "change"), chainVotes(chain)];
   if (section === "to-review") {
     parts.unshift(chain.owner.name);
     if (chain.your_turn !== false) {

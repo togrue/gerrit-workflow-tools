@@ -92,6 +92,9 @@ export interface Chain {
   attention_reasons: string[];
   severity: Severity;
   partial_chain: boolean;
+  /** Per label, the worst vote cast on a member (`verified`, `code_review` above count a missing one as worse), and how many members have none. */
+  votes_cast?: { verified: number | null; code_review: number | null };
+  votes_missing?: { verified: number; code_review: number };
   /** Under To review: a member's turn is yours. False: you reviewed it, and it waits on its author. */
   your_turn?: boolean;
   members: Member[];

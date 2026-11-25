@@ -173,3 +173,25 @@ def test_a_chain_in_the_queue_is_shown_whole_its_unready_changes_said_so(
         (41, "not verified yet", False),  # Gerrit's attention set holds you, but it is not in your queue
         (42, "not verified yet", False),
     ]
+
+
+def test_a_chains_votes_say_the_worst_cast_and_what_is_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Three of four with V+1 is not "no votes" (finding 8): the row names what is missing."""
+    rows = [
+        _alice(60, "v1", attention_since="2026-08-17 12:00:00.000000000", cr=1),
+        _alice(61, "v2", parent="v1", cr=1),
+        _alice(62, "v3", parent="v2", verified=0, cr=1),
+        _alice(63, "v4", parent="v3"),
+    ]
+    store = _store(*rows)
+    code, out, err = run_cli(tmp_path, inbox_main, ["--color=never", "--no-url"], monkeypatch, gerrit=store)
+    assert code == int(ExitCode.OK), err
+    [row] = [line for line in out.splitlines() if line.startswith("c63")]
+    assert re.search(r"worst v\+1 cr\+1 +v missing on 1, cr on 1  waiting", row), row
+    _code, out, _err = run_cli(tmp_path, inbox_main, ["--ai"], monkeypatch, gerrit=store)
+    assert "V+1, CR+1, V missing on 1, CR missing on 1" in out
+    _code, out, _err = run_cli(tmp_path, inbox_main, ["--json"], monkeypatch, gerrit=store)
+    [chain] = json_stdout(out)["sections"][0]["chains"]
+    assert (chain["verified"], chain["code_review"]) == (None, None), "the worst counts a missing vote as worse"
+    assert chain["votes_cast"] == {"verified": 1, "code_review": 1}
+    assert chain["votes_missing"] == {"verified": 1, "code_review": 1}

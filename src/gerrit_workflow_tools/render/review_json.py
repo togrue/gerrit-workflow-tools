@@ -69,6 +69,8 @@ def chain_json(chain: ReviewChain, *, to_review: bool = False) -> dict[str, obje
         "last_activity_yours": chain.last_activity_yours,
         "verified": chain.verified,
         "code_review": chain.code_review,
+        "votes_cast": {"verified": chain.verified_tally.cast, "code_review": chain.code_review_tally.cast},
+        "votes_missing": {"verified": chain.verified_tally.missing, "code_review": chain.code_review_tally.missing},
         "comments_unresolved": chain.comments_unresolved,
         "comments_awaiting_reply": chain.comments_awaiting_reply,
         "attention_reasons": list(chain.attention_reasons),

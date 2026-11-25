@@ -10,6 +10,7 @@ import {
   blockedMove,
   blockedSwaps,
   chainDescription,
+  chainVotes,
   chainsWithActivity,
   commentLocation,
   commitVotes,
@@ -147,6 +148,11 @@ test("votes and ages read like ger's own output", () => {
   assert.equal(chainDescription(chain("k", ""), "to-review"), "alice · 2 changes · V+1 💬2 · waiting 3d · active 4h ago");
   assert.equal(chainDescription(chain("k", ""), "outgoing"), "2 changes · V+1 💬2 · active 4h ago");
   assert.equal(votes({ verified: null, code_review: null, comments_unresolved: 0 }), "no votes");
+  // A chain says the worst vote cast and what is missing: never "no votes" while a member has one.
+  const partly = { ...chain("k", ""), depth: 4, verified: null, code_review: null, comments_unresolved: 5 };
+  assert.equal(chainVotes({ ...partly, votes_cast: { verified: 1, code_review: 1 }, votes_missing: { verified: 2, code_review: 1 } }), "V+1 CR+1 💬5 · V missing on 2, CR on 1");
+  assert.equal(chainVotes({ ...partly, comments_unresolved: 0, votes_cast: { verified: 1, code_review: null }, votes_missing: { verified: 1, code_review: 4 } }), "V+1 · V missing on 1");
+  assert.equal(chainVotes({ ...partly, comments_unresolved: 0, votes_cast: { verified: null, code_review: null }, votes_missing: { verified: 4, code_review: 4 } }), "no votes");
   assert.deepEqual([fileState("A"), fileState("R"), sentence("unresolved comments")], ["added", "renamed", "Unresolved comments"]);
 });
 

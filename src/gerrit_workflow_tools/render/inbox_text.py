@@ -63,9 +63,24 @@ def _fmt_votes(item: ReviewChain | ChainMember) -> str:
 
 
 def _fmt_chain_votes(chain: ReviewChain) -> str:
-    """The chain's votes; over several changes, the worst of each, said so (not the top's own)."""
-    votes = _fmt_votes(chain)
-    return f"{color_text('worst', ANSI_DIM)} {votes}" if chain.depth > 1 else votes
+    """The chain's votes; over several changes, the worst cast of each, said so (not the top's own)."""
+    if chain.depth == 1:
+        return _fmt_votes(chain)
+    verified, code_review = chain.verified_tally.cast, chain.code_review_tally.cast
+    comments = fmt_comments(chain.comments_unresolved, chain.comments_awaiting_reply)
+    return f"{color_text('worst', ANSI_DIM)} {fmt_verified(verified)} {fmt_code_review(code_review)} {comments}"
+
+
+def _fmt_missing(chain: ReviewChain) -> str:
+    """``v missing on 2, cr on 1``: the labels some members of the chain have no vote on. A label no
+    member has a vote on says so in its own token (``v?``)."""
+    parts = [
+        (name, tally.missing)
+        for name, tally in (("v", chain.verified_tally), ("cr", chain.code_review_tally))
+        if 0 < tally.missing < chain.depth
+    ]
+    words = [f"{name} missing on {n}" if i == 0 else f"{name} on {n}" for i, (name, n) in enumerate(parts)]
+    return color_text(", ".join(words), ANSI_YELLOW) if words else ""
 
 
 def _fmt_size(depth: int) -> str:
@@ -115,7 +130,9 @@ def _pad(cells: list[str], widths: list[int]) -> str:
         gap = " " * (widths[i] - visible_len(cell))
         return gap + cell if i == _VOTES else cell + gap
 
-    return "  ".join(fit(i, cell) for i, cell in enumerate(cells))
+    return "  ".join(
+        fit(i, cell) for i, cell in enumerate(cells) if widths[i]
+    )  # a column empty in every row takes no room
 
 
 _INDENT = "  "
@@ -135,7 +152,12 @@ def _subject(text: str, *, used: int, columns: int | None, highlighter: SummaryH
 def _chain_cells(chain: ReviewChain, *, outgoing: bool) -> list[str]:
     """The aligned part of a chain's row. An outgoing chain is yours: no waiting clock and no owner.
     Nor has a chain you reviewed that waits on its author: it waits on nobody's review."""
-    cells = [_fmt_change_number(chain.top.number, chain.url), _fmt_size(chain.depth), _fmt_chain_votes(chain)]
+    cells = [
+        _fmt_change_number(chain.top.number, chain.url),
+        _fmt_size(chain.depth),
+        _fmt_chain_votes(chain),
+        _fmt_missing(chain),
+    ]
     if outgoing or not chain.your_turn:
         cells.append(_fmt_age("active", chain.wait_age_seconds, ANSI_DIM))
         return cells if outgoing else [*cells, _fmt_owner(chain.owner_name)]
