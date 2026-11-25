@@ -16,6 +16,8 @@ export interface VoteRequest {
   draftsOnly?: boolean;
   /** Draw what was sent: the views refresh, the change shown reloads. */
   after?: () => Promise<void>;
+  /** Once it is sent: the way on to offer on the notification (the next change of a staged review), if any. */
+  next?: () => Promise<{ label: string; run: () => Promise<void> } | undefined>;
 }
 
 /** Ask for the vote (or none) and a message, confirm once what goes out, and publish it. */
@@ -66,7 +68,10 @@ export async function voteAndPublish(model: Model, target: ChangeTarget | undefi
   try {
     const client = await model.client();
     const sent = await ui().progress(vscode.ProgressLocation.Notification, `Publishing on ${number}`, () => client.vote(number, chain, votes, message.trim() || undefined, patchSets));
-    void ui().message("info", sentVote(sent, option), {}, []);
+    const next = await request.next?.().catch(() => undefined);
+    void ui()
+      .message("info", sentVote(sent, option), {}, next ? [next.label] : [])
+      .then((picked) => (picked && next ? next.run() : undefined));
   } catch (error) {
     // The changes moved since they were shown: nothing went out. Look again, and decide on what is there now.
     if (error instanceof GerApiError && error.code === "REFUSED") {

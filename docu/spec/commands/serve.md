@@ -491,7 +491,9 @@ In `GET /show`, every comment chain carries `held`.
 
 ### `GET /review`
 
-The **review state**, as `ger review --status --json`, under `review`; `null` when none.
+The **review state**, as `ger review --status --json`, under `review`; `null` when none. With
+`chain=1` its `chain` is the review chain's open changes, base first, as `ger review` prints it
+(one Gerrit request); without, `null`.
 
 ### `GET /vote?change=<changeish>`
 
@@ -521,7 +523,7 @@ a vote no change takes is `USAGE`, as on the command line.
 
 | Endpoint | Body | Does |
 |----------|------|------|
-| `/review/open` | `change`, optional `patchset`, `mode`, `stage`, `force` | `ger review CHANGEISH`: the **review checkout**. Answers `review` and `moved_from`. |
+| `/review/open` | `change`, optional `patchset`, `mode`, `stage`, `force`; or `step` instead of `change` | `ger review CHANGEISH`: the **review checkout**. `step` (`1` or `-1`) is `ger review --next` / `--prev`: the change above or below in the review chain of the review going on, at its current patchset, in that review's mode; at the end of the chain it is `NOT_FOUND`, with `ger review`'s words. Answers `review` (with `chain`) and `moved_from`. |
 | `/review/done` | — | `ger review --done`. |
 | `/vote` | `change`, `patch_sets`, optional `chain`, `votes`, `message` | `ger review --vote`: publish your drafts on the change (with `chain`, on every open change of its chain), with `votes` (`{label: value}`; `{}` or none: the drafts go out without a vote, as `ger reply --publish CHANGEISH`) and `message` on each. `patch_sets` (`{change number: patchset}`) is what `GET /vote` showed: when the changes or a patchset are not that any more, nothing is sent and it is `REFUSED`. A change that rules a vote out is skipped; when none takes it, or there is nothing to send (no draft, no vote, no message), or `GER_NO_PUBLISH` is set, it is `USAGE`. Answers as `ger review --vote --json` for several changes: `changes` (each `change`, `number`, `drafts`, `labels`, `message`, `status`) and `skipped` (`change`, `number`, `ruled_out`). |
 | `/comments/reply` | `rev`, `comment_id`, `message`, optional `resolved` | `ger reply`: a **draft** reply in that chain. Publishing stays with `ger push` and `ger review --vote`. |

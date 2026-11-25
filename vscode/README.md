@@ -251,7 +251,8 @@ The commits above your upstream, newest first. One row per commit:
   everything that goes out: the vote, each draft (`path:line` and its first words), the message,
   on which changes, and the changes of a chain that do not take the vote. Publish sends it; a
   notification says what went out and the views refresh, so the chain leaves *To review* when
-  Gerrit says so. Should the change get a new patchset meanwhile, nothing is sent and **Look
+  Gerrit says so. On the change a staged review holds, the notification offers the way on: **Next
+  Change** while the chain goes on above it, **Leave Review** at its top. Should the change get a new patchset meanwhile, nothing is sent and **Look
   Again** starts over on what is there now. **Publish Drafts…** (the Change view's `…` menu, the
   palette) sends your drafts without a vote: `ger reply --publish`.
 - **Review Change** (eye icon, changes that are not in your stack): `ger review`
@@ -259,6 +260,13 @@ The commits above your upstream, newest first. One row per commit:
   own stack is not touched. When the git config key `ger.reviewCheckout` says `branch`, it switches
   this checkout to a `change-<n>` branch instead, the message says so, and *Leave Review Checkout*
   switches back. For reading someone's work.
+- **Review Next Change in Chain** (arrow in the Change view's title bar, `Ctrl+Alt+PageDown`) and
+  **Review Previous Change in Chain** (the `…` menu, `Ctrl+Alt+PageUp`), while a staged review sits
+  in this checkout: `ger review --next` / `--prev`. The review moves to the change above (below) in
+  the review chain, at its current patchset; the Change view shows it, its files open in one editor
+  (*Open All Changes*), and the combined diff of the change it left closes. At the top of the chain it
+  says so and offers what `ger review` suggests there: **Vote on the Chain…** and **Leave Review**.
+  With edits of yours in the way, nothing moves, and it says what to do in `ger review`'s words.
 - **Check Out to Work On** (download icon, changes that are not in your stack): `ger checkout` in
   the *ger* terminal puts the change on a `change-<n>` branch here that tracks its target branch, so
   the change is your local stack and *Push to Gerrit* uploads a new patchset. It may ask before it

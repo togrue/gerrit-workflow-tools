@@ -29,7 +29,7 @@ Status words: **ships**, **partial** (see the linked spec), **gap** (nothing doe
 |------|-----|-----------|-------|--------|
 | Open the chain | `ger inbox`, `ger show CHANGEISH` | click a chain, *Show Change* | `tests/test_inbox.py`, `tests/test_show.py` | ships |
 | Check out one commit for review (in the review worktree by default) | `ger review CHANGEISH` | *Review Change* | `tests/test_review.py` | ships |
-| Walk up and down the chain | `ger review CHANGEISH --bottom`, `ger review --next`, `ger review --prev` | click another chain member | `tests/test_review.py`, `tests/test_review_chain.py` | ships |
+| Walk up and down the chain | `ger review CHANGEISH --bottom`, `ger review --next`, `ger review --prev` | *Review Next / Previous Change in Chain* in a staged review (`POST /review/open` with `step`); click another chain member | `tests/test_review.py`, `tests/test_review_chain.py`, `tests/test_serve.py` | ships |
 | Read the commit's diff in your own tools | `ger review --stage` (the commit's changes staged, so every git view shows them) | *Files* group, *Open Diff*, *Open All Changes* (every file in one editor) | `tests/test_review.py` | ships |
 | What changed since the patchset you reviewed | `ger review CHANGEISH` (the `since your review of patchset N` line and its `git diff`) | *Since your review* group (`GET /diff?since=reviewed`) | `tests/test_review.py`, `tests/test_serve.py` | ships |
 | Read the comment chains | `ger show --comments all` | editor comment threads, *Next Unresolved Comment* | `tests/test_show.py`, `tests/test_show_comments_render.py` | ships |
@@ -95,6 +95,8 @@ A **gap** names the work that would close it.
 | `ger.checkout` | `ger checkout CHANGEISH` | runs in a terminal, as it may ask to update an existing branch |
 | `ger.stack.edit` | `ger edit REV` | |
 | `ger.reviewDone` | `ger review --done` | |
+| `ger.reviewNext` | `ger review --next` | the change it moves to is shown, all its files in one editor |
+| `ger.reviewPrev` | `ger review --prev` | |
 | `ger.vote` | `ger review --vote +1 --change CHANGEISH -m MSG`; a *To review* chain row: `ger review --vote +1 --chain --change CHANGEISH` | the votes on offer and what each means are Gerrit's; one confirmation lists what goes out |
 | `ger.publishDrafts` | `ger reply --publish CHANGEISH` | your drafts on the change, no vote |
 | `ger.push` | `ger push` | |

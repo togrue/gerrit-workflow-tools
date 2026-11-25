@@ -37,6 +37,7 @@ from gerrit_workflow_tools.core.inbox import DEFAULT_OUTGOING_QUERY, build_to_re
 from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
 from gerrit_workflow_tools.core.reorder import ReorderRefusal, StackStep, rewrite_stack
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict, swap_conflicts
+from gerrit_workflow_tools.core.review_checkout import ReviewChainEndError
 from gerrit_workflow_tools.core.review_delta import patchset_delta_files
 from gerrit_workflow_tools.core.stack import Commit, read_commit_meta
 from gerrit_workflow_tools.server.api import GerApi
@@ -692,7 +693,21 @@ def test_review_open_checks_out_in_the_review_worktree_and_done_leaves_it(stack_
     staged = _get(GerApi(worktree, gerrit=store), "/stack")["staged_review"]
     assert (staged["number"], staged["commit"], staged["branch"]) == (102, rows[2].sha, "change-102")
     assert _get(api, "/stack")["staged_review"] is None, "the review is staged in its worktree, not here"
-    assert _post(api, "/review/done", {}) == {"done": 102, "deleted": ["change-102"], "kept": []}
+    assert _get(api, "/review", chain="1")["review"]["chain"] == [100, 101, 102, 103]
+    # ger review --next: the change above, in the review's own mode; at the top, the chain ends.
+    walked = _post(api, "/review/open", {"step": 1})["review"]
+    assert (walked["number"], walked["staged"], Path(walked["worktree"])) == (103, True, worktree)
+    assert _get(GerApi(worktree, gerrit=store), "/stack")["staged_review"]["number"] == 103
+    with pytest.raises(ReviewChainEndError, match="top of its review chain"):
+        _post(api, "/review/open", {"step": 1})
+    assert (
+        failure_response(ReviewChainEndError("change 103 is the top of its review chain"))[1]["error"]["reason"]
+        == "chain-end"
+    )
+    with pytest.raises(BadRequest):
+        _post(api, "/review/open", {"step": 2})
+    assert _post(api, "/review/open", {"step": -1})["review"]["number"] == 102
+    assert _post(api, "/review/done", {}) == {"done": 102, "deleted": ["change-102", "change-103"], "kept": []}
 
 
 def test_reorder_rewrites_the_stack_and_keeps_every_change_id(stack_repo: Path) -> None:

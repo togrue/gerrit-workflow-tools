@@ -20,7 +20,7 @@ import { Poller } from "./poller";
 import { push, rebaseOntoUpstream, rebaseStep } from "./rebase";
 import { RepoWatcher } from "./repoWatcher";
 import { reportIssue } from "./reportIssue";
-import { checkout, editCommit, leaveReview, review } from "./review";
+import { ReviewWalk, checkout, editCommit, leaveReview, review, stepReview } from "./review";
 import { GerProcess } from "./server";
 import { CommitArg, StackView, commitTarget } from "./stackView";
 import { waitsForYou } from "./state";
@@ -204,6 +204,45 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     await model.refresh({ fromGerrit: true });
     await changeView.open();
   };
+  /** The change a staged review holds here, shown (the keyboard stays where it is); with `all`, all its files in one editor. */
+  const showReview = async (all: boolean) => {
+    const review = model.stack?.staged_review;
+    const commit = review && model.stack?.commits.find((c) => c.sha === review.commit);
+    if (!commit) {
+      return;
+    }
+    await openChange(commitTarget(commit), true);
+    await changeView.idle();
+    if (all) {
+      await changeView.openAll();
+    }
+  };
+  const reviewWalk: ReviewWalk = {
+    show: () => showReview(true),
+    leave: () => changeView.closeCombined(),
+    voteChain: (number) => {
+      const shown = changeView.target?.number === number ? changeView.target : { rev: `change:${number}`, title: String(number), number, local: false };
+      return voteAndPublish(model, shown, { chain: true, after: afterVote });
+    },
+  };
+  /**
+   * After a vote on the change a staged review holds: Next Change while the chain goes on above it,
+   * Leave Review at its top (`ger review`'s own `next:` line, the vote done). Nothing elsewhere.
+   */
+  const nextAfterVote = (target: ChangeTarget | undefined) => async () => {
+    const review = model.stack?.staged_review;
+    if (!review || review.number !== target?.number) {
+      return undefined;
+    }
+    const chain = (await (await model.client()).review(true))?.chain ?? [];
+    const index = chain.indexOf(review.number);
+    if (index < 0) {
+      return undefined;
+    }
+    return index < chain.length - 1
+      ? { label: "Next Change", run: () => stepReview(model, 1, reviewWalk) }
+      : { label: "Leave Review", run: () => leaveReview(model) };
+  };
   /** A chain row of Review chains votes on its whole chain. */
   const isChainRow = (arg: unknown) => (arg as { kind?: unknown } | undefined)?.kind === "chain";
 
@@ -271,7 +310,12 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg)),
     "ger.setUpstream": (upstream?: unknown) => setUpstream(model, typeof upstream === "string" ? upstream : undefined),
     "ger.reviewDone": () => leaveReview(model),
-    "ger.vote": (arg: unknown) => voteAndPublish(model, targetOf(arg), { chain: isChainRow(arg), after: afterVote }),
+    "ger.vote": (arg: unknown) => {
+      const target = targetOf(arg);
+      return voteAndPublish(model, target, { chain: isChainRow(arg), after: afterVote, next: isChainRow(arg) ? undefined : nextAfterVote(target) });
+    },
+    "ger.reviewNext": () => stepReview(model, 1, reviewWalk),
+    "ger.reviewPrev": () => stepReview(model, -1, reviewWalk),
     "ger.publishDrafts": (arg: unknown) => voteAndPublish(model, targetOf(arg), { draftsOnly: true, after: afterVote }),
     "ger.push": () => push(model),
     "ger.rebase.continue": () => rebaseStep(model, "continue"),

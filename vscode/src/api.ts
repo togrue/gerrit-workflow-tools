@@ -474,6 +474,8 @@ export interface ReviewState {
   staged: boolean;
   worktree: string;
   branch: string;
+  /** The review chain's open changes, base first; null unless asked for. */
+  chain?: number[] | null;
 }
 
 /** The attention walk as work for an agent: Markdown to follow, and what is in it. */
@@ -655,12 +657,18 @@ export class GerClient {
     return (await this.call<{ content: string | null }>("GET", "/file", { rev, path })).content;
   }
 
-  async review(): Promise<ReviewState | null> {
-    return (await this.call<{ review: ReviewState | null }>("GET", "/review")).review;
+  /** The review going on here or in the review worktree; with `chain`, its review chain too (one Gerrit request). */
+  async review(chain = false): Promise<ReviewState | null> {
+    return (await this.call<{ review: ReviewState | null }>("GET", "/review", chain ? { chain: "1" } : undefined)).review;
   }
 
   async reviewOpen(change: number | string): Promise<ReviewState> {
     return (await this.call<{ review: ReviewState }>("POST", "/review/open", undefined, { change })).review;
+  }
+
+  /** `ger review --next` (1) or `--prev` (-1): the review moves along its chain. At its end a `GerApiError` with reason `chain-end`. */
+  async reviewStep(step: 1 | -1): Promise<ReviewState> {
+    return (await this.call<{ review: ReviewState }>("POST", "/review/open", undefined, { step })).review;
   }
 
   reviewDone(): Promise<{ done: number; deleted: string[]; kept: string[] }> {

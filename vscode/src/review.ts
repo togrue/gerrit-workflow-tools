@@ -4,6 +4,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 
+import { GerApiError, ReviewState } from "./api";
 import { runInTerminal } from "./launch";
 import { reviewOpened } from "./format";
 import { ChangeTarget, Model, describeError } from "./model";
@@ -81,3 +82,55 @@ export async function leaveReview(model: Model): Promise<void> {
     void ui().message("warning", describeError(error), {}, []);
   }
 }
+
+/** What moving a staged review along its chain needs from the rest of the extension. */
+export interface ReviewWalk {
+  /** Show the change the staged review holds now, with all its files. */
+  show(): Promise<void>;
+  /** Close what showed the change it left (its combined diffs: their right side is your file). */
+  leave(): Promise<void>;
+  /** Vote and Publish on every open change of the chain of `number`. */
+  voteChain(number: number): Promise<void>;
+}
+
+const VOTE_CHAIN = "Vote on the Chain…";
+const LEAVE = "Leave Review";
+
+/**
+ * Review Next (`step` 1) or Previous (-1) Change in Chain: `ger review --next` / `--prev` moves the
+ * staged review here to the change above or below, and it is shown with all its files. At the top
+ * of the chain it says so and offers what `ger review`'s own `next:` line does there: a vote on
+ * the chain, and leaving the review.
+ */
+export async function stepReview(model: Model, step: 1 | -1, walk: ReviewWalk): Promise<void> {
+  const here = model.stack?.staged_review;
+  if (!here) {
+    void ui().message("info", "No staged review here: Review Change on a change of Review chains starts one.", {}, []);
+    return;
+  }
+  let moved: ReviewState;
+  try {
+    const client = await model.client();
+    const which = step > 0 ? "next" : "previous";
+    moved = await ui().progress(vscode.ProgressLocation.Notification, `Checking out the ${which} change of ${here.number}'s chain`, () => client.reviewStep(step));
+  } catch (error) {
+    if (error instanceof GerApiError && error.reason === "chain-end") {
+      const buttons = step > 0 ? [VOTE_CHAIN, LEAVE] : [];
+      const picked = await ui().message("info", `${capitalized(error.message)}.`, {}, buttons);
+      if (picked === VOTE_CHAIN) {
+        await walk.voteChain(here.number);
+      } else if (picked === LEAVE) {
+        await leaveReview(model);
+      }
+      return;
+    }
+    void ui().message("warning", `The review did not move on: ${describeError(error)}`, {}, []);
+    return;
+  }
+  await walk.leave();
+  await model.refresh();
+  feedback(`Reviewing ${moved.number}: ${moved.subject} (patchset ${moved.patch_set})`, { icon: "eye" });
+  await walk.show();
+}
+
+const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);

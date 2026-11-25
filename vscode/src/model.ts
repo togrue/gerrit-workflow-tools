@@ -148,6 +148,8 @@ export class Model implements vscode.Disposable {
       // Leave Review Checkout is offered only while there is one to leave.
       const review = await client.review().catch(() => null);
       void vscode.commands.executeCommand("setContext", "ger.reviewOpen", Boolean(review));
+      // Review Next / Previous Change in Chain, while a staged review sits here (core's fact).
+      void vscode.commands.executeCommand("setContext", "ger.stagedReview", Boolean(this.stack?.staged_review));
       // Continue, Abort and Skip are in the palette only while there is a rebase to go on with.
       void vscode.commands.executeCommand("setContext", "ger.rebasing", Boolean(this.stack?.rebase_in_progress));
       // Skip only where core allows it: at any other stop git would only throw away what is not committed.
@@ -251,6 +253,7 @@ export class Model implements vscode.Disposable {
     if (state !== "ready") {
       // Derived from the service: with no service there is nothing to leave.
       await vscode.commands.executeCommand("setContext", "ger.reviewOpen", false);
+      await vscode.commands.executeCommand("setContext", "ger.stagedReview", false);
     }
   }
 

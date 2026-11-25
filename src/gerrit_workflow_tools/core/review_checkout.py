@@ -39,6 +39,9 @@ class ReviewUsageError(UsageError):
 class ReviewChainEndError(RuntimeError):
     """``--next`` / ``--prev`` at the end of the review chain (exit 10)."""
 
+    reason = "chain-end"
+    """What ``ger serve`` names it (``error.reason``), so a client can offer what comes after the chain."""
+
 
 @dataclass(frozen=True)
 class CheckoutOptions:

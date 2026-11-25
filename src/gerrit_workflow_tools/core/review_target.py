@@ -19,8 +19,14 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit
-from gerrit_workflow_tools.core.gerrit_patchset import resolve_change
-from gerrit_workflow_tools.core.review_checkout import ReviewState, ReviewUsageError, chain_numbers, find_review
+from gerrit_workflow_tools.core.gerrit_patchset import GerritPatchset, resolve_change, resolve_patchset
+from gerrit_workflow_tools.core.review_checkout import (
+    ReviewState,
+    ReviewUsageError,
+    chain_numbers,
+    find_review,
+    neighbour,
+)
 from gerrit_workflow_tools.core.usage import Refusal, UsageError
 from gerrit_workflow_tools.core.votes import DEFAULT_LABEL, votes_ruled_out
 
@@ -31,6 +37,18 @@ def related_chain_numbers(service: GerritService, key: str, patch_set: int | str
         return chain_numbers(service.rest.get_related(key, patch_set))
     except GerritApiError:
         return []
+
+
+def review_neighbour(
+    service: GerritService, cwd: Path | str, state: ReviewState, step: int
+) -> tuple[GerritPatchset, str | None]:
+    """The change *step* places up (``+1``) or down (``-1``) the review chain of *state*, at its
+    current patchset, and its URL: what ``ger review --next`` / ``--prev`` checks out.
+
+    Raises :class:`~gerrit_workflow_tools.core.review_checkout.ReviewChainEndError` at the end of the chain.
+    """
+    number = neighbour(related_chain_numbers(service, state.key, state.patch_set), state.number, step)
+    return resolve_patchset(service, cwd, f"change:{number}", None)
 
 
 DraftsPublishedBy = Literal["push", "vote"]
