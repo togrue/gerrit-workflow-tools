@@ -86,6 +86,46 @@ test("your commit's message is a box without the Change-Id, which shows read-onl
   assert.deepEqual(posted.at(-1), { type: "message", text: "Extract the routing" }, "the extension puts the Change-Id back on");
 });
 
+test("a message that cannot be reworded reads at the view's width: paragraphs and list items reflowed, indented blocks and trailers as they are", () => {
+  const text = [
+    "Fix the thing",
+    "",
+    "The first paragraph, hard-wrapped",
+    "at 72 as people write them.",
+    "",
+    "- one item, also",
+    "  wrapped",
+    "- two",
+    "",
+    "    code(stays)",
+    "    as it is",
+    "",
+    "```",
+    "fenced",
+    "",
+    "block",
+    "```",
+    "",
+    "Bug: 12",
+    "Signed-off-by: A <a@example.org>",
+  ].join("\n");
+  const vm = changeVm(state({ local: false, readOnly: READ_ONLY.remote }));
+  const { root } = changePage({ ...vm, message: { ...vm.message!, text } });
+  const parts = root.all(byClass("message-text"))[0].children.filter((part): part is FakeElement => typeof part !== "string" && part.className !== "message-gap");
+  assert.deepEqual(
+    parts.map((part) => [part.className, part.textContent]),
+    [
+      ["message-subject", "Fix the thing"],
+      ["message-para", "The first paragraph, hard-wrapped at 72 as people write them."],
+      ["message-item", "- one item, also wrapped"],
+      ["message-item", "- two"],
+      ["message-pre", "    code(stays)\n    as it is"],
+      ["message-pre", "```\nfenced\n\nblock\n```"],
+      ["message-trailers", "Bug: 12\nSigned-off-by: A <a@example.org>"],
+    ],
+  );
+});
+
 test("a message that cannot be reworded is plain text: no box, no note saying so, its Change-Id still under it", () => {
   for (const readOnly of [READ_ONLY.remote, READ_ONLY.patchset, READ_ONLY.review]) {
     const { root } = changePage(changeVm(state({ local: false, readOnly })));

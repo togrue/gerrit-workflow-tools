@@ -196,7 +196,10 @@ The commits above your upstream, newest first. One row per commit:
   uncommitted changes stay where they are, nothing can conflict. **Undo** is offered right after.
   What you typed survives a refresh and switching views until you apply or revert it. Someone
   else's change (also one checked out for review), or a patchset on Gerrit, cannot be reworded
-  here: its message is plain text.
+  here: its message is plain text, set to read in a narrow side bar: the subject in bold;
+  paragraphs and list items hard-wrapped at 72 joined again, so they wrap once, where the view
+  does; indented and fenced blocks kept line for line in the editor font (they scroll sideways when
+  wide); the trailers (`Bug:`, `Signed-off-by:`) small and dim, as the Change-Id is.
 - **Show**: which version of the change you look at. It always starts on your **local commit**
   when the change is in your stack; the list also has every patchset on Gerrit, the current one
   and the one you reviewed marked.

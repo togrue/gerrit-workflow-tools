@@ -194,6 +194,27 @@ const FILES = [
   { path: "tests/integration/routing/test_longest_prefix_matching_with_overlapping_registrations.py", status: "A", old_path: null, insertions: 2468, deletions: 0 },
 ];
 
+/** A message as people write them: hard-wrapped at 72, a list, an indented example, trailers. */
+const LONG_MESSAGE = `calc: raise DivisionByZero from divide()
+
+divide() let Python's ZeroDivisionError escape, so callers could not
+tell a calc error from a bug in their own code. Introduce calc.errors
+with a CalcError base class and DivisionByZero, which still subclasses
+ZeroDivisionError so existing \`except ZeroDivisionError\` keeps working.
+
+What changes for callers:
+- divide(1, 0) raises DivisionByZero, with the operands in the message
+  so the traceback says which call it was.
+- every error calc raises is a CalcError: one except clause for all.
+
+Before and after:
+
+    >>> divide(1, 0)
+    calc.errors.DivisionByZero: cannot divide 1 by zero
+
+Bug: CALC-12
+Signed-off-by: Alice Author <alice@example.org>`;
+
 const theChange = (extra: Partial<ShownCommit> = {}): ShownCommit => shown({ ...pushed(SUBJECT), ...extra });
 /** As /diff serves it: the box's text without the Change-Id footer, which comes beside it. */
 const [MESSAGE_TEXT, CHANGE_ID] = [MESSAGE.slice(0, MESSAGE.lastIndexOf("\n")), MESSAGE.slice(MESSAGE.lastIndexOf(" ") + 1)];
@@ -285,6 +306,9 @@ function changeScenarios(): Scenario[] {
     scenario("Change: Gerrit has a newer patchset", { change: change({ shown: theChange({ patchset_status: "outdated", attention_reasons: ["outdated-patchset"] }) }) }),
     scenario("Change: someone's change, new since your review", {
       change: change({ local: false, shown: theChange({ local_commit: false, code_review: 1 }), version: "current", readOnly: REMOTE, delta: itsDiff({ files: FILES.slice(4, 6), since: { ...since, to_patch_set: 5 } }) }),
+    }),
+    scenario("Change: someone's change, a long message to read", {
+      change: change({ local: false, shown: theChange({ local_commit: false }), version: "current", readOnly: REMOTE, base: itsDiff({ message: LONG_MESSAGE, message_text: LONG_MESSAGE }) }),
     }),
     scenario("Change: someone's change since your review, rebased", {
       change: change({ local: false, shown: theChange({ local_commit: false }), version: "current", mode: "reviewed", readOnly: REMOTE, delta: itsDiff({ files: FILES.slice(4, 6), since: { ...since, to_patch_set: 5, rebased: true } }) }),
