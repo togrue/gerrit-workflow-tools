@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from gerrit_workflow_tools.core.comment_chains import (
+    ChainTurns,
     build_comment_chains,
+    chain_turns,
     collect_comment_chains,
-    unresolved_chain_counts,
 )
 from gerrit_workflow_tools.core.gerrit_change_status import ChainTurn
 from gerrit_workflow_tools.render.comments import chain_location
@@ -65,7 +66,7 @@ def test_collect_unresolved_skips_resolved_chain_tail() -> None:
         ]
     }
     assert collect_comment_chains(file_map, comments="unresolved") == []
-    assert unresolved_chain_counts(file_map, None) == (0, 0)
+    assert chain_turns(file_map, None) == ChainTurns(0, 0)
 
 
 def test_collect_unresolved_includes_open_chain() -> None:
@@ -84,7 +85,7 @@ def test_collect_unresolved_includes_open_chain() -> None:
     chains = collect_comment_chains(file_map, comments="unresolved")
     assert len(chains) == 1
     assert chains[0].resolved is False
-    assert unresolved_chain_counts(file_map, None) == (1, 0)
+    assert chain_turns(file_map, None) == ChainTurns(1, 0)
 
 
 def test_multiple_independent_chains() -> None:
@@ -98,7 +99,7 @@ def test_multiple_independent_chains() -> None:
     file_map["a.py"][1]["line"] = 5
     chains = build_comment_chains(file_map)
     assert len(chains) == 2
-    assert unresolved_chain_counts(file_map, None) == (1, 0)
+    assert chain_turns(file_map, None) == ChainTurns(1, 0)
 
 
 def test_orphan_reply_becomes_own_chain() -> None:
@@ -215,7 +216,7 @@ def test_turn_follows_the_last_published_comment() -> None:
     }
     turns = {chain.root_id: chain.turn for chain in build_comment_chains(file_map, me=ME)}
     assert turns == {"asked": ChainTurn.THEIRS, "open": ChainTurn.YOURS}
-    assert unresolved_chain_counts(file_map, ME) == (2, 1)
+    assert chain_turns(file_map, ME) == ChainTurns(2, 1)
 
 
 def test_a_draft_answer_is_still_your_turn_to_publish() -> None:
@@ -230,7 +231,22 @@ def test_a_draft_answer_is_still_your_turn_to_publish() -> None:
     assert chain.turn is ChainTurn.THEIRS
 
 
+def test_turns_count_the_chains_your_drafts_answer_apart_from_those_left_to_answer() -> None:
+    published = {"a.py": [_by("asked", REVIEWER), _by("open", REVIEWER), _by("said", ME)]}
+    drafts = {
+        "a.py": [
+            _draft("done", in_reply_to="asked", unresolved=False),
+            _draft("new", in_reply_to=None, unresolved=True),
+        ]
+    }
+    turns = chain_turns(published, ME, drafts)
+    # Your new chain of drafts only is not on Gerrit yet: not among Gerrit's unresolved ones.
+    assert turns == ChainTurns(3, theirs=1, drafted=1) and turns.yours == 1
+    # Under Gerrit's count the others never exceed it.
+    assert ChainTurns(3, 2, 2).within(2) == ChainTurns(2, 2, 0)
+
+
 def test_without_knowing_who_you_are_no_chain_has_a_turn() -> None:
     file_map = {"a.py": [_by("said", ME)]}
     assert [chain.turn for chain in build_comment_chains(file_map)] == [None]
-    assert unresolved_chain_counts(file_map, None) == (1, 0)
+    assert chain_turns(file_map, None) == ChainTurns(1, 0)

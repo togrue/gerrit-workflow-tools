@@ -253,8 +253,9 @@ def load_inbox(
     false). Its built-in query is asked beside the same query without the readiness terms, which
     finds them; the chains of that one alone are counted as not ready
     (:attr:`InboxSection.not_ready`). Not with ``--unready`` or a custom query, which leave
-    nothing out. *with_drafts* asks, beside them, which changes hold drafts of yours (one light
-    ``has:draft`` query, :attr:`InboxSection.drafted`).
+    nothing out. Which changes hold drafts of yours is asked once (one light ``has:draft`` query)
+    where a comment chain may be answered by one (:attr:`ChainMember.comments_drafted`), and
+    with *with_drafts*, beside the sections, for :attr:`InboxSection.drafted`.
 
     Both are narrowed to :func:`project_scope` of the service's directory. *To review* keeps the
     inbox order (longest unreviewed first) and honours *limit*, else ``ger.inboxLimit``.
@@ -273,14 +274,16 @@ def load_inbox(
     gated = TO_REVIEW in queries and not include_unready and not settings.inbox_to_review_query
     context = {TO_REVIEW: build_to_review_query(settings, projects=names, include_unready=True)} if gated else {}
     account = service.self_account_id()
-    fetch = partial(service.fetch_review_chains, now=moment, self_account_id=account)
+    # Which changes hold drafts of yours: asked once for both sections, when first wanted.
+    drafts = service.comments.drafted_lazily(None, n=100)
+    fetch = partial(service.fetch_review_chains, now=moment, self_account_id=account, drafted=drafts)
     jobs: list[Callable[[], Any]] = [
         partial(fetch, query, context_query=context.get(name)) for name, query in queries.items()
     ]
     if with_drafts:  # beside the sections, not after them: no wait added
-        jobs.append(partial(service.comments.drafted_changes, None, n=100))
+        jobs.append(drafts.numbers)
     answers = parallel_map(jobs)
-    drafted = frozenset(view.number for view in answers.pop()) if with_drafts else frozenset()
+    drafted = answers.pop() if with_drafts else frozenset()
     fetched: dict[str, list[ReviewChain]] = dict(zip(queries, answers, strict=True))
     not_ready = None
     if TO_REVIEW in fetched:

@@ -119,6 +119,7 @@ Right-aligned annotations summarize what needs action. Omitted when nothing stan
 | `Gerrit state unknown` | Gerrit could not be asked; JSON reason `gerrit-unknown`. `ger log` exits `5` |
 | `build failed` | Verified −1 or named CI failure |
 | `N unresolved comments` | Open review threads where somebody else spoke last: your turn (`1 unresolved comment`). Threads whose last published comment is yours are counted apart: `1 of 2 comments to answer`, the other waits on the reviewer |
+| `N drafts to publish` | Open threads where somebody else spoke last and a draft of yours answers them (a reply, or Done): they wait on your push, which publishes the drafts (`ger push`, or `ger reply --publish`). Shown dim beside what is left to answer (`1 of 3 comments to answer, 2 drafts to publish`). JSON reason `drafts-to-publish`, severity `pending`; `ger edit` does not stop here. A commit held back only by them closes the log with `chain waits on your push: 1a2b3c4 has 2 drafts to publish` instead of `chain blocked by …` |
 | `N comments wait on the reviewer` | Every open thread ends with your published comment: the reviewer's turn (`on the author` on somebody's change you review). JSON reason `awaiting-reply`, severity `pending`; `ger edit` does not stop here, and the inbox does not count it as needing you |
 | `no reviewers` | Change has no reviewers assigned |
 | `ahead of gerrit` | Local commit is newer than Gerrit's current patch set |
@@ -166,6 +167,7 @@ chain blocked by 1a2b3c4 (build failed)
 | `merged` / `abandoned` | Changes Gerrit merged or abandoned |
 | `failed CI` | Commits with failed Verified / CI |
 | `commits with comments` (`1 commit with comments`) | Commits with unresolved comments waiting on you (the row's hint counts the threads) |
+| `with drafts to publish` (`1 commit with drafts to publish`) | Commits with unresolved comments your drafts answer: your push publishes them |
 | `awaiting reply` (`1 awaiting reply`) | Commits whose unresolved comments all wait on the other side |
 | `WIP` | Work-in-progress changes; a `next:` line says ``ready them with `ger push --ready` `` (`--all --ready` when one sits above the ready boundary) |
 

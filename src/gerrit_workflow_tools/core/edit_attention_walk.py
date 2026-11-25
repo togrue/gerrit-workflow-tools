@@ -44,15 +44,17 @@ _NO_EDIT_ATTENTION = "no commit needs edit attention (comments to answer, a fail
 
 
 def _nothing_to_edit(commits: list[LogCommit]) -> NoEditAttentionError:
-    """The walk's end, naming what it passed over: a comment waiting on the other side is not
-    edit attention; ``ger log`` shows it."""
+    """The walk's end, naming what it passed over: comments your drafts answer (your push
+    publishes them) and comments waiting on the other side are not edit attention; ``ger log`` shows them."""
     lines = [_NO_EDIT_ATTENTION]
-    passed = [
-        c for c in commits if Attention.AWAITING_REPLY in c.attention_reasons and not commit_needs_edit_attention(c)
-    ]
-    if passed:
-        have = f"{counted(len(passed), 'commit')} {'has' if len(passed) == 1 else 'have'}"
-        lines.append(f"{have} comments waiting on a reply: ger show {passed[0].short_sha}")
+    for reason, what, where in (
+        (Attention.DRAFTS_TO_PUBLISH, "drafts to publish", "ger push"),
+        (Attention.AWAITING_REPLY, "comments waiting on a reply", "ger show"),
+    ):
+        passed = [c for c in commits if reason in c.attention_reasons and not commit_needs_edit_attention(c)]
+        if passed:
+            have = f"{counted(len(passed), 'commit')} {'has' if len(passed) == 1 else 'have'}"
+            lines.append(f"{have} {what}: {where}" + (f" {passed[0].short_sha}" if where == "ger show" else ""))
     return NoEditAttentionError("\n".join(lines))
 
 

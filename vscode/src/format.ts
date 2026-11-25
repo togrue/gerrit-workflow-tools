@@ -10,6 +10,7 @@ const WORDS: Record<string, string> = {
   "gerrit-unknown": "Gerrit state unknown",
   "unresolved-comments": "unresolved comments",
   "awaiting-reply": "comments wait on a reply",
+  "drafts-to-publish": "drafts to publish with the push",
   "review-issues": "negative vote",
   "not-pushed": "not pushed",
   "ahead-of-gerrit": "local changes not pushed",
@@ -118,8 +119,24 @@ export function vote(label: string, value: number | null): string {
   return `${label}${value > 0 ? "+" : ""}${value}`;
 }
 
-/** The votes that exist and the unresolved comments, e.g. `V+1 CR-1 💬2`; `no votes` when there is nothing. */
-export function votes(item: { verified: number | null; code_review: number | null; comments_unresolved: number }): string {
+type Commented = { comments_unresolved: number; comments_awaiting_reply?: number; comments_drafted?: number; comments_to_answer?: number };
+
+/** How a row's unresolved comment chains split: left to answer, answered by your drafts, waiting on a reply (core's counts). */
+export function commentTurns(item: Commented): { count: number; left: number; drafted: number; awaiting: number } {
+  const count = item.comments_unresolved;
+  const awaiting = Math.min(item.comments_awaiting_reply ?? 0, count);
+  const drafted = Math.min(item.comments_drafted ?? 0, count - awaiting);
+  return { count, left: item.comments_to_answer ?? count - awaiting - drafted, drafted, awaiting };
+}
+
+/** The comments left to answer (`💬2`), and a small mark for those your drafts answer (`✎1`: they wait on your push). */
+export function commentMarks(item: Commented): string[] {
+  const { left, drafted } = commentTurns(item);
+  return [left > 0 ? `💬${left}` : "", drafted > 0 ? `✎${drafted}` : ""].filter(Boolean);
+}
+
+/** The votes that exist and the comments left to answer, e.g. `V+1 CR-1 💬2 ✎1`; `no votes` when there is nothing. */
+export function votes(item: { verified: number | null; code_review: number | null } & Commented): string {
   const parts: string[] = [];
   if (item.verified !== null && item.verified !== undefined) {
     parts.push(vote("V", item.verified));
@@ -127,9 +144,7 @@ export function votes(item: { verified: number | null; code_review: number | nul
   if (item.code_review !== null && item.code_review !== undefined) {
     parts.push(vote("CR", item.code_review));
   }
-  if (item.comments_unresolved > 0) {
-    parts.push(`💬${item.comments_unresolved}`);
-  }
+  parts.push(...commentMarks(item));
   return parts.join(" ") || "no votes";
 }
 
@@ -142,7 +157,7 @@ export function commitVotes(commit: CommitStatus): string {
   if (!last || (last.verified === null && last.code_review === null)) {
     return votes(commit);
   }
-  const comments = commit.comments_unresolved > 0 ? ` 💬${commit.comments_unresolved}` : "";
+  const comments = commentMarks(commit).map((mark) => ` ${mark}`).join("");
   return `last pushed ${votes({ ...last, comments_unresolved: 0 })}${comments}`;
 }
 
@@ -208,7 +223,7 @@ export function plural(count: number, noun: string): string {
 export function chainVotes(chain: Chain): string {
   const cast = chain.votes_cast ?? chain;
   const missing = chain.votes_missing ?? { verified: 0, code_review: 0 };
-  const shown = votes({ verified: cast.verified, code_review: cast.code_review, comments_unresolved: chain.comments_unresolved });
+  const shown = votes({ ...chain, verified: cast.verified, code_review: cast.code_review });
   const gaps = ([["V", missing.verified], ["CR", missing.code_review]] as const).filter(([, n]) => n > 0 && n < chain.depth);
   const words = gaps.map(([label, n], i) => (i === 0 ? `${label} missing on ${n}` : `${label} on ${n}`));
   return words.length ? `${shown} · ${words.join(", ")}` : shown;

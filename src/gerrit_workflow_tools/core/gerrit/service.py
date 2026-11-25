@@ -13,7 +13,7 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.cache import DEFAULT_CHANGE_TRUST_WINDOW_SECONDS, GerritCache
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.changes import ChangeApi
-from gerrit_workflow_tools.core.gerrit.comments import CommentApi
+from gerrit_workflow_tools.core.gerrit.comments import CommentApi, DraftedChanges
 from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest, gerrit_auth_from_settings
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
@@ -180,8 +180,11 @@ class GerritService:
 
         changes = [by_triplet.get(key) if key else None for key in keys]
         facts = overlay_code_facts(cwd, zip(commits, changes, strict=True))
-        # Whose turn an unresolved comment is needs who you are: asked once, and only where there are some.
-        me = self.self_account_id() if any(change and change.unresolved_comments for change in changes) else None
+        # Whose turn an unresolved comment is needs who you are and your drafts: asked once, and only
+        # where there are some (``has:draft`` among the commented changes, then their drafts).
+        commented = [change.number for change in changes if change and change.unresolved_comments and change.number]
+        me = self.self_account_id() if commented else None
+        drafted = self.comments.drafted_lazily(commented) if me is not None else None
         result: list[Any] = []
         follow_ups: list[Callable[[], None]] = []
         for row, change in zip(commits, changes, strict=True):
@@ -193,7 +196,7 @@ class GerritService:
             result.append(lc)
             if needed and change is not None and change.key:
                 follow_ups.append(
-                    partial(self._fill_follow_ups, lc, change, needed, stack.project, fetch_ci_pipelines, me)
+                    partial(self._fill_follow_ups, lc, change, needed, stack.project, fetch_ci_pipelines, me, drafted)
                 )
 
         parallel_map(follow_ups)
@@ -207,19 +210,18 @@ class GerritService:
         project: str,
         fetch_pipelines: bool,
         me: int | None = None,
+        drafted: DraftedChanges | None = None,
     ) -> None:
-        """Fill what *change*'s payload lacked, and whose turn its unresolved comments are (*me*: you).
+        """Fill what *change*'s payload lacked, and whose turn its unresolved comments are (*me*: you,
+        *drafted*: the changes holding drafts of yours).
 
         A failed follow-up leaves its fields as they were."""
-        from gerrit_workflow_tools.core.comment_chains import unresolved_chain_counts
         from gerrit_workflow_tools.core.reviewer import reviewer_accounts_from_reviewer_list
 
         def _comments() -> None:
-            file_map = self.comments.get_file_map(change.key, change_updated=change.freshness)
-            unresolved, awaiting = unresolved_chain_counts(file_map, me)
-            if change.unresolved_comments is None:  # else Gerrit's count stands: the fact
-                commit.comments_unresolved = unresolved
-            commit.comments_awaiting_reply = min(awaiting, commit.comments_unresolved)
+            turns = self.comments.turns(change, me, drafted)
+            commit.comments_unresolved = turns.unresolved
+            commit.comments_awaiting_reply, commit.comments_drafted = turns.theirs, turns.drafted
 
         def _checks() -> None:
             commit.ci_failures, commit.ci_links, commit.ci_pipelines = self._fetch_ci_result(
@@ -247,6 +249,7 @@ class GerritService:
         now: datetime | None = None,
         self_account_id: int | None = None,
         context_query: str | None = None,
+        drafted: DraftedChanges | None = None,
     ) -> list[ReviewChain]:
         """Query Gerrit and assemble **review chains**. Never resolves stack context.
 
@@ -257,7 +260,8 @@ class GerritService:
 
         *context_query*, asked beside *query*, finds the rest of each chain: its changes join the
         chain they belong to as members *query* did not match (``ChainMember.matched``); a chain
-        of its changes alone has no member matched.
+        of its changes alone has no member matched. *drafted* (else asked among the commented
+        changes) says where your drafts may answer their comment chains.
         """
         moment = now if now is not None else datetime.now(timezone.utc)
         asked = [query] if context_query is None else [query, context_query]
@@ -268,6 +272,9 @@ class GerritService:
         parents, unmatched = self.changes.parents([*rows, *follow_up_rows])
         follow_up_rows += parents
         every = list({change.key: change for change in [*follow_up_rows, *rows]}.values())
+        if drafted is None:
+            commented = [change.number for change in every if change.unresolved_comments and change.number]
+            drafted = self.comments.drafted_lazily(commented)
         return assemble_review_chains(
             rows,
             follow_up_rows,
@@ -275,29 +282,8 @@ class GerritService:
             now=moment,
             self_account_id=account_id,
             follow_up_unmatched=unmatched,
-            awaiting_reply=self._comments_awaiting_reply(every, account_id),
+            turns=self.comments.turns_by_change(every, account_id, drafted),
         )
-
-    def _comments_awaiting_reply(self, changes: Sequence[ChangeView], me: int | None) -> dict[str, int]:
-        """By change key, how many of its unresolved comment chains wait on the other side (*me*: you).
-
-        Only a change with unresolved comments is asked, its comments from the cache while its
-        freshness holds. One that cannot be asked counts none: every chain stays yours, as before.
-        """
-        from gerrit_workflow_tools.core.comment_chains import unresolved_chain_counts
-
-        commented = [change for change in changes if change.unresolved_comments and change.key] if me else []
-
-        def count(change: ChangeView) -> int:
-            try:
-                file_map = self.comments.get_file_map(change.key, change_updated=change.freshness)
-            except GerritApiError as exc:
-                logger.debug("comments failed for %s: %s", change.key, exc)
-                return 0
-            return min(unresolved_chain_counts(file_map, me)[1], change.unresolved_comments or 0)
-
-        counts = parallel_map([partial(count, change) for change in commented])
-        return {change.key: n for change, n in zip(commented, counts, strict=True) if n}
 
     def _get_messages_or_empty(self, change_id: str) -> list[dict[str, Any]]:
         try:

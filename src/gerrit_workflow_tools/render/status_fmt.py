@@ -124,25 +124,51 @@ def other_side(reasons: Collection[str]) -> str:
     return AUTHOR if {Attention.WAITING_ON_YOU, Attention.WAITING_ON_AUTHOR} & set(reasons) else REVIEWER
 
 
-def unresolved_comments_text(count: int, awaiting: int = 0, *, side: str = REVIEWER) -> str:
-    """*count* unresolved comment chains, *awaiting* of them waiting on the other side (*side*).
+def comment_hints(count: int, awaiting: int = 0, drafted: int = 0, *, side: str = REVIEWER) -> list[tuple[str, str]]:
+    """*count* unresolved comment chains as (reason, text): *awaiting* of them wait on the other side
+    (*side*), *drafted* of them are answered by drafts of yours. The reasons are
+    :func:`core.attention.comment_reasons`'s.
 
-    ``3 unresolved comments``; ``1 of 3 comments to answer`` (the others wait on the other side);
-    ``2 comments wait on the reviewer``.
+    ``3 unresolved comments``; ``1 of 3 comments to answer`` (the others wait on the other side or
+    on your push); ``2 drafts to publish``; ``2 comments wait on the reviewer``.
     """
-    yours = count - awaiting
-    if not awaiting:
-        return counted(count, "unresolved comment")
-    waiting = f"{'waits' if awaiting == 1 else 'wait'} on the {side}"
-    if not yours:
-        return f"{counted(awaiting, 'comment')} {waiting}"
-    return f"{yours} of {count} comments to answer"
+    yours = count - awaiting - drafted
+    hints: list[tuple[str, str]] = []
+    if yours > 0:
+        text = counted(count, "unresolved comment") if yours == count else f"{yours} of {count} comments to answer"
+        hints.append((Attention.UNRESOLVED_COMMENTS, text))
+    if drafted:
+        hints.append((Attention.DRAFTS_TO_PUBLISH, f"{counted(drafted, 'draft')} to publish"))
+    if yours <= 0 and awaiting:
+        hints.append(
+            (
+                Attention.AWAITING_REPLY,
+                f"{counted(awaiting, 'comment')} {'waits' if awaiting == 1 else 'wait'} on the {side}",
+            )
+        )
+    return hints
+
+
+def unresolved_comments_text(count: int, awaiting: int = 0, drafted: int = 0, *, side: str = REVIEWER) -> str:
+    """:func:`comment_hints` as one text: ``1 of 3 comments to answer, 2 drafts to publish``."""
+    return ", ".join(text for _reason, text in comment_hints(count, awaiting, drafted, side=side))
+
+
+_COMMENT_REASONS = (Attention.UNRESOLVED_COMMENTS, Attention.DRAFTS_TO_PUBLISH, Attention.AWAITING_REPLY)
+
+
+def commit_comment_hints(commit: LogCommit) -> list[tuple[str, str]]:
+    """:func:`comment_hints` of *commit*, whose turn said apart; only those its reasons hold."""
+    side = other_side(commit.attention_reasons)
+    hints = comment_hints(
+        commit.comments_unresolved, commit.comments_awaiting_reply, commit.comments_drafted, side=side
+    )
+    return [(reason, text) for reason, text in hints if reason in commit.attention_reasons]
 
 
 def comments_text(commit: LogCommit) -> str:
-    """:func:`unresolved_comments_text` of *commit*, whose turn said apart."""
-    side = other_side(commit.attention_reasons)
-    return unresolved_comments_text(commit.comments_unresolved, commit.comments_awaiting_reply, side=side)
+    """:func:`commit_comment_hints` of *commit* as one text."""
+    return ", ".join(text for _reason, text in commit_comment_hints(commit))
 
 
 def review_issues_text(commit: LogCommit) -> str:
@@ -192,14 +218,22 @@ def blocking_text(commit: LogCommit) -> tuple[str, str]:
     reason = blocking_reason(commit)
     if reason is None:
         return NOT_SUBMITTABLE, "not submittable"
-    if reason in (Attention.UNRESOLVED_COMMENTS, Attention.AWAITING_REPLY):
+    if reason == Attention.DRAFTS_TO_PUBLISH:
+        return reason, dict(commit_comment_hints(commit)).get(reason, "drafts to publish")
+    if reason in _COMMENT_REASONS:
         return reason, comments_text(commit)
     return reason, _BLOCKING_TEXT[reason]
 
 
 def chain_blocked_text(blocker: LogCommit) -> str:
-    """``chain blocked by 1a2b3c4 (awaiting review)``: the line that closes a stack whose chain is blocked."""
-    return f"chain blocked by {blocker.short_sha} ({blocking_text(blocker)[1]})"
+    """``chain blocked by 1a2b3c4 (awaiting review)``: the line that closes a stack whose chain is blocked.
+
+    Held back only by comments your drafts answer, it waits on your push, which publishes them.
+    """
+    key, text = blocking_text(blocker)
+    if key == Attention.DRAFTS_TO_PUBLISH:
+        return f"chain waits on your push: {blocker.short_sha} has {text}"
+    return f"chain blocked by {blocker.short_sha} ({text})"
 
 
 def attention_hints(commit: LogCommit) -> list[tuple[str, str]]:
@@ -218,9 +252,7 @@ def attention_hints(commit: LogCommit) -> list[tuple[str, str]]:
         hints.append((PRIVATE, "private"))
     if Attention.CI_FAILED in reasons:
         hints.append((Attention.CI_FAILED, "build failed"))
-    for reason in (Attention.UNRESOLVED_COMMENTS, Attention.AWAITING_REPLY):
-        if reason in reasons:
-            hints.append((reason, comments_text(commit)))
+    hints.extend(commit_comment_hints(commit))
     if Attention.NO_REVIEWERS in reasons:
         hints.append((Attention.NO_REVIEWERS, "no reviewers"))
     if commit.submittable and not hints:
@@ -244,9 +276,9 @@ def member_hints(member: ChainMember, *, side: str = REVIEWER) -> list[tuple[str
         hints.append((Attention.CI_FAILED, "build failed"))
     if Attention.UNRESOLVED_COMMENTS in reasons and not comments:
         hints.append((Attention.UNRESOLVED_COMMENTS, "unresolved comments"))
-    elif Attention.UNRESOLVED_COMMENTS in reasons or Attention.AWAITING_REPLY in reasons:
-        reason = Attention.UNRESOLVED_COMMENTS if Attention.UNRESOLVED_COMMENTS in reasons else Attention.AWAITING_REPLY
-        hints.append((reason, unresolved_comments_text(comments, member.comments_awaiting_reply, side=side)))
+    else:
+        turns = comment_hints(comments, member.comments_awaiting_reply, member.comments_drafted, side=side)
+        hints.extend((reason, text) for reason, text in turns if reason in reasons)
     if Attention.REVIEW_ISSUES in reasons:
         hints.append((Attention.REVIEW_ISSUES, "negative vote"))
     return hints
@@ -271,7 +303,7 @@ def attention_text(commit: LogCommit) -> str:
         parts.append("private")
     if Attention.CI_FAILED in reasons:
         parts.append(f"CI failed: {commit.ci_failures[0]}" if commit.ci_failures else "build failed")
-    if Attention.UNRESOLVED_COMMENTS in reasons or Attention.AWAITING_REPLY in reasons:
+    if reasons.intersection(_COMMENT_REASONS):
         parts.append(comments_text(commit))
     if Attention.REVIEW_ISSUES in reasons:
         parts.append(review_issues_text(commit))

@@ -2,22 +2,26 @@
 
 from __future__ import annotations
 
+import logging
 import os
-from collections.abc import Mapping, Sequence
+import threading
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Any, Literal
 
 from gerrit_workflow_tools.core.comment_chains import (
     ChainRef,
+    ChainTurns,
     CommentSelection,
+    chain_turns,
     collect_comment_chains,
     find_chains,
     parse_chain_ref,
 )
 from gerrit_workflow_tools.core.gerrit.cache_rows import comments_context_key, dict_rows
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
-from gerrit_workflow_tools.core.gerrit.rest import LIGHT_QUERY_OPTIONS, parallel_map, printable_path
+from gerrit_workflow_tools.core.gerrit.rest import LIGHT_QUERY_OPTIONS, GerritApiError, parallel_map, printable_path
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
 
@@ -25,6 +29,8 @@ from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, Inline
 if TYPE_CHECKING:
     from gerrit_workflow_tools.core.gerrit.service import GerritService
 
+
+logger = logging.getLogger(__name__)
 
 PUBLISH_GUARD_ENV = "GER_NO_PUBLISH"
 
@@ -57,6 +63,31 @@ class DraftReply:
     """The chain's state once this draft is published."""
     replaced_message: str | None = None
     """Text of the draft this one replaced; ``None`` when it was created."""
+
+
+class DraftedChanges:
+    """The numbers of the changes holding drafts of yours: one ``has:draft`` query, asked when first
+    wanted, by whichever thread wants it first; the others wait for that answer.
+
+    Made for one call (:meth:`CommentApi.drafted_lazily`), never kept across runs: drafts change
+    outside any trust window. One that cannot be asked holds none.
+    """
+
+    def __init__(self, ask: Callable[[], Sequence[ChangeView]]) -> None:
+        self._ask = ask
+        self._lock = threading.Lock()
+        self._numbers: frozenset[int] | None = None
+
+    def numbers(self) -> frozenset[int]:
+        """The drafted change numbers, asked on the first call."""
+        with self._lock:
+            if self._numbers is None:
+                try:
+                    self._numbers = frozenset(view.number for view in self._ask() if view.number is not None)
+                except GerritApiError as exc:
+                    logger.debug("has:draft failed: %s", exc)
+                    self._numbers = frozenset()
+            return self._numbers
 
 
 class CommentApi:
@@ -119,6 +150,38 @@ class CommentApi:
         limit = len(numbers) if numbers else n
         rows = self._service.rest.query_changes(f"has:draft{among}", n=limit, options=list(LIGHT_QUERY_OPTIONS))
         return [ChangeView.from_payload(row) for row in dict_rows(rows)]
+
+    def drafted_lazily(self, numbers: Sequence[int] | None = None, *, n: int = 25) -> DraftedChanges:
+        """:meth:`drafted_changes` asked when first wanted, once however many threads want it."""
+        return DraftedChanges(partial(self.drafted_changes, numbers, n=n))
+
+    def turns(self, change: ChangeView, me: int | None, drafted: DraftedChanges | None = None) -> ChainTurns:
+        """Whose turn *change*'s unresolved comment chains are (*me*: you): its comments from the cache
+        while its freshness holds, your drafts asked only where *drafted* says it holds some. Gerrit's
+        count of unresolved chains stands where its payload has one."""
+        file_map = self.get_file_map(change.key, change_updated=change.freshness)
+        has_drafts = drafted is not None and me is not None and change.number in drafted.numbers()
+        turns = chain_turns(file_map, me, self.get_drafts(change.key) if has_drafts else None)
+        return turns if change.unresolved_comments is None else turns.within(change.unresolved_comments)
+
+    def turns_by_change(
+        self, changes: Sequence[ChangeView], me: int | None, drafted: DraftedChanges | None = None
+    ) -> dict[str, ChainTurns]:
+        """By change key, :meth:`turns` of those of *changes* with unresolved comments, asked side by side.
+
+        Without *me* none is asked. One that cannot be asked is left out: every chain stays yours.
+        """
+        commented = [change for change in changes if change.unresolved_comments and change.key] if me else []
+
+        def ask(change: ChangeView) -> ChainTurns | None:
+            try:
+                return self.turns(change, me, drafted)
+            except GerritApiError as exc:
+                logger.debug("comments failed for %s: %s", change.key, exc)
+                return None
+
+        answers = parallel_map([partial(ask, change) for change in commented])
+        return {change.key: turns for change, turns in zip(commented, answers, strict=True) if turns}
 
     def draft_counts(self, numbers: Sequence[int]) -> dict[int, int]:
         """How many drafts of yours each of *numbers* holds, those with none left out: the

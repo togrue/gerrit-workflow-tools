@@ -67,6 +67,7 @@ def summary_line(overview: StackOverview, *, width: int | None = None) -> str:
     merged = sum(1 for c in commits if c.patchset_status in _MERGED)
     abandoned = sum(1 for c in commits if c.abandoned)
     commented = sum(1 for c in commits if Attention.UNRESOLVED_COMMENTS in c.attention_reasons)
+    drafted = sum(1 for c in commits if Attention.DRAFTS_TO_PUBLISH in c.attention_reasons)
     counts = (
         (
             sum(1 for c in commits if c.pushed and not c.abandoned and c.patchset_status not in _MERGED),
@@ -79,6 +80,7 @@ def summary_line(overview: StackOverview, *, width: int | None = None) -> str:
         (abandoned, "abandoned", ANSI_RED),
         (sum(1 for c in commits if c.pushed and Attention.CI_FAILED in c.attention_reasons), "failed CI", ANSI_RED),
         (commented, f"{plural(commented, 'commit')} with comments", ANSI_YELLOW),
+        (drafted, f"{plural(drafted, 'commit')} with drafts to publish", ANSI_DIM),
         (sum(1 for c in commits if Attention.AWAITING_REPLY in c.attention_reasons), "awaiting reply", ANSI_DIM),
         (sum(1 for c in commits if Attention.WIP in c.attention_reasons), "WIP", ANSI_YELLOW),
     )

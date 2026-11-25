@@ -20,6 +20,7 @@ from gerrit_workflow_tools.core.comment_anchor import (
     parse_location,
     repository_path,
 )
+from gerrit_workflow_tools.core.comment_chains import gerrit_inline_comment_url
 from gerrit_workflow_tools.core.comment_target import CommentTarget
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
@@ -27,7 +28,6 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     CommentState,
     LogCommit,
     PatchsetStatus,
-    gerrit_inline_comment_url,
 )
 from gerrit_workflow_tools.core.local_comments import LocalCommentStore, new_comment
 from gerrit_workflow_tools.core.usage import UsageError

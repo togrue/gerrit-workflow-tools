@@ -58,7 +58,7 @@ def _fmt_change_number(number: int, url: str | None) -> str:
 
 def _fmt_votes(item: ReviewChain | ChainMember) -> str:
     """Verified / Code-Review / comments tokens — same palette as ``ger log``."""
-    comments = fmt_comments(item.comments_unresolved, item.comments_awaiting_reply)
+    comments = fmt_comments(item.comments_unresolved, item.comments_to_answer)
     return f"{fmt_verified(item.verified)} {fmt_code_review(item.code_review)} {comments}"
 
 
@@ -67,7 +67,7 @@ def _fmt_chain_votes(chain: ReviewChain) -> str:
     if chain.depth == 1:
         return _fmt_votes(chain)
     verified, code_review = chain.verified_tally.cast, chain.code_review_tally.cast
-    comments = fmt_comments(chain.comments_unresolved, chain.comments_awaiting_reply)
+    comments = fmt_comments(chain.comments_unresolved, chain.comments_to_answer)
     return f"{color_text('worst', ANSI_DIM)} {fmt_verified(verified)} {fmt_code_review(code_review)} {comments}"
 
 

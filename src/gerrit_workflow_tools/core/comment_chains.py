@@ -2,7 +2,7 @@
 
 Groups raw Gerrit file-map comment dicts into :class:`CommentChain` objects,
 resolving ``in_reply_to`` links to find thread roots. :func:`chain_turn` is the one verdict
-on whose turn an unresolved chain is; attention counts it (:func:`unresolved_chain_counts`).
+on whose turn an unresolved chain is; attention counts it (:func:`chain_turns`).
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 from gerrit_workflow_tools.core.gerrit_change_status import ChainTurn, CommentChain, ContextLine, InlineComment
 from gerrit_workflow_tools.core.suggested_edits import suggested_edits_from_raw
@@ -39,14 +39,45 @@ def chain_turn(chain: CommentChain, me: int | None) -> ChainTurn | None:
     return ChainTurn.DRAFT if chain.draft is not None else ChainTurn.YOURS
 
 
-def unresolved_chain_counts(file_map: dict[str, list[dict[str, Any]]], me: int | None) -> tuple[int, int]:
-    """(unresolved chains, those of them waiting on the other side) in a Gerrit file map.
+@dataclass(frozen=True)
+class ChainTurns:
+    """How a change's unresolved comment chains split by whose turn they are (:func:`chain_turn`)."""
 
-    The first is the fact Gerrit counts; the second is what :func:`chain_turn` calls
-    :attr:`ChainTurn.THEIRS`, none when *me* is not known.
+    unresolved: int = 0
+    """Every unresolved chain, whoever's turn: the fact Gerrit counts."""
+    theirs: int = 0
+    """Your published comment is the last word: they wait on the other side."""
+    drafted: int = 0
+    """Somebody else spoke last and a draft of yours answers them: they wait on your push."""
+
+    @property
+    def yours(self) -> int:
+        """The chains left to answer: somebody else spoke last and nothing of yours answers them yet."""
+        return max(0, self.unresolved - self.theirs - self.drafted)
+
+    def within(self, unresolved: int) -> ChainTurns:
+        """These turns under Gerrit's count *unresolved*: that count stands, the others never exceed it."""
+        theirs = min(self.theirs, unresolved)
+        return ChainTurns(unresolved, theirs, min(self.drafted, unresolved - theirs))
+
+
+def chain_turns(
+    file_map: dict[str, list[dict[str, Any]]],
+    me: int | None,
+    drafts: dict[str, list[dict[str, Any]]] | None = None,
+) -> ChainTurns:
+    """The :class:`ChainTurns` of a Gerrit file map, your *drafts* (``GET …/drafts``) beside it.
+
+    Without *me* every chain is yours: nothing tells whose turn it is. A chain of drafts only is
+    not on Gerrit yet, so not counted.
     """
-    unresolved = [chain for chain in build_comment_chains(file_map, me=me) if not chain.resolved]
-    return len(unresolved), sum(1 for chain in unresolved if chain.turn is ChainTurn.THEIRS)
+    chains = build_comment_chains(file_map, drafts, me=me)
+    unresolved = [chain for chain in chains if not chain.resolved and any(not c.draft for c in chain.comments)]
+    return ChainTurns(
+        len(unresolved),
+        sum(1 for chain in unresolved if chain.turn is ChainTurn.THEIRS),
+        sum(1 for chain in unresolved if chain.turn is ChainTurn.DRAFT),
+    )
 
 
 def _comment_line(c: dict[str, Any]) -> int | None:
@@ -240,6 +271,20 @@ def collect_comment_chains(
     """
 
     return select_chains(build_comment_chains(file_map, drafts, me=me), comments)
+
+
+def gerrit_inline_comment_url(change_page_url: str | None, comment_id: str | None) -> str | None:
+    """Build a PolyGerrit URL that opens the diff view focused on one inline comment.
+
+    Matches the ``/c/<project>/+/<changeNum>/comment/<commentId>/`` route (see Gerrit
+    ``gr-router`` COMMENT pattern). *comment_id* is the REST ``CommentInfo.id`` (URL-encoded
+    UUID string).
+    """
+    if not change_page_url or not comment_id or not str(comment_id).strip():
+        return None
+    base = change_page_url.rstrip("/")
+    cid_enc = quote(str(comment_id), safe="")
+    return f"{base}/comment/{cid_enc}/"
 
 
 _COMMENT_URL_RE = re.compile(r"/comment/([^/?#]+)")

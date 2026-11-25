@@ -69,6 +69,9 @@ For a stack of eight changes, nothing changed on Gerrit, as a Gerrit 3.10 logged
 | Editor poll (`ger serve`: overview and stack) | 2 to 3 light, every `ger.pollSeconds` while the window has focus; with Gerrit's event stream live, every 15 minutes |
 
 A change that moved adds one request for its details, and its comments when you look at it.
+Unresolved comments add one light `has:draft` query (which of the commented changes hold
+drafts of yours: whose turn a thread is counts them answered), and a drafts request for each
+change it names; both are asked every time, as drafts are.
 
 ## Looking at the requests
 

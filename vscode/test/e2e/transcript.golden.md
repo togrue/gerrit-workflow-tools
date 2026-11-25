@@ -624,6 +624,14 @@ reply box: Reply to Alice Reviewer — b.txt:1
 notification (info): Draft saved, visible only to you: your next push publishes it.  [Publish Drafts…]
     → dismissed
 --- on screen:
++ chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬1 ✎1 · active <age> ago  [ger.chain.url.local]
+- chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
++ chains |     Extract command routing — 101 · V+1 CR+2 💬1 ✎1 · in your stack  [ger.change.url.local]
+- chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
++ stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 1 · draft, review +2, ci good]
+- stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
++ change | Unresolved comments, drafts to publish with the push — V+1 CR+2 💬1 ✎1
+- change | Unresolved comments — V+1 CR+2 💬2
 + change | Comments — 1 to answer · 1 answered by your drafts (push publishes them)
 + change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
 + change |     you — [draft] Renamed it.
@@ -666,6 +674,16 @@ status bar message: $(check) Draft updated, visible only to you: your next push 
 ```
 status bar message: $(check) Draft saved, resolving the comment, visible only to you: your next push publishes it.
 --- on screen:
++ chains | Outgoing — 1 chain · 1 with failed CI
++ chains |   Cleanup after experiment — 4 changes · V-1 CR+2 ✎2 · active <age> ago  [ger.chain.url.local]
+- chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
+- chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬1 ✎1 · active <age> ago  [ger.chain.url.local]
++ chains |     Extract command routing — 101 · V+1 CR+2 ✎2 · in your stack  [ger.change.url.local]
+- chains |     Extract command routing — 101 · V+1 CR+2 💬1 ✎1 · in your stack  [ger.change.url.local]
++ stack  | Extract command routing — <sha> · the same as on Gerrit  [comments draft, review +2, ci good]
+- stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 1 · draft, review +2, ci good]
++ change | Drafts to publish with the push — V+1 CR+2 ✎2
+- change | Unresolved comments, drafts to publish with the push — V+1 CR+2 💬1 ✎1
 + change | Comments — 2 answered by your drafts (push publishes them)
 - change | Comments — 1 to answer · 1 answered by your drafts (push publishes them)
 + change |   Is this the right design? — your draft resolves it · b.txt:1 · Bob Architect · 1 reply  [open]
@@ -915,7 +933,7 @@ browser opens: https://g.example/c/testproj/+/101
 + change | CI failed — V-1 CR+2
 + change | Commit message — test! temporary experiment  (editable)
 - change | title: Change 101
-- change | Unresolved comments — V+1 CR+2 💬2
+- change | Drafts to publish with the push — V+1 CR+2 ✎2
 - change | Commit message — Extract command routing  (editable)
 + change |   c.txt — added +1 −0
 + change | Comments — none
@@ -994,10 +1012,10 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 + stack  | Cleanup after experiment — HEAD · <sha> · held back · only rebased since the last push  [review +2, ci bad]
 + stack  | test! temporary experiment — <sha> · held back · only rebased since the last push  [review +2, ci bad]
 + stack  | Refactor parser init — <sha> · only rebased since the last push  [review +2, ci good]
-+ stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
++ stack  | Extract command routing — <sha> · only rebased since the last push  [comments draft, review +2, ci good]
 - stack  | Cleanup after experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 - stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
-- stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
+- stack  | Extract command routing — <sha> · the same as on Gerrit  [comments draft, review +2, ci good]
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci good]
 + change | Local changes not pushed, CI failed — V-1 CR+2
 + change | This commit is ahead of Gerrit — only rebased since the last push: the same code, by patch-id (whitespace and the message aside), so Gerrit usually keeps the votes when you push
@@ -1321,21 +1339,25 @@ notification (warning): Still out of date: fake ger: down for this test
 + chains | CI failed on 102: Refactor parser init
 - events | (not said)
 - chains | CI failed on 102: test! temporary experiment
++ chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 + chains |   test! temporary experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
 + chains |     test! temporary experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
 + chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
-- chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
-- chains |     Cleanup after experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
-- chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
++ chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
 + chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
 + stack  | test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 + stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 + stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
+- chains | Outgoing — 1 chain · 1 with failed CI
+- chains |   Cleanup after experiment — 4 changes · V-1 CR+2 ✎2 · active <age> ago  [ger.chain.url.local]
+- chains |     Cleanup after experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
+- chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
+- chains |     Extract command routing — 101 · V+1 CR+2 ✎2 · in your stack  [ger.change.url.local]
 - chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
 - stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | Refactor parser init — <sha> · only rebased since the last push  [review +2, ci good]
-- stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
+- stack  | Extract command routing — <sha> · only rebased since the last push  [comments draft, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci bad]
 ```
 
@@ -1347,7 +1369,7 @@ notification (warning): Still out of date: fake ger: down for this test
 + status bar | $(warning) Gerrit
 + state  | incompatible
 + events | (not said)
-+ stack  | ger serve speaks API 2.0, the extension needs 1.3: update the extension, or install the ger release that matches it.
++ stack  | ger serve speaks API 2.0, the extension needs 1.4: update the extension, or install the ger release that matches it.
 - status bar | $(error) CI failed: 102
 - state  | ready
 - events | live
@@ -1364,7 +1386,7 @@ notification (warning): Still out of date: fake ger: down for this test
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
-+ change | ger serve speaks API 2.0, the extension needs 1.3: update the extension, or install the ger release that matches it.
++ change | ger serve speaks API 2.0, the extension needs 1.4: update the extension, or install the ger release that matches it.
 - change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 - change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | Commit message — test! temporary experiment  (editable)
@@ -1413,9 +1435,9 @@ status bar message: $(check) Refreshed from Gerrit
 - status bar | $(warning) Gerrit
 - state  | incompatible
 - events | (not said)
-- stack  | ger serve speaks API 2.0, the extension needs 1.3: update the extension, or install the ger release that matches it.
+- stack  | ger serve speaks API 2.0, the extension needs 1.4: update the extension, or install the ger release that matches it.
 - change | title: Change 102
-- change | ger serve speaks API 2.0, the extension needs 1.3: update the extension, or install the ger release that matches it.
+- change | ger serve speaks API 2.0, the extension needs 1.4: update the extension, or install the ger release that matches it.
 ```
 
 ## Meanwhile: a reviewer comments on change 900 on Gerrit, and its event stream says so

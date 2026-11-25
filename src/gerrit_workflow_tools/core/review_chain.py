@@ -15,7 +15,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from urllib.parse import urlparse
 
-from gerrit_workflow_tools.core.attention import Attention, ci_failed, comment_reason
+from gerrit_workflow_tools.core.attention import Attention, ci_failed, comment_reasons
+from gerrit_workflow_tools.core.comment_chains import ChainTurns
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView, parse_gerrit_time
 from gerrit_workflow_tools.core.review_chain_graph import ChainComponent, chain_components
 
@@ -46,12 +47,20 @@ class ChainMember:  # pylint: disable=too-many-instance-attributes
     comments_awaiting_reply: int = 0
     """Of :attr:`comments_unresolved`, the chains whose last published comment is yours: they wait
     on the other side (``ChainTurn.THEIRS``)."""
+    comments_drafted: int = 0
+    """Of :attr:`comments_unresolved`, the chains a draft of yours answers (``ChainTurn.DRAFT``):
+    they wait on you to publish it."""
     your_turn: bool = False
     """It is your turn to review it (:func:`your_turn_since`), and the query matched it; never on a
     change of yours."""
     matched: bool = True
     """The section's query matched it. Otherwise it is context: a parent the chain sits on, or a
     change of the chain the *to review* query leaves out as not ready (no Verified, WIP, private)."""
+
+    @property
+    def comments_to_answer(self) -> int:
+        """Of :attr:`comments_unresolved`, the chains left to answer: neither waiting on the other side nor drafted."""
+        return max(0, self.comments_unresolved - self.comments_awaiting_reply - self.comments_drafted)
 
 
 @dataclass(frozen=True)
@@ -87,12 +96,19 @@ class ReviewChain:  # pylint: disable=too-many-instance-attributes
     """The member updated last was updated by you (your push, your vote): not news to you."""
     comments_awaiting_reply: int = 0
     """Of :attr:`comments_unresolved`, the chains that wait on the other side, over all members."""
+    comments_drafted: int = 0
+    """Of :attr:`comments_unresolved`, the chains your drafts answer, over all members."""
     verified_tally: LabelTally = LabelTally()
     code_review_tally: LabelTally = LabelTally()
     """What :attr:`verified` and :attr:`code_review` sum up: the worst vote cast, and the members without one."""
     your_turn: bool = False
     """It is your turn to review a member: the chain waits on you. Otherwise a chain you review
     waits on its author; :attr:`unreviewed_age_seconds` is then 0."""
+
+    @property
+    def comments_to_answer(self) -> int:
+        """Of :attr:`comments_unresolved`, the chains left to answer over all members."""
+        return sum(member.comments_to_answer for member in self.members)
 
     @property
     def matched(self) -> bool:
@@ -161,17 +177,17 @@ def your_turn_since(change: ChangeView, self_account_id: int | None) -> datetime
     return None
 
 
-def member_attention_reasons(change: ChangeView, awaiting_reply: int = 0) -> tuple[str, ...]:
+def member_attention_reasons(change: ChangeView, turns: ChainTurns | None = None) -> tuple[str, ...]:
     """Inbox member reasons — CI, comments, negative vote. No local patchset states.
 
-    *awaiting_reply* of its unresolved comment chains wait on the other side
-    (:func:`~gerrit_workflow_tools.core.attention.comment_reason` decides as for a commit).
+    *turns* says whose turn its unresolved comment chains are
+    (:func:`~gerrit_workflow_tools.core.attention.comment_reasons` decides as for a commit).
     """
     reasons: list[str] = []
     if ci_failed(change.verified):
         reasons.append(Attention.CI_FAILED)
-    if comments := comment_reason(change.unresolved_comments or 0, awaiting_reply):
-        reasons.append(comments)
+    known = turns or ChainTurns(change.unresolved_comments or 0)
+    reasons += comment_reasons(change.unresolved_comments or 0, known.theirs, known.drafted)
     if change.code_review is not None and change.code_review < 0:
         reasons.append(Attention.REVIEW_ISSUES)
     return tuple(reasons)
@@ -192,10 +208,11 @@ def _tally(values: list[int | None]) -> LabelTally:
 
 
 def _to_member(
-    change: ChangeView, web_base: str, self_account_id: int | None, awaiting_reply: int, *, matched: bool
+    change: ChangeView, web_base: str, self_account_id: int | None, turns: ChainTurns | None, *, matched: bool
 ) -> ChainMember | None:
     if change.number is None:
         return None
+    known = turns or ChainTurns(change.unresolved_comments or 0)
     return ChainMember(
         number=change.number,
         change_id=change.change_id,
@@ -209,12 +226,13 @@ def _to_member(
         comments_unresolved=change.unresolved_comments or 0,
         updated=parse_gerrit_time(change.updated),
         url=change.url(web_base),
-        attention_reasons=member_attention_reasons(change, awaiting_reply),
+        attention_reasons=member_attention_reasons(change, known),
         sha=change.current_revision,
         work_in_progress=change.work_in_progress,
         private=change.private,
         updated_by_you=change.updated_by(self_account_id),
-        comments_awaiting_reply=awaiting_reply,
+        comments_awaiting_reply=known.theirs,
+        comments_drafted=known.drafted,
         your_turn=matched and your_turn_since(change, self_account_id) is not None,
         matched=matched,
     )
@@ -236,7 +254,7 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
     now: datetime,
     self_account_id: int | None,
     unmatched: set[str],
-    awaiting_reply: Mapping[str, int],
+    turns: Mapping[str, ChainTurns],
     matched: set[str],
 ) -> ReviewChain | None:
     """Build one ReviewChain from a connected component, or None if it has no numbers. Its clock
@@ -250,7 +268,7 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
                 payloads[member_id],
                 web_base,
                 self_account_id,
-                awaiting_reply.get(member_id, 0),
+                turns.get(member_id),
                 matched=member_id in matched,
             )
         )
@@ -282,6 +300,7 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
         code_review=_worst_label([member.code_review for member in members]),
         comments_unresolved=sum(member.comments_unresolved for member in members),
         comments_awaiting_reply=sum(member.comments_awaiting_reply for member in members),
+        comments_drafted=sum(member.comments_drafted for member in members),
         attention_reasons=tuple(dict.fromkeys(reason for member in members for reason in member.attention_reasons)),
         partial_chain=any(payloads[member_id].first_parent in unmatched for member_id in ordered_ids),
         url=top_member.url,
@@ -300,7 +319,7 @@ def assemble_review_chains(  # pylint: disable=too-many-arguments,too-many-local
     now: datetime,
     self_account_id: int | None,
     follow_up_unmatched: set[str] | None = None,
-    awaiting_reply: Mapping[str, int] | None = None,
+    turns: Mapping[str, ChainTurns] | None = None,
 ) -> list[ReviewChain]:
     """Assemble review chains from a query result plus optional parent follow-up rows.
 
@@ -309,8 +328,8 @@ def assemble_review_chains(  # pylint: disable=too-many-arguments,too-many-local
     chain of follow-up rows alone has no member matched. Merged/abandoned
     follow-up rows are ignored (they are the ground the chain sits on).
     *follow_up_unmatched* are parent SHAs that a follow-up returned for a
-    non-current revision: the chain is then flagged ``partial_chain``. *awaiting_reply* says, by
-    change key, how many of its unresolved comment chains wait on the other side.
+    non-current revision: the chain is then flagged ``partial_chain``. *turns* says, by change
+    key, whose turn its unresolved comment chains are; a change it leaves out has every one yours.
     """
     queried_ids = {change.key for change in queried if change.key}
     open_follow_up = [change for change in follow_up if change.is_open and change.key not in queried_ids]
@@ -327,7 +346,7 @@ def assemble_review_chains(  # pylint: disable=too-many-arguments,too-many-local
             now=now,
             self_account_id=self_account_id,
             unmatched=unmatched,
-            awaiting_reply=awaiting_reply or {},
+            turns=turns or {},
             matched=queried_ids,
         )
         if chain is not None:
