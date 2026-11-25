@@ -66,11 +66,13 @@ export function resolveSide<T extends From | Version>(side: T, patchsets: Patchs
 /**
  * A comparison as asked for, made one core can answer: From older than To. Picking To at or
  * below the patchset From names sets From back to the base commit; once the patchsets are
- * known, a From that names one at or above To does the same.
+ * known, a From that names one at or above To does the same. Before they are known, From and
+ * To naming the same patchset ("current" both) does too: nothing refits the pick later.
  */
 export function fitSides(from: From, to: Version, patchsets: Patchsets | undefined): { from: From; to: Version } {
   const [older, newer] = [resolveSide(from, patchsets), resolveSide(to, patchsets)];
-  return typeof older === "number" && typeof newer === "number" && older >= newer ? { from: "base", to } : { from, to };
+  const notOlder = older === newer || (typeof older === "number" && typeof newer === "number" && older >= newer);
+  return notOlder ? { from: "base", to } : { from, to };
 }
 
 export const NOT_FILES = ["/COMMIT_MSG", "/PATCHSET_LEVEL", "/MERGE_LIST"];

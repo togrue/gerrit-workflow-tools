@@ -387,7 +387,10 @@ test("To at or below From sets From back to the base commit; From older than To 
   assert.deepEqual(fitSides(3, 2, patchsets), { from: "base", to: 2 });
   assert.deepEqual(fitSides("current", "current", patchsets), { from: "base", to: "current" });
   assert.deepEqual(fitSides("current", "local", patchsets), { from: "current", to: "local" });
-  assert.deepEqual(fitSides("current", "current", undefined), { from: "current", to: "current" }, "the patchsets not known: left to core");
+  // The patchsets not known yet: the same symbolic side on both ends is no comparison, and nothing refits it once they come.
+  assert.deepEqual(fitSides("current", "current", undefined), { from: "base", to: "current" });
+  assert.deepEqual(fitSides("current", "local", undefined), { from: "current", to: "local" });
+  assert.deepEqual(fitSides("reviewed", "current", undefined), { from: "reviewed", to: "current" }, "since your review: core says when there is nothing new");
 });
 
 test("the mode toggle is lit while From and To are the default's, and names the next mode a click makes the default", () => {
