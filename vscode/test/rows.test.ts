@@ -237,6 +237,21 @@ test("the header names the branch being rebased", () => {
   assert.equal(stackWhere({ ...detached, stack: { ...detached.stack, target_branch: null, push_branch: null } }), "detached (rebasing)");
 });
 
+test("a staged review is somebody else's chain: named as ger review prints it, the change under review marked, nothing moves", () => {
+  const [base, change] = [commit("Base", { number: 2155, is_head: true }), commit("Change", { number: 2156 })];
+  const review = { number: 2156, patch_set: 2, commit: change.sha, subject: "Change", staged: true, worktree: "/r", branch: "change-2156" };
+  const staged = stack([base, change], { branch: null, head: base.sha, staged_review: review });
+  assert.equal(stackWhere(staged), "reviewing 2155 ← [2156]");
+  const vm = stackVm(staged, undefined, never);
+  // HEAD sits at the parent only to stage the change: not said; the change is.
+  assert.deepEqual(vm.rows.map((row) => row.notes[0]), ["under review", base.short_sha]);
+  assert.deepEqual([vm.review, vm.movable, vm.rows.some((row) => row.squash)], [true, 0, false]);
+  assert.equal(vm.frozen, frozen(staged));
+  assert.match(frozen(staged) ?? "", /somebody else's commits/);
+  const behind = { name: "origin/main", behind: 1, argv: ["rebase", "origin/main"], conflict: null, preview: true, reason: null, dropped: [] };
+  assert.deepEqual(stackVm({ ...staged, upstream: behind }, undefined, never).info, [], "no Rebase onto origin/main: core refuses it there");
+});
+
 test("a merge is one row; it and what is below it stay, as ger serve says, what is above it still moves", () => {
   const withMerge = stack([commit("One", { pinned: true }), commit("Merge side", { merge: true, pinned: true }), commit("Two"), commit("Three")]);
   assert.equal(frozen(withMerge), null, "a merge no longer freezes the whole stack");

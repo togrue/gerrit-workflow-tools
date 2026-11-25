@@ -192,13 +192,14 @@ export const READ_ONLY = {
   remote: "Only a commit of your local stack can be reworded here.",
   patchset: "This is a patchset on Gerrit: choose the local commit to edit its message.",
   rebase: "A rebase is in progress: finish or abort it first.",
+  review: "Somebody else's change, checked out for review: its message is theirs.",
 };
 
 export const LOADING = "loading…";
 
 /** Never reworded here: a box would only say so. A rebase underway passes; the message stays a box. */
 function isPlain(readOnly: string): boolean {
-  return readOnly === READ_ONLY.remote || readOnly === READ_ONLY.patchset;
+  return readOnly === READ_ONLY.remote || readOnly === READ_ONLY.patchset || readOnly === READ_ONLY.review;
 }
 
 /** The Change view of the commit a rebase stopped at before applying it. */

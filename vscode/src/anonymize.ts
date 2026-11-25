@@ -18,7 +18,7 @@ import { DISCARD, LOADING, MODES, NOTHING_SHOWN, NOT_FILES, NO_CI_LINK, READ_ONL
 import { Names, Random } from "./fakes";
 import { ATTENTION_ICONS, FILE_STATES, REASON_WORDS } from "./format";
 import { SECTION_TITLES, TREE_WORDS, allRowContexts } from "./rows";
-import { MARKER_WORDS, MERGE_WORDS, REBASE_ACTIONS, REBASE_WORDS, SYNC_ICONS, SYNC_WORDS } from "./stackRows";
+import { MARKER_WORDS, MERGE_WORDS, REBASE_ACTIONS, REBASE_WORDS, REVIEW_FROZEN, SYNC_ICONS, SYNC_WORDS } from "./stackRows";
 
 type Json = Record<string, unknown>;
 const isObject = (value: unknown): value is Json => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -224,15 +224,17 @@ const STACK: Shape = {
       merge: KEEP,
       pinned: KEEP,
       /** Our words, and the short commit id. */
-      notes: [ours(["HEAD", "merge", "code changed", "held back", "abandoned"], SHA)],
+      notes: [ours(["HEAD", "under review", "merge", "code changed", "held back", "abandoned"], SHA)],
       badges: [BADGE],
       tooltip: TOOLTIP,
       squash: KEEP,
     },
   ],
-  frozen: ours(["A rebase is in progress: finish it (Continue) or abort it (Abort) before you move commits."]),
+  frozen: ours(["A rebase is in progress: finish it (Continue) or abort it (Abort) before you move commits.", REVIEW_FROZEN]),
   /** How many rows can move. */
   movable: KEEP,
+  /** A staged review: whether the rows are somebody else's. */
+  review: KEEP,
 };
 
 /** `Local commit 1a2b3c4`, `Patchset 3 (current)`: which version is shown. A patchset's number says how many there were, as a count does. */

@@ -51,6 +51,14 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
 
 The commits above your upstream, newest first. One row per commit:
 
+- **In a staged review** (`ger review` checked somebody's change out here: the review worktree, or
+  this checkout with `ger.reviewCheckout` = `branch`), the rows are their chain, not your work: the
+  header says *reviewing 2155 ← [2156]*, as `ger review` prints the chain, and the change under
+  review is marked so (HEAD sits at its parent only to stage it). Nothing moves, and the rows offer
+  review actions only: Open All Changes, Vote and Publish…, Open in Gerrit, the copies. Push, Fix
+  Stack with Agent, Edit Commit Here, squash, drop and rewording are not offered, as core refuses
+  them there (`ger review --unstage` to work on the change, or *Leave Review Checkout*).
+
 - An **icon** in front says how the commit relates to Gerrit: a **full circle** when it is the
   same as on Gerrit; a **yellow arrow up** in a circle when it is only rebased since the last push
   (the same code by patch-id, whitespace and message aside: Gerrit usually keeps the votes); a **yellow diff** square when its code changed since (push it, and
@@ -187,7 +195,8 @@ The commits above your upstream, newest first. One row per commit:
   ignored. Other trailers (`Signed-off-by:`, …) stay in the box. Only the message is rewritten —
   uncommitted changes stay where they are, nothing can conflict. **Undo** is offered right after.
   What you typed survives a refresh and switching views until you apply or revert it. Someone
-  else's change, or a patchset on Gerrit, cannot be reworded here: its message is plain text.
+  else's change (also one checked out for review), or a patchset on Gerrit, cannot be reworded
+  here: its message is plain text.
 - **Show**: which version of the change you look at. It always starts on your **local commit**
   when the change is in your stack; the list also has every patchset on Gerrit, the current one
   and the one you reviewed marked.

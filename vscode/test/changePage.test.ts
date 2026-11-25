@@ -87,7 +87,7 @@ test("your commit's message is a box without the Change-Id, which shows read-onl
 });
 
 test("a message that cannot be reworded is plain text: no box, no note saying so, its Change-Id still under it", () => {
-  for (const readOnly of [READ_ONLY.remote, READ_ONLY.patchset]) {
+  for (const readOnly of [READ_ONLY.remote, READ_ONLY.patchset, READ_ONLY.review]) {
     const { root } = changePage(changeVm(state({ local: false, readOnly })));
     const block = root.all(byClass("message-block"))[0];
     assert.equal(block.all((element) => element.tagName === "TEXTAREA").length, 0, readOnly);

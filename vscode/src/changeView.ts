@@ -349,6 +349,9 @@ export class ChangeView extends WebView<ChangeVm> {
     if (this.version !== "local") {
       return READ_ONLY.patchset;
     }
+    if (this.model.stack?.staged_review) {
+      return READ_ONLY.review; // core refuses ger reword there too
+    }
     return this.model.stack?.rebase_in_progress ? READ_ONLY.rebase : "";
   }
 
