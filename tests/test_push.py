@@ -1483,11 +1483,8 @@ def test_push_names_the_ready_boundary_on_every_path(
 @pytest.mark.parametrize(
     ("footer", "fix"),
     [
-        ("", "`git commit --amend` adds one, with Gerrit's commit-msg hook installed"),
-        (
-            "\n\nChange-Id: Inot-a-valid-id",
-            "`ger reword {short}` and delete its Change-Id line; Gerrit's commit-msg hook adds a new one",
-        ),
+        ("", "`ger change-id --fix` adds one (ger push does, on the branch checked out here)"),
+        ("\n\nChange-Id: Inot-a-valid-id", "`ger change-id --fix` gives it a new one"),
     ],
 )
 def test_push_a_change_id_boundary_names_the_fix(
@@ -1499,6 +1496,24 @@ def test_push_a_change_id_boundary_names_the_fix(
     code, out, _err = run_cli(stack_repo, push_main, ["--dry-run", "--all"], monkeypatch)
     assert code == 0
     assert f"... 1 commit held back by the ready boundary; {fix.format(short=short)}" in out
+    if not footer:
+        assert "ger push (without --dry-run) adds the missing Change-Ids first" in out
+
+
+def test_push_adds_the_missing_change_ids_and_pushes_those_commits(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No commit-msg hook (ger setup installs none): the push adds the Change-Id the hook would have."""
+    git("commit", "--allow-empty", "-m", "no footer yet", cwd=stack_repo)
+    mock_run = MagicMock(return_value=MagicMock(returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    code, out, err = run_cli(stack_repo, push_main, ["--all", "-y"], monkeypatch)
+    assert code == 0, err
+    assert 'Added a Change-Id to 1 commit, as a commit-msg hook would: "no footer yet"' in out
+    head = git("rev-parse", "HEAD", cwd=stack_repo).stdout.strip()
+    assert "Change-Id: I" in git("show", "-s", "--format=%B", "HEAD", cwd=stack_repo).stdout
+    pushes = [call.args[0] for call in mock_run.call_args_list if call.args[0][:2] == ["git", "push"]]
+    assert any(head in argv[-1] for argv in pushes), (pushes, "the push sends the commit with its new Change-Id")
 
 
 def test_push_wip_from_above_the_ready_boundary_names_it_and_all(

@@ -107,8 +107,11 @@ Without an upstream, `ger` asks for one on a terminal (it suggests what the bran
 ## 4. Change-Ids
 
 Gerrit requires a `Change-Id:` footer on each commit. `ger setup` installs no `commit-msg` hook, so
-a new commit has none until something adds it; `ger push` holds back a commit without one. Add the
-missing ones across the stack, and check it (missing, invalid and duplicate Change-Ids):
+a new commit has none until something adds it, and you need not do anything about it: `ger push`
+adds the missing ones on the branch checked out, as the hook would have, says so
+(`Added a Change-Id to 2 commits, as a commit-msg hook would: …`) and pushes them. An invalid or
+duplicate Change-Id still holds a push back; `ger change-id --fix` repairs those (and adds the
+missing ones without pushing), `ger change-id --check` lists every problem:
 
 ```bash
 ger change-id --fix
@@ -128,7 +131,7 @@ ger push --dry-run       # preview what would be pushed
 |---------|-----|
 | `ger.webUrl` / auth errors | Run `ger setup` or set keys in [Configuration.md](Configuration.md) |
 | No upstream / empty range | `git branch --set-upstream-to=…` |
-| Missing Change-Id on commits | `ger change-id --fix` |
+| Invalid or duplicate Change-Id on commits | `ger change-id --fix` |
 | API 401/403 | Check token and username |
 
 ---

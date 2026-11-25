@@ -391,6 +391,19 @@ def test_gcid_fix_skips_commit_with_valid_last_line_change_id(fix_repo, monkeypa
     assert after[2].count("Change-Id:") == 1
 
 
+def test_gcid_fix_gives_the_newer_of_two_duplicates_a_new_change_id(fix_repo, monkeypatch):
+    """A copied commit carries another's Change-Id: --fix renews the newer one, with no hook needed."""
+    repo = fix_repo
+    taken = "I" + "f" * 40
+    git("commit", "-q", "--allow-empty", "-m", f"a copy\n\nChange-Id: {taken}", cwd=repo)
+    code, _out, err = run_cli(repo, gcid_main, ["--fix"], monkeypatch)
+    assert code == 0, err
+    assert 'Fixed "a copy"' in err
+    after = _stack_bodies(repo)
+    assert f"Change-Id: {taken}" in after[2], "the older one keeps it"
+    assert f"Change-Id: {taken}" not in after[-1] and "Change-Id: I" in after[-1]
+
+
 def test_gcid_fix_rejects_check_combo(stack_repo, monkeypatch):
     code, out, err = run_cli(stack_repo, gcid_main, ["--fix", "--check"], monkeypatch)
     assert code == 2

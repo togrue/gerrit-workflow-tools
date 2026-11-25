@@ -138,7 +138,9 @@ def message_from_edit(text: str) -> str:
 
 
 def add_missing_change_ids(cwd: Path, rev: str) -> list[RewriteCommit]:
-    """Give every commit of ``upstream_tip..rev`` without a valid Change-Id footer one, as the hook would.
+    """Give every commit of ``upstream_tip..rev`` without a valid Change-Id footer one, as the hook would;
+    and a new one to a commit whose Change-Id an older commit of it carries already (the newer of two
+    duplicates).
 
     ``ger change-id --fix``: a message-only rewrite, so uncommitted changes are fine; a merge,
     rebase or ``git am`` underway is a :class:`UsageError`. Returns the commits that got one.
@@ -150,7 +152,8 @@ def add_missing_change_ids(cwd: Path, rev: str) -> list[RewriteCommit]:
     if am_in_progress(cwd):
         raise UsageError("--fix cannot run during an in-progress `git am`")
     rows = read_rewrite_rows(cwd, rev_spec_stack_base_to_end(cwd, rev))
-    needs_fix = [c for c in rows if not extract_valid_change_id(c.body)]
+    ids = [extract_valid_change_id(c.body) for c in rows]
+    needs_fix = [c for i, (c, cid) in enumerate(zip(rows, ids, strict=True)) if not cid or cid in ids[:i]]
     messages: dict[str, str] = {}
     for commit in needs_fix:
         base_msg = strip_change_id_lines(commit.body)
