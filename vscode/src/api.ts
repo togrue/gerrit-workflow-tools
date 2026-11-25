@@ -224,6 +224,8 @@ export interface Rebase {
   current: string | null;
   /** Stopped on a fixup or squash: the commit it folds into (API 1.2). */
   folding_into?: string | null;
+  /** Paths git rerere resolved at this stop from a resolution recorded earlier: unchecked (API 1.2). */
+  reused?: string[];
   /** Paths the index still holds as unresolved conflicts. */
   unmerged: string[];
   /** The stack is the branch as it was before the rebase (git's `am` backend keeps no todo): no commit has a step. */

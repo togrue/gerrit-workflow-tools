@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from gerrit_workflow_tools.core.annotated_stack import NextStep, NextStepKind, StackOverview
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
-from gerrit_workflow_tools.core.rebase_next_step import CONTINUE
+from gerrit_workflow_tools.core.rebase_next_step import CONTINUE, reused_note
 from gerrit_workflow_tools.core.rebase_state import RebaseProgress, RebaseStop
 from gerrit_workflow_tools.core.rebasing_stack import RebaseStep, RebasingStack
 from gerrit_workflow_tools.core.upstream_moved import UpstreamMoved
@@ -225,6 +225,10 @@ def rebase_note(progress: RebaseProgress, rebasing: RebasingStack | None) -> str
         at = f" at {progress.current[:7]}"
     stop = progress.stop
     said = _STOPS[stop].format(at=at, paths=", ".join(progress.unmerged)) if stop else "stopped"
+    if (reused := reused_note(progress)) and stop is RebaseStop.RESOLVED:
+        said = f"stopped{at}; {reused} before {CONTINUE}"
+    elif reused:
+        said = f"{said}; {reused}"
     whose = f"note: a rebase is in progress on {progress.branch or 'a detached HEAD'}, {said}"
     if rebasing is None:
         # No rebasing stack: the backend keeps no todo (the branch as it was), or a range was asked for (as it is).

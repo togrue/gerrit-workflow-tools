@@ -343,7 +343,9 @@ function rebaseBanner(rebase: Rebase | null | undefined): StackInfo[] {
   const stop = rebase?.stop ?? null;
   const said: Partial<Record<string, string>> = { conflict: REBASE_WORDS.conflict, resolved: REBASE_WORDS.resolved, split: REBASE_WORDS.split };
   const text = said[stop ?? ""] ?? REBASE_WORDS.progress;
-  const detail = stop === "resolved" ? REBASE_WORDS.ready : stop === "split" ? REBASE_WORDS.onTop : rebase?.as_before ? REBASE_WORDS.asBefore : undefined;
+  // git rerere put a resolution recorded earlier in: nobody has looked at it yet (core's `reused`).
+  const reused = rebase?.reused?.length ? `git reused a recorded resolution for ${rebase.reused.join(", ")}: check it before you continue` : undefined;
+  const detail = reused ?? (stop === "resolved" ? REBASE_WORDS.ready : stop === "split" ? REBASE_WORDS.onTop : rebase?.as_before ? REBASE_WORDS.asBefore : undefined);
   const banner: StackInfo = { text, detail, icon: "warning", tone: "warn", tooltip: REBASE_WORDS.tooltip, actions: rebaseButtons(rebase) };
   return [banner, ...(rebase?.unmerged ?? []).map(conflictRow)];
 }

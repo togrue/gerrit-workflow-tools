@@ -165,6 +165,11 @@ test("the rebase banner offers the ways on core allows from where it stopped, an
   assert.deepEqual(conflict.info.slice(1).map((info) => [info.text, info.conflict, info.tone]), [["src/e.txt", "src/e.txt", "bad"], ["f.txt", "f.txt", "bad"]]);
   assert.deepEqual(stackLines(conflict).slice(0, 3), ["A rebase stopped on a conflict  [Abort] [Skip]", "  ⚠ src/e.txt — conflicted", "  ⚠ f.txt — conflicted"]);
   assert.equal(stackLines(at({ stop: "resolved", applied: false, actions: RESOLVED }))[0], "A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]");
+  // git rerere put a recorded resolution in: the banner says so, to check it before Continue.
+  assert.equal(
+    stackLines(at({ stop: "resolved", applied: false, actions: RESOLVED, reused: ["README.md"] }))[0],
+    "A rebase stopped with its conflicts resolved — git reused a recorded resolution for README.md: check it before you continue  [**Continue**] [Abort] [Skip]",
+  );
   // The buttons are core's verdict, not the extension's reading of `stop`.
   assert.deepEqual(buttons(at({ stop: "resolved", applied: false, actions: ["abort"] })), ["Abort ger.rebase.abort"]);
   assert.equal(stackVm(stack(commits), undefined, never).info.length, 0, "no rebase, no banner");

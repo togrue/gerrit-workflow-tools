@@ -11,6 +11,7 @@ batch like that gets the same answer one pick at a time.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import Enum
@@ -65,16 +66,31 @@ def _plumbing(cwd: Path | str, *args: str) -> str:
     return done.stdout.strip()
 
 
-def _pick(cwd: Path | str, tip: str, commit: Commit) -> tuple[str | None, tuple[str, ...]]:
-    """The tree of *commit* picked onto *tip*; or ``None`` and the conflicted files."""
+_TEXT_CONFLICT = re.compile(r"^CONFLICT \((?:content|add/add)\): Merge conflict in (.+)$")
+
+
+def text_conflicts(cwd: Path | str, onto: str, sha: str) -> tuple[str, ...]:
+    """The files picking commit *sha* onto *onto* conflicts in line by line (conflict markers), by the
+    merge ``git rebase`` runs; ``()``: none. A rename, mode or delete conflict is not one.
+
+    Raises :class:`PreviewUnavailable` where this git cannot tell.
+    """
+    done = git("merge-tree", "--write-tree", "--name-only", f"--merge-base={sha}^", onto, sha, cwd=cwd, check=False)
+    if done.returncode not in (0, 1) or not done.stdout:
+        raise PreviewUnavailable(f"git merge-tree failed: {done.stderr.strip().partition(chr(10))[0]}")
+    return tuple(m.group(1) for line in done.stdout.splitlines() if (m := _TEXT_CONFLICT.match(line)))
+
+
+def _pick(cwd: Path | str, tip: str, sha: str) -> tuple[str | None, tuple[str, ...]]:
+    """The tree of commit *sha* picked onto *tip*; or ``None`` and the conflicted files."""
     done = git(
         "merge-tree",
         "--write-tree",
         "--name-only",
         "--no-messages",
-        f"--merge-base={commit.sha}^",
+        f"--merge-base={sha}^",
         tip,
-        commit.sha,
+        sha,
         cwd=cwd,
         check=False,
     )
@@ -101,7 +117,7 @@ def first_conflict(cwd: Path | str, base: str, picks: Sequence[Commit], stack: S
         if parent.get(commit.sha) == tip:
             tip = commit.sha  # where it already is: nothing to replay
             continue
-        tree, files = _pick(cwd, tip, commit)
+        tree, files = _pick(cwd, tip, commit.sha)
         if tree is None:
             return PickConflict(commit, files)
         rest = list(picks[index + 1 :])
@@ -131,13 +147,13 @@ def replay_conflict(
     on_trees = True
     for index, commit in enumerate(picks):
         try:
-            tree, files = _pick(cwd, tip, commit)
+            tree, files = _pick(cwd, tip, commit.sha)
         except PreviewUnavailable:
             if not on_trees or tip != tip_tree:
                 raise
             on_trees = False  # git 2.40-2.44: ours must be a commit
             tip = _plumbing(cwd, "commit-tree", tip_tree, "-m", "ger preview")
-            tree, files = _pick(cwd, tip, commit)
+            tree, files = _pick(cwd, tip, commit.sha)
         if tree is None:
             return PickConflict(commit, files)
         if tree == tip_tree and not _started_empty(cwd, commit):

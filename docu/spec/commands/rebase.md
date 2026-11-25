@@ -114,9 +114,21 @@ language passes through unfiltered.
 |--|--|
 | conflict | resolve the conflicts in `<paths>`, `git add` them, then `ger rebase --continue` to finish; `ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started |
 | conflict resolved and added | its conflicts are resolved: `ger rebase --continue` commits it and goes on; … |
+| conflict git rerere resolved, staged (`rerere.autoUpdate`) | git reused a recorded resolution for `<paths>` (rerere): check it, then `ger rebase --continue` commits it and goes on; … |
+| conflict git rerere resolved, not staged | git reused a recorded resolution for `<paths>` (rerere): check it, `git add` it, then `ger rebase --continue` to finish; … |
 | `edit` | amend it (`git commit --amend`), then `ger rebase --continue` to finish |
 | split | commit what is left of it, then `ger rebase --continue`; … |
 | `exec`, `break` | `ger rebase --continue` once you are done here; … |
+
+**A resolution git rerere reused is said to be rerere's.** With `rerere.enabled`, git puts a
+resolution it recorded at an earlier conflict back in by itself, staged or not, and nobody has looked
+at it: it may be an old, wrong one. A path is rerere's when the stop's merge conflicts in it line by
+line (`reorder_preview.text_conflicts`, one `git merge-tree`) and rerere no longer lists it in
+`MERGE_RR`, which keeps a path you resolve until the commit (`RebaseProgress.reused`). The stop line
+reads `stopped at … (conflict, resolved by git rerere)` when none is left unmerged, `ger log`'s note
+ends `git reused a recorded resolution for README.md (rerere): check it before `ger rebase
+--continue``, and `GET /stack` serves `rebase.reused`. Nothing in ger goes on by itself from such a
+stop: `ger rebase --continue` and `ger edit -n` go on when you run them.
 
 `ger rebase --continue` rather than `git rebase --continue`: it refuses over unstaged changes, which
 git misreports, and without a terminal takes a message as it is instead of failing on a missing

@@ -286,6 +286,9 @@ The top-level `rebase` is `null` without a rebase, else:
 - `folding_into` — stopped on a `fixup` or `squash` not applied yet: the id of the commit it
   folds into (`HEAD`, a `done` commit of the stack), else `null`. The stop is about that
   commit's change: the `fixup!` commit is not on Gerrit.
+- `reused` — the paths of this stop's conflict git rerere resolved from a resolution it recorded
+  earlier (staged, or in the file and still `unmerged`): nobody has checked them yet
+  ([rebase](rebase.md#going-on-with-a-rebase-underway)). `[]` otherwise.
 - `unmerged` — the paths the index holds as unresolved conflicts, at whatever stop (a `git stash
   pop` at an `edit` stop can leave some). Each is the literal path relative to the worktree's top,
   as the file is named (`café.txt`), never git's C-quoted form (`"caf\303\251.txt"`).

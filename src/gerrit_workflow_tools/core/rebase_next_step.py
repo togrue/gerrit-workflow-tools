@@ -76,13 +76,22 @@ def stop_next_step(progress: RebaseProgress, *, walk_on: str | None = None) -> s
 
     *walk_on* names the command that also walks on to the next attention stop, where a walk is underway.
     """
+    reused = reused_note(progress)
     if progress.stop is RebaseStop.CONFLICT:
-        return _resolve_step(progress.unmerged, walk_on)
+        rest = [path for path in progress.unmerged if path not in progress.reused]
+        if not rest:  # rerere wrote them all, without staging them
+            add = "them" if len(progress.unmerged) > 1 else "it"
+            return (
+                f"{reused}, `git add` {add}, then {CONTINUE} to finish{_walks_on(walk_on)}; "
+                f"{SKIP} leaves this commit out, {_BACK}"
+            )
+        return f"{reused}; {_resolve_step(rest, walk_on)}" if reused else _resolve_step(progress.unmerged, walk_on)
     if progress.stop is RebaseStop.EDIT:
         return edit_stop_next_step(walk_on)
+    resolved = f"{reused}, then {CONTINUE} commits it and goes on" if reused else None
     step = (
         {
-            RebaseStop.RESOLVED: f"its conflicts are resolved: {CONTINUE} commits it and goes on",
+            RebaseStop.RESOLVED: resolved or f"its conflicts are resolved: {CONTINUE} commits it and goes on",
             RebaseStop.SPLIT: f"commit what is left of it, then {CONTINUE}",
             RebaseStop.PAUSED: f"{CONTINUE} once you are done here",
         }.get(progress.stop)
@@ -90,6 +99,14 @@ def stop_next_step(progress: RebaseProgress, *, walk_on: str | None = None) -> s
         else None
     )
     return f"{step or f'{CONTINUE} goes on'}{_walks_on(walk_on)}; {_BACK}"
+
+
+def reused_note(progress: RebaseProgress) -> str | None:
+    """``git reused a recorded resolution for a.txt: check it``: what rerere resolved at this stop, unseen."""
+    if not progress.reused:
+        return None
+    them = "them" if len(progress.reused) > 1 else "it"
+    return f"git reused a recorded resolution for {', '.join(progress.reused)} (rerere): check {them}"
 
 
 def stop_refusal(progress: RebaseProgress, action: RebaseAction, *, walk_on: str | None = None) -> str | None:
