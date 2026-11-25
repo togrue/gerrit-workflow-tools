@@ -81,6 +81,8 @@ class InlineComment:
     """Who wrote it (Gerrit's ``author._account_id``): what tells your comments from others'."""
     context_lines: tuple[ContextLine, ...] = ()
     patch_set: int | None = None
+    commit_id: str | None = None
+    """The commit of that patch set (Gerrit's ``commit_id``): the version *line* counts in."""
     unresolved: bool = False
     """This comment's own flag. The chain takes the flag of its last comment."""
     draft: bool = False
@@ -117,8 +119,7 @@ class CommentChain:
     anchor: AnchorPlacement | None = None
     """A local comment's anchor, and where it lands on the file version shown."""
     turn: ChainTurn | None = None
-    """Whose turn it is (:func:`core.comment_chains.chain_turn`); ``None`` for a local chain, or
-    when who you are is not known."""
+    """Whose turn it is (:func:`core.comment_chains.chain_turn`); ``None`` for a local chain or an unknown user."""
 
     @property
     def anchor_moved(self) -> bool:
@@ -192,8 +193,7 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     votes: tuple[LabelVote, ...] = ()
     """Who voted what on the current patch set; empty while this commit is ahead of it with other code."""
     ci_patchset: CiPatchset | None = None
-    """While ahead of the pushed patchset with other code: the CI fields are that patchset's builds,
-    kept for their findings while you fix them. Not about this code, so they raise no attention."""
+    """Set while ahead of the pushed patchset with other code: the CI fields are then that patchset's builds."""
     attention_reasons: list[str] = field(default_factory=list)
     change_status: str | None = None  # raw Gerrit ``status`` (e.g. NEW, MERGED)
     merged_equivalent: bool | None = None  # MERGED only: proved same / different / unknown

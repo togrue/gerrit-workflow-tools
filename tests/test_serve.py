@@ -166,7 +166,7 @@ def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monk
     assert list(stack["commits"][0]) == [
         *shared,
         *("short_sha", "abandoned", "diverged", "merge", "pinned", "rebase", "updated", "is_head", "held_back"),
-        "needs_edit",
+        *("needs_edit", "fixup_of"),
     ]
     assert (log["stack"], log["upstream"], log["rebase"]) == (stack["stack"], stack["upstream"], stack["rebase"])
     assert log["next"] == stack["next"]
@@ -419,6 +419,11 @@ def test_show_carries_suggested_edits_as_ger_show_json_does(stack_repo: Path, mo
         }
 
     served = edits(commit)
+    # Where each replacement sits in the working files is the editor's (`worktree`, `original`), not `ger show`'s.
+    placed = {"worktree", "original"}
+    for found in served.values():
+        for edit in found or []:
+            edit["replacements"] = [{k: v for k, v in r.items() if k not in placed} for r in edit["replacements"]]
     assert served == edits(json_stdout(out)), err
     assert served["4f0a1c2b_8d9e7f60"][0]["fix_id"] == "a6b3c2d1_0e9f8a7b"
     assert served["7c6d5e4f_3a2b1c0d"][0]["in_message"] is True
@@ -434,6 +439,34 @@ def test_show_carries_suggested_edits_as_ger_show_json_does(stack_repo: Path, mo
     )
     block = BLOCK_COMMENT["message"]
     assert texts["7c6d5e4f_3a2b1c0d"] == (block, block), "a suggestion block is in the text already"
+
+
+def test_show_places_a_comment_of_a_stack_commit_in_the_working_file(stack_repo: Path) -> None:
+    """A comment on an earlier commit, drawn in the working file: at its line there, or outdated."""
+    store, keys, rows = _gerrit(stack_repo, [{}, {"unresolved_comment_count": 1}, {}, {}])
+    block = "Say what it is.\n\n```suggestion\nfile b.txt, the router\n```"
+    comment = {"id": "c1", "line": 1, "message": block, "unresolved": True, "patch_set": 1, "commit_id": rows[1].sha}
+    store.set_comments(keys[1], {"b.txt": [comment]})
+    api = GerApi(stack_repo, gerrit=store)
+
+    def shown() -> tuple[Any, Any]:
+        [chain] = _get(api, "/show", rev=rows[1].sha, comments="all")["commits"][0]["comment_chains"]
+        [replacement] = chain["comments"][0]["suggested_edits"][0]["replacements"]
+        return chain["worktree"], (replacement["worktree"], replacement["original"])
+
+    (stack_repo / "b.txt").write_text("a line above\nfile b.txt\n", encoding="utf-8")
+    moved = {"start_line": 2, "start_character": 0, "end_line": 3, "end_character": 0}
+    assert shown() == ({"start_line": 2, "line": 2, "outdated": False}, (moved, "file b.txt\n"))
+    (stack_repo / "b.txt").write_text("a line above\nfile b.txt, changed\n", encoding="utf-8")
+    assert shown() == ({"start_line": 1, "line": 1, "outdated": True}, (None, "file b.txt\n"))
+
+
+def test_show_claims_no_place_for_a_comment_on_a_version_that_is_not_here(stack_repo: Path) -> None:
+    store, keys, rows = _gerrit(stack_repo, [{}, {"unresolved_comment_count": 1}, {}, {}])
+    comment = {"id": "c1", "line": 1, "message": "x", "unresolved": True, "patch_set": 1, "commit_id": "f" * 40}
+    store.set_comments(keys[1], {"b.txt": [comment]})
+    [chain] = _get(GerApi(stack_repo, gerrit=store), "/show", rev=rows[1].sha)["commits"][0]["comment_chains"]
+    assert chain["worktree"] is None
 
 
 def test_show_marks_the_change_that_introduced_a_ci_finding(stack_repo: Path) -> None:
@@ -958,6 +991,29 @@ def test_reorder_off_the_branch_says_so_instead_of_missing_the_commits_it_was_sh
         rewrite_stack(stack_repo, [StackStep(sha) for sha in order], settings=settings)
 
 
+def test_stack_names_the_commit_each_fixup_folds_into(stack_repo: Path) -> None:
+    store, _keys, rows = _gerrit(stack_repo)
+    git("commit", "-q", "--allow-empty", "-m", f"fixup! {rows[1].subject}", cwd=stack_repo)
+    git("commit", "-q", "--allow-empty", "-m", "fixup! no such commit", cwd=stack_repo)
+    commits = _get(GerApi(stack_repo, gerrit=store), "/stack")["commits"]
+    assert [c["fixup_of"] for c in commits] == [None, None, None, None, rows[1].sha, None]
+
+
+def test_rebase_refusal_is_the_check_every_go_on_makes_unstaged_changes_too(stack_repo: Path) -> None:
+    api = GerApi(stack_repo, gerrit=_gerrit(stack_repo)[0])
+    assert _get(api, "/rebase/refusal")["refused"].startswith("no rebase is in progress, nothing to continue")
+    stop = {"GIT_SEQUENCE_EDITOR": "sed -i 1s/^pick/edit/"}
+    git("rebase", "-q", "-i", "HEAD~2", cwd=stack_repo, env=stop, check=False)
+    assert _get(api, "/rebase/refusal", action="continue") == {"action": "continue", "refused": None}
+    (stack_repo / "a.txt").write_text("edited at the stop\n", encoding="utf-8")
+    refused = _get(api, "/rebase/refusal")["refused"]
+    assert refused.startswith("you have unstaged changes to a.txt; amend them in (`git commit --amend -a`)")
+    # The stack's own `refused` is told from the stop alone: it does not look at the work tree.
+    assert "continue" not in _get(api, "/stack")["rebase"]["refused"]
+    with pytest.raises(BadRequest, match="action must be one of continue, abort, skip"):
+        _get(api, "/rebase/refusal", action="onward")
+
+
 # --- Transport ---------------------------------------------------------------------
 
 
@@ -997,7 +1053,7 @@ def _http(
 def test_http_answers_only_with_the_token_on_a_loopback_host(served: GerHttpServer) -> None:
     status, body = _http(served, f"{V1}/health")
     assert status == 200
-    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.2.0", "feature", "g.example")
+    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.3.0", "feature", "g.example")
     assert _http(served, f"{V1}/health", token=None)[0] == 401
     assert _http(served, f"{V1}/health", token="wrong")[0] == 401
     # A page that rebinds its own name to 127.0.0.1 still sends its name as Host.

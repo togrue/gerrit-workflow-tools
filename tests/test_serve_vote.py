@@ -67,7 +67,14 @@ def test_the_plan_lists_the_drafts_that_go_out_and_the_votes_on_offer(stack_repo
     )
     assert change["owner"] == "Bob" and change["url"] == f"{WEB}/c/testproj/+/102"
     assert change["drafts"] == [
-        {"path": "c.txt", "line": 3, "location": "c.txt:3", "text": "nit: name this", "transition": None}
+        {
+            "path": "c.txt",
+            "line": 3,
+            "location": "c.txt:3",
+            "text": "nit: name this",
+            "transition": None,
+            "suggested_edit": False,
+        }
     ]
     assert plan["drafts"] == 1 and store.calls_to("publish_drafts") == []
     offered = [(o["label"], o["value"], o["meaning"], o["takes"]) for o in plan["options"]]

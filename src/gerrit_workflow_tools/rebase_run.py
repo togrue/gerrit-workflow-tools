@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Literal
 
 from gerrit_workflow_tools.cli_terminal import stdin_is_terminal
+from gerrit_workflow_tools.core.fixups import UNSQUASHED_FIXUP_ADVICE
 from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.rebase_next_step import ABORT, go_on_refusal, stop_next_step, where_head_is
@@ -29,7 +30,7 @@ from gerrit_workflow_tools.core.rewrite_outcome import (
 )
 from gerrit_workflow_tools.core.rewrite_refusal import history_rewrite_refusal
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE, read_commit_rows
+from gerrit_workflow_tools.core.stack import read_commit_rows
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.wrap import say

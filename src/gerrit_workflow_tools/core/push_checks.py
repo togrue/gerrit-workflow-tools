@@ -11,6 +11,7 @@ from typing import NamedTuple
 
 from gerrit_workflow_tools.core.change_id import parse_change_id_footer, validate_change_id_value
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.fixups import is_unsquashed_fixup
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
@@ -36,7 +37,7 @@ from gerrit_workflow_tools.core.rebase_next_step import FINISH
 from gerrit_workflow_tools.core.rebase_state import AM_UNDERWAY, am_underway, rebase_underway
 from gerrit_workflow_tools.core.reword import add_missing_change_ids
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.core.stack import Commit, RewriteCommit, is_unsquashed_fixup
+from gerrit_workflow_tools.core.stack import Commit, RewriteCommit
 
 
 class PushBlocker(Enum):

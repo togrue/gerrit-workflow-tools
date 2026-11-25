@@ -14,9 +14,9 @@ from enum import Enum
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.fixups import is_unsquashed_fixup
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import GitError
-from gerrit_workflow_tools.core.stack import is_unsquashed_fixup
 
 
 class NoEditAttentionError(GitError):

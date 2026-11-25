@@ -9,7 +9,7 @@ import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
 import { ChangeDetail, ciRevs, sameChange, stoppedHere } from "./changeLoad";
-import { ChangeState, ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, changeHeading, changeLines, changeVm, isYours } from "./changeRows";
+import { ChangeState, ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, changeHeading, changeLines, changeVm, isYours, toAnswer } from "./changeRows";
 import { fileUri, openDiff } from "./diffTabs";
 import { ChangeTarget, Model, describeError } from "./model";
 import { openConflict } from "./rebase";
@@ -377,6 +377,11 @@ export class ChangeView extends WebView<ChangeVm> {
     return this.openChains().filter((chain) => !isYours(chain));
   }
 
+  /** What is left for you to answer (`toAnswer`): not what your draft answers, nor what waits on a reply. */
+  toAnswer(): CommentChain[] {
+    return this.chains().filter(toAnswer);
+  }
+
   // --- The view ---------------------------------------------------------------------
 
   private readOnly(): string {
@@ -435,6 +440,15 @@ export class ChangeView extends WebView<ChangeVm> {
   revealThread(chain: CommentChain): void {
     this.show(true);
     this.post({ type: "reveal", id: chain.root_id });
+  }
+
+  /**
+   * Show a chain with no line in a file (about the whole change) where it is answered: here, its
+   * text whole, the keyboard in its reply box (on the row, when there is nothing to reply to).
+   */
+  async focusThread(chain: CommentChain): Promise<void> {
+    await vscode.commands.executeCommand("ger.change.focus");
+    this.post({ type: "reveal", id: chain.root_id, open: true });
   }
 
   protected receive(message: Message): unknown {
@@ -540,6 +554,16 @@ export class ChangeView extends WebView<ChangeVm> {
       this.ci = ci;
       this.render();
     }
+  }
+
+  /** Open the CI section and the first finding of it that has a place in a file: what this change broke first. Whether there was one. */
+  async openFirstFinding(): Promise<boolean> {
+    await this.openCi();
+    const finding = this.vm().ci?.links.flatMap((link) => link.findings).find((row) => row.path);
+    if (finding?.path) {
+      await this.openLocation({ path: finding.path, line: finding.line });
+    }
+    return Boolean(finding);
   }
 
   private async fetchCi(): Promise<CiView> {
@@ -652,6 +676,15 @@ export class ChangeView extends WebView<ChangeVm> {
     const commit = this.diff?.commit ?? this.shown?.sha;
     const yours = this.showsLocal() || this.worktreeHolds(commit) || !commit;
     return yours ? vscode.Uri.file(path.join(this.model.repo, file)) : fileUri(commit, file);
+  }
+
+  /**
+   * Where `chain` is drawn: in your file, where its lines are now (core's `worktree`) when core could
+   * tell, `outdated` when they changed there; else at its lines as Gerrit has them.
+   */
+  placeOf(chain: CommentChain): { start: number | null; line: number | null; outdated: boolean } {
+    const now = this.locationUri(chain.path).scheme === "file" ? chain.worktree : undefined;
+    return now ? { start: now.start_line, line: now.line, outdated: now.outdated } : { start: chain.start_line, line: chain.line, outdated: false };
   }
 
   /** Open where a comment or a CI finding points. */

@@ -276,6 +276,7 @@
         { class: "actions" },
         thread.edit ? h("button", { class: "codicon codicon-edit", title: "Edit…", onclick: act("chain.edit") }) : null,
         thread.reply ? h("button", { class: "codicon codicon-reply", title: "Reply as Draft…", onclick: act("reply") }) : null,
+        thread.apply ? h("button", { class: "codicon codicon-lightbulb-autofix", title: "Apply Suggested Edit to Your File", onclick: act("applySuggestion") }) : null,
         thread.open ? h("button", { class: "codicon codicon-check", title: "Reply Done and Resolve as Draft", onclick: act("replyDone") }) : null,
         thread.open && !thread.held ? h("button", { class: "codicon codicon-person", title: "Keep for Me (Not for the Agent)", onclick: act("hold") }) : null,
         thread.open && thread.held ? h("button", { class: "codicon codicon-hubot", title: "Let the Agent Handle It", onclick: act("release") }) : null,
@@ -309,7 +310,8 @@
   function replyBox(thread) {
     let box = replyBoxes.get(thread.id);
     if (!box) {
-      const text = h("textarea", { class: "message", rows: "3", spellcheck: "true", "aria-label": "Reply", placeholder: "Reply… (Ctrl+Enter saves it as a draft)" });
+      const to = thread.replies.filter((reply) => !reply.state).map((reply) => reply.author).pop() || thread.author;
+      const text = h("textarea", { class: "message", rows: "3", spellcheck: "true", "aria-label": "Reply", placeholder: `Reply to ${to}… (Ctrl+Enter saves it as a draft)` });
       const resolved = h("input", { type: "checkbox" });
       const tick = h("label", { class: "resolved", title: "The reply resolves the comment; untick it to leave the comment open" }, resolved, "Resolved");
       const save = h("button", { class: "button", title: "Save as your draft reply on Gerrit (Ctrl+Enter)" }, "Save");
@@ -550,10 +552,17 @@
     } else if (message.type === "reveal") {
       revealed = message.id;
       toggled.comments = true;
+      if (message.open) {
+        expanded.add(message.id); // about the whole change: its text whole, and its reply box
+      }
       draw(vm);
       const row = document.querySelector(`.thread[data-id="${CSS.escape(message.id)}"]`);
       if (row) {
         row.scrollIntoView({ block: "nearest" });
+        if (message.open) {
+          const box = replyBoxes.get(message.id);
+          (box && box.text.isConnected ? box.text : row).focus();
+        }
       }
     }
   });

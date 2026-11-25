@@ -9,7 +9,7 @@ import * as vscode from "vscode";
 import { unsavedInRepo } from "./diffTabs";
 import { runInTerminal } from "./launch";
 import { sentence } from "./format";
-import { Model } from "./model";
+import { Model, describeError } from "./model";
 import { RebaseAction } from "./api";
 import { REBASE_ACTIONS, REBASE_WORDS, pushWaysOn, rebaseNotNowFresh, skipQuestion } from "./stackRows";
 import { saveBeforeContinue } from "./staleDiffs";
@@ -28,20 +28,42 @@ const SAID: Record<RebaseAction, string> = {
  * may have resolved it since). Skip asks first: it leaves a commit out. Continue asks to save the
  * repository's files with unsaved edits first: git goes on with the files on disk.
  */
-export async function rebaseStep(model: Model, step: RebaseAction): Promise<void> {
+export async function rebaseStep(model: Model, step: RebaseAction): Promise<boolean> {
   const notNow = await rebaseNotNowFresh(model, step);
   if (notNow) {
     await ui().message("warning", notNow, {}, []);
-    return;
+    return false;
   }
   if (step === "skip" && !(await confirmSkip(model))) {
-    return;
+    return false;
   }
   if (step === "continue" && !(await saveBeforeContinue(ui(), unsavedInRepo(model.repo)))) {
-    return;
+    return false;
+  }
+  if (step !== "abort" && (await refusedNow(model, step, `ger rebase --${step} did not run`))) {
+    return false;
   }
   runInTerminal(model.repo, ["rebase", `--${step}`]);
   feedback(SAID[step], { icon: "terminal", milliseconds: 8000 });
+  return true;
+}
+
+/**
+ * Whether `ger rebase --<step>` would refuse now, as core's one check before every "go on" says
+ * (`GET /rebase/refusal`: the stop, and for Continue the files changed and not amended or added).
+ * A refusal is said here, after `what`: in the terminal it would go unseen behind the views.
+ */
+export async function refusedNow(model: Model, step: RebaseAction, what: string): Promise<boolean> {
+  let refused: string | null;
+  try {
+    refused = await (await model.client()).rebaseRefusal(step);
+  } catch (error) {
+    refused = describeError(error);
+  }
+  if (refused) {
+    await ui().message("warning", `${what}: ${sentence(refused)}.`, {}, []);
+  }
+  return Boolean(refused);
 }
 
 /**
@@ -66,25 +88,13 @@ async function confirmSkip(model: Model): Promise<boolean> {
 }
 
 /**
- * A conflicted file, to resolve: VS Code's merge editor, through the built-in git extension (it
- * reads the three versions from the index). Without it, or when it opened nothing (git disabled, the
- * repository not open in it), the file itself, with its conflict markers.
+ * A conflicted file, to resolve: the file itself, with its conflict markers, in the text editor,
+ * where VS Code offers its inline Accept Current / Incoming / Both and *Resolve in Merge Editor*.
+ * Not the merge editor at once: its result starts out dirty ("No Changes Accepted"), and saving it
+ * would write what it computed over a resolution made meanwhile in a terminal or another editor.
  */
 export async function openConflict(model: Model, file: string): Promise<void> {
-  const uri = vscode.Uri.file(path.join(model.repo, file));
-  if ((await vscode.commands.getCommands(true)).includes("git.openMergeEditor")) {
-    await Promise.resolve(vscode.commands.executeCommand("git.openMergeEditor", uri)).catch(() => undefined);
-    if (mergeEditorOn(uri)) {
-      return;
-    }
-  }
-  await vscode.commands.executeCommand("vscode.open", uri);
-}
-
-/** The merge editor's tab input (`TabInputTextMerge`, not in the 1.85 API) has the file it writes as `result`. */
-function mergeEditorOn(uri: vscode.Uri): boolean {
-  const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input as { result?: unknown } | undefined;
-  return input?.result instanceof vscode.Uri && input.result.toString() === uri.toString();
+  await vscode.window.showTextDocument(vscode.Uri.file(path.join(model.repo, file)), { preview: false });
 }
 
 /**

@@ -17,15 +17,9 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+from gerrit_workflow_tools.core.fixups import autosquash_order, fixup_target_sha
 from gerrit_workflow_tools.core.git_run import git
-from gerrit_workflow_tools.core.stack import (
-    Commit,
-    StackSnapshot,
-    autosquash_order,
-    fixup_target_sha,
-    pinned_count,
-    rewrite_base,
-)
+from gerrit_workflow_tools.core.stack import Commit, StackSnapshot, pinned_count, rewrite_base
 
 
 # The scratch commits are never reachable from a ref; they only need to be writable.

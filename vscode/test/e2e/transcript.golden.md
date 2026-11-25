@@ -459,8 +459,8 @@ status bar message: $(check) Refreshed from Gerrit
 - change | Commit message — Add retry to the uploader  (read-only)
 - change | Showing — Patchset 1 (current) · Against its base commit
 + change |   b.txt — added +1 −0
-+ change | Comments — 2 unresolved of 3
-+ change |   Please rename this. — b.txt:1 · Alice Reviewer  [open]
++ change | Comments — 2 to answer
++ change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer  [open]
 + change |   Is this the right design? — b.txt:1 · Bob Architect  [open]
 + change |   Looks good overall. — whole change · Alice Reviewer  [resolved]
 - change |   uploader.txt — added +1 −0
@@ -516,7 +516,7 @@ status bar message: $(check) Refreshed from Gerrit
 **Expect:** b.txt opens at line 1, the first thread expands, the status bar says Comment 1 of 2.
 
 ```
-status bar message: Comment 1 of 2
+status bar message: Comment 1 of 2 to answer
 --- on screen:
 + editor | b.txt (file, line 1)
 - editor | Preview ger-brief-<id>.md (webview)
@@ -527,7 +527,7 @@ status bar message: Comment 1 of 2
 **Expect:** The second thread: Comment 2 of 2.
 
 ```
-status bar message: Comment 2 of 2
+status bar message: Comment 2 of 2 to answer
 --- on screen:
 (no change)
 ```
@@ -537,7 +537,7 @@ status bar message: Comment 2 of 2
 **Expect:** It wraps around to Comment 1 of 2.
 
 ```
-status bar message: Comment 1 of 2
+status bar message: Comment 1 of 2 to answer
 --- on screen:
 (no change)
 ```
@@ -547,7 +547,7 @@ status bar message: Comment 1 of 2
 **Expect:** Back to Comment 2 of 2.
 
 ```
-status bar message: Comment 2 of 2
+status bar message: Comment 2 of 2 to answer
 --- on screen:
 (no change)
 ```
@@ -624,12 +624,25 @@ reply box: Reply to Alice Reviewer — b.txt:1
 notification (info): Draft saved, visible only to you: your next push publishes it.  [Publish Drafts…]
     → dismissed
 --- on screen:
-+ change |   Please rename this. — b.txt:1 · Alice Reviewer · 1 reply  [open]
++ change | Comments — 1 to answer · 1 answered by your drafts (push publishes them)
++ change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
 + change |     you — [draft] Renamed it.
-- change |   Please rename this. — b.txt:1 · Alice Reviewer  [open]
+- change | Comments — 2 to answer
+- change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer  [open]
 ```
 
-## 39. Inline Reply as Draft… on "Please rename this." again
+## 39. Next Unresolved Comment (Alt+F9) after the reply
+
+**Expect:** Your draft answers "Please rename this.", so the walk leaves it out and goes on where it stood, not back at 1: Comment 1 of 1 to answer, "Is this the right design?".
+
+```
+status bar message: Comment 1 of 1 to answer
+--- on screen:
++ editor | b.txt (file, line 1)
+- editor | Preview ger-runbook-<id>.md (webview)
+```
+
+## 40. Inline Reply as Draft… on "Please rename this." again
 
 **Expect:** The box opens with your draft in it, to edit; saving updates that draft, nothing you wrote is lost unseen.
 
@@ -646,30 +659,42 @@ status bar message: $(check) Draft updated, visible only to you: your next push 
 - change |     you — [draft] Renamed it.
 ```
 
-## 40. Inline Reply Done and Resolve as Draft on "Is this the right design?"
+## 41. Inline Reply Done and Resolve as Draft on "Is this the right design?"
 
 **Expect:** A "Done" draft that resolves the thread is saved at once; the thread shows that your draft resolves it.
 
 ```
 status bar message: $(check) Draft saved, resolving the comment, visible only to you: your next push publishes it.
 --- on screen:
++ change | Comments — 2 answered by your drafts (push publishes them)
+- change | Comments — 1 to answer · 1 answered by your drafts (push publishes them)
 + change |   Is this the right design? — your draft resolves it · b.txt:1 · Bob Architect · 1 reply  [open]
 + change |     you — [draft] Done
 - change |   Is this the right design? — b.txt:1 · Bob Architect  [open]
 ```
 
-## 41. Inline Reply Done and Resolve as Draft on "Please rename this.", which has your draft
+## 42. Next Unresolved Comment (Alt+F9) once both are answered
+
+**Expect:** Nothing is left to answer: the status bar says so, and that 2 are answered by your drafts, which your next push publishes.
+
+```
+status bar message: $(pass) No comments left to answer on this change · 2 answered by your drafts (your next push publishes them)
+--- on screen:
+(no change)
+```
+
+## 43. Inline Reply Done and Resolve as Draft on "Please rename this.", which has your draft
 
 **Expect:** Your draft stays as you wrote it and now resolves the thread.
 
 ```
 status bar message: $(check) Draft updated, resolving the comment, visible only to you: your next push publishes it.
 --- on screen:
-+ change |   Please rename this. — your draft resolves it · b.txt:1 · Alice Reviewer · 1 reply  [open]
-- change |   Please rename this. — b.txt:1 · Alice Reviewer · 1 reply  [open]
++ change |   Please rename this. — your draft resolves it · suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
+- change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
 ```
 
-## 42. Expand "Looks good overall." (about the whole change) in the Change view, type a reply, Resolved left ticked › Save
+## 44. Expand "Looks good overall." (about the whole change) in the Change view, type a reply, Resolved left ticked › Save
 
 **Expect:** The comment has no line in a file, so it is answered in the view: the reply is saved as a draft, as a reply in an editor thread is, and shows under it; the status bar says it was saved, the comment staying resolved.
 
@@ -681,18 +706,17 @@ status bar message: $(check) Draft saved, resolving the comment, visible only to
 - change |   Looks good overall. — whole change · Alice Reviewer  [resolved]
 ```
 
-## 43. Click "Please rename this." in the Change view again
+## 45. Click "Please rename this." in the Change view again
 
-**Expect:** b.txt comes back in front of the runbook with that thread expanded: Alice's comment and its suggested fix, your draft reply under it, the reply box, and the Resolved toggle on in its header.
+**Expect:** b.txt is in front (the walk brought it back before the runbook) with that thread expanded: Alice's comment and its suggested fix, your draft reply under it, the reply box, and the Resolved toggle on in its header.
 
 ```
 (nothing said or done outside the views)
 --- on screen:
-+ editor | b.txt (file, line 1)
-- editor | Preview ger-runbook-<id>.md (webview)
+(no change)
 ```
 
-## 44. Type in the editor thread of "Please rename this.", whose Resolved toggle is on (your draft resolves it) › Save
+## 46. Type in the editor thread of "Please rename this.", whose Resolved toggle is on (your draft resolves it) › Save
 
 **Expect:** What you type is added to your draft reply there, after what it already says, and it still resolves the comment; the status bar says the draft was updated.
 
@@ -702,53 +726,53 @@ status bar message: $(check) Draft updated, resolving the comment, visible only 
 (no change)
 ```
 
-## 45. Click the Resolved toggle in the header of the editor thread of "Please rename this."
+## 47. Click the Resolved toggle in the header of the editor thread of "Please rename this."
 
 **Expect:** Your draft there is saved again at once, now leaving the comment unresolved; the status bar says so.
 
 ```
 status bar message: $(check) Draft updated, leaving the comment unresolved, visible only to you: your next push publishes it.
 --- on screen:
-+ change |   Please rename this. — b.txt:1 · Alice Reviewer · 1 reply  [open]
-- change |   Please rename this. — your draft resolves it · b.txt:1 · Alice Reviewer · 1 reply  [open]
++ change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
+- change |   Please rename this. — your draft resolves it · suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
 ```
 
-## 46. Click the Resolved toggle in the header of the editor thread of "Please rename this." again
+## 48. Click the Resolved toggle in the header of the editor thread of "Please rename this." again
 
 **Expect:** Your draft resolves the comment again, as before.
 
 ```
 status bar message: $(check) Draft updated, resolving the comment, visible only to you: your next push publishes it.
 --- on screen:
-+ change |   Please rename this. — your draft resolves it · b.txt:1 · Alice Reviewer · 1 reply  [open]
-- change |   Please rename this. — b.txt:1 · Alice Reviewer · 1 reply  [open]
++ change |   Please rename this. — your draft resolves it · suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
+- change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
 ```
 
-## 47. "+" on line 1 of b.txt in the diff › Save Draft
+## 49. "+" on line 1 of b.txt in the diff › Save Draft
 
 **Expect:** The comment is saved as a draft and appears as a thread marked as your draft; it is not counted as unresolved feedback.
 
 ```
 status bar message: $(check) Draft saved on Gerrit, visible only to you: your next push publishes it.
 --- on screen:
-+ change | Comments — 2 unresolved of 3 · 1 of yours, not published
-- change | Comments — 2 unresolved of 3
++ change | Comments — 2 answered by your drafts (push publishes them) · 1 of yours, not published
+- change | Comments — 2 answered by your drafts (push publishes them)
 + change |   Should this be configurable? — your draft · b.txt:1  [yours]
 ```
 
-## 48. "+" on line 1 of b.txt in the diff › Save Private Note
+## 50. "+" on line 1 of b.txt in the diff › Save Private Note
 
 **Expect:** The note is saved in this repository only and appears marked as your private note; it is not counted as unresolved feedback.
 
 ```
 status bar message: $(check) Private note saved here. It never leaves this repository.
 --- on screen:
-+ change | Comments — 2 unresolved of 3 · 2 of yours, not published
-- change | Comments — 2 unresolved of 3 · 1 of yours, not published
++ change | Comments — 2 answered by your drafts (push publishes them) · 2 of yours, not published
+- change | Comments — 2 answered by your drafts (push publishes them) · 1 of yours, not published
 + change |   Remember to check the docs. — your private note · b.txt:1  [yours]
 ```
 
-## 49. Inline Edit… on your comment "Should this be configurable?" in the Change view
+## 51. Inline Edit… on your comment "Should this be configurable?" in the Change view
 
 **Expect:** b.txt opens at its line and the comment turns into a text box in its thread, with Save and Cancel; nothing is saved yet.
 
@@ -759,7 +783,7 @@ status bar message: $(check) Private note saved here. It never leaves this repos
 - editor | b.txt (file, line 1)
 ```
 
-## 50. Change the text in that box › Save
+## 52. Change the text in that box › Save
 
 **Expect:** Your comment says the new text, in the thread and in the Change view; the status bar says it was updated. It is still yours and not published.
 
@@ -772,7 +796,7 @@ status bar message: $(check) Draft updated.
 - editor | b.txt (file)
 ```
 
-## 51. Pencil on your private note in its editor thread, change the text › Cancel
+## 53. Pencil on your private note in its editor thread, change the text › Cancel
 
 **Expect:** The note says what it said before; nothing is saved and nothing is said.
 
@@ -782,7 +806,7 @@ status bar message: $(check) Draft updated.
 (no change)
 ```
 
-## 52. Inline Delete Your Draft Reply… on "Is this the right design?" › Cancel
+## 54. Inline Delete Your Draft Reply… on "Is this the right design?" › Cancel
 
 **Expect:** A dialog shows the draft reply and asks before deleting it; Cancel leaves it.
 
@@ -794,7 +818,7 @@ dialog (warning): Delete your draft reply on b.txt:1?  [Delete] [Cancel]
 (no change)
 ```
 
-## 53. Trash on your private note in its editor thread › Delete
+## 55. Trash on your private note in its editor thread › Delete
 
 **Expect:** A dialog shows the note and asks; Delete removes it from the thread and from the Change view, and the status bar says so.
 
@@ -804,12 +828,12 @@ dialog (warning): Delete your private note on b.txt:1?  [Delete] [Cancel]
     → pressed "Delete"
 status bar message: $(check) Private note deleted.
 --- on screen:
-+ change | Comments — 2 unresolved of 3 · 1 of yours, not published
-- change | Comments — 2 unresolved of 3 · 2 of yours, not published
++ change | Comments — 2 answered by your drafts (push publishes them) · 1 of yours, not published
+- change | Comments — 2 answered by your drafts (push publishes them) · 2 of yours, not published
 - change |   Remember to check the docs. — your private note · b.txt:1  [yours]
 ```
 
-## 54. Command palette › ger: Add Comment, with your own b.txt in the editor
+## 56. Command palette › ger: Add Comment, with your own b.txt in the editor
 
 **Expect:** The file in the editor is yours as it is now, not change 101 as shown (its menu does not offer Add Comment): it says where a comment on 101 goes, and opens no box.
 
@@ -819,21 +843,21 @@ notification (info): These are not the lines of "Extract command routing", the c
 (no change)
 ```
 
-## 55. Open b.txt of the commit, cursor on line 1 › Add Comment (Ctrl+Alt+C), type › Save
+## 57. Open b.txt of the commit, cursor on line 1 › Add Comment (Ctrl+Alt+C), type › Save
 
 **Expect:** A comment box opens on that line with the same Save buttons as the "+" in the gutter; saving it adds your comment to the change.
 
 ```
 status bar message: $(check) Draft saved on Gerrit, visible only to you: your next push publishes it.
 --- on screen:
-+ change | Comments — 2 unresolved of 3 · 2 of yours, not published
-- change | Comments — 2 unresolved of 3 · 1 of yours, not published
++ change | Comments — 2 answered by your drafts (push publishes them) · 2 of yours, not published
+- change | Comments — 2 answered by your drafts (push publishes them) · 1 of yours, not published
 + change |   Added from the keyboard. — your draft · b.txt:1  [yours]
 + editor | b.txt (ger-file, line 1)
 - editor | b.txt (file, line 1)
 ```
 
-## 56. Add Comment again › Cancel
+## 58. Add Comment again › Cancel
 
 **Expect:** The box closes; nothing is saved.
 
@@ -843,7 +867,7 @@ status bar message: $(check) Draft saved on Gerrit, visible only to you: your ne
 (no change)
 ```
 
-## 57. Inline Comment on This File… on b.txt under Files
+## 59. Inline Comment on This File… on b.txt under Files
 
 **Expect:** An input box asks for a comment about the whole file; after Enter it is saved like any new comment and shows under Comments as yours.
 
@@ -853,12 +877,12 @@ input box: Comment on b.txt
     → typed "This file needs a header." and pressed Enter
 status bar message: $(check) Draft saved on Gerrit, visible only to you: your next push publishes it.
 --- on screen:
-+ change | Comments — 2 unresolved of 3 · 3 of yours, not published
++ change | Comments — 2 answered by your drafts (push publishes them) · 3 of yours, not published
 + change |   This file needs a header. — your draft · b.txt  [yours]
-- change | Comments — 2 unresolved of 3 · 2 of yours, not published
+- change | Comments — 2 answered by your drafts (push publishes them) · 2 of yours, not published
 ```
 
-## 58. Change › Edit Commit Here
+## 60. Change › Edit Commit Here
 
 **Expect:** ger edit runs in the terminal; you are told what to do once the rebase stops at 101, not that it already has.
 
@@ -869,7 +893,7 @@ status bar message: $(terminal) ger edit runs in the ger terminal: once the reba
 (no change)
 ```
 
-## 59. Change › Open in Gerrit
+## 61. Change › Open in Gerrit
 
 **Expect:** The browser opens change 101 on Gerrit.
 
@@ -880,7 +904,7 @@ browser opens: https://g.example/c/testproj/+/101
 (no change)
 ```
 
-## 60. Click "test! temporary experiment" in Local stack
+## 62. Click "test! temporary experiment" in Local stack
 
 **Expect:** The Change view says CI failed; the CI group lists the findings, the ones this commit introduced first.
 
@@ -899,9 +923,9 @@ browser opens: https://g.example/c/testproj/+/101
 + change |   Widget #55 — 1 finding
 + change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · introduced here
 - change |   b.txt — added +1 −0
-- change | Comments — 2 unresolved of 3 · 3 of yours, not published
+- change | Comments — 2 answered by your drafts (push publishes them) · 3 of yours, not published
 - change |   This file needs a header. — your draft · b.txt  [yours]
-- change |   Please rename this. — your draft resolves it · b.txt:1 · Alice Reviewer · 1 reply  [open]
+- change |   Please rename this. — your draft resolves it · suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
 - change |     you — [draft] Renamed it to route().
 - change |   Is this the right design? — your draft resolves it · b.txt:1 · Bob Architect · 1 reply  [open]
 - change |     you — [draft] Done
@@ -911,7 +935,7 @@ browser opens: https://g.example/c/testproj/+/101
 - change |     you — [draft] Added a test for the parser.
 ```
 
-## 61. Right-click it › Hand to Agent › Cancel
+## 63. Right-click it › Hand to Agent › Cancel
 
 **Expect:** A runbook for this one commit and a dialog to start or copy it; Cancel does nothing more.
 
@@ -925,7 +949,7 @@ dialog (info): 1 commit: 0 comments and 1 CI finding for the agent.  [Copy to Cl
 - editor | b.txt (ger-file, line 1)
 ```
 
-## 62. Local stack › Push to Gerrit…
+## 64. Local stack › Push to Gerrit…
 
 **Expect:** ger push runs in the ger terminal (a new one when a command still runs there), which shows what it will push and asks first.
 
@@ -936,7 +960,7 @@ status bar message: $(terminal) ger push runs in the ger terminal: it shows what
 (no change)
 ```
 
-## 63. Right-click "Refactor parser init" › Copy SHA
+## 65. Right-click "Refactor parser init" › Copy SHA
 
 **Expect:** The commit's full id is on the clipboard; the status bar says so.
 
@@ -947,7 +971,7 @@ status bar message: $(check) Copied SHA <sha>…
 (no change)
 ```
 
-## 64. Select two rows, right-click › Copy Change-Id
+## 66. Select two rows, right-click › Copy Change-Id
 
 **Expect:** Both Change-Ids are on the clipboard, one per line, newest first as shown.
 
@@ -958,7 +982,7 @@ status bar message: $(check) Copied 2 Change-Ids
 (no change)
 ```
 
-## 65. Drag "Refactor parser init" to the line above "Extract command routing"
+## 67. Drag "Refactor parser init" to the line above "Extract command routing"
 
 **Expect:** It swaps places with the commit above it; a notification offers Undo. Every commit keeps its votes: none changed its code, so Gerrit keeps them on the push.
 
@@ -982,7 +1006,7 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · introduced here
 ```
 
-## 66. Drag "Refactor parser init" to the bottom, then Undo
+## 68. Drag "Refactor parser init" to the bottom, then Undo
 
 **Expect:** It swaps back with the commit below; Undo puts the stack back as it was before this move.
 
@@ -995,7 +1019,7 @@ status bar message: $(check) Undone: the stack is as it was
 (no change)
 ```
 
-## 67. Select "Cleanup after experiment" and "Extract command routing", drag them to the bottom, then Undo
+## 69. Select "Cleanup after experiment" and "Extract command routing", drag them to the bottom, then Undo
 
 **Expect:** Both land under the last row, together and in the order they had; Undo puts the stack back.
 
@@ -1013,7 +1037,7 @@ status bar message: $(check) Undone: the stack is as it was
 ```
 ```
 
-## 68. Drag "Extract command routing" up one row, with uncommitted changes › Cancel
+## 70. Drag "Extract command routing" up one row, with uncommitted changes › Cancel
 
 **Expect:** A dialog asks whether to stash the uncommitted changes and continue; Cancel leaves the stack and the edit as they were.
 
@@ -1026,7 +1050,7 @@ dialog (warning): You have uncommitted changes. Stash them and continue?  [Stash
 (no change)
 ```
 
-## 69. The same drag › Stash and Continue, then Undo
+## 71. The same drag › Stash and Continue, then Undo
 
 **Expect:** The commits swap, and the edit to a.txt is back in the worktree afterwards; Undo puts the stack back and keeps the edit.
 
@@ -1048,7 +1072,7 @@ status bar message: $(check) Undone: the stack is as it was
 ```
 ```
 
-## 70. Change › edit the commit message of "test! temporary experiment" › Apply, then Undo
+## 72. Change › edit the commit message of "test! temporary experiment" › Apply, then Undo
 
 **Expect:** The box holds the message without its Change-Id. The commit gets the new message and keeps its Change-Id, though the text typed named another; the commits above get new ids, nothing else changes. Undo puts the old message back.
 
@@ -1069,7 +1093,7 @@ status bar message: $(check) Undone: the stack is as it was
 - stack  | Cleanup after experiment — HEAD · <sha> · held back · only rebased since the last push  [review +2, ci bad]
 ```
 
-## 71. Drag "Rework d.txt" to the line under "Cleanup after experiment"
+## 73. Drag "Rework d.txt" to the line under "Cleanup after experiment"
 
 **Expect:** One place down: the conflict preview already knows the two cannot swap, so it says at once which commit would conflict, and that nothing changed.
 
@@ -1079,7 +1103,7 @@ notification (info): "Rework d.txt" cannot change places with "Cleanup after exp
 (no change)
 ```
 
-## 72. Drag "Rework d.txt" to the bottom
+## 74. Drag "Rework d.txt" to the bottom
 
 **Expect:** Refused before anything is touched, saying which commit does not apply in its new place; the stack stays as it was.
 
@@ -1090,7 +1114,7 @@ notification (warning): "Rework d.txt" (<sha>) does not apply in its new place (
 (no change)
 ```
 
-## 73. Drag "Cleanup after experiment" to the line under "Extract command routing"
+## 75. Drag "Cleanup after experiment" to the line under "Extract command routing"
 
 **Expect:** It lands there, and the commits between move up one; Undo is offered.
 
@@ -1103,7 +1127,7 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 + stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci bad]
 ```
 
-## 74. Right-click "Rework d.txt" › Squash into Commit Below, then Undo
+## 76. Right-click "Rework d.txt" › Squash into Commit Below, then Undo
 
 **Expect:** It folds into the commit below, keeping that commit's message; Undo brings it back.
 
@@ -1116,7 +1140,7 @@ status bar message: $(check) Undone: the stack is as it was
 (no change)
 ```
 
-## 75. Right-click "Rework d.txt" › Squash into Commit Below, Keeping This Message, then Undo
+## 77. Right-click "Rework d.txt" › Squash into Commit Below, Keeping This Message, then Undo
 
 **Expect:** Folds, keeping this commit's message, with a note that the Gerrit change of the one below stays open; Undo brings both back, and the Change view shows again what it showed.
 
@@ -1129,7 +1153,7 @@ status bar message: $(check) Undone: the stack is as it was
 (no change)
 ```
 
-## 76. Right-click "Rework d.txt" › Drop Commit… › Cancel
+## 78. Right-click "Rework d.txt" › Drop Commit… › Cancel
 
 **Expect:** A dialog asks to confirm; Cancel leaves everything as it was.
 
@@ -1141,7 +1165,7 @@ dialog (warning): Drop "Rework d.txt" from the stack?  [Drop] [Cancel]
 (no change)
 ```
 
-## 77. Right-click "Rework d.txt" › Drop Commit… › Drop, then Undo
+## 79. Right-click "Rework d.txt" › Drop Commit… › Drop, then Undo
 
 **Expect:** The commit goes; Undo brings it back. It was never pushed, so there is nothing to push.
 
@@ -1157,7 +1181,7 @@ status bar message: $(check) Undone: the stack is as it was
 (no change)
 ```
 
-## 78. Right-click "Rework d.txt" › Drop Commit… › Drop
+## 80. Right-click "Rework d.txt" › Drop Commit… › Drop
 
 **Expect:** The commit is gone from the stack and from the checkout; nothing to push, as Gerrit never had it.
 
@@ -1191,7 +1215,7 @@ notification (info): Dropped "Rework d.txt".  [Undo]
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6
 ```
 
-## 79. Local stack › … › Set Upstream Branch… › Escape
+## 81. Local stack › … › Set Upstream Branch… › Escape
 
 **Expect:** A picker lists the branches it could track, the current one marked; Escape changes nothing.
 
@@ -1204,7 +1228,7 @@ picker: Upstream for feature — "The local stack is the commits above it; ger p
 (no change)
 ```
 
-## 80. Review chains › … › Report Issue… › Copy and Open GitHub Issue
+## 82. Review chains › … › Report Issue… › Copy and Open GitHub Issue
 
 **Expect:** The report opens first, as an untitled JSON document to read: what the three views show, with names, paths, text and ids replaced. A notification says so, and that nothing has left the machine. Copy and Open GitHub Issue puts the report on the clipboard and opens a new issue that has only the versions in it and says to paste the report.
 
@@ -1233,7 +1257,7 @@ status bar message: $(check) Report copied: paste it into the issue that opens i
 (no change)
 ```
 
-## 81. Command palette › ger: Report Issue… › Save to File…
+## 83. Command palette › ger: Report Issue… › Save to File…
 
 **Expect:** The report opens again to read; Save to File… asks where, suggesting ger-report.json, and the status bar says where it was saved. Nothing is copied and no browser opens.
 
@@ -1250,7 +1274,7 @@ status bar message: $(check) Report saved to ~/ger-report.json
 (no change)
 ```
 
-## 82. Command palette › ger: Report Issue… › close the report without saving › Copy and Open GitHub Issue
+## 84. Command palette › ger: Report Issue… › close the report without saving › Copy and Open GitHub Issue
 
 **Expect:** The user may have taken things out of the report before closing it, so nothing is copied, not the original either, and no browser opens; a notification says nothing was shared and to run Report Issue… again.
 
@@ -1323,7 +1347,7 @@ notification (warning): Still out of date: fake ger: down for this test
 + status bar | $(warning) Gerrit
 + state  | incompatible
 + events | (not said)
-+ stack  | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
++ stack  | ger serve speaks API 2.0, the extension needs 1.3: update the extension, or install the ger release that matches it.
 - status bar | $(error) CI failed: 102
 - state  | ready
 - events | live
@@ -1340,7 +1364,7 @@ notification (warning): Still out of date: fake ger: down for this test
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
-+ change | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
++ change | ger serve speaks API 2.0, the extension needs 1.3: update the extension, or install the ger release that matches it.
 - change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 - change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | Commit message — test! temporary experiment  (editable)
@@ -1389,9 +1413,9 @@ status bar message: $(check) Refreshed from Gerrit
 - status bar | $(warning) Gerrit
 - state  | incompatible
 - events | (not said)
-- stack  | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
+- stack  | ger serve speaks API 2.0, the extension needs 1.3: update the extension, or install the ger release that matches it.
 - change | title: Change 102
-- change | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
+- change | ger serve speaks API 2.0, the extension needs 1.3: update the extension, or install the ger release that matches it.
 ```
 
 ## Meanwhile: a reviewer comments on change 900 on Gerrit, and its event stream says so
@@ -1417,7 +1441,7 @@ status bar message: $(check) Refreshed from Gerrit
 - stack  | test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 ```
 
-## 83. Click "test! temporary experiment" in Local stack
+## 85. Click "test! temporary experiment" in Local stack
 
 **Expect:** The Change view shows change 103 as it is now: the commit is the same as on Gerrit. It should have shown that already after ger serve restarted (it kept Change 102's heading and "ahead of Gerrit", no issue yet); this click makes the rebase steps start from a fresh view.
 
@@ -1443,6 +1467,74 @@ status bar message: $(check) Refreshed from Gerrit
 - stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + change | Commit message — test! temporary experiment  (read-only)
 - change | Commit message — test! temporary experiment  (editable)
+--- shown now:
+status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
+stack header | feature (rebasing) → origin/main
+stack  | A rebase is in progress  [Continue] [Abort]
+stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
+stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
+stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
+stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
+stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
+stack  | (Cleanup after experiment is below HEAD)
+stack  | (Extract command routing is below HEAD)
+stack  | (Refactor parser init is below HEAD)
+stack  | (test! temporary experiment is HEAD)
+stack  | (Add e.txt is only on the branch as it was before)
+change | title: Change 103
+change | CI failed — V-1 CR+2
+change | Commit message — test! temporary experiment  (read-only)
+change | Showing — Local commit <sha> · Against its base commit
+change | Files — 1 · +1 −0
+change |   c.txt — added +1 −0
+change | Comments — none
+change | CI
+change |   Widget #55 — 1 finding
+change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · also fails on the parent
+change | (the commit shown is HEAD)
+```
+
+## 86. you add a line to c.txt, do not amend it, and press Local stack › Work on Next
+
+**Expect:** Nothing runs in the terminal: a warning says Work on Next did not continue the rebase, in ger's words: c.txt has unstaged changes, amend them in or stash them. The views stay as they were.
+
+```
+notification (warning): Work on Next did not continue the rebase: You have unstaged changes to c.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`.
+(no change)
+--- shown now:
+status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
+stack header | feature (rebasing) → origin/main
+stack  | A rebase is in progress  [Continue] [Abort]
+stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
+stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
+stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
+stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
+stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
+stack  | (Cleanup after experiment is below HEAD)
+stack  | (Extract command routing is below HEAD)
+stack  | (Refactor parser init is below HEAD)
+stack  | (test! temporary experiment is HEAD)
+stack  | (Add e.txt is only on the branch as it was before)
+change | title: Change 103
+change | CI failed — V-1 CR+2
+change | Commit message — test! temporary experiment  (read-only)
+change | Showing — Local commit <sha> · Against its base commit
+change | Files — 1 · +1 −0
+change |   c.txt — added +1 −0
+change | Comments — none
+change | CI
+change |   Widget #55 — 1 finding
+change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · also fails on the parent
+change | (the commit shown is HEAD)
+```
+
+## 87. Local stack › Continue, c.txt still not amended
+
+**Expect:** The same: nothing runs, and a warning says why ger rebase --continue did not run.
+
+```
+notification (warning): ger rebase --continue did not run: You have unstaged changes to c.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`.
+(no change)
 --- shown now:
 status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
@@ -1516,13 +1608,15 @@ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zer
 change | (the commit shown is HEAD)
 ```
 
-## 84. Local stack › Continue (the rebase stopped at the amended commit)
+## 88. Local stack › Continue (the rebase stopped at the amended commit)
 
 **Expect:** ger rebase --continue runs in the ger terminal, and the status bar says so; once it has run, the banner and the marks go: the branch is back, the amended commit with its code changed since the last push and "Add e.txt" on top of it; the header names the branch; the Change view shows the amended commit, its message editable again.
 
 ```
 terminal "ger": runs `ger rebase --continue`
 status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
+notification (info): The rebase is finished. 2 commits of your stack still need edits.  [Work on Next] [Push to Gerrit…]
+    → dismissed
 + status bar | $(error) CI failed: 102  $(bell-dot) 1
 - status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
 + chains | CI failed on 102: Refactor parser init
@@ -1577,8 +1671,15 @@ change | (the commit shown is below HEAD)
 - stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 - stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
-+ change | Commit message — test! temporary experiment  (read-only)
++ change | title: Change 102
+- change | title: Change 103
++ change | Commit message — Refactor parser init  (read-only)
 - change | Commit message — test! temporary experiment  (editable)
++ change | Files — 2 · +2 −0
++ change |   a.txt — added +1 −0
++ change |   e.txt — added +1 −0
+- change | Files — 1 · +2 −0
+- change |   c.txt — added +2 −0
 --- shown now:
 status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
@@ -1593,18 +1694,19 @@ stack  | (Extract command routing is below HEAD)
 stack  | (Refactor parser init is HEAD)
 stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
-change | title: Change 103
+change | title: Change 102
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
-change | Commit message — test! temporary experiment  (read-only)
+change | Commit message — Refactor parser init  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
-change | Files — 1 · +2 −0
-change |   c.txt — added +2 −0
+change | Files — 2 · +2 −0
+change |   a.txt — added +1 −0
+change |   e.txt — added +1 −0
 change | Comments — none
 change | CI
 change |   Widget #55 — from patchset 1, before your local changes · 1 finding
 change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
-change | (the commit shown is only on the branch as it was before)
+change | (the commit shown is HEAD)
 ```
 
 ## Meanwhile: you run git rebase --continue, and "Add e.txt" conflicts in e.txt
@@ -1625,6 +1727,21 @@ change | (the commit shown is only on the branch as it was before)
 - stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 - stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
 - stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ change | title: Change
++ change | Conflict in e.txt — resolve it, then Continue — not on Gerrit  [Abort] [Skip]
++ change | Commit message — Add e.txt  (read-only)
+- change | title: Change 102
+- change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
+- change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
+- change | Commit message — Refactor parser init  (read-only)
++ change | Conflicts — 1 file
++ change |   ⚠ e.txt — conflicted
++ change | Files, as before the rebase — 1 · +1 −0
+- change | Files — 2 · +2 −0
+- change |   a.txt — added +1 −0
+- change | CI
+- change |   Widget #55 — from patchset 1, before your local changes · 1 finding
+- change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
 --- shown now:
 status bar | $(error) Conflict in "Add e.txt"  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
@@ -1640,26 +1757,24 @@ stack  | (Extract command routing is below HEAD)
 stack  | (Refactor parser init is below HEAD)
 stack  | (test! temporary experiment is HEAD)
 stack  | (Add e.txt is only on the branch as it was before)
-change | title: Change 103
-change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
-change | Commit message — test! temporary experiment  (read-only)
+change | title: Change
+change | Conflict in e.txt — resolve it, then Continue — not on Gerrit  [Abort] [Skip]
+change | Commit message — Add e.txt  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
-change | Files — 1 · +2 −0
-change |   c.txt — added +2 −0
+change | Conflicts — 1 file
+change |   ⚠ e.txt — conflicted
+change | Files, as before the rebase — 1 · +1 −0
+change |   e.txt — added +1 −0
 change | Comments — none
-change | CI
-change |   Widget #55 — from patchset 1, before your local changes · 1 finding
-change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
-change | (the commit shown is HEAD)
+change | (the commit shown is only on the branch as it was before)
 ```
 
-## 85. Local stack › click e.txt under the banner
+## 89. Local stack › click e.txt under the banner
 
-**Expect:** e.txt opens in VS Code's merge editor (its file in the worktree is what it writes); nothing else changes.
+**Expect:** e.txt opens with its conflict markers in the text editor (VS Code offers Accept Current / Incoming / Both there, and Resolve in Merge Editor), not in the merge editor; nothing else changes.
 
 ```
-+ editor | Merging: e.txt (merge editor, file)
++ editor | e.txt (file, line 1)
 - editor | Preview ger-runbook-<id>.md (webview)
 --- shown now:
 status bar | $(error) Conflict in "Add e.txt"  $(bell-dot) 1
@@ -1676,18 +1791,16 @@ stack  | (Extract command routing is below HEAD)
 stack  | (Refactor parser init is below HEAD)
 stack  | (test! temporary experiment is HEAD)
 stack  | (Add e.txt is only on the branch as it was before)
-change | title: Change 103
-change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
-change | Commit message — test! temporary experiment  (read-only)
+change | title: Change
+change | Conflict in e.txt — resolve it, then Continue — not on Gerrit  [Abort] [Skip]
+change | Commit message — Add e.txt  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
-change | Files — 1 · +2 −0
-change |   c.txt — added +2 −0
+change | Conflicts — 1 file
+change |   ⚠ e.txt — conflicted
+change | Files, as before the rebase — 1 · +1 −0
+change |   e.txt — added +1 −0
 change | Comments — none
-change | CI
-change |   Widget #55 — from patchset 1, before your local changes · 1 finding
-change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
-change | (the commit shown is HEAD)
+change | (the commit shown is only on the branch as it was before)
 ```
 
 ## Meanwhile: you resolve e.txt and git add it
@@ -1704,8 +1817,12 @@ change | (the commit shown is HEAD)
 - stack  | A rebase stopped on a conflict  [Abort] [Skip]
 - stack  |   ⚠ e.txt — conflicted
 - stack  | ⚠ Add e.txt — <sha> · held back · not on Gerrit
++ change | Conflicts resolved — Continue — not on Gerrit  [**Continue**] [Abort] [Skip]
+- change | Conflict in e.txt — resolve it, then Continue — not on Gerrit  [Abort] [Skip]
+- change | Conflicts — 1 file
+- change |   ⚠ e.txt — conflicted
 + editor | Preview ger-runbook-<id>.md (webview)
-- editor | Merging: e.txt (merge editor, file)
+- editor | e.txt (file, line 1)
 --- shown now:
 status bar | $(warning) Conflict resolved in "Add e.txt"  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
@@ -1720,27 +1837,25 @@ stack  | (Extract command routing is below HEAD)
 stack  | (Refactor parser init is below HEAD)
 stack  | (test! temporary experiment is HEAD)
 stack  | (Add e.txt is only on the branch as it was before)
-change | title: Change 103
-change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
-change | Commit message — test! temporary experiment  (read-only)
+change | title: Change
+change | Conflicts resolved — Continue — not on Gerrit  [**Continue**] [Abort] [Skip]
+change | Commit message — Add e.txt  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
-change | Files — 1 · +2 −0
-change |   c.txt — added +2 −0
+change | Files, as before the rebase — 1 · +1 −0
+change |   e.txt — added +1 −0
 change | Comments — none
-change | CI
-change |   Widget #55 — from patchset 1, before your local changes · 1 finding
-change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
-change | (the commit shown is HEAD)
+change | (the commit shown is only on the branch as it was before)
 ```
 
-## 86. Local stack › Continue (the conflict resolved)
+## 90. Local stack › Continue (the conflict resolved)
 
 **Expect:** ger rebase --continue runs in the ger terminal; once it has run, the banner and the marks go; Local stack shows the branch with "Refactor parser init" changed here since the last push and "Add e.txt" on top.
 
 ```
 terminal "ger": runs `ger rebase --continue`
 status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
+notification (info): The rebase is finished. 1 commit of your stack still needs edits.  [Work on Next] [Push to Gerrit…]
+    → dismissed
 + status bar | $(error) CI failed: 102  $(bell-dot) 1
 - status bar | $(warning) Conflict resolved in "Add e.txt"  $(bell-dot) 1
 + chains | CI failed on 102: Refactor parser init
@@ -1750,8 +1865,14 @@ status bar message: $(terminal) ger rebase --continue runs in the ger terminal: 
 - stack  | A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]
 - stack  | ▶ Add e.txt — <sha> · held back · not on Gerrit
 - stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-+ change | Commit message — test! temporary experiment  (editable)
-- change | Commit message — test! temporary experiment  (read-only)
++ change | No Change-Id — not on Gerrit
++ change | Commit message — Add e.txt  (editable)
+- change | Conflicts resolved — Continue — not on Gerrit  [**Continue**] [Abort] [Skip]
+- change | Commit message — Add e.txt  (read-only)
++ change | Files — 1 · +1 −0
++ change |   e.txt — modified +1 −0
+- change | Files, as before the rebase — 1 · +1 −0
+- change |   e.txt — added +1 −0
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature → origin/main
@@ -1765,18 +1886,14 @@ stack  | (Extract command routing is below HEAD)
 stack  | (Refactor parser init is below HEAD)
 stack  | (test! temporary experiment is below HEAD)
 stack  | (Add e.txt is HEAD)
-change | title: Change 103
-change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
-change | Commit message — test! temporary experiment  (editable)
+change | title: Change
+change | No Change-Id — not on Gerrit
+change | Commit message — Add e.txt  (editable)
 change | Showing — Local commit <sha> · Against its base commit
-change | Files — 1 · +2 −0
-change |   c.txt — added +2 −0
+change | Files — 1 · +1 −0
+change |   e.txt — modified +1 −0
 change | Comments — none
-change | CI
-change |   Widget #55 — from patchset 1, before your local changes · 1 finding
-change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
-change | (the commit shown is below HEAD)
+change | (the commit shown is HEAD)
 ```
 
 ## Meanwhile: somebody adds c.txt on main, and you git fetch, so origin/main moves on
@@ -1799,21 +1916,17 @@ stack  | (Extract command routing is below HEAD)
 stack  | (Refactor parser init is below HEAD)
 stack  | (test! temporary experiment is below HEAD)
 stack  | (Add e.txt is HEAD)
-change | title: Change 103
-change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
-change | Commit message — test! temporary experiment  (editable)
+change | title: Change
+change | No Change-Id — not on Gerrit
+change | Commit message — Add e.txt  (editable)
 change | Showing — Local commit <sha> · Against its base commit
-change | Files — 1 · +2 −0
-change |   c.txt — added +2 −0
+change | Files — 1 · +1 −0
+change |   e.txt — modified +1 −0
 change | Comments — none
-change | CI
-change |   Widget #55 — from patchset 1, before your local changes · 1 finding
-change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
-change | (the commit shown is below HEAD)
+change | (the commit shown is HEAD)
 ```
 
-## 87. Local stack › Rebase onto origin/main ("test! temporary experiment" conflicts in c.txt, as the row said)
+## 91. Local stack › Rebase onto origin/main ("test! temporary experiment" conflicts in c.txt, as the row said)
 
 **Expect:** ger rebase origin/main runs in the ger terminal, and the status bar says so; once it has run, the upstream row goes and Local stack says the rebase stopped on a conflict in c.txt, with Abort and Skip; "test! temporary experiment" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; "Add e.txt" is dimmed. The Change view of 103 says "Conflict in c.txt" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.
 
@@ -1831,21 +1944,27 @@ status bar message: $(terminal) ger rebase origin/main runs in the ger terminal:
 + stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 + stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 + stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
++ change | title: Change 103
++ change | Conflict in c.txt — resolve it, then Continue — last pushed V-1 CR+2  [Abort] [Skip]
++ change | Commit message — test! temporary experiment  (read-only)
 - stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 - stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 - stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
-+ change | Conflict in c.txt — resolve it, then Continue — last pushed V-1 CR+2  [Abort] [Skip]
-+ change | Commit message — test! temporary experiment  (read-only)
-- change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-- change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
-- change | Commit message — test! temporary experiment  (editable)
+- change | title: Change
+- change | No Change-Id — not on Gerrit
+- change | Commit message — Add e.txt  (editable)
 + change | Conflicts — 1 file
 + change |   ⚠ c.txt — conflicted
 + change | Files, as before the rebase — 1 · +2 −0
-- change | Files — 1 · +2 −0
++ change |   c.txt — added +2 −0
+- change | Files — 1 · +1 −0
+- change |   e.txt — modified +1 −0
++ change | CI
++ change |   Widget #55 — from patchset 1, before your local changes · 1 finding
++ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
 --- shown now:
 status bar | $(error) Conflict in 103  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
@@ -1876,7 +1995,7 @@ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zer
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 88. Local stack › Skip › Cancel
+## 92. Local stack › Skip › Cancel
 
 **Expect:** A dialog asks before "test! temporary experiment" is left out: the commit and the conflict resolution so far would be thrown away, Abort brings back the branch as before the rebase but not the resolution, and its change stays open on Gerrit. Cancelled, nothing runs and nothing changes.
 
@@ -1915,7 +2034,7 @@ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zer
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 89. Local stack › Push to Gerrit… (during the rebase) › Abort
+## 93. Local stack › Push to Gerrit… (during the rebase) › Abort
 
 **Expect:** No ger push: a dialog says to finish the rebase first, why (in ger push's own words), and offers only Abort: Continue is not a way on while c.txt is conflicted. Abort runs ger rebase --abort in the ger terminal; once it has run, everything is as before the rebase: the branch, its commits, the header; Local stack still says origin/main has 1 new commit.
 
@@ -1996,8 +2115,15 @@ change | (the commit shown is below HEAD)
 - stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 - stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-+ change | Commit message — test! temporary experiment  (read-only)
++ change | title: Change 102
+- change | title: Change 103
++ change | Commit message — Refactor parser init  (read-only)
 - change | Commit message — test! temporary experiment  (editable)
++ change | Files — 2 · +2 −0
++ change |   a.txt — added +1 −0
++ change |   e.txt — added +1 −0
+- change | Files — 1 · +2 −0
+- change |   c.txt — added +2 −0
 --- shown now:
 status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
@@ -2012,21 +2138,22 @@ stack  | (Extract command routing is below HEAD)
 stack  | (Refactor parser init is HEAD)
 stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
-change | title: Change 103
+change | title: Change 102
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
-change | Commit message — test! temporary experiment  (read-only)
+change | Commit message — Refactor parser init  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
-change | Files — 1 · +2 −0
-change |   c.txt — added +2 −0
+change | Files — 2 · +2 −0
+change |   a.txt — added +1 −0
+change |   e.txt — added +1 −0
 change | Comments — none
 change | CI
 change |   Widget #55 — from patchset 1, before your local changes · 1 finding
 change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
-change | (the commit shown is only on the branch as it was before)
+change | (the commit shown is HEAD)
 ```
 
-## 90. Local stack › click "Add e.txt" (still to be replayed)
+## 94. Local stack › click "Add e.txt" (still to be replayed)
 
 **Expect:** The Change view shows "Add e.txt" as it was: it changes e.txt.
 
@@ -2034,14 +2161,15 @@ change | (the commit shown is only on the branch as it was before)
 + change | title: Change
 + change | No Change-Id — not on Gerrit
 + change | Commit message — Add e.txt  (read-only)
-- change | title: Change 103
+- change | title: Change 102
 - change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 - change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
-- change | Commit message — test! temporary experiment  (read-only)
+- change | Commit message — Refactor parser init  (read-only)
 + change | Files — 1 · +1 −0
 + change |   e.txt — modified +1 −0
-- change | Files — 1 · +2 −0
-- change |   c.txt — added +2 −0
+- change | Files — 2 · +2 −0
+- change |   a.txt — added +1 −0
+- change |   e.txt — added +1 −0
 - change | CI
 - change |   Widget #55 — from patchset 1, before your local changes · 1 finding
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
@@ -2069,7 +2197,7 @@ change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 91. Change › click e.txt under Files
+## 95. Change › click e.txt under Files
 
 **Expect:** The diff of e.txt in "Add e.txt" opens, its title naming the commit; both sides are that commit's, as it is not the one you stand on. You keep it open (double-click its tab), so the next file opened does not take its place.
 
@@ -2101,7 +2229,7 @@ change | (the commit shown is only on the branch as it was before)
 diff tab | e.txt (<sha>) (ger-file on the right, active)
 ```
 
-## 92. Local stack › click "Refactor parser init" (where it stopped)
+## 96. Local stack › click "Refactor parser init" (where it stopped)
 
 **Expect:** The Change view shows the commit you stand on; the diff tab of "Add e.txt" stays as it is.
 
@@ -2151,7 +2279,7 @@ change | (the commit shown is HEAD)
 diff tab | e.txt (<sha>) (ger-file on the right, active)
 ```
 
-## 93. Change › click e.txt under Files
+## 97. Change › click e.txt under Files
 
 **Expect:** e.txt opens on its own (the commit adds it), as your file: you stand on this commit.
 
@@ -2225,16 +2353,15 @@ change | (the commit shown is HEAD)
 diff tab | e.txt (<sha>) (ger-file on the right)
 ```
 
-## 94. Local stack › Continue (e.txt not saved) › Save All
+## 98. Local stack › Continue (e.txt not saved) › Save All
 
-**Expect:** Before anything runs, a dialog names e.txt, says ger rebase --continue sees only the files on disk and then says what saved edits still need, and offers Save All, Continue without saving (git would rewrite e.txt under the edits) and Cancel. Save All pressed, e.txt is saved, then ger rebase --continue runs in the ger terminal, where it refuses: e.txt is changed and not committed, amend it in or stash it. The rebase stays where it stopped.
+**Expect:** Before anything runs, a dialog names e.txt, says ger rebase --continue sees only the files on disk and then says what saved edits still need, and offers Save All, Continue without saving (git would rewrite e.txt under the edits) and Cancel. Save All pressed, e.txt is saved; then ger's own check refuses before anything runs, and a warning says so in its words: e.txt is changed and not committed, amend it in or stash it. Nothing runs in the terminal; the rebase stays where it stopped.
 
 ```
 dialog (warning): Save e.txt first? ger rebase --continue then says what it still needs.  [Save All] [Continue without saving] [Cancel]
     detail: e.txt has edits that are not saved, and ger rebase --continue sees only the files on disk. Continue without saving: the edits stay in the editor, git rewrites the files under them, and VS Code says so when you save.
     → pressed "Save All"
-terminal "ger": runs `ger rebase --continue`
-status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
+notification (warning): ger rebase --continue did not run: You have unstaged changes to e.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`.
 ger terminal | error: you have unstaged changes to e.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`
 ger terminal | (exit 2)
 (no change)
@@ -2321,7 +2448,7 @@ change | (the commit shown is below HEAD)
 diff tab | e.txt (<sha>) — stale (ger-file on the right)
 ```
 
-## 95. Settings › ger.closeDiffsOnRebase: on
+## 99. Settings › ger.closeDiffsOnRebase: on
 
 **Expect:** The stale diff tab of "Add e.txt" closes.
 
@@ -2356,7 +2483,7 @@ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zer
 change | (the commit shown is below HEAD)
 ```
 
-## 96. Local stack › click "Add e.txt"
+## 100. Local stack › click "Add e.txt"
 
 **Expect:** The Change view shows "Add e.txt", now HEAD.
 
@@ -2400,7 +2527,7 @@ change | Comments — none
 change | (the commit shown is HEAD)
 ```
 
-## 97. Change › click e.txt under Files
+## 101. Change › click e.txt under Files
 
 **Expect:** The diff of e.txt in "Add e.txt" opens with your file on its right: you stand on this commit.
 
@@ -2481,14 +2608,27 @@ diff tab | e.txt (<sha>) (file on the right, unsaved, active)
 + stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 + stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 + stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
++ change | title: Change 103
++ change | Conflict in c.txt — resolve it, then Continue — last pushed V-1 CR+2  [Abort] [Skip]
++ change | Commit message — test! temporary experiment  (read-only)
 - stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 - stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 - stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
-+ change | Commit message — Add e.txt  (read-only)
+- change | title: Change
+- change | No Change-Id — not on Gerrit
 - change | Commit message — Add e.txt  (editable)
++ change | Conflicts — 1 file
++ change |   ⚠ c.txt — conflicted
++ change | Files, as before the rebase — 1 · +2 −0
++ change |   c.txt — added +2 −0
+- change | Files — 1 · +1 −0
+- change |   e.txt — modified +1 −0
++ change | CI
++ change |   Widget #55 — from patchset 1, before your local changes · 1 finding
++ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
 + editor | e.txt (<sha>) — stale (diff, ger-file ↔ file)
 - editor | e.txt (<sha>) (diff, ger-file ↔ file)
 --- shown now:
@@ -2506,13 +2646,18 @@ stack  | (Extract command routing is below HEAD)
 stack  | (Refactor parser init is HEAD)
 stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
-change | title: Change
-change | No Change-Id — not on Gerrit
-change | Commit message — Add e.txt  (read-only)
+change | title: Change 103
+change | Conflict in c.txt — resolve it, then Continue — last pushed V-1 CR+2  [Abort] [Skip]
+change | Commit message — test! temporary experiment  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
-change | Files — 1 · +1 −0
-change |   e.txt — modified +1 −0
+change | Conflicts — 1 file
+change |   ⚠ c.txt — conflicted
+change | Files, as before the rebase — 1 · +2 −0
+change |   c.txt — added +2 −0
 change | Comments — none
+change | CI
+change |   Widget #55 — from patchset 1, before your local changes · 1 finding
+change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
 change | (the commit shown is only on the branch as it was before)
 diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 ```
@@ -2531,6 +2676,10 @@ diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 - stack  |   ⚠ c.txt — conflicted
 + stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | ⚠ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ change | Conflicts resolved — Continue — last pushed V-1 CR+2  [**Continue**] [Abort] [Skip]
+- change | Conflict in c.txt — resolve it, then Continue — last pushed V-1 CR+2  [Abort] [Skip]
+- change | Conflicts — 1 file
+- change |   ⚠ c.txt — conflicted
 --- shown now:
 status bar | $(warning) Conflict resolved in 103  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main
@@ -2545,13 +2694,16 @@ stack  | (Extract command routing is below HEAD)
 stack  | (Refactor parser init is HEAD)
 stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
-change | title: Change
-change | No Change-Id — not on Gerrit
-change | Commit message — Add e.txt  (read-only)
+change | title: Change 103
+change | Conflicts resolved — Continue — last pushed V-1 CR+2  [**Continue**] [Abort] [Skip]
+change | Commit message — test! temporary experiment  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
-change | Files — 1 · +1 −0
-change |   e.txt — modified +1 −0
+change | Files, as before the rebase — 1 · +2 −0
+change |   c.txt — added +2 −0
 change | Comments — none
+change | CI
+change |   Widget #55 — from patchset 1, before your local changes · 1 finding
+change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
 change | (the commit shown is only on the branch as it was before)
 diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 ```
@@ -2576,18 +2728,21 @@ stack  | (Extract command routing is below HEAD)
 stack  | (Refactor parser init is HEAD)
 stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
-change | title: Change
-change | No Change-Id — not on Gerrit
-change | Commit message — Add e.txt  (read-only)
+change | title: Change 103
+change | Conflicts resolved — Continue — last pushed V-1 CR+2  [**Continue**] [Abort] [Skip]
+change | Commit message — test! temporary experiment  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
-change | Files — 1 · +1 −0
-change |   e.txt — modified +1 −0
+change | Files, as before the rebase — 1 · +2 −0
+change |   c.txt — added +2 −0
 change | Comments — none
+change | CI
+change |   Widget #55 — from patchset 1, before your local changes · 1 finding
+change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
 change | (the commit shown is only on the branch as it was before)
 diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 ```
 
-## 98. Local stack › Continue (e.txt and notes.txt not saved) › Cancel
+## 102. Local stack › Continue (e.txt and notes.txt not saved) › Cancel
 
 **Expect:** A dialog names e.txt, whose edits are only in the stale diff tab, and notes.txt, though git does not track it (asking once too often loses nothing), and offers Save All, Continue without saving and Cancel. Cancelled, nothing is saved and nothing runs: the rebase stays stopped, the tab stale and unsaved.
 
@@ -2610,13 +2765,16 @@ stack  | (Extract command routing is below HEAD)
 stack  | (Refactor parser init is HEAD)
 stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
-change | title: Change
-change | No Change-Id — not on Gerrit
-change | Commit message — Add e.txt  (read-only)
+change | title: Change 103
+change | Conflicts resolved — Continue — last pushed V-1 CR+2  [**Continue**] [Abort] [Skip]
+change | Commit message — test! temporary experiment  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
-change | Files — 1 · +1 −0
-change |   e.txt — modified +1 −0
+change | Files, as before the rebase — 1 · +2 −0
+change |   c.txt — added +2 −0
 change | Comments — none
+change | CI
+change |   Widget #55 — from patchset 1, before your local changes · 1 finding
+change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
 change | (the commit shown is only on the branch as it was before)
 diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 ```
@@ -2641,13 +2799,16 @@ stack  | (Extract command routing is below HEAD)
 stack  | (Refactor parser init is HEAD)
 stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
-change | title: Change
-change | No Change-Id — not on Gerrit
-change | Commit message — Add e.txt  (read-only)
+change | title: Change 103
+change | Conflicts resolved — Continue — last pushed V-1 CR+2  [**Continue**] [Abort] [Skip]
+change | Commit message — test! temporary experiment  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
-change | Files — 1 · +1 −0
-change |   e.txt — modified +1 −0
+change | Files, as before the rebase — 1 · +2 −0
+change |   c.txt — added +2 −0
 change | Comments — none
+change | CI
+change |   Widget #55 — from patchset 1, before your local changes · 1 finding
+change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
 change | (the commit shown is only on the branch as it was before)
 diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 ```
@@ -2673,17 +2834,20 @@ stack  | (Extract command routing is below HEAD)
 stack  | (Refactor parser init is HEAD)
 stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
-change | title: Change
-change | No Change-Id — not on Gerrit
-change | Commit message — Add e.txt  (read-only)
+change | title: Change 103
+change | Conflicts resolved — Continue — last pushed V-1 CR+2  [**Continue**] [Abort] [Skip]
+change | Commit message — test! temporary experiment  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
-change | Files — 1 · +1 −0
-change |   e.txt — modified +1 −0
+change | Files, as before the rebase — 1 · +2 −0
+change |   c.txt — added +2 −0
 change | Comments — none
+change | CI
+change |   Widget #55 — from patchset 1, before your local changes · 1 finding
+change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 99. Local stack › Continue (ger.closeDiffsOnRebase on)
+## 103. Local stack › Continue (ger.closeDiffsOnRebase on)
 
 **Expect:** Nothing is unsaved, so nothing is asked: ger rebase --continue runs in the ger terminal; once it has run, the rebase is finished, "Add e.txt" is replayed onto origin/main with a new SHA. The Change view follows "Add e.txt" to its new commit.
 
@@ -2692,6 +2856,8 @@ change | (the commit shown is only on the branch as it was before)
 ```
 terminal "ger": runs `ger rebase --continue`
 status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
+notification (info): The rebase is finished. 1 commit of your stack still needs edits.  [Work on Next] [Push to Gerrit…]
+    → dismissed
 + status bar | $(error) CI failed: 102  $(bell-dot) 1
 - status bar | $(warning) Conflict resolved in 103  $(bell-dot) 1
 + chains | CI failed on 102: Refactor parser init
@@ -2703,15 +2869,15 @@ status bar message: $(terminal) ger rebase --continue runs in the ger terminal: 
 - stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 - stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-+ change | title: (nothing shown)
-+ change | Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.
-- change | title: Change
-- change | No Change-Id — not on Gerrit
-- change | Commit message — Add e.txt  (read-only)
-- change | Showing — Local commit <sha> · Against its base commit
-- change | Files — 1 · +1 −0
-- change |   e.txt — modified +1 −0
-- change | Comments — none
++ change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
++ change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
++ change | Commit message — test! temporary experiment  (editable)
+- change | Conflicts resolved — Continue — last pushed V-1 CR+2  [**Continue**] [Abort] [Skip]
+- change | Commit message — test! temporary experiment  (read-only)
++ change | Files — 1 · +1 −0
++ change |   c.txt — modified +1 −0
+- change | Files, as before the rebase — 1 · +2 −0
+- change |   c.txt — added +2 −0
 --- shown now:
 status bar | $(error) CI failed: 102  $(bell-dot) 1
 stack header | feature → origin/main
@@ -2725,12 +2891,21 @@ stack  | (Extract command routing is below HEAD)
 stack  | (Refactor parser init is below HEAD)
 stack  | (test! temporary experiment is below HEAD)
 stack  | (Add e.txt is HEAD)
-change | title: Change
-change | Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.
-change | (the commit shown is none)
+change | title: Change 103
+change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
+change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
+change | Commit message — test! temporary experiment  (editable)
+change | Showing — Local commit <sha> · Against its base commit
+change | Files — 1 · +1 −0
+change |   c.txt — modified +1 −0
+change | Comments — none
+change | CI
+change |   Widget #55 — from patchset 1, before your local changes · 1 finding
+change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
+change | (the commit shown is below HEAD)
 ```
 
-## 100. Click "Add retry to the uploader" under To review
+## 104. Click "Add retry to the uploader" under To review
 
 **Expect:** The Change view shows change 900, Alice's; its title bar offers Vote and Publish.
 
@@ -2745,16 +2920,23 @@ change | (the commit shown is none)
 + change | Waiting for your review, unresolved comments — V+1 💬2
 + change | Commit message — Add retry to the uploader  (read-only)
 + change | Showing — Patchset 1 (current) · Against its base commit
-+ change | Files — 1 · +1 −0
+- change | title: Change 103
+- change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
+- change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
+- change | Commit message — test! temporary experiment  (editable)
+- change | Showing — Local commit <sha> · Against its base commit
 + change |   uploader.txt — added +1 −0
 + change | Comments — 2 unresolved of 2
 + change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
 + change |   And cap the delay. — uploader.txt:1 · Bob Architect  [open]
-- change | title: (nothing shown)
-- change | Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.
+- change |   c.txt — modified +1 −0
+- change | Comments — none
+- change | CI
+- change |   Widget #55 — from patchset 1, before your local changes · 1 finding
+- change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
 ```
 
-## 101. "+" on line 1 of uploader.txt in the diff › Save Draft
+## 105. "+" on line 1 of uploader.txt in the diff › Save Draft
 
 **Expect:** The draft is saved on Gerrit and shows as yours in the Change view. Only you see it until it is published, and as it is not your change, ger push would not publish it: the notification offers Vote and Publish.
 
@@ -2767,7 +2949,7 @@ notification (info): Draft saved on Gerrit, visible only to you: Vote and Publis
 + change |   Cap the retries at 5? — your draft · uploader.txt:1  [yours]
 ```
 
-## 102. Change › Vote and Publish… › Escape
+## 106. Change › Vote and Publish… › Escape
 
 **Expect:** A picker offers the votes Gerrit lets you give on 900, each with what the project says it means, opening on Code-Review +1, and your draft without a vote. Escape sends nothing.
 
@@ -2785,7 +2967,7 @@ picker: Vote on 900 "Add retry to the uploader" — "1 draft of yours goes out w
 (no change)
 ```
 
-## 103. Change › Vote and Publish… › Code-Review +1 › type "Thanks!" › Publish
+## 107. Change › Vote and Publish… › Code-Review +1 › type "Thanks!" › Publish
 
 **Expect:** After the vote, an optional message; then one dialog lists what goes out (Code-Review +1, the draft at uploader.txt:1, the message, on change 900) and says it cannot be taken back. Publish sends it; a notification says what was published, the draft shows as published in the Change view and the vote on 900's row.
 
@@ -2824,7 +3006,7 @@ notification (info): Published Code-Review +1 and 1 draft on change 900.
 - change |   Cap the retries at 5? — your draft · uploader.txt:1  [yours]
 ```
 
-## 104. Inline Vote and Publish… on the To review row of 900 › Code-Review +2 › no message › Cancel
+## 108. Inline Vote and Publish… on the To review row of 900 › Code-Review +2 › no message › Cancel
 
 **Expect:** The row's button votes on its chain (here only 900): the same picker and message, and the dialog. Cancelled, nothing is sent.
 
@@ -2850,7 +3032,7 @@ Everyone on the change sees it at once; it cannot be taken back.
 (no change)
 ```
 
-## 105. Command palette › ger: Publish Drafts…, with no drafts left on 900
+## 109. Command palette › ger: Publish Drafts…, with no drafts left on 900
 
 **Expect:** It says there are no drafts of yours on 900 to publish, and asks nothing.
 
@@ -2866,7 +3048,7 @@ notification (info): You have no drafts on 900 to publish.
 ```
 ```
 
-## 106. Inline Review Change on change 900, ger.reviewCheckout being branch
+## 110. Inline Review Change on change 900, ger.reviewCheckout being branch
 
 **Expect:** This checkout switches to change-900 with 900's changes staged, and the notification says so. Local stack lists 900's chain: its row is marked under review, not HEAD, with no Rebase onto origin/main (nothing there is yours to rewrite). The Change view shows 900, and all its files open in one editor (here one, added by the change).
 
@@ -2902,7 +3084,7 @@ notification (info): Change 900 (patchset 1) is checked out for review: this che
 - editor | e.txt (file, line 2)
 ```
 
-## 107. Change › Files › uploader.txt
+## 111. Change › Files › uploader.txt
 
 **Expect:** Your file opens, not the commit's copy: the working files hold the change, so comments are drawn where they are written and language features work.
 
@@ -2913,7 +3095,7 @@ notification (info): Change 900 (patchset 1) is checked out for review: this che
 - editor | Change 900 (<sha>) (1 file) (webview)
 ```
 
-## 108. "+" on line 1 of uploader.txt, your file › Save Draft
+## 112. "+" on line 1 of uploader.txt, your file › Save Draft
 
 **Expect:** The draft is saved on Gerrit as on the commit's lines, and listed as yours in the Change view.
 
@@ -2925,7 +3107,7 @@ status bar message: $(check) Draft saved on Gerrit, visible only to you: Vote an
 + change |   Is 3 enough on a slow link? — your draft · uploader.txt:1  [yours]
 ```
 
-## 109. Next Unresolved Comment (Alt+F9)
+## 113. Next Unresolved Comment (Alt+F9)
 
 **Expect:** 900 is not yours: the walk takes your draft too, so it counts four (the three open comments and yours), in the Change view's order.
 
@@ -2935,7 +3117,7 @@ status bar message: Comment 1 of 4
 (no change)
 ```
 
-## 110. Change › Review Next Change in Chain
+## 114. Change › Review Next Change in Chain
 
 **Expect:** 900 is the only change of its chain: it says so and offers Vote on the Chain… and Leave Review. Nothing moves.
 
@@ -2947,7 +3129,7 @@ notification (info): Change 900 has no review chain to walk.  [Vote on the Chain
 (no change)
 ```
 
-## 111. Change › … › Leave Review Checkout
+## 115. Change › … › Leave Review Checkout
 
 **Expect:** Back on the branch it came from; the views are your stack again.
 

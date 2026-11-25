@@ -8,7 +8,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime, timezone
 from functools import partial
-from itertools import pairwise
 from typing import Any, TypeVar, cast
 
 from gerrit_workflow_tools import __version__
@@ -20,6 +19,7 @@ from gerrit_workflow_tools.core.ci_content import introduced_fingerprints
 from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS
 from gerrit_workflow_tools.core.comment_write import new_comment_state
 from gerrit_workflow_tools.core.config_keys import legacy_keys_notice
+from gerrit_workflow_tools.core.fixups import fixup_targets
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.change_view import parse_gerrit_time
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
@@ -27,19 +27,14 @@ from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_s
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.inbox import RebaseHeadline, load_inbox, pick_headline, project_scope
 from gerrit_workflow_tools.core.push_checks import push_blocked
-from gerrit_workflow_tools.core.rebase_state import rebase_underway
-from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_conflicts
+from gerrit_workflow_tools.core.rebase_next_step import go_on_refusal
+from gerrit_workflow_tools.core.rebase_state import RebaseAction, rebase_underway
+from gerrit_workflow_tools.core.rebasing_stack import stopped_rebase
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import find_review, staged_review
 from gerrit_workflow_tools.core.review_target import drafts_published_by, related_chain_numbers
-from gerrit_workflow_tools.core.stack import (
-    get_stack_snapshot,
-    merge_commits,
-    pinned_below,
-    pinned_count,
-    rewrite_base,
-)
-from gerrit_workflow_tools.core.upstream import branch_has_upstream, upstream_choice
+from gerrit_workflow_tools.core.stack import merge_commits, pinned_below
+from gerrit_workflow_tools.core.upstream import branch_has_upstream
 from gerrit_workflow_tools.render.agent_runbook import runbook_json
 from gerrit_workflow_tools.render.review_json import (
     chain_json,
@@ -58,11 +53,11 @@ from gerrit_workflow_tools.render.show_json import (
 )
 from gerrit_workflow_tools.render.show_markdown import commit_markdown
 from gerrit_workflow_tools.render.suggested_fixes import comment_text
-from gerrit_workflow_tools.server.diff_views import commit_files
+from gerrit_workflow_tools.server.diff_views import add_worktree_places, commit_files
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
 
-API_VERSION = "1.2.0"
+API_VERSION = "1.3.0"
 """The serve contract's version, ``MAJOR.MINOR.PATCH`` (bump rules: ``docu/spec/commands/serve.md``)."""
 _T = TypeVar("_T")
 _NOT_ON_GERRIT = frozenset({Attention.NOT_PUSHED, Attention.AHEAD_OF_GERRIT, Attention.DIVERGED})
@@ -101,6 +96,15 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
     return _stack(ctx, req)[0]
 
 
+def rebase_refusal(ctx: Context, req: Request) -> dict[str, Any]:
+    """Why ``ger rebase --<action>`` would refuse now (``go_on_refusal``: unstaged changes too), or ``null``."""
+    try:
+        action = RebaseAction(req.one("action", RebaseAction.CONTINUE.value))
+    except ValueError as exc:
+        raise BadRequest(f"action must be one of {', '.join(a.value for a in RebaseAction)}") from exc
+    return {"action": action.value, "refused": go_on_refusal(ctx.cwd, action, stopped_rebase(ctx.cwd))}
+
+
 def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline | None]:
     """:func:`stack`, and the rebase underway as the headline it makes: ``None`` without one."""
     cwd = ctx.cwd
@@ -111,6 +115,7 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
     steps = rebase_steps(view)
     merges = merge_commits(cwd, [c.sha for c in view.commits])
     pinned = pinned_below([c.sha for c in view.commits], merges)
+    fixups = fixup_targets([(c.sha, c.summary) for c in view.commits])
     commits = [
         {
             **log_commit_json(c),
@@ -124,6 +129,7 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
             "is_head": c.sha == head,
             "held_back": c.sha in blocked,
             "needs_edit": commit_needs_edit_attention(c),
+            "fixup_of": fixups.get(c.sha),
             **({"resolution_note": view.notes_by_sha[c.sha]} if c.sha in view.notes_by_sha else {}),
         }
         for index, c in enumerate(view.commits)
@@ -171,46 +177,6 @@ def _push_blocked_json(ctx: Context) -> dict[str, str] | None:
     """Why ``ger push`` would refuse whatever the stack holds (a rebase, a ``git am`` underway), or ``None``."""
     blocked = push_blocked(ctx.run.worktree.repository_dir, ctx.run.repo.working_branch)
     return {"reason": blocked.by.value, "message": blocked.message} if blocked else None
-
-
-def stack_moves(ctx: Context, _req: Request) -> dict[str, Any]:
-    """Which adjacent commits of the local stack can swap places: a conflict preview, nothing is touched.
-
-    One entry per adjacent pair above the newest merge, oldest first: that merge and what is below
-    it stay where they are. ``available`` is false when this git cannot tell.
-    """
-    snapshot = get_stack_snapshot(ctx.cwd, settings=ctx.settings)
-    pinned = pinned_count(ctx.cwd, snapshot.commits)
-    commits = snapshot.commits[pinned:]
-    base = rewrite_base(ctx.cwd, snapshot, pinned)
-    answer: dict[str, Any] = {"head": commit_sha_or_none(ctx.cwd, "HEAD"), "available": True, "swaps": []}
-    try:
-        conflicts = swap_conflicts(ctx.cwd, base, commits)
-    except PreviewUnavailable as error:
-        return {**answer, "available": False, "reason": str(error)}
-    for (lower, upper), conflict in zip(pairwise(commits), conflicts, strict=True):
-        found = conflict and {
-            "sha": conflict.commit.sha,
-            "summary": conflict.commit.subject,
-            "files": list(conflict.files),
-        }
-        answer["swaps"].append({"lower": lower.sha, "upper": upper.sha, "conflict": found})
-    return answer
-
-
-def stack_upstream(ctx: Context, _req: Request) -> dict[str, Any]:
-    """The working branch's upstream, and which to offer when it has none: the best guess first."""
-    branch = ctx.run.worktree.branch
-    if branch is None:
-        return {"branch": None, "upstream": None, "suggested": None, "why": None, "candidates": []}
-    choice = upstream_choice(ctx.cwd, branch, settings=ctx.settings)
-    return {
-        "branch": branch,
-        "upstream": choice.current,
-        "suggested": choice.suggested,
-        "why": choice.why,
-        "candidates": choice.candidates,
-    }
 
 
 def _soft(load: Callable[[], _T], failed: Callable[[dict[str, Any]], _T]) -> _T:
@@ -335,6 +301,8 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
             for entry, comment in zip(chain_payload["comments"], chain.comments, strict=True):
                 entry["text"] = comment_text(comment.message, comment.suggested_edits)
                 entry["markdown"] = comment_text(comment.message, comment.suggested_edits, markdown=True)
+        if item.target.is_local_commit:
+            add_worktree_places(ctx.cwd, served_chains, item.chains)
         payload["updated"] = iso_utc(parse_gerrit_time(item.commit.updated))
         if req.flag("markdown"):
             lines = commit_markdown(

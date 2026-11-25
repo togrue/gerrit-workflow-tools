@@ -127,7 +127,7 @@ test("each answer fills in its part as it comes: the commit with its files first
   const vm = drawn(detail);
   assert.equal(vm.message?.text, "Extract routing");
   assert.equal(vm.loading, undefined, "the message is drawn: no placeholder");
-  assert.deepEqual([vm.files?.summary, vm.comments?.summary, vm.comments?.threads.map((t) => t.id)], ["1 file", "1 unresolved of 1", ["c1"]]);
+  assert.deepEqual([vm.files?.summary, vm.comments?.summary, vm.comments?.threads.map((t) => t.id)], ["1 file", "1 to answer", ["c1"]]);
   assert.deepEqual(detail.loading(), { commit: false, base: false, delta: true, ready: true }, "the delta has not come yet");
   assert.equal(vm.key, commit.change_id, "the same change as before the message came: nothing the page kept is reset");
   assert.ok(detail.arrive(token, "delta", undefined));
@@ -198,7 +198,7 @@ test("a part that cannot be had clears its loading mark and says so, while the o
   const vm = drawn(detail);
   assert.equal(vm.loading, undefined, "no message placeholder left");
   assert.equal(vm.files?.note, "the commit is not available here");
-  assert.equal(vm.comments?.summary, "1 unresolved of 1");
+  assert.equal(vm.comments?.summary, "1 to answer");
   assert.deepEqual(detail.loading(), { commit: false, base: false, delta: true, ready: true });
 });
 

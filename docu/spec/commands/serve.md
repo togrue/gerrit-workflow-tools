@@ -161,7 +161,7 @@ a client words its own advice while `message` stays ger's.
 
 ## API version
 
-`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.2.0`); the URL
+`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.3.0`); the URL
 prefix carries only the major (`/api/v1`). It moves on its own, not with ger's package version:
 
 | Bump | When |
@@ -260,6 +260,10 @@ For a view that draws the stack, each commit also says:
 - `pinned` — it is the newest merge or below it (`pinned_count`). It cannot be moved, folded
   or dropped here, as `POST /stack/rewrite` refuses and `GET /stack/moves` leaves out; the
   commits above the newest merge can.
+- `fixup_of` — for an unsquashed `fixup!`/`squash!` commit, the id of the commit below it that it
+  folds into: the nearest one with the subject it names, as `ger fix` writes it
+  (`core/stack.py`, `fixup_targets`); `null` for any other commit, and for a fixup whose original
+  is not below it.
 - `rebase` — while a rebase is underway (`rebase_in_progress`), the stack is the one `ger log`
   shows then: the commits on `HEAD` above the upstream, as they are now (a replayed or amended
   commit has its new id and its new relation to Gerrit), then the commit it stopped at while
@@ -307,7 +311,8 @@ The top-level `rebase` is `null` without a rebase, else:
   `skip` once the index and work tree hold nothing it would throw away: it keeps `HEAD` and goes
   on. Then a rebase through `am` has nothing left to continue with (git would stop again, "No
   changes"), so `continue` is left out there. A client offers these and no others. `continue`
-  can still be refused over unstaged changes, which this does not look at.
+  can still be refused over unstaged changes, which this does not look at:
+  [`GET /rebase/refusal`](#get-rebaserefusalactioncontinue) does, when asked.
 - `refused` — for each way on `actions` leaves out, the refusal `ger rebase --<action>` prints
   for it, by action (`{"skip": "--skip leaves out …"}`): what a client says when one is asked for
   anyway.
@@ -387,6 +392,18 @@ tells (`git checkout -b topic origin/main`); else the remote branch nearest to i
 ahead plus behind. Two git calls: all remote branches are measured by one `for-each-ref`
 (git 2.41; older git measures them one by one).
 
+### `GET /rebase/refusal?action=continue`
+
+Why `ger rebase --<action>` (`continue`, `abort` or `skip`; `continue` when not given) would
+refuse now, in its words, as `refused`; `null` when it would run. This is the one check every ger
+"go on" makes before git runs (`ger rebase --continue|--skip`, `ger edit -n`): the stop as
+`rebase.refused` judges it, and for `continue` also the work tree, which `GET /stack` does not
+look at: unstaged changes to tracked files (`you have unstaged changes to a.txt; amend them in
+(…) or git stash them, then ger rebase --continue`). Without a rebase it says there is none. A
+client asks it just before it starts the step in a terminal, so a refusal is said where the
+client is, not only in the terminal. Cost: two git calls (`update-index --refresh`, `diff-files`)
+beyond reading the stop.
+
 ### `GET /chains/<number>`
 
 The **review chain** an open change sits in, base to top, in the `ger inbox --json` chain shape.
@@ -404,6 +421,22 @@ Each comment also carries its whole text with the Gerrit fix suggestions written
 (`render/suggested_fixes.py`), so a viewer shows them without rendering them itself: `text`
 plain, as `ger show` prints them without its box and colours, and `markdown` with each
 replacement fenced. A ```` ```suggestion ```` block is in the message already and is not repeated.
+
+For a commit of the local stack (`local_commit: true`), an editor draws the threads in the working
+files, which may hold another version of a commented file than the patchset the comment was written
+on (a comment on an earlier commit, seen at the tip; a commit changed since its push). So each open
+Gerrit chain there also carries `worktree`: where its lines are in the working file, mapped from the
+version the comment was written on (Gerrit's `commit_id`) as local comments are re-anchored
+([comment](comment.md#re-anchoring), `core/anchor_mapping.py`, `WorktreeMap`): `start_line`, `line`,
+and `outdated` when those lines changed or are gone there (`line` is then the one just before where
+they were). It is `null` where that cannot be told: the version is not in this repository, the
+working file is gone or binary, a resolved chain, a local chain (whose own anchor is mapped onto the
+shown commit), or no line. Each replacement a comment of such a chain suggests carries `worktree`
+too, its `range` in the working file while the lines it covers are there unchanged (else `null`),
+and `original`, the text it replaces in the version commented on: what a client checks the file
+against before it applies the edit. Cost, once per commented file: a `git rev-parse`, a `git
+hash-object -w` of the working file (so it diffs as a blob), a `git diff` (remembered by blob pair),
+and a `git cat-file` where an edit is suggested.
 
 Each commit also says what a new comment on it becomes by default, in `new_comment`: `draft`
 when Gerrit has that very commit as a patchset (or the change is only on Gerrit), else
@@ -519,8 +552,9 @@ a vote no change takes is `USAGE`, as on the command line.
   current patchset, per label), `keeps` (with `chain=1` and `vote`: the votes of yours it keeps,
   per label; the vote does not go there), and `drafts`: each draft
   of yours a publish sends, with `path`, `line`, `location` (`path:line`, in words for the
-  commit message and the patchset level), `text` (its first line) and `transition` (`resolves`,
-  `reopens` or `null`: what it does to its chain).
+  commit message and the patchset level), `text` (its first line), `transition` (`resolves`,
+  `reopens` or `null`: what it does to its chain) and `suggested_edit` (it suggests an edit: a
+  ```` ```suggestion ```` block or a fix suggestion, which its first line may not show).
 - `drafts` — how many drafts go out, on the changes that take the votes.
 - `options` — every vote some change lets you give, Code-Review first, each label's highest
   value first: `label`, `value`, `meaning` (the project's words for it, "Looks good to me, but

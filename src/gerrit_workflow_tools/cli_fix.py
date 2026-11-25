@@ -14,6 +14,7 @@ from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, may_pro
 from gerrit_workflow_tools.cli_notes import print_stack_commit_notes
 from gerrit_workflow_tools.cli_terminal import ask_choice
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.fixups import UNSQUASHED_FIXUP_ADVICE, fixup_target_sha
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git, git_out
@@ -23,13 +24,7 @@ from gerrit_workflow_tools.core.reorder import ReorderRefusal, fold_fixup
 from gerrit_workflow_tools.core.reorder_preview import FoldConflict, PickStop, PreviewUnavailable, fixup_fold_conflict
 from gerrit_workflow_tools.core.review_checkout import staged_review_refusal
 from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal
-from gerrit_workflow_tools.core.stack import (
-    UNSQUASHED_FIXUP_ADVICE,
-    Commit,
-    StackSnapshot,
-    fixup_target_sha,
-    get_stack_snapshot,
-)
+from gerrit_workflow_tools.core.stack import Commit, StackSnapshot, get_stack_snapshot
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.core.words import counted, listed
 from gerrit_workflow_tools.render.wrap import say

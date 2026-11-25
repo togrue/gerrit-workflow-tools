@@ -14,7 +14,7 @@ from typing import Any
 from gerrit_workflow_tools.core.ci_http import CiHttp
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.server import actions, diff_views, views, vote
+from gerrit_workflow_tools.server import actions, diff_views, stack_views, views, vote
 from gerrit_workflow_tools.server.activity import Activity
 from gerrit_workflow_tools.server.request import Context, NoRoute, Request
 
@@ -27,8 +27,9 @@ ROUTES: tuple[tuple[str, str, Endpoint], ...] = (
     ("GET", "/health", views.health),
     ("GET", "/overview", views.overview),
     ("GET", "/stack", views.stack),
-    ("GET", "/stack/moves", views.stack_moves),
-    ("GET", "/stack/upstream", views.stack_upstream),
+    ("GET", "/stack/moves", stack_views.stack_moves),
+    ("GET", "/stack/upstream", stack_views.stack_upstream),
+    ("GET", "/rebase/refusal", views.rebase_refusal),
     ("GET", "/chains/([^/]+)", views.chain),
     ("GET", "/show", views.show),
     ("GET", "/diff", diff_views.diff),

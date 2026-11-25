@@ -29,6 +29,7 @@ import { statusBar } from "./statusBar";
 import { Ui, feedback, saveReplyResolved, ui, useUi } from "./ui";
 import { setUpstream } from "./upstream";
 import { voteAndPublish } from "./vote";
+import { AttentionWalk } from "./walk";
 import { staticView } from "./webview";
 import { RepoChoice, chooseRepo, gitDirs, repoNote } from "./workspace";
 
@@ -132,7 +133,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     overviewTree.badge = waiting ? { value: waiting, tooltip: `${plural(waiting, "chain")} to review` } : undefined;
   });
   let pausedLogged = false;
-  const follower = new ShownCommitFollower(model, changeView);
+  // A rebase that stops somewhere new is shown there (the keyboard stays where it is): openChange is defined below.
+  const follower = new ShownCommitFollower(model, changeView, (commit) => openChange(commitTarget(commit), true));
   const diffTabs = new DiffTabs(model, (line) => log.appendLine(line));
   model.onDidGetNewHeadline(async (headline) => {
     if (setting("notify", true) && (await ui().message("info", headline.text, {}, ["Open"])) === "Open") {
@@ -176,6 +178,16 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       await openChange(commitTarget(head), true);
     }
   };
+  /** Work on Next stopped at `commit`: shown, the keyboard on its first comment to answer, else its first CI finding. */
+  const walk = new AttentionWalk(model, async (commit) => {
+    await openChange(commitTarget(commit), true);
+    await changeView.idle();
+    if (changeView.toAnswer().length) {
+      await threads.step(1);
+    } else if (commit.attention_reasons.includes("ci-failed")) {
+      await changeView.openFirstFinding();
+    }
+  });
   changeView.reword = (sha, message, applied) => stackView.reword(sha, message, applied);
   changeView.showThread = (chain) => threads.show(chain);
   changeView.replyWith = (chain, text, resolved) => threads.replyWith(chain, text, resolved);
@@ -341,7 +353,12 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.reviewPrev": () => stepReview(model, -1, reviewWalk),
     "ger.publishDrafts": (arg: unknown) => voteAndPublish(model, targetOf(arg), { draftsOnly: true, after: afterVote }),
     "ger.push": () => push(model),
-    "ger.rebase.continue": () => rebaseStep(model, "continue"),
+    "ger.rebase.continue": async () => {
+      if (await rebaseStep(model, "continue")) {
+        walk.continued();
+      }
+    },
+    "ger.workOnNext": () => walk.next(),
     "ger.rebase.abort": () => rebaseStep(model, "abort"),
     "ger.rebase.skip": () => rebaseStep(model, "skip"),
     "ger.rebase.upstream": () => rebaseOntoUpstream(model),
@@ -383,6 +400,12 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.comment.saveNote": (reply: vscode.CommentReply) => threads.saveNew(reply, "note"),
     "ger.comment.add": (arg?: { lineNumber?: number }) => threads.add(typeof arg?.lineNumber === "number" ? arg.lineNumber - 1 : undefined),
     "ger.comment.cancelNew": (reply: vscode.CommentReply) => threads.cancelNew(reply),
+    "ger.comment.suggest": () => threads.suggest(),
+    "ger.comment.applySuggestion": (comment: ThreadComment) => threads.applyInThread(comment),
+    "ger.applySuggestion": (arg: unknown) => {
+      const chain = threadOf(arg);
+      return chain ? threads.applySuggestion(chain) : undefined;
+    },
     "ger.comment.file": (file: string) => threads.commentOnFile(file),
     "ger.comment.edit": (comment: ThreadComment) => threads.startEdit(comment),
     "ger.comment.save": (comment: ThreadComment) => threads.saveEdit(comment),
@@ -438,6 +461,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     changePane,
     threads,
     follower,
+    walk,
     diffTabs,
     statusItem,
     vscode.workspace.registerTextDocumentContentProvider(FILE_SCHEME, files),

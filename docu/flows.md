@@ -94,6 +94,7 @@ A **gap** names the work that would close it.
 | `ger.review` | `ger review CHANGEISH` | |
 | `ger.checkout` | `ger checkout CHANGEISH` | runs in a terminal, as it may ask to update an existing branch |
 | `ger.stack.edit` | `ger edit REV` | |
+| `ger.workOnNext` | `ger edit -n` (no rebase: `ger edit`) | continues the rebase and stops at the next commit that needs edits; then shows it, the cursor on its first comment to answer |
 | `ger.reviewDone` | `ger review --done` | |
 | `ger.reviewUpdate` | `ger review CHANGEISH` (again, once Gerrit has a newer patchset) | offered on the Change view's "newer patchset" line in a staged review; it then opens on what is new since your review |
 | `ger.reviewNext` | `ger review --next` | the change it moves to is shown, all its files in one editor |
@@ -130,6 +131,9 @@ A **gap** names the work that would close it.
 | `ger.comment.saveNote` | `ger comment --note PATH:LINE -m MSG` | |
 | `ger.comment.add` | `ger comment PATH:LINE -m MSG` | opens the comment box on the selected lines |
 | `ger.comment.cancelNew` | UI only | closes a comment box |
+| `ger.comment.suggest` | `ger comment PATH:START-END -m MSG` with a ```` ```suggestion ```` block in MSG | opens the comment box on the selected lines with them in a suggestion block, to change |
+| `ger.comment.applySuggestion` | `ger show --json` (each comment's `suggested_edits`: path, range, new text), then edit the file | writes the edit a comment suggests into your file where its lines are now (the thread's title bar); nothing is committed. No ger command writes it for you yet |
+| `ger.applySuggestion` | `ger show --json`, as above | the same, from the comment's row in the Change view |
 | `ger.comment.file` | `ger comment PATH -m MSG` | |
 | `ger.comment.edit` | `ger comment --edit ID -m MSG` | turns your comment into a text box; *Save* writes it |
 | `ger.comment.save` | `ger comment --edit ID -m MSG` | |

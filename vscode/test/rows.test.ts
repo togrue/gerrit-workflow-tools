@@ -5,9 +5,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { CommentChain, Rebase, RebaseAction, StackCommit } from "../src/api";
-import { ChangeState, READ_ONLY, changeHeading, changeLines, changeVm } from "../src/changeRows";
+import { ChangeState, READ_ONLY, answeredByDraft, changeHeading, changeLines, changeVm, toAnswer } from "../src/changeRows";
 import { attentionIcon, reasonWords } from "../src/format";
-import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, rebaseNotNowFresh, reviewerWords, skipQuestion, stackLines, stoppedAt, sync, stackVm, stackWhere } from "../src/stackRows";
+import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, workOnNext, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, rebaseNotNowFresh, reviewerWords, skipQuestion, stackLines, stoppedAt, sync, stackVm, stackWhere } from "../src/stackRows";
 import { waitingFor } from "../src/state";
 import { attended, chain, comment, commit, content, diff, finding, never, patchsets, shown, stack, state } from "./fixtures";
 
@@ -479,9 +479,9 @@ test("the commit message is read-only with the reason, and comment chains say wh
       ["closed", true, false],
     ],
   );
-  assert.equal(vm.comments?.summary, "1 unresolved of 2 · 1 of yours, not published");
+  assert.equal(vm.comments?.summary, "1 answered by your drafts (Vote and Publish sends them) · 1 of yours, not published");
   assert.deepEqual(changeLines(vm).slice(-5), [
-    "Comments — 1 unresolved of 2 · 1 of yours, not published",
+    "Comments — 1 answered by your drafts (Vote and Publish sends them) · 1 of yours, not published",
     "  Please rename this. — kept for you · a.py:4 · Alice · 1 reply  [open, kept for you]",
     "    you — [draft] Renamed it.",
     "  Check the docs. — your private note · a.py:4  [yours]",
@@ -579,4 +579,63 @@ test("a comment chain whose last published word is yours waits on a reply: a pla
   assert.deepEqual([badge({ comments_unresolved: 2, comments_awaiting_reply: 2 })?.icon, badge({ comments_unresolved: 2, comments_awaiting_reply: 2 })?.title], ["comment", "2 comments wait on a reply"]);
   assert.deepEqual([badge({ comments_unresolved: 2, comments_awaiting_reply: 1 })?.icon, badge({ comments_unresolved: 2, comments_awaiting_reply: 1 })?.title], ["comment-unresolved", "1 of 2 comments to answer"]);
   assert.equal(reasonWords(["awaiting-reply"]), "comments wait on a reply");
+});
+
+test("what is left to answer: not a chain your draft answers, nor one waiting on a reply, nor your own", () => {
+  const chains = [
+    chain("open", [comment("Please rename this.")], { turn: "yours" }),
+    chain("answered", [comment("Typo."), comment("Done", { state: "draft", author: undefined })], { turn: "draft", resolved_after_publish: true }),
+    chain("waiting", [comment("Why?"), comment("Because.", { author: "Me" })], { turn: "theirs" }),
+    chain("mine", [comment("Check the docs.", { state: "note", author: undefined })]),
+    chain("closed", [comment("Nit.")], { resolved: true }),
+  ];
+  assert.deepEqual(chains.filter(toAnswer).map((c) => c.root_id), ["open"]);
+  assert.deepEqual(chains.filter(answeredByDraft).map((c) => c.root_id), ["answered"]);
+});
+
+test("Work on Next: on from the stop to the next commit that needs edits, else the walk's start, else nothing", () => {
+  // Oldest first, as GET /stack sends them.
+  const bottom = commit("Bottom", { needs_edit: true, rebase: "done" });
+  const stopped = commit("Stopped", { needs_edit: true, rebase: "current" });
+  const middle = commit("Middle", { needs_edit: false, rebase: "todo" });
+  const top = commit("Top", { needs_edit: true, rebase: "todo" });
+  const after = commit("After", { needs_edit: true, rebase: "todo" });
+  assert.deepEqual(workOnNext(stack([bottom, stopped, middle, top, after], { rebase_in_progress: true })), { kind: "continue", next: top });
+  assert.deepEqual(workOnNext(stack([bottom, stopped, middle], { rebase_in_progress: true })), { kind: "continue", next: undefined });
+  const resting = (needs: number) => stack([commit("A")], { summary: { commits: 1, ready: 0, attention: 0, needs_edit: needs, not_on_gerrit: 0 } });
+  assert.deepEqual([workOnNext(resting(2)).kind, workOnNext(resting(0)).kind], ["start", "nothing"]);
+});
+
+test("a thread of your local commit says where its lines are in your file now, or that they changed", () => {
+  const threads = changeVm(
+    state({
+      chains: [
+        chain("moved", [comment("Sort a copy.")], { line: 11, worktree: { start_line: 13, line: 13, outdated: false } }),
+        chain("gone", [comment("Typo.")], { line: 4, worktree: { start_line: 3, line: 3, outdated: true } }),
+        chain("same", [comment("Nit.")], { line: 4, worktree: { start_line: 4, line: 4, outdated: false } }),
+      ],
+    }),
+  ).comments?.threads;
+  assert.deepEqual(
+    threads?.map((row) => row.notes),
+    [
+      ["a.py:11", "line 13 in your file", "Alice"],
+      ["a.py:4", "outdated: changed since", "Alice"],
+      ["a.py:4", "Alice"],
+    ],
+  );
+});
+
+test("a fixup row names the commit it folds into, and that commit how many wait for it", () => {
+  const target = commit("Add median", { number: 2168 });
+  const fix = commit("fixup! Add median", { fixup_of: target.sha, change_id: null, pushed: false });
+  const vm = stackVm(stack([target, commit("Other"), fix, { ...fix, sha: "f".repeat(40), short_sha: "fffffff" }]), undefined, never);
+  const notes = (summary: string) => vm.rows?.filter((row) => row.summary === summary).map((row) => row.notes);
+  assert.deepEqual(notes("Add median"), [[target.short_sha, "2 fixups pending"]]);
+  // Newest first: the second fixup, then the first.
+  assert.deepEqual(notes("fixup! Add median"), [
+    ["fffffff", "→ 2168"],
+    [fix.short_sha, "→ 2168"],
+  ]);
+  assert.deepEqual(notes("Other"), [[commit("Other").short_sha]]);
 });

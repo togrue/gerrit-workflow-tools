@@ -236,7 +236,7 @@ export const REBASE_WORDS = {
   asBefore: "this is the branch as it was before",
   tooltip: "The marker shows where the rebase stands; dimmed commits are not replayed yet and are shown as they were. Continue goes on, Abort goes back to the branch as it was before.",
   conflicted: "conflicted",
-  resolve: "Open it in the merge editor to resolve it, then stage it (git add).",
+  resolve: "Open it, with its conflict markers, to resolve it (Accept Current / Incoming, or Resolve in Merge Editor), then stage it (git add).",
   /** Why the palette's Continue, Abort or Skip does not run: there is no rebase. Where there is one, core says why (`rebase.refused`). */
   noRebase: "There is no rebase in progress.",
   /** Why Rebase onto the upstream does not run: nothing new on it, or a rebase to finish first. */
@@ -267,6 +267,37 @@ export function rebaseButtons(rebase: Pick<Rebase, "stop" | "actions"> | null | 
     command: { id: REBASE_ACTIONS[action].command, args: [] },
     ...(action === "continue" && rebase?.stop === "resolved" ? { primary: true } : {}),
   }));
+}
+
+/** What Work on Next says: the attention walk (`ger edit -n`) from the extension. */
+export const WALK_WORDS = {
+  title: "Work on Next",
+  continues: (next: string) => `ger edit -n runs in the ger terminal: it continues the rebase and stops at "${next}", the next commit that needs edits`,
+  last: "ger edit -n runs in the ger terminal: it continues the rebase; no commit after this one needs edits",
+  starts: "ger edit runs in the ger terminal: it stops at the commit the attention walk is at, or the first that needs edits",
+  notContinued: "Work on Next did not continue the rebase",
+  nothing: "No commit of your stack needs edits: no comments to answer, failed builds or negative votes.",
+  finished: "The rebase is finished, and no commit after it needs edits.",
+  finishedMore: (count: number) => `The rebase is finished. ${count === 1 ? "1 commit of your stack still needs" : `${count} commits of your stack still need`} edits.`,
+  review: "Work on Next walks your own stack: here a staged review holds somebody else's change.",
+};
+
+/**
+ * What Work on Next does from `stack`, by core's verdicts (`needs_edit`, the rebase's stop): go on
+ * with the rebase underway (`ger edit -n`), naming the next commit tip-ward of where it stopped that
+ * needs edits, if any; start the walk (`ger edit`) when one needs edits; else nothing is left.
+ */
+export function workOnNext(stack: Stack): { kind: "continue"; next: StackCommit | undefined } | { kind: "start" } | { kind: "nothing" } | { kind: "review" } {
+  if (stack.staged_review) {
+    return { kind: "review" };
+  }
+  if (stack.rebase_in_progress) {
+    // Oldest first, as GET /stack sends them: what is above the stop (or still to come, between commits) comes after it.
+    const at = stack.commits.findIndex((commit) => commit.rebase === "current");
+    const above = at >= 0 ? stack.commits.slice(at + 1) : stack.commits.filter((commit) => commit.rebase === "todo");
+    return { kind: "continue", next: above.find((commit) => commit.needs_edit) };
+  }
+  return stack.summary.needs_edit ? { kind: "start" } : { kind: "nothing" };
 }
 
 /** Why `ger rebase --<action>` is not to run now, in core's words (`rebase.refused`); undefined when it may, or core has said nothing yet (the CLI decides). */
@@ -438,12 +469,17 @@ function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: numb
   // In a staged review HEAD sits at the change's parent only to stage it: the change is what is looked at.
   const review = stack.staged_review;
   const where = review ? (commit.sha === review.commit ? "under review" : "") : commit.is_head ? "HEAD" : "";
-  const notes = [where, commit.short_sha, commit.merge ? "merge" : "", state === "code-changed" ? "code changed" : "", commit.held_back ? "held back" : "", commit.abandoned ? "abandoned" : ""];
+  // A fixup and the commit it folds into, by core's pairing (`fixup_of`): each row names the other.
+  const target = commit.fixup_of ? stack.commits.find((c) => c.sha === commit.fixup_of) : undefined;
+  const pending = stack.commits.filter((c) => c.fixup_of === commit.sha).length;
+  const fixes = target ? FIXUP_WORDS.of(target.number ? String(target.number) : target.short_sha) : pending ? FIXUP_WORDS.pending(pending) : "";
+  const notes = [where, commit.short_sha, fixes, commit.merge ? "merge" : "", state === "code-changed" ? "code changed" : "", commit.held_back ? "held back" : "", commit.abandoned ? "abandoned" : ""];
   const tooltip = [
     commit.summary,
     `${commit.number ? `Change ${commit.number}: ` : ""}${SYNC_WORDS[state]}`,
     reasonWords(commit.attention_reasons) || "no open issues",
     stopped ? MARKER_WORDS[stopped === "applied" ? "rebase" : stopped] : commit.rebase === "todo" ? "Still to be replayed by the rebase." : "",
+    target ? FIXUP_WORDS.ofTooltip(target.summary) : pending ? FIXUP_WORDS.pendingTooltip : "",
     commit.held_back ? "Held back by the ready boundary: ger push will not send it." : "",
     commit.merge ? MERGE_WORDS : "",
     isPinned ? "It stays where it is: git rebase cannot replay a merge, so the newest merge and what is below it are not moved, folded or dropped." : "",
@@ -471,6 +507,14 @@ function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: numb
     squash: !review && below !== undefined && index - 1 >= pinnedBelow,
   };
 }
+
+/** A fixup row names the commit it folds into; that commit, how many wait to be folded into it. */
+export const FIXUP_WORDS = {
+  of: (target: string) => `→ ${target}`,
+  ofTooltip: (summary: string) => `A fixup of "${summary}": ger rebase --autosquash folds it in there. ger push stops at it until then.`,
+  pending: (count: number) => `${count} ${count === 1 ? "fixup" : "fixups"} pending`,
+  pendingTooltip: "Fixups above wait to be folded into this commit: ger rebase --autosquash does it.",
+};
 
 type Conflicts = (lower: string, upper: string) => MoveConflict | undefined;
 

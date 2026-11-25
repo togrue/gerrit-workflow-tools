@@ -430,6 +430,11 @@ export async function run(): Promise<void> {
       [{ type: "Renamed it." }],
     );
     await press(
+      "Next Unresolved Comment (Alt+F9) after the reply",
+      "Your draft answers \"Please rename this.\", so the walk leaves it out and goes on where it stood, not back at 1: Comment 1 of 1 to answer, \"Is this the right design?\".",
+      exec("ger.nextComment"),
+    );
+    await press(
       "Inline Reply as Draft… on \"Please rename this.\" again",
       "The box opens with your draft in it, to edit; saving updates that draft, nothing you wrote is lost unseen.",
       exec("ger.reply", await threadRow(/^Please rename this/)),
@@ -439,6 +444,11 @@ export async function run(): Promise<void> {
       "Inline Reply Done and Resolve as Draft on \"Is this the right design?\"",
       "A \"Done\" draft that resolves the thread is saved at once; the thread shows that your draft resolves it.",
       exec("ger.replyDone", await threadRow(/^Is this the right design/)),
+    );
+    await press(
+      "Next Unresolved Comment (Alt+F9) once both are answered",
+      "Nothing is left to answer: the status bar says so, and that 2 are answered by your drafts, which your next push publishes.",
+      exec("ger.nextComment"),
     );
     await press(
       "Inline Reply Done and Resolve as Draft on \"Please rename this.\", which has your draft",
@@ -452,7 +462,7 @@ export async function run(): Promise<void> {
     );
     await press(
       "Click \"Please rename this.\" in the Change view again",
-      "b.txt comes back in front of the runbook with that thread expanded: Alice's comment and its suggested fix, your draft reply under it, the reply box, and the Resolved toggle on in its header.",
+      "b.txt is in front (the walk brought it back before the runbook) with that thread expanded: Alice's comment and its suggested fix, your draft reply under it, the reply box, and the Resolved toggle on in its header.",
       async () => {
         await page.receive({ type: "thread", id: chain(/^Please rename this/).root_id, action: "open" });
         const thread = api.threads.threadOf(chain(/^Please rename this/));
@@ -1000,6 +1010,25 @@ export async function run(): Promise<void> {
         () => editAt("test! temporary experiment"),
       );
       await inTerminal(
+        "you add a line to c.txt, do not amend it, and press Local stack › Work on Next",
+        "Nothing runs in the terminal: a warning says Work on Next did not continue the rebase, in ger's words: c.txt has unstaged changes, amend them in or stash them. The views stay as they were.",
+        undefined,
+        async () => {
+          write("c.txt", "file c.txt\namended at the stop\n");
+          await exec("ger.workOnNext")();
+        },
+        [],
+        true,
+      );
+      await inTerminal(
+        "Local stack › Continue, c.txt still not amended",
+        "The same: nothing runs, and a warning says why ger rebase --continue did not run.",
+        undefined,
+        () => exec("ger.rebase.continue")(),
+        [],
+        true,
+      );
+      await inTerminal(
         "you add a line to c.txt and amend the stopped commit",
         "The stopped commit shows what it is now: a new SHA, HEAD, its code changed since the last push. The Change view follows it to the amended commit: c.txt with +2 lines.",
         undefined,
@@ -1036,7 +1065,7 @@ export async function run(): Promise<void> {
       );
       await inTerminal(
         "Local stack › click e.txt under the banner",
-        "e.txt opens in VS Code's merge editor (its file in the worktree is what it writes); nothing else changes.",
+        "e.txt opens with its conflict markers in the text editor (VS Code offers Accept Current / Incoming / Both there, and Resolve in Merge Editor), not in the merge editor; nothing else changes.",
         undefined,
         () => stackPage.receive({ type: "conflict", path: "e.txt" }),
         [],
@@ -1047,7 +1076,7 @@ export async function run(): Promise<void> {
         "Nothing is conflicted any more: e.txt leaves the list and the conflict icon goes; the rebase is still stopped at \"Add e.txt\", ready to Continue, which now appears as the prominent button.",
         undefined,
         async () => {
-          // Resolved by hand here, not in the merge editor: close it without keeping what it put in e.txt.
+          // Resolved by hand here: close the editor of e.txt without keeping anything typed in it.
           await vscode.commands.executeCommand("workbench.action.revertAndCloseActiveEditor");
           write("e.txt", "from the amend\nfrom the terminal\n");
           gitRun(["add", "e.txt"]);
@@ -1149,7 +1178,7 @@ export async function run(): Promise<void> {
       );
       await inTerminal(
         "Local stack › Continue (e.txt not saved) › Save All",
-        "Before anything runs, a dialog names e.txt, says ger rebase --continue sees only the files on disk and then says what saved edits still need, and offers Save All, Continue without saving (git would rewrite e.txt under the edits) and Cancel. Save All pressed, e.txt is saved, then ger rebase --continue runs in the ger terminal, where it refuses: e.txt is changed and not committed, amend it in or stash it. The rebase stays where it stopped.",
+        "Before anything runs, a dialog names e.txt, says ger rebase --continue sees only the files on disk and then says what saved edits still need, and offers Save All, Continue without saving (git would rewrite e.txt under the edits) and Cancel. Save All pressed, e.txt is saved; then ger's own check refuses before anything runs, and a warning says so in its words: e.txt is changed and not committed, amend it in or stash it. Nothing runs in the terminal; the rebase stays where it stopped.",
         undefined,
         async () => {
           await exec("ger.rebase.continue")();

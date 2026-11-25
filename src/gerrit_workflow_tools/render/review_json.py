@@ -173,7 +173,8 @@ def headline_json(headline: Headline | RebaseHeadline | None) -> dict[str, objec
 
 
 def _draft_json(chain: CommentChain, draft: InlineComment) -> dict[str, object]:
-    """One draft a vote publishes: where (``path:line``), its first line, whether it resolves or reopens its chain."""
+    """One draft a vote publishes: where (``path:line``), its first line, whether it resolves or reopens its chain,
+    whether it suggests an edit."""
     transition = draft_transition(chain, draft.unresolved).removeprefix(" -> ") if draft is chain.draft else ""
     return {
         "path": chain.path,
@@ -181,6 +182,7 @@ def _draft_json(chain: CommentChain, draft: InlineComment) -> dict[str, object]:
         "location": chain_location(chain),
         "text": first_line(draft.message),
         "transition": transition or None,
+        "suggested_edit": bool(draft.suggested_edits),
     }
 
 

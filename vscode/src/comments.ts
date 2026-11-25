@@ -1,16 +1,19 @@
 // Unresolved comment chains of the shown change as editor comment threads, with draft replies.
 // For a local stack commit they sit on your files; for any other change, on the commit's own
 // documents — the right-hand side of its diffs. What you wrote and have not published (a draft,
-// a local draft, a private note) can be edited and deleted where it stands.
+// a local draft, a private note) can be edited and deleted where it stands. A suggested edit shows
+// as old → new; on your own commit Apply writes it into your file. Suggest Edit writes one.
 
+import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { Comment, CommentChain, NewCommentState, ShownCommit } from "./api";
-import { ownComment } from "./changeRows";
+import { NOT_FILES, answeredByDraft, ownComment } from "./changeRows";
 import { ChangeView } from "./changeView";
 import { FILE_SCHEME, filePath, repoPath } from "./diffTabs";
 import { commentLocation } from "./format";
 import { Model, describeError } from "./model";
+import { APPLY_WORDS, Place, applyPlan, latestSuggestion, suggestionMarkdown } from "./suggestions";
 import { ui } from "./ui";
 
 const FILE_PROMPT: Record<NewCommentState, string> = {
@@ -35,10 +38,27 @@ function publishing(shown: ShownCommit | undefined): { words: string; button: st
     : { words: "Vote and Publish sends it", button: "Vote and Publish…", command: "ger.vote" };
 }
 
+/**
+ * What the comment boxes say: VS Code has one prompt and placeholder per controller, so they are set
+ * for the box about to be used. A reply names who it answers; a new comment says where it goes.
+ */
+const BOX = {
+  reply: (to: string | undefined): vscode.CommentOptions => ({
+    prompt: to ? `Reply to ${to}…` : "Reply…",
+    placeHolder: `${to ? `Reply to ${to}` : "Reply"}… saved as your draft, visible only to you until it is published`,
+  }),
+  new: { prompt: "Comment on the shown change", placeHolder: "A draft on Gerrit, a local draft where Gerrit does not have this commit, or a private note" } as vscode.CommentOptions,
+};
+
 /** What an unpublished comment of yours is called. */
 const YOURS: Record<string, string> = { draft: "draft", "local-draft": "local draft", note: "private note" };
 
 const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** A comment as a thread shows it: an edit it suggests as old → new, under *Suggested edit*. */
+function shownBody(source: Comment): vscode.MarkdownString {
+  return new vscode.MarkdownString(suggestionMarkdown(source, (replacement) => replacement.original));
+}
 
 /** A comment as its thread shows it. One you wrote and have not published can be edited in place. */
 export class ThreadComment implements vscode.Comment {
@@ -46,15 +66,18 @@ export class ThreadComment implements vscode.Comment {
   mode = vscode.CommentMode.Preview;
   readonly author: vscode.CommentAuthorInformation;
   readonly label: string | undefined;
-  /** `yours`: the manifest offers Edit and Delete on it. */
+  /** `yours`: the manifest offers Edit and Delete on it; `suggestion`: Apply, the edit it suggests written into your file. */
   readonly contextValue: string | undefined;
   thread: vscode.CommentThread | undefined;
 
-  constructor(readonly source: Comment) {
-    this.body = new vscode.MarkdownString(source.markdown);
+  constructor(
+    readonly source: Comment,
+    applies = false,
+  ) {
+    this.body = shownBody(source);
     this.author = { name: source.author ?? "you" };
     this.label = source.state === "published" ? undefined : source.state;
-    this.contextValue = source.state !== "published" && source.comment_id ? "yours" : undefined;
+    this.contextValue = source.state !== "published" && source.comment_id ? "yours" : applies ? "suggestion" : undefined;
   }
 
   /** What the comment says now: while it is edited, what you typed. */
@@ -85,13 +108,11 @@ export async function closeComment(): Promise<void> {
  * Set a thread's Resolved toggle (in its header) and its label to match: `resolved` or
  * `unresolved`, whether the reply saved next resolves the chain.
  */
-function mark(thread: vscode.CommentThread, chain: CommentChain, resolved: boolean): void {
+function mark(thread: vscode.CommentThread, chain: CommentChain, resolved: boolean, outdated = false): void {
   thread.contextValue = resolved ? "resolved" : "unresolved";
-  thread.label = !resolved
-    ? "Gerrit — unresolved"
-    : chain.resolved_after_publish
-      ? "Gerrit — your draft resolves this"
-      : "Gerrit — your reply will resolve this";
+  const label = !resolved ? "Gerrit — unresolved" : chain.resolved_after_publish ? "Gerrit — your draft resolves this" : "Gerrit — your reply will resolve this";
+  // Its lines changed in your file since the version it was written on: drawn where they were.
+  thread.label = outdated ? `${label} · outdated: line ${chain.line} has changed since` : label;
 }
 
 /** Your unpublished reply in `chain`: a chain holds at most one. */
@@ -99,9 +120,36 @@ function yourDraft(chain: CommentChain): Comment | undefined {
   return chain.comments.slice(1).find((comment) => comment.state === "draft");
 }
 
+/** Which change a walk position belongs to: its Change-Id, or its commit before the first push. */
+function changeKey(target: { changeId?: string | null; rev: string } | undefined): string {
+  return target?.changeId ?? target?.rev ?? "";
+}
+
+/**
+ * The index in `ids` (the walk now) one step in `direction` from `position` (the chain shown last,
+ * in the walk then); may be out of range, the caller wraps it. Still in the walk, the chain next to
+ * it; gone from it (answered), the first of those after it (before it, stepping back) that is still
+ * there. Nowhere yet, the first (the last).
+ */
+function stepFrom(position: { id: string; order: string[] } | undefined, ids: string[], direction: 1 | -1): number {
+  if (!position) {
+    return direction === 1 ? 0 : -1;
+  }
+  const at = ids.indexOf(position.id);
+  if (at >= 0) {
+    return at + direction;
+  }
+  const from = position.order.indexOf(position.id);
+  const passed = direction === 1 ? position.order.slice(from + 1) : position.order.slice(0, Math.max(0, from)).reverse();
+  const next = passed.map((id) => ids.indexOf(id)).find((index) => index >= 0);
+  return next ?? (direction === 1 ? ids.length : -1);
+}
+
 interface Anchor {
   rev: string;
   chain: CommentChain;
+  /** Drawn where its lines were: they changed in your file since the version it was written on. */
+  outdated: boolean;
 }
 
 export class CommentThreads implements vscode.Disposable {
@@ -115,7 +163,12 @@ export class CommentThreads implements vscode.Disposable {
   private readonly toldAbout = new Set<string>();
   private outdated = false;
   private readonly listeners: vscode.Disposable[] = [];
-  private cursor = -1;
+  /**
+   * Where Next / Previous Unresolved Comment stands: the chain it showed last, by identity, and the
+   * walk's order then. A reload (a reply saved) keeps it; a chain that left the walk (your draft
+   * answers it now) is stepped on from where it was. Another change starts the walk afresh.
+   */
+  private position: { change: string; id: string; order: string[] } | undefined;
   /** Shows the commit you are standing on in the Change view, if the stack has it. Set by the extension. */
   showHead: () => Promise<unknown> = () => Promise.resolve();
 
@@ -137,10 +190,7 @@ export class CommentThreads implements vscode.Disposable {
       provideCommentingRanges: (document) =>
         this.pathOf(document.uri) === undefined ? [] : [new vscode.Range(0, 0, Math.max(0, document.lineCount - 1), 0)],
     };
-    this.controller.options = {
-      prompt: "Comment on the shown change",
-      placeHolder: "A draft on Gerrit, a local draft where Gerrit does not have this commit, or a private note",
-    };
+    this.controller.options = BOX.reply(undefined);
   }
 
   /**
@@ -203,6 +253,7 @@ export class CommentThreads implements vscode.Disposable {
     // A selection that ends at the start of a line does not take that line in.
     const last = end.line > start.line && end.character === 0 ? end.line - 1 : end.line;
     const lines = line === undefined ? new vscode.Range(start.line, 0, last, 0) : new vscode.Range(line, 0, line, 0);
+    this.controller.options = BOX.new;
     const box = this.controller.createCommentThread(uri, lines, []);
     box.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
     this.boxes.add(box);
@@ -268,8 +319,10 @@ export class CommentThreads implements vscode.Disposable {
       thread.dispose();
     }
     this.anchors.clear();
-    this.cursor = -1;
     const target = this.view.target;
+    if (this.position && this.position.change !== changeKey(target)) {
+      this.position = undefined;
+    }
     for (const box of this.boxes) {
       // A box on lines the shown change no longer has (another change is shown) has nowhere to save to.
       if (this.pathOf(box.uri) === undefined) {
@@ -284,41 +337,56 @@ export class CommentThreads implements vscode.Disposable {
       if (chain.path.startsWith("/")) {
         continue; // commit message and patchset-level chains have no line in a file
       }
-      const line = Math.max(0, (chain.line ?? 1) - 1);
-      const first = chain.start_line ? Math.max(0, chain.start_line - 1) : line;
-      const comments = chain.comments.map((comment) => new ThreadComment(comment));
+      const place = this.view.placeOf(chain);
+      const line = Math.max(0, (place.line ?? 1) - 1);
+      const first = place.start ? Math.max(0, place.start - 1) : line;
+      // Apply is offered on the newest comment that suggests an edit, on your own commit's threads.
+      const suggestion = this.applies() ? latestSuggestion(chain.comments)?.comment : undefined;
+      const comments = chain.comments.map((comment) => new ThreadComment(comment, comment === suggestion));
       const thread = this.controller.createCommentThread(this.view.locationUri(chain.path), new vscode.Range(first, 0, line, 0), comments);
       comments.forEach((comment) => (comment.thread = thread));
       const root = chain.comments[0]?.state;
       if (root === "published") {
-        mark(thread, chain, chain.resolved_after_publish);
+        mark(thread, chain, chain.resolved_after_publish, place.outdated);
       } else {
         thread.label = root === "note" ? "Your private note" : "Your new comment (not published yet)";
         thread.contextValue = "yours";
       }
       thread.canReply = root === "published"; // a reply answers someone on Gerrit
       thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
-      this.anchors.set(thread, { rev: target.rev, chain });
+      this.anchors.set(thread, { rev: target.rev, chain, outdated: place.outdated });
     }
   }
 
   /**
-   * Step through the unresolved chains of the shown change, in the Change view's order. On a change
-   * you review (not yours), your own drafts, local drafts and notes too: what you are about to
-   * publish is read again the same way.
+   * Step through the shown change's comments. On your own change, what is left for you to answer
+   * (`toAnswer`), in the Change view's order: a chain your draft answers is not walked again, and
+   * the count is of what is left. On a change you review (not yours), every open chain, your own
+   * drafts, local drafts and notes too: what you are about to publish is read again the same way.
+   * A chain about the whole change (no line in a file) is shown in the Change view, its reply box
+   * focused.
    */
   async step(direction: 1 | -1): Promise<void> {
     const reviewing = this.view.shown?.own === false;
-    const chains = reviewing ? this.view.openChains() : this.view.unresolved();
+    const chains = reviewing ? this.view.openChains() : this.view.toAnswer();
     if (!chains.length) {
-      ui().status(`$(pass) No unresolved comments${reviewing ? " or drafts of yours" : ""} on this change`, 4000);
+      this.position = undefined;
+      const answered = reviewing ? 0 : this.view.chains().filter((chain) => !chain.resolved && answeredByDraft(chain)).length;
+      const drafts = answered ? ` · ${answered} answered by your drafts (${publishing(this.view.shown).words.replace(/ it$/, " them")})` : "";
+      ui().status(`$(pass) ${reviewing ? "No unresolved comments or drafts of yours" : "No comments left to answer"} on this change${drafts}`, 4000);
       return;
     }
-    this.cursor = (this.cursor + direction + chains.length) % chains.length;
-    const chain = chains[this.cursor];
+    const ids = chains.map((chain) => chain.root_id);
+    const index = (stepFrom(this.position, ids, direction) + ids.length) % ids.length;
+    const chain = chains[index];
+    this.position = { change: changeKey(this.view.target), id: chain.root_id, order: ids };
     this.reveal(chain);
-    await this.show(chain);
-    ui().status(`Comment ${this.cursor + 1} of ${chains.length}`, 4000);
+    if (NOT_FILES.includes(chain.path)) {
+      await this.view.focusThread(chain);
+    } else {
+      await this.show(chain);
+    }
+    ui().status(`Comment ${index + 1} of ${chains.length}${reviewing ? "" : " to answer"}`, 4000);
   }
 
   /**
@@ -326,7 +394,9 @@ export class CommentThreads implements vscode.Disposable {
    * A chain the editor shows no thread for (a resolved one) just opens its line.
    */
   async show(chain: CommentChain): Promise<void> {
-    await this.view.openLocation({ path: chain.path, line: chain.line });
+    // The reply box of the thread it opens answers the last of them who spoke.
+    this.controller.options = BOX.reply(chain.comments.filter((comment) => comment.state === "published").at(-1)?.author);
+    await this.view.openLocation({ path: chain.path, line: this.view.placeOf(chain).line });
     for (const [thread, anchor] of this.anchors) {
       const here = anchor.chain.root_id === chain.root_id;
       thread.collapsibleState = here ? vscode.CommentThreadCollapsibleState.Expanded : vscode.CommentThreadCollapsibleState.Collapsed;
@@ -359,7 +429,7 @@ export class CommentThreads implements vscode.Disposable {
   cancelReply(reply: vscode.CommentReply): void {
     const anchor = this.anchors.get(reply.thread);
     if (anchor) {
-      mark(reply.thread, anchor.chain, anchor.chain.resolved_after_publish);
+      mark(reply.thread, anchor.chain, anchor.chain.resolved_after_publish, anchor.outdated);
     }
     reply.thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
   }
@@ -374,7 +444,7 @@ export class CommentThreads implements vscode.Disposable {
     if (!anchor) {
       return;
     }
-    mark(thread, anchor.chain, resolved);
+    mark(thread, anchor.chain, resolved, anchor.outdated);
     if (yourDraft(anchor.chain)) {
       await this.replyWith(anchor.chain, "", resolved);
     }
@@ -469,6 +539,115 @@ export class CommentThreads implements vscode.Disposable {
     void Promise.resolve(ui().message("info", text, {}, [how.button])).then((picked) => (picked ? vscode.commands.executeCommand(how.command) : undefined));
   }
 
+  // --- Suggested edits ------------------------------------------------------------------
+
+  /** Whether an edit a comment suggests may be written into your file: the shown change is your own local commit, not a review. */
+  private applies(): boolean {
+    return Boolean(this.view.target?.local) && this.view.shown?.own !== false && !this.model.stack?.staged_review;
+  }
+
+  /** Apply on a thread's comment (its title bar). */
+  async applyInThread(comment: ThreadComment): Promise<void> {
+    const anchor = comment.thread && this.anchors.get(comment.thread);
+    if (anchor) {
+      await this.applySuggestion(anchor.chain);
+    }
+  }
+
+  /**
+   * Write the edit `chain`'s newest suggesting comment suggests into your file, where its lines are
+   * now (core's `worktree`), once they still say what it replaces; else say why not. Nothing is saved
+   * or committed: the edit is in the editor, to undo or amend in. Then Reply Done is offered.
+   */
+  async applySuggestion(chain: CommentChain): Promise<void> {
+    const found = latestSuggestion(chain.comments);
+    if (!found || !this.applies()) {
+      return;
+    }
+    const files = new Map<string, vscode.TextDocument>();
+    try {
+      for (const rep of found.edit.replacements) {
+        files.set(rep.path, files.get(rep.path) ?? (await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(this.model.repo, rep.path)))));
+      }
+    } catch (error) {
+      void ui().message("warning", `The suggested edit was not applied: ${describeError(error)}`, {}, []);
+      return;
+    }
+    const range = (place: Place) => new vscode.Range(place.start.line, place.start.character, place.end.line, place.end.character);
+    const plan = applyPlan(found.edit, (place) => files.get(place.path)?.getText(range(place)));
+    if ("refused" in plan) {
+      void ui().message("warning", plan.refused, {}, []);
+      return;
+    }
+    const edit = new vscode.WorkspaceEdit();
+    plan.places.forEach((place) => edit.replace(files.get(place.path)!.uri, range(place), place.replacement));
+    if (!(await vscode.workspace.applyEdit(edit))) {
+      void ui().message("warning", "The suggested edit was not applied: VS Code refused the edit.", {}, []);
+      return;
+    }
+    const [first] = plan.places;
+    const where = `${first.path}:${first.start.line + 1}`;
+    await vscode.window.showTextDocument(files.get(first.path)!, { selection: new vscode.Range(first.start.line, 0, first.start.line, 0), preview: true });
+    const done = "Reply Done";
+    if ((await ui().message("info", APPLY_WORDS.applied(where), {}, [done])) === done) {
+      await this.replyToChain(chain, true);
+    }
+  }
+
+  /** Suggestion boxes Suggest Edit opened, not saved yet: the comment being written, by its thread. */
+  private readonly suggesting = new Map<ThreadComment, vscode.CommentThread>();
+
+  /**
+   * Suggest Edit: a comment box on the selected lines (the cursor's line without a selection),
+   * holding them in a ```` ```suggestion ```` block to change into what they should say, as Gerrit's
+   * own "Suggest edit" writes it. Saved as a new comment, a draft where Gerrit has the commit.
+   */
+  async suggest(): Promise<void> {
+    const editor = vscode.window.activeTextEditor;
+    const uri = editor?.document.uri;
+    if (uri && this.ofHead(uri)) {
+      await this.showHead();
+    }
+    const file = uri && this.pathOf(uri);
+    if (!editor || !uri || file === undefined) {
+      await this.add(); // says why there is nothing to comment on here
+      return;
+    }
+    const { start, end } = editor.selection;
+    const last = end.line > start.line && end.character === 0 ? end.line - 1 : end.line;
+    const lines = editor.document.getText(new vscode.Range(start.line, 0, last, editor.document.lineAt(last).text.length));
+    const body = `\`\`\`suggestion\n${lines}\n\`\`\``;
+    const box = this.controller.createCommentThread(uri, new vscode.Range(start.line, 0, last, 0), []);
+    const comment = new ThreadComment({ path: file, line: last + 1, message: body, text: body, markdown: body, patch_set: null, state: "published", url: null, author: "you" });
+    comment.body = body;
+    comment.mode = vscode.CommentMode.Editing;
+    comment.thread = box;
+    box.comments = [comment];
+    box.canReply = false;
+    box.label = "Suggest an edit: change the lines in the block";
+    box.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
+    this.suggesting.set(comment, box);
+  }
+
+  /** Save a suggestion box: a new comment on its lines, as the version looked at has them. */
+  private async saveSuggestion(comment: ThreadComment, box: vscode.CommentThread): Promise<void> {
+    const [target, file, text] = [this.view.target, this.pathOf(box.uri), comment.text.trim()];
+    const range = box.range as vscode.Range | undefined;
+    if (!target || file === undefined || !text) {
+      return;
+    }
+    const state: NewCommentState = this.view.newComment ?? "local-draft";
+    try {
+      await (await this.model.client()).newComment(target.rev, commentLocation(file, range && { start: range.start.line + 1, end: range.end.line + 1 }), text, state, this.view.diff?.commit);
+      this.suggesting.delete(comment);
+      box.dispose();
+      this.saved(state, "Draft with a suggested edit saved on Gerrit");
+      await this.view.open();
+    } catch (error) {
+      void ui().message("error", `Comment not saved: ${describeError(error)}`, {}, []);
+    }
+  }
+
   // --- Your own unpublished comments --------------------------------------------------
 
   /** Redraw `comment`'s thread: a comment's mode and body only show once the list is set again. */
@@ -490,9 +669,15 @@ export class CommentThreads implements vscode.Disposable {
     this.redraw(comment);
   }
 
-  /** Leave the text box: the comment says again what is saved. */
+  /** Leave the text box: the comment says again what is saved. A suggestion box not saved goes. */
   cancelEdit(comment: ThreadComment): void {
-    comment.body = new vscode.MarkdownString(comment.source.markdown);
+    const box = this.suggesting.get(comment);
+    if (box) {
+      this.suggesting.delete(comment);
+      box.dispose();
+      return;
+    }
+    comment.body = shownBody(comment.source);
     comment.mode = vscode.CommentMode.Preview;
     this.editing.delete(comment);
     this.redraw(comment);
@@ -503,6 +688,10 @@ export class CommentThreads implements vscode.Disposable {
 
   /** Save what the text box says. Empty or unchanged text leaves the comment as it was. */
   async saveEdit(comment: ThreadComment): Promise<void> {
+    const box = this.suggesting.get(comment);
+    if (box) {
+      return this.saveSuggestion(comment, box);
+    }
     const text = comment.text.trim();
     const rev = (comment.thread && this.anchors.get(comment.thread)?.rev) ?? this.view.target?.rev;
     if (!text || text === comment.source.message.trim() || !rev) {
@@ -584,7 +773,7 @@ export class CommentThreads implements vscode.Disposable {
     }
     const shown = this.ownInThread(chain);
     if (shown) {
-      await this.view.openLocation({ path: chain.path, line: chain.line });
+      await this.view.openLocation({ path: chain.path, line: this.view.placeOf(chain).line });
       this.startEdit(shown);
       return;
     }

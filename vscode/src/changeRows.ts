@@ -8,6 +8,7 @@ import { Attended, CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets,
 import { attentionIcon, commitVotes, fileState, plural, reasonWords, sentence } from "./format";
 import { Badge, SYNC_WORDS, StackAction, StackInfo, Tone, actionsText, badges, sync, conflictRow, rebaseButtons } from "./stackRows";
 import { Waiting } from "./state";
+import { latestSuggestion } from "./suggestions";
 
 /** Which version of the change is looked at: your commit, Gerrit's current patchset, or patchset `n`. */
 export type Version = "local" | "current" | number;
@@ -132,6 +133,8 @@ export interface ThreadRow extends Icon {
   edit: boolean;
   /** What deleting your unpublished comment in it is called; empty when you have none there. */
   discard: string;
+  /** A comment of it suggests an edit, and it is your commit's: Apply writes it into your file. */
+  apply: boolean;
   replies: ReplyRow[];
 }
 
@@ -245,6 +248,16 @@ export function isYours(chain: CommentChain): boolean {
   return (chain.comments[0]?.state ?? "published") !== "published";
 }
 
+/** A chain somebody started on Gerrit that your draft reply answers (or resolves): published, it is no longer yours to answer. */
+export function answeredByDraft(chain: CommentChain): boolean {
+  return !isYours(chain) && chain.comments.slice(1).some((comment) => comment.state === "draft");
+}
+
+/** Left for you to answer: open, somebody started it on Gerrit, your draft does not answer it, and your published comment is not its last word. */
+export function toAnswer(chain: CommentChain): boolean {
+  return !chain.resolved && !isYours(chain) && !answeredByDraft(chain) && chain.turn !== "theirs";
+}
+
 /** Your unpublished comment in `chain` that can be edited or deleted: the chain itself when you started it, else your draft reply. */
 export function ownComment(chain: CommentChain): Comment | undefined {
   const own = isYours(chain) ? chain.comments[0] : chain.comments.slice(1).find((comment) => comment.state === "draft");
@@ -331,7 +344,8 @@ function files(state: ChangeState): NonNullable<ChangeVm["files"]> {
   return { title, summary: note || plural(rows.length, "file"), added, deleted, note, tooltip, rows };
 }
 
-function thread(chain: CommentChain): ThreadRow {
+/** `applies`: an edit a comment suggests may be written into your file (your own local commit). */
+function thread(chain: CommentChain, applies: boolean): ThreadRow {
   const first = chain.comments[0];
   const where = NOT_FILES.includes(chain.path) ? "whole change" : `${path.posix.basename(chain.path)}${chain.line ? `:${chain.line}` : ""}`;
   const replies = chain.comments.slice(1);
@@ -341,7 +355,11 @@ function thread(chain: CommentChain): ThreadRow {
   // Your published comment is its last word (core's turn): open, but waiting on the other side.
   const waiting = !mine && !chain.resolved && chain.turn === "theirs";
   const own = ownComment(chain);
-  const notes = [mine ?? "", held ? "kept for you" : "", answered ? "your draft resolves it" : "", waiting ? "waits on a reply" : "", where, mine ? "" : (first?.author ?? "")];
+  // In your file its lines may sit elsewhere now (core's `worktree`): said beside Gerrit's line.
+  const now = chain.worktree;
+  const moved = now ? (now.outdated ? "outdated: changed since" : now.line !== chain.line ? `line ${now.line} in your file` : "") : "";
+  const suggests = latestSuggestion(chain.comments) !== undefined;
+  const notes = [mine ?? "", held ? "kept for you" : "", answered ? "your draft resolves it" : "", waiting ? "waits on a reply" : "", suggests ? "suggested edit" : "", where, moved, mine ? "" : (first?.author ?? "")];
   const icon: Icon = mine
     ? { icon: first?.state === "note" ? "note" : "edit" }
     : chain.resolved
@@ -372,6 +390,7 @@ function thread(chain: CommentChain): ThreadRow {
     draft: Boolean(!mine && own),
     edit: Boolean(mine && own),
     discard: own ? (mine ? DISCARD[own.state] : "Delete Your Draft Reply…") : "",
+    apply: applies && suggests && !mine && !chain.resolved,
     replies: replies.map((c) => ({ author: c.author ?? (c.state === "published" ? "?" : "you"), state: c.state === "published" ? "" : c.state, text: c.text })),
   };
 }
@@ -427,6 +446,23 @@ function ciLinks(ci: CiView): CiLinkRow[] {
   });
 }
 
+/**
+ * What the comments from Gerrit leave for you: on a change you review (not yours), how many are
+ * unresolved; else what is left to answer, what your drafts answer (and what publishes them), and
+ * what waits on a reply. Unresolved on Gerrit, all three, until the drafts are published.
+ */
+function commentCounts(commit: ShownCommit, chains: CommentChain[], open: number, fromGerrit: number): string {
+  if (commit.own === false) {
+    return `${open} unresolved of ${fromGerrit}`;
+  }
+  const answered = chains.filter((chain) => !chain.resolved && answeredByDraft(chain)).length;
+  const waiting = chains.filter((chain) => !chain.resolved && !isYours(chain) && !answeredByDraft(chain) && chain.turn === "theirs").length;
+  const left = chains.filter(toAnswer).length;
+  const publish = commit.drafts_published_by === "push" ? "push publishes them" : "Vote and Publish sends them";
+  const parts = [left ? `${left} to answer` : "", answered ? `${answered} answered by your drafts (${publish})` : "", waiting ? `${waiting} waiting on a reply` : ""];
+  return parts.filter(Boolean).join(" · ") || `all ${fromGerrit} resolved`;
+}
+
 export function changeVm(state: ChangeState): ChangeVm {
   const { shown: commit, chains } = state;
   const notes: NonNullable<ChangeVm["notes"]> = [];
@@ -463,7 +499,7 @@ export function changeVm(state: ChangeState): ChangeVm {
   const open = chains.filter((chain) => !chain.resolved && !isYours(chain)).length;
   const fromGerrit = chains.filter((chain) => !isYours(chain)).length;
   const yours = chains.length - fromGerrit;
-  const counts = [fromGerrit ? `${open} unresolved of ${fromGerrit}` : "", yours ? `${yours} of yours, not published` : ""];
+  const counts = [fromGerrit ? commentCounts(commit, chains, open, fromGerrit) : "", yours ? `${yours} of yours, not published` : ""];
   const hasCi = commit.ci_failures.length > 0 || commit.ci_links.length > 0 || commit.attention_reasons.includes("ci-failed");
   const loading = state.loading;
   const words = sentence(reasonWords(commit.attention_reasons));
@@ -505,7 +541,7 @@ export function changeVm(state: ChangeState): ChangeVm {
     files: files(state),
     comments: loading?.commit
       ? { summary: LOADING, open: false, threads: [] }
-      : { summary: counts.filter(Boolean).join(" · ") || "none", open: open > 0 || yours > 0, threads: chains.map(thread) },
+      : { summary: counts.filter(Boolean).join(" · ") || "none", open: open > 0 || yours > 0, threads: chains.map((chain) => thread(chain, state.local && commit.own !== false && !state.reviewing)) },
     ci: hasCi
       ? {
           // The head already says "CI failed": the section names the failing builds, or nothing.

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from gerrit_workflow_tools.core.change_id import ChangeIdRow, first_change_id_boundary
 from gerrit_workflow_tools.core.changeish import not_in_stack_message
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.fixups import UNSQUASHED_FIXUP_ADVICE, is_unsquashed_fixup
 from gerrit_workflow_tools.core.gerrit.change_resolution import local_commit_sha
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.git_state import repo_toplevel
@@ -17,7 +18,7 @@ from gerrit_workflow_tools.core.ready_strategy import (
     BoundaryResult,
     find_ready_boundary_via_registry,
 )
-from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE, Commit, get_stack_snapshot, is_unsquashed_fixup
+from gerrit_workflow_tools.core.stack import Commit, get_stack_snapshot
 from gerrit_workflow_tools.core.usage import UsageError
 
 

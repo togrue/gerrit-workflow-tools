@@ -103,7 +103,7 @@ export function confirmVote(plan: VotePlan, option: VoteOption | undefined, mess
   for (const change of changes.length > 1 || drafts || kept.length ? changes : []) {
     const notes = [keptVote(change, option), change.drafts.length ? "" : "no drafts"].filter(Boolean).join(", ");
     lines.push("", `${change.number} ${change.subject}${notes ? `: ${notes}` : ""}`);
-    lines.push(...change.drafts.map((draft) => `  ${draft.location}  "${draft.text}"${draft.transition ? ` (${draft.transition})` : ""}`));
+    lines.push(...change.drafts.map((draft) => `  ${draft.location}  "${draft.text}"${draft.suggested_edit ? " (with a suggested edit)" : ""}${draft.transition ? ` (${draft.transition})` : ""}`));
   }
   const skipped = plan.changes.filter((change) => !on.includes(change.number));
   if (skipped.length) {

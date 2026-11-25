@@ -61,6 +61,11 @@ const KEEP: Leaf = (value, names) => (typeof value === "boolean" || typeof value
 const TEXT = string((text, names) => names.text(text));
 const PERSON = string((text, names) => names.person(text));
 const SHA = string((text, names) => names.hex(text));
+/** A short commit id, or `→ 2168` / `→ 1a2b3c4` (the commit a fixup folds into). */
+const FIXUP_OR_SHA = string((text, names) => {
+  const target = /^→ (.*)$/.exec(text)?.[1];
+  return target === undefined ? names.hex(text) : `→ ${/^\d+$/.test(target) ? names.number(target) : names.hex(target)}`;
+});
 const CHANGE_ID = string((text, names) => names.changeId(text));
 const KEY = string((text, names) => names.key(text));
 /** The Change-Id beside the commit message: none stays none. */
@@ -224,7 +229,8 @@ const STACK: Shape = {
       merge: KEEP,
       pinned: KEEP,
       /** Our words, and the short commit id. */
-      notes: [ours(["HEAD", "under review", "merge", "code changed", "held back", "abandoned"], SHA)],
+      /** Our words, the short commit id, and the commit a fixup folds into (its change number or short id). */
+      notes: [ours(["HEAD", "under review", "merge", "code changed", "held back", "abandoned", new RegExp(`${COUNT} fixups? pending`)], FIXUP_OR_SHA)],
       badges: [BADGE],
       tooltip: TOOLTIP,
       squash: KEEP,
@@ -249,7 +255,7 @@ const FILE_DIR = string((text, names, row) => (typeof row.path === "string" && r
 /** A file's name, with the line when there is one: where a comment is. */
 const WHERE = around(/(.*?)(?::(\d+))?/, (names, file, line) => `${names.fileName(file)}${line ? `:${names.number(line)}` : ""}`);
 /** Under a comment: our words, then where it is, then who wrote it. */
-const THREAD_NOTE = ours([...Object.values(YOURS), "kept for you", "your draft resolves it", "waits on a reply", "whole change"], (value, names, row) => (value === row.author ? PERSON(value, names, row) : WHERE(value, names, row)));
+const THREAD_NOTE = ours([...Object.values(YOURS), "kept for you", "your draft resolves it", "waits on a reply", "whole change", "outdated: changed since", "suggested edit"], (value, names, row) => (value === row.author ? PERSON(value, names, row) : WHERE(value, names, row)));
 const WHO = ours(["you", "?", ""], PERSON);
 
 /** Under a CI finding: the tool that found it (theirs), our words, and the file and line it stands in. */
@@ -335,7 +341,19 @@ const CHANGE: Shape = {
     ],
   },
   comments: {
-    summary: each(" · ", ours([LOADING, "none", new RegExp(`${COUNT} unresolved of ${COUNT}`), new RegExp(`${COUNT} of yours, not published`)])),
+    summary: each(
+      " · ",
+      ours([
+        LOADING,
+        "none",
+        new RegExp(`${COUNT} unresolved of ${COUNT}`),
+        new RegExp(`${COUNT} to answer`),
+        new RegExp(`${COUNT} answered by your drafts \\((push publishes them|Vote and Publish sends them)\\)`),
+        new RegExp(`${COUNT} waiting on a reply`),
+        new RegExp(`all ${COUNT} resolved`),
+        new RegExp(`${COUNT} of yours, not published`),
+      ]),
+    ),
     open: KEEP,
     threads: [
       {
@@ -358,6 +376,7 @@ const CHANGE: Shape = {
         draft: KEEP,
         edit: KEEP,
         discard: ours(["", "Delete Your Draft Reply…", ...Object.values(DISCARD)]),
+        apply: KEEP,
         replies: [{ author: WHO, state: ours(["", "draft", "local-draft", "note"]), text: TEXT }],
       },
     ],

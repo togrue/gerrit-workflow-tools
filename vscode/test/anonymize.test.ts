@@ -153,8 +153,8 @@ test("a stopped rebase keeps its banner and buttons; each conflicted file's row 
   assert.equal(out.info[0].text, "A rebase stopped on a conflict");
   assert.deepEqual(out.info[0].actions?.map((action) => [action.label, action.command.id]), [["Abort", "ger.rebase.abort"], ["Skip", "ger.rebase.skip"]]);
   assert.deepEqual(out.info.slice(1).map((info) => [info.text === info.conflict, info.detail, info.tooltip]), [
-    [true, "conflicted", "Open it in the merge editor to resolve it, then stage it (git add)."],
-    [true, "conflicted", "Open it in the merge editor to resolve it, then stage it (git add)."],
+    [true, "conflicted", "Open it, with its conflict markers, to resolve it (Accept Current / Incoming, or Resolve in Merge Editor), then stage it (git add)."],
+    [true, "conflicted", "Open it, with its conflict markers, to resolve it (Accept Current / Incoming, or Resolve in Merge Editor), then stage it (git add)."],
   ]);
   assert.deepEqual(out.rows.map((row) => [row.marker, row.dim]), [[null, true], ["conflict", false], [null, false]]);
 });

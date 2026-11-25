@@ -11,17 +11,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from gerrit_workflow_tools.core.config import ConfigError
+from gerrit_workflow_tools.core.fixups import fixed_subject, is_unsquashed_fixup
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.git_run import git_out
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.core.stack import (
-    Commit,
-    commits_in_range,
-    get_stack_snapshot,
-    is_unsquashed_fixup,
-    read_commit_rows,
-)
+from gerrit_workflow_tools.core.stack import Commit, commits_in_range, get_stack_snapshot, read_commit_rows
 
 
 @dataclass(frozen=True)
@@ -68,13 +63,6 @@ def _same(a: Commit, b: Commit) -> bool:
     return a.subject == b.subject
 
 
-def _fixed(subject: str) -> str:
-    """The subject of the commit a ``fixup!``/``squash!`` commit fixes, past every prefix."""
-    while is_unsquashed_fixup(subject):
-        subject = subject.split(" ", 1)[1] if " " in subject else ""
-    return subject
-
-
 def _open_changes(run: RunContext, change_ids: Sequence[str]) -> dict[str, int] | None:
     """Change number by Change-Id, for those the cache has open on the push branch; ``None`` without a Gerrit.
 
@@ -106,7 +94,7 @@ def rewrite_outcome(run: RunContext, before: Sequence[Commit]) -> RewriteOutcome
     gone = [c for c in before if not any(_same(c, now) for now in after)]
     # A fixup is squashed when the commit it fixes was rewritten; one dropped on its own is dropped.
     squashed = [
-        c for c in gone if is_unsquashed_fixup(c.subject) and _fixed(c.subject) in {r.subject for r in rewritten}
+        c for c in gone if is_unsquashed_fixup(c.subject) and fixed_subject(c.subject) in {r.subject for r in rewritten}
     ]
     gone = [c for c in gone if c not in squashed]
     upstream: list[Commit] = []

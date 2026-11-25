@@ -497,7 +497,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log`, as text (`format_call_trace_summary`); `cli_common.print_call_trace_summary` prints it |
 | `core/changeish.py` | The changeish grammar: what an input naming a commit or change looks like |
 | `core/change_id.py` | Change-Id footer: `parse_change_id_footer` (raw footer value), `validate_change_id_value`, `extract_valid_change_id`, `change_id_of_rev`, `classify_issues` and the errors its issues are worth (`change_id_issues_error`: `ChangeIdIssuesError`, `DuplicateChangeIdError`), generate and fix |
-| `core/stack.py` | Local stack: `Commit` (the one commit-row type), `get_stack_snapshot` (the one stack loader), `read_commit_rows` (a fold's squash template read as the message will be: `squash_cleaned`), `read_commit_meta`, `read_rewrite_rows`, ranges, merge-base, fixup targets and their autosquash order (`fixup_target_sha`, `autosquash_order`) |
+| `core/stack.py` | Local stack: `Commit` (the one commit-row type), `get_stack_snapshot` (the one stack loader), `read_commit_rows` (a fold's squash template read as the message will be: `squash_cleaned`), `read_commit_meta`, `read_rewrite_rows`, ranges, merge-base |
+| `core/fixups.py` | `fixup!`/`squash!` commits of a stack: the one test for them (`is_unsquashed_fixup`), what each folds into (`fixup_targets`, `fixup_target_sha`) and their autosquash order (`autosquash_order`) |
 | `core/ready_calc.py` | Ready boundary and push range |
 | `core/ready_strategy.py` | Loading ready-boundary strategies from `.ger/ready/` |
 | `core/annotated_stack.py` | Annotated stack: local stack + Gerrit overlay + attention; the stack overview `ger log` and `GET /stack` answer from (`load_stack_overview`), with what `ger push` would upload (`StackOverview.to_upload`) and the stack's next steps (`StackOverview.next_steps`: `NextStep`, `NextStepKind`) |
@@ -636,7 +637,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 |--------|------|
 | `server/api.py` | `GerApi`: the route table, the per-request `Context`, `refresh=1`, `handle_unlocked` (the long-poll that must not wait in line) |
 | `server/request.py` | `Request` (query, body, path captures), `Context`, `BadRequest`, `safe_rev` (client input never reaches git as an option) |
-| `server/views.py` | Read endpoints: health, overview, stack (with rebase progress and how far the upstream moved), stack moves (conflict preview), chain, show, review, agent runbook; `error_json` |
+| `server/views.py` | Read endpoints: health, overview, stack (with rebase progress and how far the upstream moved), chain, show, review, agent runbook; `error_json` |
+| `server/stack_views.py` | Read endpoints about moving the local stack: stack moves (conflict preview), the upstream and which to offer |
 | `server/diff_views.py` | Read endpoints about what a change changed: diff (a commit, a patchset, the **review delta**, Gerrit against local), patchsets, file |
 | `server/actions.py` | Endpoints that change something: review checkout, draft reply, hold, stack rewrite, reword and their undo |
 | `server/vote.py` | The vote: what it would send (`GET /vote`, with the votes on offer) and sending it (`POST /vote`), through core's `plan_vote` and `send_vote` |

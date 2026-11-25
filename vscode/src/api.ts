@@ -212,6 +212,8 @@ export interface StackCommit extends CommitStatus {
   pinned?: boolean;
   /** Where a rebase underway stands on this commit; null without one, or when it does not replay it. */
   rebase?: "done" | "current" | "todo" | null;
+  /** An unsquashed `fixup!`/`squash!` commit: the commit below it that it folds into (core's pairing); null otherwise. */
+  fixup_of?: string | null;
 }
 
 /** Why a rebase underway is stopped: core's verdict, the shell's words. */
@@ -343,6 +345,10 @@ export interface FixReplacement {
   range: { start_line: number; start_character: number; end_line: number; end_character: number };
   replacement: string;
   location: string;
+  /** For a comment of a local commit: `range` in your working file, while the lines it covers are there unchanged; null otherwise. */
+  worktree?: FixReplacement["range"] | null;
+  /** For a comment of a local commit: the text it replaces in the version commented on; null when that version is not here. */
+  original?: string | null;
 }
 
 /** An edit a comment suggests: a Gerrit fix suggestion, or a ```suggestion block of its text (`in_message`). */
@@ -382,6 +388,12 @@ export interface CommentChain {
   /** Whose turn it is, core's verdict: somebody else spoke last (`yours`), and your answer is a draft (`draft`); your published comment is the last word (`theirs`). Null for a local chain. */
   turn?: ChainTurn | null;
   outdated: boolean;
+  /**
+   * For an open Gerrit chain of a local commit: where its lines are in your working file, mapped from
+   * the version it was written on; `outdated` when they changed or are gone there. Null when that
+   * cannot be told (absent from an older ger).
+   */
+  worktree?: { start_line: number; line: number; outdated: boolean } | null;
   /** On hold: you keep this chain for yourself, the agent runbook leaves it alone. */
   held: boolean;
   comments: Comment[];
@@ -527,6 +539,8 @@ export interface VoteDraft {
   location: string;
   text: string;
   transition: "resolves" | "reopens" | null;
+  /** It suggests an edit (a ```suggestion block, a fix suggestion): said in the dialog, as its first line may not show it. */
+  suggested_edit?: boolean;
 }
 
 /** One change a vote goes to, as `GET /vote` serves it. */
@@ -683,6 +697,11 @@ export class GerClient {
 
   async file(rev: string, path: string): Promise<string | null> {
     return (await this.call<{ content: string | null }>("GET", "/file", { rev, path })).content;
+  }
+
+  /** Why `ger rebase --<action>` (and `ger edit -n`) would refuse now, in its words, the work tree's unstaged changes too; null when it would run. */
+  async rebaseRefusal(action: RebaseAction): Promise<string | null> {
+    return (await this.call<{ refused: string | null }>("GET", "/rebase/refusal", { action })).refused;
   }
 
   /** The review going on here or in the review worktree; with `chain`, its review chain too (one Gerrit request). */
