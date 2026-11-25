@@ -13,9 +13,20 @@ import { DiffMark, Unsaved, fateOf, liveTitle, markFragment, readMark, stackNow,
 
 export const FILE_SCHEME = "ger-file";
 
-/** A file as it is in a commit: `ger-file:/<path>?<commit>`. */
-export function fileUri(rev: string, file: string): vscode.Uri {
-  return vscode.Uri.from({ scheme: FILE_SCHEME, path: `/${file}`, query: rev });
+/**
+ * A file as it is in a commit: `ger-file:/<path>?<commit>`. With `repo`, the path is your file's in
+ * the repository (`ger-file:/<repo>/<path>?<commit>`): the side compared with your file then names
+ * the same file, so VS Code's diff editors do not take the pair for a rename.
+ */
+export function fileUri(rev: string, file: string, repo?: string): vscode.Uri {
+  const at = repo ? vscode.Uri.file(path.join(repo, file)).path : `/${file}`;
+  return vscode.Uri.from({ scheme: FILE_SCHEME, path: at, query: rev });
+}
+
+/** The repository path of a `ger-file:` document (`fileUri`), either form. */
+export function filePath(uri: vscode.Uri, repo: string): string {
+  const own = `${vscode.Uri.file(repo).path.replace(/\/$/, "")}/`;
+  return uri.path.startsWith(own) ? uri.path.slice(own.length) : uri.path.slice(1);
 }
 
 /**

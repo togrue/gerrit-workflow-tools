@@ -8,7 +8,7 @@ import * as vscode from "vscode";
 import { Comment, CommentChain, NewCommentState, ShownCommit } from "./api";
 import { ownComment } from "./changeRows";
 import { ChangeView } from "./changeView";
-import { FILE_SCHEME, repoPath } from "./diffTabs";
+import { FILE_SCHEME, filePath, repoPath } from "./diffTabs";
 import { commentLocation } from "./format";
 import { Model, describeError } from "./model";
 import { ui } from "./ui";
@@ -156,7 +156,7 @@ export class CommentThreads implements vscode.Disposable {
       return undefined;
     }
     if (uri.scheme === FILE_SCHEME) {
-      return uri.query === commit ? uri.path.slice(1) : undefined;
+      return uri.query === commit ? filePath(uri, this.model.repo) : undefined;
     }
     return this.view.worktreeHolds(commit) ? repoPath(this.model.repo, uri) : undefined;
   }

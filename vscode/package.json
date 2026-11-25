@@ -173,6 +173,7 @@
       { "command": "ger.openHeadline", "title": "Open the Most Important Change", "category": "ger" },
       { "command": "ger.markSeen", "title": "Mark All Activity as Seen", "category": "ger", "icon": "$(check-all)" },
       { "command": "ger.openChange", "title": "Show Change", "category": "ger" },
+      { "command": "ger.openAllChanges", "title": "Open All Changes", "category": "ger", "icon": "$(diff-multiple)" },
       { "command": "ger.openInGerrit", "title": "Open in Gerrit", "category": "ger", "icon": "$(link-external)" },
       { "command": "ger.review", "title": "Review Change", "category": "ger", "icon": "$(eye)" },
       { "command": "ger.checkout", "title": "Check Out to Work On", "category": "ger", "icon": "$(cloud-download)" },
@@ -228,6 +229,7 @@
       "commandPalette": [
         { "command": "ger.openHeadline", "when": "ger.ready" },
         { "command": "ger.markSeen", "when": "ger.ready" },
+        { "command": "ger.openAllChanges", "when": "ger.ready && ger.changeShown" },
         { "command": "ger.openInGerrit", "when": "ger.ready && ger.changeShown" },
         { "command": "ger.review", "when": "ger.ready && ger.changeShown && !ger.changeIsLocal" },
         { "command": "ger.checkout", "when": "ger.ready && ger.changeShown && !ger.changeIsLocal" },
@@ -304,6 +306,7 @@
         { "command": "ger.refresh", "when": "view == ger.stack", "group": "navigation@9" },
         { "command": "ger.push", "when": "view == ger.stack && ger.ready", "group": "navigation@1" },
         { "command": "ger.setUpstream", "when": "view == ger.stack && ger.ready", "group": "1_branch@1" },
+        { "command": "ger.openAllChanges", "when": "view == ger.change && ger.ready && ger.changeShown", "group": "navigation@0" },
         { "command": "ger.agentBrief", "when": "view == ger.change && ger.ready && ger.changeShown", "group": "navigation@3" },
         { "command": "ger.review", "when": "view == ger.change && ger.ready && ger.changeShown && !ger.changeIsLocal", "group": "1_open@1" },
         { "command": "ger.checkout", "when": "view == ger.change && ger.ready && ger.changeShown && !ger.changeIsLocal", "group": "navigation@4" },
@@ -322,11 +325,13 @@
         { "command": "ger.review", "when": "viewItem =~ /^ger\\.chain(?!.*\\.local)/", "group": "0_open@1" },
         { "command": "ger.checkout", "when": "viewItem =~ /^ger\\.chain(?!.*\\.local)/", "group": "0_open@2" },
         { "command": "ger.stack.edit", "when": "viewItem =~ /^ger\\.chain.*\\.local/", "group": "0_open@1" },
+        { "command": "ger.openAllChanges", "when": "viewItem =~ /^ger\\.change/", "group": "inline@4" },
         { "command": "ger.agentBrief", "when": "viewItem =~ /^ger\\.change/", "group": "1_ger@1" },
         { "command": "ger.copyChangeId", "when": "viewItem =~ /^ger\\.(change|chain)/", "group": "9_copy@1" },
         { "command": "ger.copySha", "when": "viewItem =~ /^ger\\.(change|chain)/", "group": "9_copy@2" }
       ],
       "webview/context": [
+        { "command": "ger.openAllChanges", "when": "webviewId == ger.stack && webviewSection == commit && !gerMulti", "group": "0_open@0" },
         { "command": "ger.stack.edit", "when": "webviewId == ger.stack && webviewSection == commit && !gerMulti", "group": "0_open@1" },
         { "command": "ger.openInGerrit", "when": "webviewId == ger.stack && webviewSection == commit && gerUrl && !gerMulti", "group": "0_open@2" },
         { "command": "ger.agentBrief", "when": "webviewId == ger.stack && webviewSection == commit && !gerMulti", "group": "1_ger@1" },

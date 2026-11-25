@@ -5,8 +5,9 @@ import * as vscode from "vscode";
 
 import { handToAgent, runAgent } from "./agent";
 import { CommentChain, Diff, FileChange, Health } from "./api";
+import { sameChange } from "./changeLoad";
 import { ChangeView, Location, ThreadArg } from "./changeView";
-import { DiffTabs, FILE_SCHEME } from "./diffTabs";
+import { DiffTabs, FILE_SCHEME, filePath } from "./diffTabs";
 import { CommentThreads, ThreadComment, closeComment, leaveCommentBox } from "./comments";
 import { setting } from "./config";
 import { EventFollower } from "./events";
@@ -289,6 +290,15 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.copySha": (arg: unknown) => copyIds(arg, "sha"),
     "ger.sortChains": () => overviewView.chooseSort(),
     "ger.openDiff": (file: FileChange, diff?: Diff) => changeView.openDiff(file, diff),
+    "ger.openAllChanges": async (arg: unknown) => {
+      // A row's change is shown first (the keyboard stays where it is), then all its files in one editor.
+      const target = arg === undefined ? changeView.target : targetOf(arg);
+      if (target && !(changeView.target && sameChange(changeView.target, target))) {
+        await openChange(target, true);
+      }
+      await changeView.idle();
+      await changeView.openAll();
+    },
     "ger.openLocation": (location: Location) => changeView.openLocation(location),
     "ger.nextComment": () => threads.step(1),
     "ger.prevComment": () => threads.step(-1),
@@ -337,7 +347,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
 
   // Files as they are in a commit, for diffs and for changes that are not checked out.
   const files: vscode.TextDocumentContentProvider = {
-    provideTextDocumentContent: async (uri) => (await (await model.client()).file(uri.query, uri.path.slice(1))) ?? "",
+    provideTextDocumentContent: async (uri) => (await (await model.client()).file(uri.query, filePath(uri, repo))) ?? "",
   };
 
   // Gerrit's event stream, when ger serve has one: a refresh on news, and only a slow poll.

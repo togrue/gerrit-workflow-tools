@@ -206,6 +206,14 @@ The commits above your upstream, newest first. One row per commit:
   be edited: an edit shows as an unstaged change in Source Control, and `ger review` refuses to
   move on (`--next`, `--done`) until it is put back, saying how. Another patchset, a commit below
   HEAD, or a file the change deletes is shown as it is in the commit, read-only.
+- **Open All Changes** (the two-pages icon in the title bar, on a change row of *Review chains*,
+  in Local stack's context menu, the palette): every file of what is compared in one editor,
+  VS Code's multi-diff editor, in the Files list's order, top to bottom. Each file has the sides
+  its own diff has, so in a staged review comments and go to definition work there too. A
+  click on a change still only shows it here: walking the stack with the arrow keys, or reading a
+  message, opens no editor. A review that moves on (*Review Next Change*) closes the combined diff
+  of the change it left, as its right side is your file. VS Code before 1.86 has no multi-diff
+  editor: the first file's diff opens instead.
 - **Comments**: unresolved first. Click one to open its file at the line, its thread expanded there. The chevron shows a chain whole: every comment in full; one about the whole change (no line in a file) opens that way on a click and has a box to reply right there. *Next / Previous Unresolved Comment* (command palette) step
   through the unresolved ones, across files. `Alt+F9` / `Shift+Alt+F9` do it too while the Change view or a
   diff of the change has focus; anywhere else they stay VS Code's own next / previous comment thread, which only

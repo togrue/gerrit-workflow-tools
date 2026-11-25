@@ -30,7 +30,7 @@ Status words: **ships**, **partial** (see the linked spec), **gap** (nothing doe
 | Open the chain | `ger inbox`, `ger show CHANGEISH` | click a chain, *Show Change* | `tests/test_inbox.py`, `tests/test_show.py` | ships |
 | Check out one commit for review (in the review worktree by default) | `ger review CHANGEISH` | *Review Change* | `tests/test_review.py` | ships |
 | Walk up and down the chain | `ger review CHANGEISH --bottom`, `ger review --next`, `ger review --prev` | click another chain member | `tests/test_review.py`, `tests/test_review_chain.py` | ships |
-| Read the commit's diff in your own tools | `ger review --stage` (the commit's changes staged, so every git view shows them) | *Files* group, *Open Diff* | `tests/test_review.py` | ships |
+| Read the commit's diff in your own tools | `ger review --stage` (the commit's changes staged, so every git view shows them) | *Files* group, *Open Diff*, *Open All Changes* (every file in one editor) | `tests/test_review.py` | ships |
 | What changed since the patchset you reviewed | `ger review CHANGEISH` (the `since your review of patchset N` line and its `git diff`) | *Since your review* group (`GET /diff?since=reviewed`) | `tests/test_review.py`, `tests/test_serve.py` | ships |
 | Read the comment chains | `ger show --comments all` | editor comment threads, *Next Unresolved Comment* | `tests/test_show.py`, `tests/test_show_comments_render.py` | ships |
 | Read a reviewer's suggested edit (Gerrit fix suggestion or ```` ```suggestion ```` block) | `ger show` (`suggested_edits` in `--json`) | in the comment, editor thread and *Change* view | `tests/test_suggested_edits.py`, `tests/test_serve.py` | partial: shown, not applied |
@@ -111,6 +111,7 @@ A **gap** names the work that would close it.
 | `ger.copySha` | `ger sha CHANGEISH` | the local commit; for a change not in the stack, its current patch set's |
 | `ger.sortChains` | UI only | `ger inbox` prints chains by state |
 | `ger.openDiff` | UI only | `ger review --stage` shows the diff to git's own tools |
+| `ger.openAllChanges` | `ger review CHANGEISH` (staged), then `git diff --cached` | every file of the change in one view |
 | `ger.openLocation` | UI only | |
 | `ger.nextComment` | UI only | `ger show` lists every unresolved chain |
 | `ger.prevComment` | UI only | |

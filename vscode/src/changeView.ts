@@ -523,6 +523,25 @@ export class ChangeView extends WebView<ChangeVm> {
   }
 
   /**
+   * What a file's diff compares: the version compared with on the left (none for an added file),
+   * the version looked at on the right (none for a deleted one). What the working files hold is
+   * your file (`worktreeHolds`): comments are drawn where they are written, F12 works, edits go in
+   * place. `own`: the right side is your file.
+   */
+  private sides(file: FileChange, diff: Diff & { base: string }): { left?: vscode.Uri; right?: vscode.Uri; own: boolean } {
+    const own = this.worktreeHolds(diff.commit);
+    const left = file.status === "A" ? undefined : fileUri(diff.base, file.old_path ?? file.path, own ? this.model.repo : undefined);
+    const right = file.status === "D" ? undefined : own ? vscode.Uri.file(path.join(this.model.repo, file.path)) : fileUri(diff.commit, file.path);
+    return { left, right, own };
+  }
+
+  /** What a diff's title says it compares: "patchset 1 ↔ 2", or the commit. */
+  private static range(diff: Diff): string {
+    const to = diff.since?.to_patch_set ?? (diff.local_commit ? "local" : diff.since?.current_patch_set);
+    return diff.since ? `patchset ${diff.since.patch_set} ↔ ${to}` : diff.commit.slice(0, 8);
+  }
+
+  /**
    * The diff of one file: what it is compared with on the left, the version looked at on the right.
    * An added file opens alone, and so does a deleted one, as VS Code's own Git does: its diff editor
    * shows an empty side as one removed (or added) empty line.
@@ -531,22 +550,60 @@ export class ChangeView extends WebView<ChangeVm> {
     if (!diff || diff.base === null) {
       return;
     }
-    const left = fileUri(diff.base, file.old_path ?? file.path);
-    if (file.status === "D") {
-      await vscode.commands.executeCommand("vscode.open", left);
+    const { left, right, own } = this.sides(file, { ...diff, base: diff.base });
+    if (!left || !right) {
+      await vscode.commands.executeCommand("vscode.open", left ?? right);
       return;
     }
-    // What the working files hold diffs against the real file: comments drawn where they are written, F12, edits in place.
-    const editable = this.worktreeHolds(diff.commit);
-    const right = editable ? vscode.Uri.file(path.join(this.model.repo, file.path)) : fileUri(diff.commit, file.path);
-    if (file.status === "A") {
-      await vscode.commands.executeCommand("vscode.open", right);
+    const title = `${path.posix.basename(file.path)} (${ChangeView.range(diff)})`;
+    await openDiff(left, right, title, markOf(diff, this.model.stack, own));
+  }
+
+  /**
+   * Every file of what is compared in one editor, in the Files list's order: VS Code's multi-diff
+   * editor, each file with the sides its own diff has, so comments and language features work there
+   * as in the file's diff. Where VS Code has no multi-diff editor (before 1.86), the first file's diff.
+   */
+  async openAll(diff: Diff | undefined = this.shownDiff()): Promise<void> {
+    if (!diff || diff.base === null || !diff.files.length) {
+      const what = this.target ? `${this.target.title}: ` : "";
+      void ui().message("info", `${what}there are no files to show${this.mode === "base" ? "" : " for this comparison"}.`, {}, []);
       return;
     }
-    const to = diff.since?.to_patch_set ?? (diff.local_commit ? "local" : diff.since?.current_patch_set);
-    const range = diff.since ? `patchset ${diff.since.patch_set} ↔ ${to}` : diff.commit.slice(0, 8);
-    const title = `${path.posix.basename(file.path)} (${range})`;
-    await openDiff(left, right, title, markOf(diff, this.model.stack, editable));
+    if (!(await vscode.commands.getCommands(true)).includes("vscode.changes")) {
+      await this.openDiff(diff.files[0], diff);
+      return;
+    }
+    const base = diff.base;
+    const resources = diff.files.map((file) => {
+      const { left, right } = this.sides(file, { ...diff, base });
+      // The row's name: the file in the repository, as Source Control names it.
+      return [vscode.Uri.file(path.join(this.model.repo, file.path)), left, right];
+    });
+    const number = this.shown?.number ?? this.target?.number;
+    const title = `${number ? `Change ${number}` : (this.shown?.summary ?? "Change")} (${ChangeView.range(diff)})`;
+    if (this.worktreeHolds(diff.commit)) {
+      this.combined.add(title);
+    }
+    await vscode.commands.executeCommand("vscode.changes", title, resources);
+  }
+
+  /** The titles of the combined diffs opened this session: a review that moves on closes them (`closeCombined`). */
+  private readonly combined = new Set<string>();
+
+  /**
+   * Close the combined diffs opened of the change a staged review held: their right sides are your
+   * files, which hold another change now. VS Code's 1.85 API does not say what a multi-diff tab shows,
+   * so they are known by title; single-file diffs go stale on their own (diffTabs.ts).
+   */
+  async closeCombined(): Promise<void> {
+    // VS Code titles the tab "<title> (4 files)"; its input (not in the 1.85 API) lists `textDiffs`.
+    const combined = (tab: vscode.Tab) => Boolean((tab.input as { textDiffs?: unknown } | undefined)?.textDiffs) && [...this.combined].some((title) => tab.label.startsWith(title));
+    const tabs = vscode.window.tabGroups.all.flatMap((group) => group.tabs).filter(combined);
+    this.combined.clear();
+    if (tabs.length) {
+      await vscode.window.tabGroups.close(tabs, true);
+    }
   }
 
   /** The document a path of the shown change lives in: your file for your local commit and for what the working files hold, the commit's otherwise. */
