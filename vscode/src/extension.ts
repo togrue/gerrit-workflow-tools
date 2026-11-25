@@ -229,6 +229,23 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     },
   };
   /**
+   * A window opened on a staged review (Open Review Worktree, or a reload there) opens on it: the
+   * Gerrit view, the change under review shown, and, in a window with no editor open yet, all its
+   * files. Once, on the first stack ger serve sends.
+   */
+  const greet = model.onDidChange(() => {
+    if (model.state !== "ready" || !model.overview) {
+      return;
+    }
+    greet.dispose();
+    if (!model.stack?.staged_review || changeView.target) {
+      return;
+    }
+    const fresh = vscode.window.tabGroups.all.every((group) => group.tabs.length === 0);
+    void vscode.commands.executeCommand("workbench.view.extension.ger").then(() => showReview(fresh));
+  });
+  context.subscriptions.push(greet);
+  /**
    * After a vote on the change a staged review holds: Next Change while the chain goes on above it,
    * Leave Review at its top (`ger review`'s own `next:` line, the vote done). Nothing elsewhere.
    */
@@ -308,7 +325,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       }
       return undefined;
     },
-    "ger.review": (arg: unknown) => review(model, targetOf(arg)),
+    "ger.review": (arg: unknown) => review(model, targetOf(arg), reviewWalk),
     "ger.checkout": (arg: unknown) => checkout(model, targetOf(arg)),
     "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg)),
     "ger.setUpstream": (upstream?: unknown) => setUpstream(model, typeof upstream === "string" ? upstream : undefined),

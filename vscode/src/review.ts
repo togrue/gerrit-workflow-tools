@@ -38,7 +38,7 @@ export function checkout(model: Model, target: ChangeTarget | undefined): void {
 }
 
 /** Someone's change on Gerrit: `ger review` checks it out for review: in the review worktree, or here when `ger.reviewCheckout` says `branch`. */
-export async function review(model: Model, target: ChangeTarget | undefined): Promise<void> {
+export async function review(model: Model, target: ChangeTarget | undefined, walk?: ReviewWalk): Promise<void> {
   if (!target) {
     return;
   }
@@ -48,14 +48,19 @@ export async function review(model: Model, target: ChangeTarget | undefined): Pr
       client.reviewOpen(target.number ?? target.rev),
     );
     const where = vscode.Uri.file(opened.worktree);
-    const inPlace = path.resolve(opened.worktree) === path.resolve(model.repo);
-    const open = inPlace ? undefined : "Open Review Worktree";
-    const picked = await ui().message(
-      "info",
-      reviewOpened(opened, inPlace),
-      {},
-      open ? [open] : [],
-    );
+    if (path.resolve(opened.worktree) === path.resolve(model.repo)) {
+      void ui().message("info", reviewOpened(opened, true), {}, []);
+      if (opened.staged && walk) {
+        // Checked out here: the change under review is shown with all its files, as in a review window.
+        await walk.leave();
+        await model.refresh();
+        await walk.show();
+      } else {
+        void model.refresh(); // a review is open now: the Change view offers to leave it
+      }
+      return;
+    }
+    const picked = await ui().message("info", reviewOpened(opened, false), {}, ["Open Review Worktree"]);
     void model.refresh(); // a review is open now: the Change view offers to leave it
     if (picked) {
       await ui().openFolder(where);

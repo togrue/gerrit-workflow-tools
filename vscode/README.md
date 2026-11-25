@@ -269,9 +269,12 @@ The commits above your upstream, newest first. One row per commit:
   palette) sends your drafts without a vote: `ger reply --publish`.
 - **Review Change** (eye icon, changes that are not in your stack): `ger review`
   fetches the change into the review worktree and offers to open that worktree in a new window; your
-  own stack is not touched. When the git config key `ger.reviewCheckout` says `branch`, it switches
-  this checkout to a `change-<n>` branch instead, the message says so, and *Leave Review Checkout*
-  switches back. For reading someone's work.
+  own stack is not touched. The new window opens on the review: the Gerrit view, the change under
+  review shown, and all its files in one editor (the same whenever a window opens on a staged
+  review with no editor open yet; with editors open, only the change is shown). When the git config
+  key `ger.reviewCheckout` says `branch`, it switches this checkout to a `change-<n>` branch instead,
+  the message says so, the change is shown with all its files, and *Leave Review Checkout* switches
+  back. For reading someone's work.
 - **Review Next Change in Chain** (arrow in the Change view's title bar, `Ctrl+Alt+PageDown`) and
   **Review Previous Change in Chain** (the `…` menu, `Ctrl+Alt+PageUp`), while a staged review sits
   in this checkout: `ger review --next` / `--prev`. The review moves to the change above (below) in
