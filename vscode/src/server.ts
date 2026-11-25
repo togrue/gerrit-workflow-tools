@@ -39,6 +39,8 @@ export class GerProcess {
     private readonly log: (line: string) => void,
     /** Told what answered, once per start, when its API fits: the package versions are compared there. */
     private readonly onServed: (health: Health) => void = () => undefined,
+    /** Arguments after `serve`, read at each start: `--debug-log` while `ger.debugLog` is on. */
+    private readonly serveArgs: () => string[] = () => [],
   ) {}
 
   /** The client of the running service; starts the service when it is not running. */
@@ -54,7 +56,7 @@ export class GerProcess {
 
   private start(): Promise<GerClient> {
     // The service stops when its stdin closes, so it cannot outlive the editor.
-    const argv = [...this.program(), "serve", "--exit-with-stdin"];
+    const argv = [...this.program(), "serve", "--exit-with-stdin", ...this.serveArgs()];
     const shown = shellCommandLine(argv, process.platform === "win32" ? "cmd" : "posix");
     this.log(`starting: ${shown}  (in ${this.cwd})`);
     return new Promise<GerClient>((resolve, reject) => {

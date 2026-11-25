@@ -84,6 +84,13 @@
           "scope": "window",
           "order": 5,
           "markdownDescription": "Close a diff tab opened from the Change view once it is stale: its commit left the stack (rewritten by a rebase, in the views or in a terminal, an amend or a reorder; dropped; or merged past the upstream), or, with your file on its right, HEAD moved off it. Off: the tab stays open, its title marked *stale*. A tab that may hold unsaved edits is never closed."
+        },
+        "ger.debugLog": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "order": 6,
+          "markdownDescription": "Start `ger serve` with `--debug-log`: the log (**ger: Show Log**) then says, for every request of the views, how long it took and which git and Gerrit calls it made, and holds Gerrit's response bodies. For finding out what the views cost; it is verbose. A change restarts `ger serve`."
         }
       }
     },

@@ -273,6 +273,7 @@ publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to t
 | `ger.pollSeconds` | `120` | Background refresh from Gerrit while the window has focus; a change applies at once. It also refreshes when the window regains focus. While Gerrit's event stream is live (below) it slows to every 15 minutes (or this, when longer), a safety net. |
 | `ger.notify` | `true` | Notify when a background refresh finds something new to be the most important change. Not for what you just did: the status bar shows that. |
 | `ger.closeDiffsOnRebase` | `false` | Close a diff tab opened from the Change view once it is stale: its commit left the stack (rewritten by a rebase, in the views or in a terminal, an amend or a reorder; dropped; or merged past the upstream), or, with your file on its right, HEAD moved off it. Off: the tab stays open and its title says *stale* (`b.txt (6827cbfe) — stale`). A tab that may hold unsaved edits is never closed. |
+| `ger.debugLog` | `false` | Start `ger serve` with `--debug-log`: **Show Log** then has, for every request of the views, how long it took and the git and Gerrit calls it made, and Gerrit's response bodies. Verbose; for finding out what the views cost. A change restarts `ger serve`. |
 
 **Gerrit's event stream.** When `ger serve` can follow Gerrit's event stream (`ssh … gerrit
 **Your repository.** The views follow it as the built-in Git view does: a commit, a checkout, a
