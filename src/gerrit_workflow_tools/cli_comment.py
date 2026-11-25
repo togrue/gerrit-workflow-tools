@@ -17,7 +17,7 @@ from gerrit_workflow_tools.cli_args import (
 )
 from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.core.changeish import change_label
-from gerrit_workflow_tools.core.comment_anchor import CommentLocation, LocationError
+from gerrit_workflow_tools.core.comment_anchor import PATCHSET_LEVEL, CommentLocation, LocationError
 from gerrit_workflow_tools.core.comment_chains import ChainRefError, parse_chain_ref
 from gerrit_workflow_tools.core.comment_target import (
     CommentTarget,
@@ -52,20 +52,25 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="ger comment",
         usage=(
-            "ger comment [options] LOCATION (-m MSG | -F FILE) [--note | --local]\n"
+            "ger comment [options] [LOCATION] (-m MSG | -F FILE) [--note | --local]\n"
             "       ger comment --edit ID (-m MSG | -F FILE) [--change CHANGEISH] [--resolved] [--json | --ai]\n"
             "       ger comment --discard ID [--change CHANGEISH] [--json | --ai]"
         ),
         description=(
-            "Start a comment chain on a file, line or range. On a patchset Gerrit has, it is a draft "
-            "there, visible only to you until published; otherwise a local draft in refs/ger/comments."
+            "Start a comment chain on a file, line or range, on the commit message, or (no LOCATION) on "
+            "the change itself. On a patchset Gerrit has, it is a draft there, visible only to you until "
+            "published; otherwise a local draft in refs/ger/comments."
         ),
     )
     p.add_argument(
         "location",
         nargs="?",
         metavar="LOCATION",
-        help="PATH, PATH:LINE, PATH:START-END or PATH:LINE.COL-LINE.COL (lines and columns from 1).",
+        help=(
+            "PATH, PATH:LINE, PATH:START-END or PATH:LINE.COL-LINE.COL (lines and columns from 1); "
+            "/COMMIT_MSG:LINE for the commit message, as Gerrit numbers it. None: the change itself "
+            "(/PATCHSET_LEVEL)."
+        ),
     )
     add_change_option(p, "Comment on this change (default: the change under review here, else the commit at HEAD).")
     add_branch_arg(p)
@@ -96,11 +101,8 @@ def _check_args(p: argparse.ArgumentParser, args: argparse.Namespace) -> str:
         if args.location or given or args.resolved or args.note or args.local or args.edit is not None:
             p.error("--discard takes only an ID (and --change)")
         return ""
-    if args.edit is not None:
-        if args.location or args.note or args.local:
-            p.error("--edit takes an ID and the new message; the comment stays where and what it is")
-    elif not args.location:
-        p.error("name a LOCATION to comment on")
+    if args.edit is not None and (args.location or args.note or args.local):
+        p.error("--edit takes an ID and the new message; the comment stays where and what it is")
     if args.message is not None and args.file is not None:
         p.error("give the comment with one of -m or -F")
     message = read_message(args.message, args.file) if given else ""
@@ -229,7 +231,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     if args.edit is not None:
         _edit(cwd, service, target, comment_id, message, resolved=args.resolved, as_json=args.json_)
         return int(ExitCode.OK)
-    location = _located(p, cwd, args.location, target)
+    location = _located(p, cwd, args.location or PATCHSET_LEVEL, target)
     written = write_comment(
         cwd, service, target, location, message, state=_state(args, target, service), unresolved=not args.resolved
     )

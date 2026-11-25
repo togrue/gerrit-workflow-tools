@@ -107,7 +107,7 @@ _Avoid_: stack (unqualified), series, relation chain (in user-facing text)
 _Avoid_: tip, root, HEAD of the chain
 
 **Unreviewed age**:
-How long a **review chain** has waited for *your* review. Prefer the attention-set timestamp for self; fall back to "current patch set after my last Code-Review vote". The inbox sort key.
+How long a **review chain** has waited for *your* review: since the oldest of its members whose **turn** is yours became so. Zero, and not shown, while the chain waits on its author. The inbox sort key.
 _Avoid_: wait age (that is last activity), stale time
 
 **Wait age**:
@@ -115,11 +115,11 @@ Time since the last activity on a **review chain**: `now − max(updated)` over 
 _Avoid_: using this for "how long since I reviewed"
 
 **Inbox section**:
-One Gerrit query plus the **review chains** assembled from it. Two exist: **to review** (open chains where you are a reviewer) and **outgoing** (open chains you own). `ger inbox` prints both and `ger serve` serves both, each narrowed to the current clone's project unless asked for every project.
+One Gerrit query plus the **review chains** assembled from it. Two exist: **to review** (open chains where you are a reviewer) and **outgoing** (open chains you own). *To review* is ready per chain: its query is asked beside the same without the readiness terms (no Verified, WIP, private), which completes each chain it lists with the members that are not ready. `ger inbox` prints both and `ger serve` serves both, each narrowed to the current clone's project unless asked for every project.
 _Avoid_: inbox tab, queue (unqualified), incoming (for *to review*)
 
 **Headline**:
-The one change across all **inbox sections** that most wants you: failed CI on an outgoing chain, then unresolved comments, then a negative vote; with none of those, the *to review* chain with the largest **unreviewed age**. While a rebase is underway in the checkout, the rebase leads instead: where it stopped, on the **rebasing stack**. What an editor's status bar shows.
+The one change across all **inbox sections** that most wants you: failed CI on an outgoing chain; then unresolved comments on an outgoing chain or the *to review* chain whose **turn** is yours with the largest **unreviewed age**, whichever has waited longer; then a negative vote. While a rebase is underway in the checkout, the rebase leads instead: where it stopped, on the **rebasing stack**. What an editor's status bar shows.
 _Avoid_: top issue, main alert, status (unqualified)
 
 **Reviewer strategy**:
@@ -194,6 +194,7 @@ _Avoid_: agent prompt, brief (for the whole walk), task list
 
 **Turn**:
 Whose move an unresolved comment chain waits on, decided by its last *published* comment: somebody else's makes it **yours** (a **draft to publish** when your answer is a Gerrit draft), yours makes it **theirs**. "You" is the account `ger` runs as. A commit whose unresolved chains are all theirs is *awaiting a reply*: still unresolved for Gerrit, but no attention of yours.
+Of somebody else's change you review, Gerrit's attention set decides: yours while it holds you, the author's once it took you out (your reply); with neither (the attention set switched off), yours while its current patch set came after your last Code-Review vote (`your_turn_since`, the one place). A *to review* chain is yours while any member is; otherwise it *waits on the author*.
 _Avoid_: needs reply, pending comment, answered (for a chain still unresolved)
 
 **Hold**:

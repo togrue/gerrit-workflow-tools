@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { VoteChange, VotePlan } from "../src/api";
+import { VoteChange, VotePlan, VoteSent } from "../src/api";
 import { confirmVote, defaultVoteItem, sentVote, voteItems, voteTitle } from "../src/voteText";
 
 const change = (number: number, drafts: VoteChange["drafts"] = [], own = false): VoteChange => ({
@@ -90,4 +90,25 @@ test("once sent, one line says what went out where", () => {
   };
   assert.equal(sentVote(sent, { label: "Code-Review", value: 1, meaning: "", takes: [900] }), "Published Code-Review +1 and 2 drafts on change 900. Skipped change 899.");
   assert.equal(sentVote({ ...sent, skipped: [] }, undefined), "Published 2 drafts on change 900.");
+});
+
+test("a chain vote keeps a vote you gave: the picker and the confirmation say so, and nothing is said to replace it", () => {
+  const voted = { ...change(101, [nit]), yours: { "Code-Review": -1 } };
+  const shown = plan([change(100), voted, change(102)]);
+  const plusOne = { ...shown.options[1], keeps: [101] };
+  shown.options[1] = plusOne;
+  const item = voteItems(shown).find((it) => it.option === plusOne);
+  assert.equal(item?.detail, "change 101 keeps your vote");
+  const asked = confirmVote(shown, plusOne, "");
+  assert.equal(asked.text, "Publish on 100, 101, 102?", "101 still gets its draft");
+  const lines = asked.detail.split("\n");
+  assert.equal(lines[0], "Code-Review +1 on 100, 102 · 1 draft");
+  assert.ok(lines.includes("101 Change 101: keeps your Code-Review -1"), asked.detail);
+  assert.ok(!asked.detail.includes("101 Change 101: no drafts"));
+  // Without drafts there, nothing goes to it: it is not in the question.
+  const bare = plan([change(100), { ...change(101), yours: { "Code-Review": -1 } }]);
+  bare.options[1] = { ...bare.options[1], keeps: [101] };
+  assert.equal(confirmVote(bare, bare.options[1], "").text, "Publish on change 100?");
+  const sent: VoteSent = { changes: [{ change: "a", number: 100, drafts: 0, labels: { "Code-Review": 1 }, keeps: {}, message: null, status: "published" }, { change: "b", number: 101, drafts: 1, labels: {}, keeps: { "Code-Review": -1 }, message: null, status: "published" }], skipped: [] };
+  assert.equal(sentVote(sent, plusOne), "Published Code-Review +1 and 1 draft on 100, 101. Kept your vote on change 101.");
 });

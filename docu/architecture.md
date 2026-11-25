@@ -486,7 +486,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/config_write.py` | Write helpers for branch / attention-cursor git config keys |
 | `core/config_form.py` | Editable settings catalog for `ger config`: sections, defaults, resolution |
 | `core/config_editor_file.py` | Temp-file key=value render/parse/diff for `ger config` |
-| `core/git_editor.py` | Resolve and run `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`; `module_editor_command` for a `GIT_SEQUENCE_EDITOR` that is one of our modules; `run_editor_cli` runs an editor's own command-line program, or the npm that builds its extension |
+| `core/git_editor.py` | Resolve and run `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`; `module_editor_command` for a `GIT_SEQUENCE_EDITOR` that is one of our modules; `run_editor_cli` runs an editor's own command-line program, or the npm that builds its extension; `run_git_pager` shows text through git's pager |
 | `core/editor_extension.py` | The VS Code extension that goes with ger: the one a release bundles (`bundled_extension`), a checkout's sources (`source_extension`) and packaging them (`build_extension`), the editor's CLI (`find_editor_cli`), and installing it |
 | `core/git_state.py` | Repository state: branch, HEAD, upstream, Gerrit push destination, and the branch a stopped rebase belongs to |
 | `core/tracked_changes.py` | What the index and work tree hold of yours, by what `git stash` saves of it (`tracked_changes`, `TrackedChanges`): changes to tracked files, submodules staged at another commit, submodules a file replaced. A submodule's own state is none of them |
@@ -510,8 +510,9 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/edit_attention_walk.py` | Edit-attention walk: load stack, resume/next/first target, cursor status |
 | `core/attention_strategy.py` | Loading attention strategies from `.ger/attention/` |
 | `cli_attention.py` | Shared CLI helpers for `--first-attention` / `--next-attention` queries and the attention cursor (`--cursor`, `--cursor-history`, `--set-cursor`) |
-| `core/review_chain.py` | Review chains from `ChangeView`s; unreviewed age, wait age |
-| `core/inbox.py` | The inbox: **inbox section** queries (`build_to_review_query`), `load_inbox` (both sections), `section_summary`, the **headline** (`pick_headline`; a rebase underway, handed in as a `RebaseHeadline`, leads it), and which changes wait on your review (`waiting_on_your_review`: the *to review* query, narrowed to them; `to_review_needs_you_as_reviewer`: whether only changes that list you can match) |
+| `core/review_chain.py` | Review chains from `ChangeView`s; whose turn a change you review is (`your_turn_since`: Gerrit's attention set, else your last vote), unreviewed age, wait age |
+| `core/review_chain_graph.py` | A review chain's relation graph: changes linked along first-parent SHAs, base-to-top order, the chain top (`chain_components`) |
+| `core/inbox.py` | The inbox: **inbox section** queries (`build_to_review_query`), `load_inbox` (both sections), `section_summary`, the **headline** (`pick_headline`; a rebase underway, handed in as a `RebaseHeadline`, leads it), and which changes you review and whose turn each is (`review_turns`: the *to review* query, narrowed to them; `to_review_needs_you_as_reviewer`: whether only changes that list you can match) |
 | `core/gerrit_patchset.py` | One Gerrit patchset: which one a changeish names (`resolve_change`, `resolve_patchset`, `GerritPatchset`), its `refs/changes/…` ref, fetching it |
 | `core/review_target.py` | What a review acts on: the review chain it walks (`related_chain_numbers`), the changes a vote goes to (`vote_changes`, `changes_by_number`, `vote_targets`: drafts and ruled-out votes per change), and the vote: `plan_vote` (a `VotePlan`), `send_vote`. `ger review --vote` and `ger serve` share both |
 | `core/change_checkout.py` | Checking a change out to work on it: the **local version** (`find_local_versions`), what to do with it (`plan_checkout`, `choose_action`), which commits above it take Gerrit's patchset (`gerrit_above`) |
@@ -545,7 +546,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/registry_trust.py` | Whether a project-local registry may run: `ger.scriptsDir` from uncloned config, or a trusted digest of its code (`record_trust`, `untrusted_local_registries`); `RegistrySource` (`read_registry_source`: a registry's sources, read once, what is hashed is what runs); `source_digest` |
 | `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes; `load_shown_commits` (overlay, comment chains and CI content per target; a change that waits on your review leads with that) |
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |
-| `core/commit_diff.py` | What one commit changed: `commit_diff` (files against the first parent), `diff_between` and `file_text` |
+| `core/commit_diff.py` | What one commit changed: `commit_diff` (files against the first parent), `diff_between`, `file_text`, and its unified diff with each line numbered (`numbered_diff`) |
 | `core/review_delta.py` | The **review delta**: `last_reviewed_patch_set`, `load_review_delta` (the patchset you reviewed against the current one, another patchset, or the local commit) |
 | `core/reorder.py` | Rewriting the local stack, all or nothing: `rewrite_stack` (reorder, fold, drop; `autostash`), `fold_fixup` (`ger fix --autosquash`), `undo_rewrite`, `ReorderRefusal`; also the sequence editor that run uses |
 | `core/rewrite_outcome.py` | What a finished rewrite of the local stack did, as data (`rewrite_outcome`, `RewriteOutcome`): commits rewritten, how many of them now ahead of Gerrit (from the cache, no request), fixups squashed, commits already upstream, and the commits it dropped (`DroppedCommit`, `dropped_commit`), against the stack before it (`stack_before`) |
@@ -603,6 +604,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/checkout_text.py` | What `ger checkout` says once it checked a change out (`checkout_lines`) |
 | `render/show_text.py` | `ger show`'s human text for one commit (`commit_lines`), the brief one of a multi-commit view (`brief_commit_lines`) and the line between them (`commit_separator`) |
 | `render/show_markdown.py` | `ger show`'s Markdown (`--ai`) for one commit: `commit_markdown` |
+| `render/diff_text.py` | A commit's diff for a reviewer: git's colours and each line's new-side number in a gutter (`diff_lines`; `ger show --diff`) |
 | `render/inbox_text.py` | `ger inbox`'s human text: a row per review chain by inbox section, and each section's summary (`render_inbox_text`) |
 | `render/ai_text.py` | `--ai` text for `ger log` (`stack_ai_lines`) and `ger inbox` (`inbox_ai_lines`): one plain line per commit or chain, in `status_fmt`'s words |
 | `render/show_json.py` | JSON for one commit's overlay state: `log_commit_json` (shared by `ger log` and `ger show`), comment chains |
@@ -649,8 +651,7 @@ Concepts that still exist more than once, ranked by how far the copies have **dr
 
 1. **One reviewer normalizer.** Reviewer logic is spread over `core/reviewer.py`, `core/reviewer_completion.py`, `core/push_reviewers.py`, `core/reviewers_strategy.py` and `reviewer_catalog.py`.
 2. **Show resolution vs generic resolution.** `core/gerrit_show.py` wraps `resolve_changeish` and builds a row for a remote-only change itself (through the service's `ChangeApi`, so the cache: every caller passes `changes`, which is now required), next to what `ger resolve` already exposes. `gerrit_show.resolve_range_endpoint_sha` re-implements `change_resolution.resolve_to_stack_sha`.
-3. **Exit codes outside the mapper.** Some CLI modules still return a bare number, or print `error:` and return a code themselves, beside `run_cli_command` and `ExitCode`. Tracked by `test_commands_exit_with_exit_code_members`.
-4. **Flags defined per command.** A flag several commands take (`--branch`, `-y`, `--dry-run`, `--debug-log`, …) was written out in each, with its own help text, so the same flag drifted apart. Tracked by `test_a_flag_means_one_thing` and `test_help_text_style`.
+3. **Flags defined per command.** A flag several commands take (`--branch`, `-y`, `--dry-run`, `--debug-log`, …) was written out in each, with its own help text, so the same flag drifted apart. Tracked by `test_a_flag_means_one_thing` and `test_help_text_style`.
 
 ---
 

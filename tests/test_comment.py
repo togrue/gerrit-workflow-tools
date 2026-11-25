@@ -137,7 +137,32 @@ def test_an_empty_or_missing_message_is_a_usage_error(stack_repo: Path, monkeypa
     store, _ = _store(stack_repo)
     assert _comment(stack_repo, store, ["d.txt:1", "-m", "  "], monkeypatch)[0] == ExitCode.USAGE
     assert _comment(stack_repo, store, ["d.txt:1"], monkeypatch)[0] == ExitCode.USAGE
-    assert _comment(stack_repo, store, ["-m", "x"], monkeypatch)[0] == ExitCode.USAGE
+    assert _comment(stack_repo, store, [], monkeypatch)[0] == ExitCode.USAGE
+
+
+def test_a_comment_on_the_change_or_its_commit_message_is_a_draft_ger_show_lists(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finding 15 of the 2026-11-25 review walk: no change-level draft, and /COMMIT_MSG refused."""
+    store, key = _store(stack_repo)
+    code, out, err = _comment(stack_repo, store, ["-m", "Overall: nice split."], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert out.startswith("draft on the change (patchset 1)")
+    code, out, err = _comment(stack_repo, store, ["/COMMIT_MSG:7", "-m", "typo in the subject"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert out.startswith("draft on Commit message:7 (patchset 1)")
+    assert sorted((row["path"], row.get("line")) for row in _drafts(store, key)) == [
+        ("/COMMIT_MSG", 7),
+        ("/PATCHSET_LEVEL", None),
+    ]
+    code, out, err = run_cli(stack_repo, show_main, ["--comments", "all", "--color=never"], monkeypatch, gerrit=store)
+    assert code == ExitCode.OK, err
+    assert "╭─ Patchset-level comment ─" in out and "Overall: nice split." in out
+    assert "╭─ Commit message:7 ─" in out and "typo in the subject" in out
+    # Gerrit's paths take no local comment: there is no file to anchor it to.
+    code, _out, err = _comment(stack_repo, store, ["/PATCHSET_LEVEL", "--note", "-m", "x"], monkeypatch)
+    assert code == ExitCode.USAGE and "a note or local draft goes on a file" in err
+    assert _comment(stack_repo, store, ["/PATCHSET_LEVEL:3", "-m", "x"], monkeypatch)[0] == ExitCode.USAGE
 
 
 def test_a_commit_without_change_id_exits_9(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -212,3 +237,26 @@ def test_edit_and_discard_take_the_comment_url_and_its_change(
     assert code == ExitCode.OK, err
     assert _drafts(store, first) == []
     assert _comment(stack_repo, store, ["--discard", url, "--change", str(number)], monkeypatch)[0] == ExitCode.USAGE
+
+
+def test_show_with_context_shows_the_code_around_a_new_draft_too(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finding 20 of the 2026-11-25 review walk: drafts came without their code; Gerrit's drafts
+    listing takes enable-context as its comments listing does."""
+    store, key = _store(stack_repo)
+    context = [{"line_number": 1, "context_line": "the first line of d.txt"}]
+    store.set_drafts(
+        key,
+        {
+            "d.txt": [
+                {"id": "d1", "line": 1, "message": "why?", "patch_set": 1, "unresolved": True, "context_lines": context}
+            ]
+        },
+    )
+    code, out, err = run_cli(stack_repo, show_main, ["--context", "--color=never"], monkeypatch, gerrit=store)
+    assert code == ExitCode.OK, err
+    assert "1  the first line of d.txt" in out
+    assert [call.kwargs for call in store.calls_to("list_drafts")][-1] == {"context_padding": 2}
+    code, out, err = run_cli(stack_repo, show_main, ["--color=never"], monkeypatch, gerrit=store)
+    assert "the first line of d.txt" not in out

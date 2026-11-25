@@ -20,13 +20,14 @@ from gerrit_workflow_tools.cli_terminal import assume_yes, confirm, stdin_is_ter
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name, ger_push_mode
-from gerrit_workflow_tools.core.push import PushRefusal, changes_nothing, execute, prepare, prepare_vanilla
-from gerrit_workflow_tools.core.push_checks import resolve_push_branch
+from gerrit_workflow_tools.core.push import PushPlan, PushRefusal, changes_nothing, execute, prepare, prepare_vanilla
+from gerrit_workflow_tools.core.push_checks import add_change_ids_for_push, resolve_push_branch
 from gerrit_workflow_tools.core.review_checkout import staged_review_refusal
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.upstream import missing_upstream_error
 from gerrit_workflow_tools.core.usage import UsageError
+from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.push_confirm import confirm_gerrit_push, prompt_initial_options
 from gerrit_workflow_tools.push_outcome import finish_push, print_refusal
 from gerrit_workflow_tools.push_preview import print_nothing_to_push
@@ -192,27 +193,40 @@ def _push_gerrit(run: RunContext, args: argparse.Namespace, *, branch: str) -> i
     cwd, settings = run.cwd, run.settings
     defaults = settings.push_defaults
     first_parent = not args.follow_merges
-    prepared = prepare(
-        run,
-        branch,
-        all_commits=bool(args.all_),
-        until=args.until,
-        until_sha=args.until and resolve_in_stack(run, args.until, branch=branch).sha,
-        first_parent=first_parent,
-        reviewer_flags=tuple(args.reviewers),
-        strategy=args.reviewer_strategy,
-        topic=args.topic,
-        wip=bool(args.wip),
-        ready_for_review=bool(args.ready),
-        private=bool(args.private),
-        remove_private=bool(args.no_private),
-        no_rebase_check=bool(args.no_rebase_check),
-        show_attributes=defaults["show_attributes"],
-        update_last_pushed=defaults["last_pushed_branch"],
-        publish_comments=bool(args.publish_comments),
-        force=bool(args.force),
-        wip_from=args.wip_from and resolve_in_stack(run, args.wip_from, branch=branch).sha,
-    )
+
+    def prepare_push() -> PushPlan | PushRefusal:
+        """The push as it stands; asked again once Change-Ids were added (new commits, --until resolved anew)."""
+        return prepare(
+            run,
+            branch,
+            all_commits=bool(args.all_),
+            until=args.until,
+            until_sha=args.until and resolve_in_stack(run, args.until, branch=branch).sha,
+            first_parent=first_parent,
+            reviewer_flags=tuple(args.reviewers),
+            strategy=args.reviewer_strategy,
+            topic=args.topic,
+            wip=bool(args.wip),
+            ready_for_review=bool(args.ready),
+            private=bool(args.private),
+            remove_private=bool(args.no_private),
+            no_rebase_check=bool(args.no_rebase_check),
+            show_attributes=defaults["show_attributes"],
+            update_last_pushed=defaults["last_pushed_branch"],
+            publish_comments=bool(args.publish_comments),
+            force=bool(args.force),
+            wip_from=args.wip_from and resolve_in_stack(run, args.wip_from, branch=branch).sha,
+        )
+
+    prepared = prepare_push()
+    # No commit-msg hook adds Change-Ids (ger setup installs none): the push adds the missing ones,
+    # as the hook would have at commit time, says so before its preview, and goes on with them.
+    if args.dry_run and prepared.boundary is not None and prepared.boundary.missing_change_id:
+        print("ger push (without --dry-run) adds the missing Change-Ids first, and pushes those commits too.")
+    elif added := add_change_ids_for_push(cwd, branch, prepared.boundary):
+        named = ", ".join(f'"{commit.subject}"' for commit in added)
+        print(f"Added a Change-Id to {counted(len(added), 'commit')}, as a commit-msg hook would: {named}")
+        prepared = prepare_push()
     if isinstance(prepared, PushRefusal):
         print_refusal(cwd, branch, prepared, first_parent=first_parent, settings=settings)
         return int(ExitCode.REFUSED)

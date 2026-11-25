@@ -23,7 +23,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     self_account_id as account_id_of_self,
 )
 from gerrit_workflow_tools.core.gerrit.stack_context import StackContext, build_triplet
-from gerrit_workflow_tools.core.review_chain import ReviewChain, assemble_review_chains, missing_parent_shas
+from gerrit_workflow_tools.core.review_chain import ReviewChain, assemble_review_chains
 
 
 if TYPE_CHECKING:
@@ -240,12 +240,13 @@ class GerritService:
                 except Exception as exc:  # pylint: disable=broad-exception-caught
                     logger.debug("%s follow-up failed for %s: %s", kind, change.key, exc)
 
-    def fetch_review_chains(  # pylint: disable=too-many-locals
+    def fetch_review_chains(
         self,
         query: str,
         *,
         now: datetime | None = None,
         self_account_id: int | None = None,
+        context_query: str | None = None,
     ) -> list[ReviewChain]:
         """Query Gerrit and assemble **review chains**. Never resolves stack context.
 
@@ -253,20 +254,20 @@ class GerritService:
         must not call :func:`resolve_stack_context`. Gerrit is always asked what matches
         (:meth:`ChangeApi.query`: a light listing, details from the cache where current),
         then once more, batched, for parents missing from the result set.
+
+        *context_query*, asked beside *query*, finds the rest of each chain: its changes join the
+        chain they belong to as members *query* did not match (``ChainMember.matched``); a chain
+        of its changes alone has no member matched.
         """
         moment = now if now is not None else datetime.now(timezone.utc)
-        rows = [ChangeView.from_payload(row) for row in self.changes.query(query)]
+        asked = [query] if context_query is None else [query, context_query]
+        answers = parallel_map([partial(self.changes.query, q) for q in asked])
+        rows, *context = [[ChangeView.from_payload(row) for row in answer] for answer in answers]
         account_id = self_account_id if self_account_id is not None else self.self_account_id()
-        parent_shas = missing_parent_shas(rows)
-        follow_up_rows: list[ChangeView] = []
-        unmatched: set[str] = set()
-        if parent_shas:
-            follow_up_rows = [ChangeView.from_payload(payload) for payload in self.changes.by_commit(parent_shas)]
-            current_shas = {change.current_revision for change in follow_up_rows if change.current_revision}
-            for sha in parent_shas:
-                # A parent found only as an older patch set: the chain is partial.
-                if sha not in current_shas and any(sha in change.revisions for change in follow_up_rows):
-                    unmatched.add(sha)
+        follow_up_rows = [view for views in context for view in views]  # the queried ones among them are skipped
+        parents, unmatched = self.changes.parents([*rows, *follow_up_rows])
+        follow_up_rows += parents
+        every = list({change.key: change for change in [*follow_up_rows, *rows]}.values())
         return assemble_review_chains(
             rows,
             follow_up_rows,
@@ -274,7 +275,7 @@ class GerritService:
             now=moment,
             self_account_id=account_id,
             follow_up_unmatched=unmatched,
-            awaiting_reply=self._comments_awaiting_reply([*rows, *follow_up_rows], account_id),
+            awaiting_reply=self._comments_awaiting_reply(every, account_id),
         )
 
     def _comments_awaiting_reply(self, changes: Sequence[ChangeView], me: int | None) -> dict[str, int]:

@@ -19,10 +19,13 @@ from gerrit_workflow_tools.cli_args import (
 from gerrit_workflow_tools.cli_attention import add_attention_query_args, show_revs_with_attention
 from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.cli_notes import print_resolution_note
+from gerrit_workflow_tools.cli_terminal import paged
 from gerrit_workflow_tools.core.annotated_targets import local_stack_or_none
+from gerrit_workflow_tools.core.changeish import change_label
 from gerrit_workflow_tools.core.ci_content_service import CiContentService
 from gerrit_workflow_tools.core.ci_http import CiHttp
 from gerrit_workflow_tools.core.comment_chains import COMMENT_SELECTIONS
+from gerrit_workflow_tools.core.commit_diff import numbered_diff
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.stack_context import resolve_stack_context
@@ -32,12 +35,15 @@ from gerrit_workflow_tools.core.gerrit_show import (
     load_shown_commits,
     resolve_show_targets,
 )
+from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import StackSnapshot, read_commit_meta
+from gerrit_workflow_tools.render.diff_text import diff_lines
 from gerrit_workflow_tools.render.download_meter import DownloadMeter
 from gerrit_workflow_tools.render.show_json import commit_json_payload
 from gerrit_workflow_tools.render.show_markdown import commit_markdown
 from gerrit_workflow_tools.render.show_text import brief_commit_lines, commit_lines, commit_separator
+from gerrit_workflow_tools.render.style import ANSI_DIM, color_text
 from gerrit_workflow_tools.summary_highlight import SummaryHighlighter, run_summary_highlighter
 from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 
@@ -74,6 +80,7 @@ def _build_parser() -> argparse.ArgumentParser:
   ger show HEAD~1 --context a commit, with the code around each comment
   ger show change:1234      a change by number, whether or not you have it locally
   ger show --stack          every commit of the local stack
+  ger show --diff           the change's diff, numbered as ger comment PATH:LINE counts
   ger reply ID --done       answer a comment by the id ger show prints
 
 The status columns are those of ger log (see ger log --help).""",
@@ -104,6 +111,12 @@ The status columns are those of ger log (see ger log --help).""",
         default=None,
         metavar="N",
         help="Extra source lines before/after the comment (implies --context; default 2).",
+    )
+    p.add_argument(
+        "--diff",
+        action="store_true",
+        help="Also print each commit's diff, every line with its number in the new version (what "
+        "ger comment PATH:LINE takes); paged on a terminal.",
     )
     add_on_off_arg(
         p,
@@ -159,7 +172,10 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp |
         else None
     )
     shown = _load(run, args, targets, snap, ci_http=ci_http)
-    _print_shown(run, args, shown, multi=len(targets) > 1, highlighter=_highlighter(run, snap, branch))
+    if args.diff and output_format(args) != "human":
+        p.error("--diff is for the terminal: drop --json / --ai")
+    with paged(args.diff):
+        _print_shown(run, args, shown, multi=len(targets) > 1, highlighter=_highlighter(run, snap, branch))
     # Shown what is known locally; now say, once, why the rest is not.
     if unavailable := next((item.gerrit_unavailable for item in shown if item.gerrit_unavailable), None):
         raise unavailable
@@ -243,9 +259,21 @@ def _print_shown(
         if multi and not item.chains and not item.ci_contents:
             lines = brief_commit_lines(commit, comments=args.comments)
         else:
-            meta = read_commit_meta(run.cwd, commit.sha) if item.target.is_local_commit and commit.sha else None
+            local = item.target.is_local_commit and commit.sha
+            meta = read_commit_meta(run.cwd, commit.sha) if local else item.target.gerrit_meta
             lines = commit_lines(item, meta, summary_highlighter=highlighter, wrap_width=run.settings.wrap_width)
+        if args.diff:
+            lines += ["", *_diff(run, item)]
         print("\n".join(lines))
+
+
+def _diff(run: RunContext, item: ShownCommit) -> list[str]:
+    """The commit's diff, numbered; or why there is none: the commit is not in this repository."""
+    commit = item.commit
+    if commit.sha and commit_sha_or_none(run.cwd, commit.sha):
+        return diff_lines(numbered_diff(run.cwd, commit.sha))
+    fetch = f": ger review {change_label(commit.number)} fetches it" if commit.number else ""
+    return [color_text(f"(no diff: commit {commit.short_sha} is not in this repository{fetch})", ANSI_DIM)]
 
 
 if __name__ == "__main__":

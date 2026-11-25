@@ -10,7 +10,6 @@ Pure functions over :class:`ChangeView` values, so unit tests drive them from
 
 from __future__ import annotations
 
-from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -18,6 +17,7 @@ from urllib.parse import urlparse
 
 from gerrit_workflow_tools.core.attention import Attention, ci_failed, comment_reason
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView, parse_gerrit_time
+from gerrit_workflow_tools.core.review_chain_graph import ChainComponent, chain_components
 
 
 @dataclass(frozen=True)
@@ -46,6 +46,20 @@ class ChainMember:  # pylint: disable=too-many-instance-attributes
     comments_awaiting_reply: int = 0
     """Of :attr:`comments_unresolved`, the chains whose last published comment is yours: they wait
     on the other side (``ChainTurn.THEIRS``)."""
+    your_turn: bool = False
+    """It is your turn to review it (:func:`your_turn_since`), and the query matched it; never on a
+    change of yours."""
+    matched: bool = True
+    """The section's query matched it. Otherwise it is context: a parent the chain sits on, or a
+    change of the chain the *to review* query leaves out as not ready (no Verified, WIP, private)."""
+
+
+@dataclass(frozen=True)
+class LabelTally:
+    """One label over a chain's members: the worst vote cast on any of them, and how many have none."""
+
+    cast: int | None = None
+    missing: int = 0
 
 
 @dataclass(frozen=True)
@@ -73,6 +87,17 @@ class ReviewChain:  # pylint: disable=too-many-instance-attributes
     """The member updated last was updated by you (your push, your vote): not news to you."""
     comments_awaiting_reply: int = 0
     """Of :attr:`comments_unresolved`, the chains that wait on the other side, over all members."""
+    verified_tally: LabelTally = LabelTally()
+    code_review_tally: LabelTally = LabelTally()
+    """What :attr:`verified` and :attr:`code_review` sum up: the worst vote cast, and the members without one."""
+    your_turn: bool = False
+    """It is your turn to review a member: the chain waits on you. Otherwise a chain you review
+    waits on its author; :attr:`unreviewed_age_seconds` is then 0."""
+
+    @property
+    def matched(self) -> bool:
+        """Whether the section's query matched a member: else the chain is all context (not ready)."""
+        return any(member.matched for member in self.members)
 
     @property
     def work_in_progress(self) -> bool:
@@ -104,34 +129,33 @@ def host_from_web_base(web_base: str) -> str:
     return host.split("@", 1)[-1].split(":", 1)[0] or "unknown"
 
 
-def missing_parent_shas(changes: list[ChangeView]) -> list[str]:
-    """First-parent SHAs that are not another change's current revision."""
-    known = {change.current_revision for change in changes if change.current_revision}
-    parents = (change.first_parent for change in changes if change.first_parent)
-    return list(dict.fromkeys(parent for parent in parents if parent not in known))
-
-
-def _self_vote_date(change: ChangeView, self_account_id: int | None) -> datetime | None:
-    if self_account_id is None:
-        return None
+def _self_vote_date(change: ChangeView, self_account_id: int) -> datetime | None:
     dates = [vote.date for vote in change.code_review_votes if vote.account_id == self_account_id and vote.date]
     return max(dates, default=None)
 
 
-def member_unreviewed_since(change: ChangeView, self_account_id: int | None) -> datetime | None:
-    """When this change last started waiting for *self*'s review, or ``None`` if current.
+def your_turn_since(change: ChangeView, self_account_id: int | None) -> datetime | None:
+    """Since when it is your **turn** on somebody else's *change*; ``None`` while it is not. Never
+    on a change of yours. The one place that decides it.
 
-    Prefers the attention-set clock (Gerrit's "your turn"). Falls back to "current
-    patch set uploaded after my last Code-Review vote", then to change creation
-    when I have never voted.
+    Gerrit's attention set decides wherever it holds you: in it, your turn since Gerrit put you
+    there (an upload, a reply to you); taken out of it (your reply), not yours. With neither, a
+    server with the attention set switched off or one that never had you in it: your turn while
+    the current patch set came after your last Code-Review vote, or since the change was created
+    when you never voted.
     """
-    attention_at = change.attention_set.get(self_account_id) if self_account_id is not None else None
-    if attention_at is not None:
-        return attention_at
-    last_vote = _self_vote_date(change, self_account_id)
+    me = self_account_id
+    if me is None or change.owned_by(me):
+        return None
+    created = parse_gerrit_time(change.created)
+    if me in change.attention_set:
+        return change.attention_set[me] or change.current_revision_created() or created
+    if me in change.removed_from_attention_set:
+        return None
+    last_vote = _self_vote_date(change, me)
     patch_created = change.current_revision_created()
     if last_vote is None:
-        return patch_created or parse_gerrit_time(change.created)
+        return patch_created or created
     if patch_created is not None and last_vote < patch_created:
         return patch_created
     return None
@@ -162,8 +186,13 @@ def _worst_label(values: list[int | None]) -> int | None:
     return None
 
 
+def _tally(values: list[int | None]) -> LabelTally:
+    known = [value for value in values if value is not None]
+    return LabelTally(min(known, default=None), len(values) - len(known))
+
+
 def _to_member(
-    change: ChangeView, web_base: str, self_account_id: int | None = None, awaiting_reply: int = 0
+    change: ChangeView, web_base: str, self_account_id: int | None, awaiting_reply: int, *, matched: bool
 ) -> ChainMember | None:
     if change.number is None:
         return None
@@ -186,90 +215,9 @@ def _to_member(
         private=change.private,
         updated_by_you=change.updated_by(self_account_id),
         comments_awaiting_reply=awaiting_reply,
+        your_turn=matched and your_turn_since(change, self_account_id) is not None,
+        matched=matched,
     )
-
-
-def _index_payloads(changes: list[ChangeView]) -> dict[str, ChangeView]:
-    """Key changes by Gerrit ``id``; last write wins for a duplicate id."""
-    return {change.key: change for change in changes if change.key}
-
-
-class _UnionFind:
-    """Disjoint-set of change ids used while grouping a query result into chains."""
-
-    def __init__(self) -> None:
-        self._parent: dict[str, str] = {}
-
-    def add(self, item: str) -> None:
-        """Ensure *item* is a set of its own."""
-        self._parent.setdefault(item, item)
-
-    def find(self, item: str) -> str:
-        """Return the representative for *item*'s set."""
-        parent = self._parent[item]
-        if parent != item:
-            parent = self.find(parent)
-            self._parent[item] = parent
-        return parent
-
-    def union(self, left: str, right: str) -> None:
-        """Merge the sets containing *left* and *right*."""
-        root_left, root_right = self.find(left), self.find(right)
-        if root_left != root_right:
-            self._parent[root_right] = root_left
-
-
-def _parent_id(change: ChangeView, sha_to_id: dict[str, str]) -> str | None:
-    return sha_to_id.get(change.first_parent) if change.first_parent else None
-
-
-def _order_members(
-    component: set[str],
-    payloads: dict[str, ChangeView],
-    sha_to_id: dict[str, str],
-) -> list[str]:
-    """Base-to-top order along first-parent links; siblings by change number."""
-    children: dict[str, list[str]] = defaultdict(list)
-    bases: list[str] = []
-    for member_id in component:
-        parent_id = _parent_id(payloads[member_id], sha_to_id)
-        if parent_id and parent_id in component:
-            children[parent_id].append(member_id)
-        else:
-            bases.append(member_id)
-    for child_ids in children.values():
-        child_ids.sort(key=lambda item: payloads[item].number or 0)
-    bases.sort(key=lambda item: payloads[item].number or 0)
-    ordered: list[str] = []
-    seen: set[str] = set()
-
-    def _walk(member_id: str) -> None:
-        if member_id in seen:
-            return
-        seen.add(member_id)
-        ordered.append(member_id)
-        for child_id in children.get(member_id, []):
-            _walk(child_id)
-
-    for base_id in bases:
-        _walk(base_id)
-    for member_id in sorted(component, key=lambda item: payloads[item].number or 0):
-        _walk(member_id)
-    return ordered
-
-
-def _pick_top(
-    ordered_ids: list[str],
-    component: set[str],
-    payloads: dict[str, ChangeView],
-    sha_to_id: dict[str, str],
-) -> str:
-    """Member whose current revision is not the parent of any other member."""
-    parent_ids = {_parent_id(payloads[member_id], sha_to_id) for member_id in component}
-    tips = [member_id for member_id in ordered_ids if member_id not in parent_ids]
-    if not tips:
-        return ordered_ids[-1]
-    return max(tips, key=lambda item: payloads[item].number or 0)
 
 
 def _seconds_since(moment: datetime | None, now: datetime) -> int:
@@ -280,9 +228,8 @@ def _seconds_since(moment: datetime | None, now: datetime) -> int:
 
 
 def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
-    component: set[str],
-    payloads: dict[str, ChangeView],
-    sha_to_id: dict[str, str],
+    component: ChainComponent,
+    payloads: Mapping[str, ChangeView],
     *,
     web_base: str,
     host: str,
@@ -290,22 +237,33 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
     self_account_id: int | None,
     unmatched: set[str],
     awaiting_reply: Mapping[str, int],
+    matched: set[str],
 ) -> ReviewChain | None:
-    """Build one ReviewChain from a connected component, or None if it has no numbers."""
-    ordered_ids = _order_members(component, payloads, sha_to_id)
+    """Build one ReviewChain from a connected component, or None if it has no numbers. Its clock
+    runs from the *matched* members whose turn is yours."""
+    ordered_ids = component.ordered
     members = [
         member
         for member_id in ordered_ids
-        if (member := _to_member(payloads[member_id], web_base, self_account_id, awaiting_reply.get(member_id, 0)))
+        if (
+            member := _to_member(
+                payloads[member_id],
+                web_base,
+                self_account_id,
+                awaiting_reply.get(member_id, 0),
+                matched=member_id in matched,
+            )
+        )
     ]
     if not members:
         return None
-    top_id = _pick_top(ordered_ids, component, payloads, sha_to_id)
-    top_number = payloads[top_id].number
+    top_number = payloads[component.top].number
     top_member = next((member for member in members if member.number == top_number), members[-1])
     last_activity = max((member.updated for member in members if member.updated is not None), default=None)
     last = [member for member in members if member.updated == last_activity]
-    stamps = (member_unreviewed_since(payloads[member_id], self_account_id) for member_id in ordered_ids)
+    stamps = (
+        your_turn_since(payloads[member_id], self_account_id) for member_id in ordered_ids if member_id in matched
+    )
     unreviewed_at = min((stamp for stamp in stamps if stamp is not None), default=None)
     project = top_member.project
     return ReviewChain(
@@ -325,9 +283,12 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
         comments_unresolved=sum(member.comments_unresolved for member in members),
         comments_awaiting_reply=sum(member.comments_awaiting_reply for member in members),
         attention_reasons=tuple(dict.fromkeys(reason for member in members for reason in member.attention_reasons)),
-        partial_chain=any(payloads[member_id].first_parent in unmatched for member_id in component),
+        partial_chain=any(payloads[member_id].first_parent in unmatched for member_id in ordered_ids),
         url=top_member.url,
         last_activity_yours=last_activity is not None and all(member.updated_by_you for member in last),
+        verified_tally=_tally([member.verified for member in members]),
+        code_review_tally=_tally([member.code_review for member in members]),
+        your_turn=unreviewed_at is not None,
     )
 
 
@@ -344,7 +305,8 @@ def assemble_review_chains(  # pylint: disable=too-many-arguments,too-many-local
     """Assemble review chains from a query result plus optional parent follow-up rows.
 
     *queried* members seed chains even when you are not a reviewer on every
-    follow-up row — those extra open changes are context. Merged/abandoned
+    follow-up row — those extra open changes are context (:attr:`ChainMember.matched` false); a
+    chain of follow-up rows alone has no member matched. Merged/abandoned
     follow-up rows are ignored (they are the ground the chain sits on).
     *follow_up_unmatched* are parent SHAs that a follow-up returned for a
     non-current revision: the chain is then flagged ``partial_chain``. *awaiting_reply* says, by
@@ -352,40 +314,31 @@ def assemble_review_chains(  # pylint: disable=too-many-arguments,too-many-local
     """
     queried_ids = {change.key for change in queried if change.key}
     open_follow_up = [change for change in follow_up if change.is_open and change.key not in queried_ids]
-    payloads = _index_payloads(list(queried) + open_follow_up)
-    if not payloads:
-        return []
-
-    sha_to_id = {change.current_revision: key for key, change in payloads.items() if change.current_revision}
-
-    union = _UnionFind()
-    for member_id in payloads:
-        union.add(member_id)
-    for member_id, change in payloads.items():
-        parent_id = _parent_id(change, sha_to_id)
-        if parent_id:
-            union.union(member_id, parent_id)
-
-    groups: dict[str, set[str]] = defaultdict(set)
-    for member_id in payloads:
-        groups[union.find(member_id)].add(member_id)
-
+    payloads = {change.key: change for change in [*queried, *open_follow_up] if change.key}  # last one wins
     unmatched = follow_up_unmatched or set()
     host = host_from_web_base(web_base)
     chains: list[ReviewChain] = []
-    for component in groups.values():
+    for component in chain_components(payloads):
         chain = _chain_from_component(
             component,
             payloads,
-            sha_to_id,
             web_base=web_base,
             host=host,
             now=now,
             self_account_id=self_account_id,
             unmatched=unmatched,
             awaiting_reply=awaiting_reply or {},
+            matched=queried_ids,
         )
         if chain is not None:
             chains.append(chain)
-    chains.sort(key=lambda chain: (-chain.unreviewed_age_seconds, -chain.wait_age_seconds, chain.top.number))
+    # Your turn first, longest waited first; then the chains that wait on their author.
+    chains.sort(
+        key=lambda chain: (
+            not chain.your_turn,
+            -chain.unreviewed_age_seconds,
+            -chain.wait_age_seconds,
+            chain.top.number,
+        )
+    )
     return chains

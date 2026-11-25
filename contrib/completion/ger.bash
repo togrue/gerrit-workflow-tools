@@ -450,7 +450,7 @@ _ger_show() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --stack --first-attention -n --next-attention --branch --comments --context --context-padding --ci --no-ci --json --format --ai --color --hyperlinks -v --verbose --debug-log --refresh
+        __gwt_flags "$cur" -h --help --stack --first-attention -n --next-attention --branch --comments --context --context-padding --diff --ci --no-ci --json --format --ai --color --hyperlinks -v --verbose --debug-log --refresh
         return
     fi
     case "$prev" in

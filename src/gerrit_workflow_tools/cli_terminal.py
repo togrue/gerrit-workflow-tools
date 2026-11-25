@@ -3,10 +3,14 @@ does ``GER_ASSUME_YES`` answer for the user) and the plain questions (:func:`ask
 
 from __future__ import annotations
 
+import io
 import os
 import sys
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager, redirect_stdout
 from typing import TextIO, TypeVar
+
+from gerrit_workflow_tools.core.git_editor import run_git_pager
 
 
 _T = TypeVar("_T")
@@ -72,3 +76,17 @@ def confirm(question: str, *, default: bool) -> bool:
     suffix = "[Y/n]" if default else "[y/N]"
     answers = {"y": True, "yes": True, "n": False, "no": False, "": default}
     return ask_choice(f"{question} {suffix}: ", answers, on_eof=False)
+
+
+@contextmanager
+def paged(enabled: bool) -> Iterator[None]:
+    """What is printed inside goes through git's pager (``git var GIT_PAGER``; ``LESS=FRX`` unless
+    set, as git does) when *enabled* and stdout is a terminal; else straight out."""
+    if not enabled or not sys.stdout.isatty():
+        yield
+        return
+    buffer = io.StringIO()
+    with redirect_stdout(buffer):
+        yield
+    if not run_git_pager(buffer.getvalue()):
+        sys.stdout.write(buffer.getvalue())

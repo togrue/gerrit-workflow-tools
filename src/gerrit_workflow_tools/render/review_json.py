@@ -8,7 +8,14 @@ from datetime import datetime
 
 from gerrit_workflow_tools.core.attention import Attention, attention_severity
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
-from gerrit_workflow_tools.core.inbox import Headline, InboxSection, RebaseHeadline, section_summary
+from gerrit_workflow_tools.core.inbox import (
+    TO_REVIEW,
+    Headline,
+    InboxSection,
+    RebaseHeadline,
+    not_ready_why,
+    section_summary,
+)
 from gerrit_workflow_tools.core.rebase_state import RebaseStop
 from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain, format_age
 from gerrit_workflow_tools.core.review_checkout import ReviewState
@@ -22,8 +29,9 @@ def iso_utc(moment: datetime | None) -> str | None:
     return moment.isoformat().replace("+00:00", "Z") if moment else None
 
 
-def member_json(member: ChainMember) -> dict[str, object]:
-    """One chain member: identity, current patch set, votes, unresolved comments, attention."""
+def member_json(member: ChainMember, *, to_review: bool = False) -> dict[str, object]:
+    """One chain member: identity, current patch set, votes, unresolved comments, attention; under
+    *to review*, why it is not ready when the section's query left it out."""
     return {
         "number": member.number,
         "change_id": member.change_id,
@@ -36,11 +44,13 @@ def member_json(member: ChainMember) -> dict[str, object]:
         "severity": attention_severity(member.attention_reasons).value,
         "url": member.url,
         "sha": member.sha,
+        "your_turn": member.your_turn,
+        "not_ready": not_ready_why(member) if to_review and not member.matched else None,
     }
 
 
-def chain_json(chain: ReviewChain) -> dict[str, object]:
-    """One review chain: its top, clocks, worst votes, and members base to top."""
+def chain_json(chain: ReviewChain, *, to_review: bool = False) -> dict[str, object]:
+    """One review chain: its top, clocks, worst votes, and members base to top (*to review*: :func:`member_json`)."""
     return {
         "key": chain.key,
         "top": {
@@ -59,12 +69,15 @@ def chain_json(chain: ReviewChain) -> dict[str, object]:
         "last_activity_yours": chain.last_activity_yours,
         "verified": chain.verified,
         "code_review": chain.code_review,
+        "votes_cast": {"verified": chain.verified_tally.cast, "code_review": chain.code_review_tally.cast},
+        "votes_missing": {"verified": chain.verified_tally.missing, "code_review": chain.code_review_tally.missing},
         "comments_unresolved": chain.comments_unresolved,
         "comments_awaiting_reply": chain.comments_awaiting_reply,
         "attention_reasons": list(chain.attention_reasons),
         "severity": attention_severity(chain.attention_reasons).value,
         "partial_chain": chain.partial_chain,
-        "members": [member_json(member) for member in chain.members],
+        "your_turn": chain.your_turn,
+        "members": [member_json(member, to_review=to_review) for member in chain.members],
     }
 
 
@@ -130,8 +143,8 @@ def sections_json(sections: list[InboxSection]) -> list[dict[str, object]]:
         {
             "name": section.name,
             "query": section.query,
-            "summary": section_summary(section.chains),
-            "chains": [chain_json(chain) for chain in section.chains],
+            "summary": section_summary(section),
+            "chains": [chain_json(chain, to_review=section.name == TO_REVIEW) for chain in section.chains],
         }
         for section in sections
     ]
@@ -184,6 +197,8 @@ def vote_plan_json(plan: VotePlan, options: list[VoteOption], *, web_base: str) 
             "own": target.own,
             "permitted": {label: list(values) for label, values in target.change.permitted_votes.items()},
             "ruled_out": list(target.ruled_out),
+            "yours": dict(target.yours),
+            "keeps": plan.keeps(target),
             "drafts": [_draft_json(chain, draft) for chain, draft in drafts_in(list(target.drafts))],
         }
         for target in plan.targets
@@ -192,7 +207,7 @@ def vote_plan_json(plan: VotePlan, options: list[VoteOption], *, web_base: str) 
         "changes": changes,
         "votes": dict(plan.votes),
         "drafts": plan.draft_count,
-        "options": [{**asdict(option), "takes": list(option.takes)} for option in options],
+        "options": [{**asdict(option), "takes": list(option.takes), "keeps": list(option.keeps)} for option in options],
     }
 
 
@@ -203,11 +218,12 @@ def sent_vote_json(plan: VotePlan, status: str) -> dict[str, list[dict[str, obje
             "change": target.change.key,
             "number": target.number,
             "drafts": target.draft_count,
-            "labels": dict(plan.votes),
+            "labels": plan.votes_on(target),
+            "keeps": plan.keeps(target),
             "message": plan.message,
             "status": status,
         }
-        for target in plan.takes
+        for target in plan.sends
     ]
     skipped: list[dict[str, object]] = [
         {"change": t.change.key, "number": t.number, "ruled_out": list(t.ruled_out)} for t in plan.skipped

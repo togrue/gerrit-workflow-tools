@@ -62,7 +62,7 @@ Default `REV_OR_RANGE`: `HEAD`. Change-Id argument is echoed unchanged. A range 
 |--------|-------------|
 | `--start-at-remote` | Use `upstream_tip..END` stack window |
 | `--check` | Validate **all** commits in the current local stack (`upstream_tip..HEAD`): every commit must have a valid Change-Id footer, and no Change-Id may appear on more than one commit |
-| `--fix` | Assign missing Change-Ids on last message line (message-only rewrite via `commit-tree`) |
+| `--fix` | Assign missing Change-Ids on last message line, replace malformed ones, and give the newer of two commits with the same Change-Id a new one (message-only rewrite via `commit-tree`); what `ger push` runs itself for missing ones |
 | `--color`, `--debug-log` | Standard helpers (`-v` is accepted, does nothing, and is not shown) |
 
 `--check` always covers the full current stack (`upstream_tip..HEAD`). A `REV_OR_RANGE` argument is a usage error in this mode. Formerly named `--check-duplicates`. It names every problem it finds, one `error: commit <sha>: …` line each, oldest commit first; the exit code is that of the first line. With none, it prints `N commits, all Change-Ids valid` on a terminal and nothing when piped.

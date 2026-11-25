@@ -84,6 +84,21 @@ def test_the_to_review_list_and_each_changes_view_agree(stack_repo: Path) -> Non
     assert listed == leads == {900, 902}
 
 
+def test_whose_turn_the_list_and_each_changes_view_say_agree(stack_repo: Path) -> None:
+    """After your reply Gerrit takes you out of the attention set: the list says the chain waits on
+    its author, and so does the change's own view (finding 1 of the 2026-11-25 review walk)."""
+    reviewed = _theirs(903, asks_you=True)
+    reviewed["removed_from_attention_set"] = {
+        str(SELF): {"account": {"_account_id": SELF}, "last_update": "2026-11-08 10:00:00.000000000"}
+    }
+    api = GerApi(stack_repo, gerrit=_store(stack_repo, _theirs(900, asks_you=True), reviewed))
+    [to_review] = [section for section in _get(api, "/overview")["sections"] if section["name"] == TO_REVIEW]
+    listed = {chain["top"]["number"]: chain["your_turn"] for chain in to_review["chains"]}
+    leads = {number: _shown(api, number)["attention_reasons"][0] for number in listed}
+    assert listed == {900: True, 903: False}
+    assert leads == {900: Attention.WAITING_ON_YOU, 903: Attention.WAITING_ON_AUTHOR}
+
+
 def test_your_review_replaces_what_the_author_waits_for_from_reviewers() -> None:
     reasons = [Attention.CI_FAILED, Attention.NO_REVIEWERS, Attention.AWAITING_REVIEW, Attention.UNRESOLVED_COMMENTS]
     assert as_your_review(reasons) == [Attention.WAITING_ON_YOU, Attention.CI_FAILED, Attention.UNRESOLVED_COMMENTS]

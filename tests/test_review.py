@@ -450,6 +450,38 @@ def test_vote_on_the_chain_lists_each_change_with_its_drafts_and_votes_on_each(
     assert "published 1 draft and Code-Review+1 on 103" in out
 
 
+def test_a_chain_vote_keeps_a_vote_you_gave_and_naming_the_change_replaces_it(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finding 2 of the 2026-11-25 review walk: a chain +1 turned the reviewer's own -1 into +1."""
+    store, keys, _shas = gerrit
+    store._self_account_id = 1000  # pylint: disable=protected-access  # whose votes are yours
+    store._accounts[1000] = {"_account_id": 1000, "username": "me"}  # pylint: disable=protected-access
+    code, _out, err = _review(stack_repo, store, ["--vote", "-1", "--change", "101", "-y"], monkeypatch)
+    assert code == ExitCode.OK, err
+    _review(stack_repo, store, ["101"], monkeypatch)
+    code, out, err = _review(stack_repo, store, ["--vote", "+1", "--chain", "--dry-run"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert f'change 101 "{_subjects(store, keys)[1]}": 0 drafts, keeps your Code-Review-1' in out
+    assert f'change 100 "{_subjects(store, keys)[0]}": 0 drafts, Code-Review+1' in out
+    del store.calls[:]
+    code, out, err = _review(stack_repo, store, ["--vote", "+1", "--chain", "-y"], monkeypatch)
+    assert code == ExitCode.OK, err
+    sent = {call.args[0]: call.kwargs["labels"] for call in store.calls_to("publish_drafts")}
+    assert sent == {keys[0]: {"Code-Review": 1}, keys[2]: {"Code-Review": 1}, keys[3]: {"Code-Review": 1}}
+    # With a draft there, the draft goes out and the vote stays yours.
+    _draft(store, keys[1], "still a nit")
+    del store.calls[:]
+    code, out, err = _review(stack_repo, store, ["--vote", "+1", "--chain", "-y"], monkeypatch)
+    assert {call.args[0]: call.kwargs["labels"] for call in store.calls_to("publish_drafts")}[keys[1]] is None
+    assert "published 1 draft on 101 (keeps your Code-Review-1)" in out
+    # Naming the change is how a vote of yours is replaced.
+    del store.calls[:]
+    code, out, err = _review(stack_repo, store, ["--vote", "+1", "--change", "101", "-y"], monkeypatch)
+    assert code == ExitCode.OK, err
+    assert [call.kwargs["labels"] for call in store.calls_to("publish_drafts")] == [{"Code-Review": 1}]
+
+
 def test_vote_on_several_named_changes_votes_on_each(
     stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
 ) -> None:

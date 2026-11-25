@@ -100,7 +100,7 @@ class CommentApi:
         file_map, drafts = parallel_map(
             [
                 partial(self._file_map, key, change_updated=change_updated, context_padding=context_padding),
-                partial(self._drafts, key),
+                partial(self._drafts, key, context_padding=context_padding),
             ]
         )
         # Who you are says whose turn each chain is: remembered once asked, so no request when known.
@@ -294,8 +294,8 @@ class CommentApi:
         """
         return self._drafts(self._key(change_id))
 
-    def _drafts(self, key: str) -> dict[str, list[dict[str, Any]]]:
-        return self._service.rest.list_drafts(key)
+    def _drafts(self, key: str, *, context_padding: int | None = None) -> dict[str, list[dict[str, Any]]]:
+        return self._service.rest.list_drafts(key, context_padding=context_padding)
 
     def get_file_map(
         self,

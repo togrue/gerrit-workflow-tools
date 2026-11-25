@@ -21,6 +21,7 @@ import { push, rebaseOntoUpstream, rebaseStep } from "./rebase";
 import { RepoWatcher } from "./repoWatcher";
 import { reportIssue } from "./reportIssue";
 import { ReviewWalk, checkout, editCommit, leaveReview, review, stepReview, updateReview } from "./review";
+import { waitsOnYou } from "./rows";
 import { GerProcess } from "./server";
 import { CommitArg, StackView, commitTarget } from "./stackView";
 import { waitsForYou } from "./state";
@@ -122,7 +123,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   const threads = new CommentThreads(model, changeView, (chain) => changeView.revealThread(chain));
 
   model.onDidChange(() => {
-    const waiting = model.overview?.sections?.find((s) => s.name === "to-review")?.chains.length ?? 0;
+    // What waits on your review: the chains whose turn is yours, not those waiting on their author.
+    const waiting = model.overview?.sections?.find((s) => s.name === "to-review")?.chains.filter((chain) => waitsOnYou(chain, "to-review")).length ?? 0;
     overviewTree.description = model.stale ? "out of date" : undefined;
     // Over the welcome text, which cannot say which versions: this can. (A message hides the welcome text and its
     // buttons, so setup wanting says its cause there by `ger.setupReason`, and ger's own words in the other views.)

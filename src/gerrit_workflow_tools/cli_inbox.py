@@ -125,7 +125,6 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         include_unready=bool(args.include_unready),
         limit=limit,
         sections=(TO_REVIEW, OUTGOING) if args.section is None else (args.section,),
-        count_not_ready=output_format(args) == "human",
         with_drafts=output_format(args) == "human",
     )
     if limit is not None:

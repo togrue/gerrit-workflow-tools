@@ -24,10 +24,11 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, G
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
-from gerrit_workflow_tools.core.inbox import to_review_needs_you_as_reviewer, waiting_on_your_review
+from gerrit_workflow_tools.core.inbox import review_turns, to_review_needs_you_as_reviewer
 from gerrit_workflow_tools.core.local_comments import local_chains_of
 from gerrit_workflow_tools.core.stack import (
     Commit,
+    CommitMeta,
     StackSnapshot,
     abbreviated_sha,
     commits_in_range,
@@ -43,6 +44,8 @@ class ShowCommitResolution:
     row: Commit
     is_local_commit: bool
     resolution: Resolution
+    gerrit_meta: CommitMeta | None = None
+    """A change with no local commit: its author, date and message as Gerrit has them, when it sent them."""
 
     @property
     def shown_triplet(self) -> str | None:
@@ -79,7 +82,19 @@ def _row_from_gerrit_change(change: ChangeView) -> Commit:
         raise ChangeResolutionError("Gerrit change has no change_id")
     summary = change.subject
     short = abbreviated_sha(sha) or "???????"
-    return Commit(sha=sha, short_sha=short, subject=summary, body="", change_id=change_id)
+    meta = gerrit_commit_meta(change)
+    return Commit(sha=sha, short_sha=short, subject=summary, body=meta.body if meta else "", change_id=change_id)
+
+
+def gerrit_commit_meta(change: ChangeView) -> CommitMeta | None:
+    """The current patchset's author, date and whole message as Gerrit has them (``CURRENT_COMMIT``);
+    ``None`` when Gerrit did not send the commit."""
+    revision = change.revisions.get(change.current_revision or "")
+    if revision is None or revision.message is None:
+        return None
+    name, email, date = revision.author or ("", None, None)
+    when = date.isoformat() if date else ""
+    return CommitMeta(author_line=f"{name} <{email}>" if email else name, date=when, body=revision.message.rstrip("\n"))
 
 
 def _row_from_local_commit(cwd: Path | str, sha: str) -> Commit:
@@ -117,7 +132,7 @@ def resolve_show_commit_row(
 
     change = ChangeView.from_payload(changes.get(resolution.selected.triplet))
     row = _row_from_gerrit_change(change)
-    return ShowCommitResolution(row=row, is_local_commit=False, resolution=resolution)
+    return ShowCommitResolution(row, False, resolution, gerrit_commit_meta(change))
 
 
 def resolve_range_endpoint_sha(
@@ -299,7 +314,7 @@ class ShownCommit:
 
 
 def _mark_waiting_on_you(service: GerritService, commits: list[LogCommit]) -> None:
-    """Of *commits*, each that waits on your review leads with that (:func:`as_your_review`).
+    """Of *commits*, each you review leads with whose turn it is (:func:`as_your_review`).
 
     Commits of the local stack are asked too: a change checked out for review (``ger review``), or
     a colleague's change your work sits on, is in the stack and still waits on you. The query's own
@@ -319,12 +334,12 @@ def _mark_waiting_on_you(service: GerritService, commits: list[LogCommit]) -> No
         pushed = [c for c in pushed if any(r.account_id == me and not r.cc for r in c.reviewers)]
     numbers = [c.number for c in pushed if c.number is not None]
     try:
-        asked = waiting_on_your_review(service, numbers)
+        turns = review_turns(service, numbers)
     except GerritApiError:
         return
     for commit in commits:
-        if commit.number in asked:
-            commit.attention_reasons = as_your_review(commit.attention_reasons)
+        if commit.number in turns:
+            commit.attention_reasons = as_your_review(commit.attention_reasons, your_turn=turns[commit.number])
 
 
 def load_shown_commits(

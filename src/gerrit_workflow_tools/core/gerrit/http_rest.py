@@ -334,9 +334,13 @@ class HttpGerritRest:
                 params["context-padding"] = str(context_padding)
         return _file_map(self._request_dict("comments", _change_path(change_id, "/comments"), params=params))
 
-    def list_drafts(self, change_id: str) -> dict[str, list[dict[str, Any]]]:
-        """GET ``changes/<id>/drafts``: the caller's drafts on every patchset, grouped by file path."""
-        return _file_map(self._request_dict("drafts", _change_path(change_id, "/drafts")))
+    def list_drafts(self, change_id: str, *, context_padding: int | None = None) -> dict[str, list[dict[str, Any]]]:
+        """GET ``changes/<id>/drafts``: the caller's drafts on every patchset, grouped by file path;
+        with *context_padding*, each with its ``context_lines``."""
+        params = (
+            None if context_padding is None else {"enable-context": "true", "context-padding": str(context_padding)}
+        )
+        return _file_map(self._request_dict("drafts", _change_path(change_id, "/drafts"), params=params))
 
     def put_draft(
         self, change_id: str, revision: int | str, comment: dict[str, Any], *, draft_id: str | None = None

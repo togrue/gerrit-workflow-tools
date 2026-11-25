@@ -10,8 +10,9 @@ contract is [docu/spec/commands/serve.md](../docu/spec/commands/serve.md).
 
 In the editor, places are called *Gerrit* (the activity bar, the status bar item); commands are listed in the palette under `ger:`, because they run the `ger` tool.
 
-**Status bar** — the *headline*: the one change that most wants you (failed CI on your chain,
-then unresolved comments, then a negative vote, else the review that has waited longest).
+**Status bar** — the *headline*: the one change that most wants you (failed CI on your chain;
+then unresolved comments on your chains or the review whose turn is yours, whichever has waited
+longer; then a negative vote).
 Failed CI counts only on the chain of your local stack, and the item then just says
 *CI failed:* and the change number; the tooltip has the change's subject. A bell
 with a count appears when chains had activity since you last looked. Click to open the change.
@@ -31,14 +32,21 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
 
 **Review chains** (activity bar → Gerrit)
 
-- *Outgoing*: your open chains. *To review*: chains waiting on you.
-- One row per chain, showing its top change, worst votes, unresolved comments and age. Expand
-  it for the chain's changes. A `●` marks new activity.
+- *To review* first: the chains whose turn is yours, as Gerrit's attention set says (a new
+  patchset, a reply to you, or not reviewed yet). The chains you reviewed wait on their author:
+  they sit in the collapsed *Waiting on the author* group below, with a clock, and come back up
+  when it is your turn again. The activity bar's badge counts the chains whose turn is yours.
+  *Outgoing*: your open chains.
+- One row per chain, showing its top change, the worst vote cast of each label and what is missing
+  (*V+1 CR+1 💬5 · V missing on 2, CR on 1*; *no votes* only when no change of it has any),
+  unresolved comments and age. Expand
+  it for the chain's changes: all of them, also those not ready for review yet (greyed out, with
+  why: *not verified yet*, *WIP*). A `●` marks new activity.
 - The icon in front is the most urgent thing about the chain or change: an error for failed CI or
   a broken change (abandoned, merged drift, invalid or missing Change-Id), a comment bubble for
   unresolved comments (the ones the Change view lists as open), a warning for a negative vote, a
   newer patchset on Gerrit or a merge whose equivalence is unknown, a clock while it waits, a
-  check when nothing does. A *To review* chain with nothing wrong shows an eye. The status bar
+  check when nothing does. A *To review* chain with nothing wrong shows an eye while it is your turn, a clock while it waits on its author. The status bar
   uses the same icons for the headline.
 - Changes that are commits of your local stack are marked *in your stack* and open as local commits.
 - Right-click a change (or a chain, for its top change) › **Copy Change-Id** or **Copy SHA**: the
@@ -264,7 +272,9 @@ The commits above your upstream, newest first. One row per commit:
   the votes Gerrit lets you give there, each with what the project says it means, opening on
   Code-Review +1, and your drafts without a vote. Then an optional message, then one dialog listing
   everything that goes out: the vote, each draft (`path:line` and its first words), the message,
-  on which changes, and the changes of a chain that do not take the vote. Publish sends it; a
+  on which changes, and the changes of a chain that do not take the vote. A chain vote never
+  replaces a vote you gave: a change that carries yours keeps it (*2156 …: keeps your
+  Code-Review -1*) and still gets your drafts; Vote and Publish on that change alone replaces it. Publish sends it; a
   notification says what went out and the views refresh, so the chain leaves *To review* when
   Gerrit says so. On the change a staged review holds, the notification offers the way on: **Next
   Change** while the chain goes on above it, **Leave Review** at its top. Should the change get a new patchset meanwhile, nothing is sent and **Look

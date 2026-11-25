@@ -28,14 +28,15 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     patchset_status,
 )
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git, git_out
-from gerrit_workflow_tools.core.git_state import head_is_linear_on_remote_gerrit_target
+from gerrit_workflow_tools.core.git_state import current_branch, head_is_linear_on_remote_gerrit_target
 from gerrit_workflow_tools.core.push_targets import NextPatchset, next_patchsets
 from gerrit_workflow_tools.core.push_unchanged import AbandonedChange, OutdatedChange, UnchangedChange
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
 from gerrit_workflow_tools.core.rebase_next_step import FINISH
 from gerrit_workflow_tools.core.rebase_state import AM_UNDERWAY, am_underway, rebase_underway
+from gerrit_workflow_tools.core.reword import add_missing_change_ids
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.core.stack import Commit, is_unsquashed_fixup
+from gerrit_workflow_tools.core.stack import Commit, RewriteCommit, is_unsquashed_fixup
 
 
 class PushBlocker(Enum):
@@ -305,6 +306,8 @@ class PushBoundary:
     """What gets them past it: ``--all`` for the stop pattern or a ready strategy, else a Change-Id fix."""
     all_lifts: bool = False
     """``--all`` pushes past it (:attr:`ReadyResult.all_lifts_boundary`)."""
+    missing_change_id: bool = False
+    """It is a commit with no Change-Id at all: ``ger push`` adds the missing ones (:func:`add_change_ids_for_push`)."""
 
     def beyond(self, until: str | None) -> str:
         """``: it is above …``: why a commit of the local stack is not among those a push sends."""
@@ -353,20 +356,35 @@ def push_boundary(cwd: Path, ready: ReadyResult, *, head: str) -> PushBoundary:
     count = git_or_none(cwd, "rev-list", "--count", f"{sha}..{head}") if sha else None
     # The boundary commit itself is held back too, and `sha..head` leaves it out.
     held = int(count) + 1 if count and count.isdigit() else 0
-    fix = _boundary_fix(cwd, sha, short_sha or sha[:7], subject or "", ready, at_tip=held == 1) if sha else None
-    return PushBoundary(sha, ready.boundary_reason, short_sha, subject, held, fix, ready.all_lifts_boundary)
+    missing = sha is not None and not ready.all_lifts_boundary and _lacks_change_id(cwd, sha)
+    fix = _boundary_fix(subject or "", ready, missing=missing) if sha else None
+    return PushBoundary(sha, ready.boundary_reason, short_sha, subject, held, fix, ready.all_lifts_boundary, missing)
 
 
-def _boundary_fix(cwd: Path, sha: str, short_sha: str, subject: str, ready: ReadyResult, *, at_tip: bool) -> str | None:
-    """How the commits *ready* holds back get past its boundary at *sha*."""
+def _lacks_change_id(cwd: Path, sha: str) -> bool:
+    """Whether *sha*'s message has no Change-Id footer at all (not a malformed one)."""
+    message = git_or_none(cwd, "show", "-s", "--format=%B", sha) or ""
+    found, malformed = validate_change_id_value(parse_change_id_footer(message))
+    return not found and not malformed
+
+
+def _boundary_fix(subject: str, ready: ReadyResult, *, missing: bool) -> str | None:
+    """How the commits *ready* holds back get past its boundary: a Change-Id problem is fixed by
+    ``ger change-id --fix`` (no commit-msg hook needed), which ``ger push`` runs itself for a missing one."""
     if ready.all_lifts_boundary:
         return "`ger push --all` sends them as work-in-progress"
     if is_unsquashed_fixup(subject):  # its reason says what to do already
         return None
-    found, malformed = validate_change_id_value(
-        parse_change_id_footer(git_or_none(cwd, "show", "-s", "--format=%B", sha) or "")
-    )
-    if not found and not malformed:
-        how = "`git commit --amend`" if at_tip else f"`ger reword {short_sha}`"
-        return f"{how} adds one, with Gerrit's commit-msg hook installed"
-    return f"`ger reword {short_sha}` and delete its Change-Id line; Gerrit's commit-msg hook adds a new one"
+    if missing:
+        return "`ger change-id --fix` adds one (ger push does, on the branch checked out here)"
+    return "`ger change-id --fix` gives it a new one"
+
+
+def add_change_ids_for_push(cwd: Path, branch: str, boundary: PushBoundary | None) -> list[RewriteCommit]:
+    """A push held back at a commit without a Change-Id: give every commit of the checked-out *branch*
+    that lacks one a Change-Id (:func:`add_missing_change_ids`, as ``ger change-id --fix``), so it can
+    go. Nothing for another reason, or another branch than the one checked out; the commits that got
+    one otherwise."""
+    if boundary is None or not boundary.missing_change_id or current_branch(cwd) != branch:
+        return []
+    return add_missing_change_ids(cwd, "HEAD")

@@ -57,11 +57,17 @@ This keeps assembly at a few round trips regardless of chain count: one light re
 
 ### Ready
 
-A change is **ready to review** when it is open, not WIP, not private, and passes the CI gate (`ger.inboxRequireVerified`, default on). Everything else is filtered out unless `--all` is given.
+A change is **ready to review** when it is open, not WIP, not private, and passes the CI gate (`ger.inboxRequireVerified`, default on). Readiness is a **chain's**: a chain is listed when any member is ready, and then whole. Its members that are not ready (a new patchset at the bottom took the Verified vote of those above it, a WIP change on top) stay in the chain, marked `# not ready: not verified yet` (`WIP`, `private`, or `not asked of you` when you are no reviewer of it), and are never your turn. A chain with no ready member is left out unless `--unready` is given; the heading counts it.
+
+### Your turn
+
+Whether a change you review waits on you or on its author comes from Gerrit's **attention set**, which every ChangeInfo carries (`attention_set`, `removed_from_attention_set`): no extra request. In it, it is your turn (an upload, a reply to you, never reviewed); taken out of it (your reply), it is the author's. On a server with the attention set switched off, or one that never had you in it, the fallback: your turn while the current patch set was uploaded after your last Code-Review vote, or since the change was created when you never voted. One function decides it (`core/review_chain.py:your_turn_since`); `ger show` and the Change view read the same verdict.
+
+A chain is your turn while any member is. The others are chains you reviewed that **wait on the author**: they stay in the section, after the ones whose turn is yours, but the heading, the summary, the `next:` line and the headline speak of your turn only.
 
 ### Unreviewed age
 
-Time since the chain last started waiting for **your** review. Prefer Gerrit's attention-set `last_update` for self (how long it has been your turn). If you are not in the attention set: the current patch set uploaded after your last Code-Review vote, or change creation if you have never voted.
+Time since the chain last started waiting for **your** review: since the oldest member whose turn is yours became so (Gerrit's attention-set `last_update`, else the fallback's patch-set upload or change creation). Your own vote does not restart it: it takes that member out of your turn, and the clock goes on from the others. A chain that waits on its author has none.
 
 Rendered as `3d`, `4h`. It is the sort key — longest without your review first — so the list is a priority queue.
 
@@ -94,7 +100,7 @@ The *to review* section has `label:Verified+1` appended when `ger.inboxRequireVe
 
 A chain appears in **to review** if any member matches; the chain is then fetched whole (via assembly), so members you are not a reviewer on still appear as context.
 
-Within *to review*, chains sort by **unreviewed age**, oldest first (longest waiting for you). Ties break on wait age, then change number. Within *outgoing*, what you must act on comes first — failed CI, then unresolved comments, then a negative vote, then WIP — then the latest activity.
+Within *to review*, the chains whose turn is yours come first, by **unreviewed age**, oldest first (longest waiting for you); then the chains that wait on their author. Ties break on wait age, then change number. Within *outgoing*, what you must act on comes first — failed CI, then unresolved comments, then a negative vote, then WIP — then the latest activity.
 
 ---
 
@@ -127,7 +133,7 @@ One line per chain, its columns padded to the widest of the section so rows line
 ```text
 project: myproject
 
-to review (3; 1 not ready, --unready shows it)
+to review (4; 3 your turn; 1 not ready, --unready shows it)
 c4321  5 changes  worst v+1 cr0       waiting 3d, active 4h  alice  # feat: rate limiter
   https://gerrit.example.com/c/myproject/+/4321
 c4400  1 change         v+1 cr+1 com  waiting 1d             bob    # fix: retry backoff
@@ -136,6 +142,7 @@ c4380  9 changes  worst v-1 cr0       waiting 6d             carol  # refactor: 
   https://gerrit.example.com/c/myproject/+/4380
   └ c4376  v-1 cr0       # build failed
   └ c4379  v+1 cr0  com  # 2 unresolved comments
++ 1 chain waits on the author (-v lists it)
 
 summary: 3 chains · 15 changes · longest wait 6d · build failed 1 · comments 1
 next: ger review c4321 --bottom, then --next
@@ -149,13 +156,14 @@ c4410  2 changes  worst v-1 cr0       active 2h  # feat: quota headers
 summary: 5 chains · 9 changes · most idle 2d · build failed 1
 ```
 
-An *outgoing* line is yours: it has no waiting clock and no owner, and ends in `ger log`'s `# WIP` / `# private` marks when a member is WIP or private.
+An *outgoing* line is yours: it has no waiting clock and no owner, and ends in `ger log`'s `# WIP` / `# private` marks when a member is WIP or private. A *to review* chain that waits on its author has no waiting clock either: `active …` instead.
 
 | Column | Meaning |
 |--------|---------|
 | `c<n>` | Chain top's Gerrit change number, as every changeish argument takes it back |
 | `N changes` | Chain depth (member count) |
-| `v…` / `cr…` / `com` | One change: its votes. Several: `worst`, then the worst label across members (not the top's own): a negative vote, else a missing one (`cr?` while any member has no vote: one +1 at the bottom of five does not read as approved), else the lowest; the members that cause it follow indented. `com` when any member has unresolved comments. Right-aligned, so the tokens line up. Tokens: [Reading-ger-log.md](../../Reading-ger-log.md#status-columns) |
+| `v…` / `cr…` / `com` | One change: its votes. Several: `worst`, then the worst vote of each label cast on any member (not the top's own; `v?` when no member has one); the members that cause it follow indented. `com` when any member has unresolved comments. Right-aligned, so the tokens line up. Tokens: [Reading-ger-log.md](../../Reading-ger-log.md#status-columns) |
+| `v missing on 2, cr on 1` | The labels some members of a chain have no vote on, and on how many: one +1 at the bottom of five does not read as approved, nor three V+1 of four as "no votes". Yellow; empty when every member has a vote or none has |
 | `waiting` | Unreviewed age — how long the chain has waited for you (*to review*); `, active …` follows when the wait age (last activity) reads differently |
 | `active` | Wait age — last activity on any member (*outgoing*) |
 | owner | Chain-top owner, cut at 18 characters |
@@ -163,13 +171,13 @@ An *outgoing* line is yours: it has no waiting clock and no owner, and ends in `
 | `# drafts of yours on c<n>` | Members holding drafts of yours: nobody sees them until you publish (`ger reply --publish c<n>`). One light `has:draft` query beside the section queries, text view only (`InboxSection.drafted`) |
 | URL | Gerrit page for the **chain top** (default on) |
 
-**The heading** counts the chains shown. *To review* adds the chains its query leaves out as not ready (WIP, private, no `Verified`), when there are any: one more query beside it, asked only for the text view and never with `--unready` or a custom `ger.inboxToReviewQuery`. *Outgoing* adds how many need you (`core.inbox.needs_author`: failed CI, unresolved comments, a negative vote, or WIP).
+**The heading** counts the chains shown. *To review* adds how many are your turn, when some wait on their author, and the chains its query leaves out as not ready (WIP, private, no `Verified`), when there are any. Both come from one more query beside it, the same without the readiness terms (`build_to_review_query(include_unready=True)`), which also finds the members of a listed chain that are not ready; never with `--unready` or a custom `ger.inboxToReviewQuery`, which leave nothing out. *Outgoing* adds how many need you (`core.inbox.needs_author`: failed CI, unresolved comments, a negative vote, or WIP).
 
-**Outgoing folds the quiet chains**: those waiting only on reviewers or CI become one dim line, `+ N chains wait on reviewers or CI (-v lists them)`. They sort after the ones that need you. `--json` and `--ai` list every chain.
+**Quiet chains fold**: outgoing, those waiting only on reviewers or CI become one dim line, `+ N chains wait on reviewers or CI (-v lists them)`; to review, those you reviewed that wait on their author, `+ N chains wait on the author (-v lists them)`. They sort after the ones that need you. `--json` and `--ai` list every chain. With nothing your turn, *to review* prints `(nothing waits on your review)` and no summary or `next:` line.
 
-**Indented member lines** appear for members with attention reasons — CI failure, unresolved comments, negative vote — on a chain of several changes, the top included. A single change's row already says it all. A healthy chain stays one line plus its URL.
+**Indented member lines** appear for members with attention reasons — CI failure, unresolved comments, negative vote — and, to review, for members that are not ready (dim, `# not ready: not verified yet`), on a chain of several changes, the top included. A single change's row already says it all. A healthy chain stays one line plus its URL.
 
-**The footer** of *to review* names the command that starts on the longest-waiting chain where review begins, its bottom: `next: ger review c4321 --bottom, then --next`. A row names its chain by the top, and `ger review` checks out the change named, so `--bottom` starts at the chain's lowest open change instead: the same command works for every row.
+**The summary** of *to review* counts the chains whose turn is yours. **The footer** names the command that starts on the longest-waiting of them where review begins, its bottom: `next: ger review c4321 --bottom, then --next`. A row names its chain by the top, and `ger review` checks out the change named, so `--bottom` starts at the chain's lowest open change instead: the same command works for every row.
 
 **Empty sections** print a dim `(nothing to review)` / `(no open chains of yours)` rather than vanishing, so the output shape is stable.
 
@@ -197,13 +205,14 @@ With `--hyperlinks` on, the `cN` labels are the links and the URL lines are left
 
 ```text
 project: myproject
-to review: 2 chains, 3 changes
+to review: 3 chains, 4 changes, 1 of them waits on the author
 change 4321 feat: rate limiter — by alice, waiting on you 3d, last activity 4h, V+1, CR+1
 change 4380 refactor: split scheduler — 2 changes, by carol, waiting on you 6d, last activity 6d, V-1, 4376: build failed, 4380: 2 unresolved comments
+change 4390 docs: the scheduler — by dave, waits on the author, last activity 1h, V+1, CR-1
 outgoing: none
 ```
 
-A section line counts its chains and changes (`none` when empty). A chain line is the chain top's number and subject, then only facts with a value: its size when more than one change, the owner and unreviewed age (*to review* only), the wait age, the worst votes cast, and each member that needs something with the indented lines' hint words.
+A section line counts its chains and changes (`none` when empty). A chain line is the chain top's number and subject, then only facts with a value: its size when more than one change, the owner and unreviewed age (*to review* only), the wait age, the worst votes cast, the labels some members have no vote on (`V missing on 2`), and each member that needs something with the indented lines' hint words.
 
 ---
 
@@ -220,8 +229,9 @@ A section line counts its chains and changes (`none` when empty). A chain line i
     {
       "name": "to-review",
       "query": "is:open -is:wip -is:private -owner:self reviewer:self label:Verified+1 project:myproject",
-      "summary": { "chains": 3, "changes": 15, "oldest_unreviewed_seconds": 518400,
-                   "oldest_wait_seconds": 518400, "ci_failures": 1, "comments": 1 },
+      "summary": { "chains": 3, "changes": 15, "oldest_unreviewed_seconds": 518400,  // your turn only
+                   "oldest_wait_seconds": 518400, "ci_failures": 1, "comments": 1,
+                   "waiting_on_author": 1 },
       "chains": [
         {
           "key": "gerrit.example.com~myproject~4321",
@@ -234,15 +244,19 @@ A section line counts its chains and changes (`none` when empty). A chain line i
           "wait_age_seconds": 14400,
           "unreviewed_age_seconds": 259200,
           "last_activity": "2026-08-18T08:00:00Z",
-          "verified": -1, "code_review": 0,
+          "verified": -1, "code_review": 0,   // the worst, a missing vote counted as worse than any cast
+          "votes_cast": { "verified": -1, "code_review": 1 },    // the worst cast on any member
+          "votes_missing": { "verified": 0, "code_review": 2 },  // members without a vote
           "comments_unresolved": 2,
           "comments_awaiting_reply": 0,
           "attention_reasons": ["ci-failed", "unresolved-comments"],
           "severity": "error",
           "partial_chain": false,
+          "your_turn": true,      // false: you reviewed it, it waits on its author
           "members": [
             { "number": 4317, "subject": "feat: config plumbing", "sha": "3f2a…", "verified": 1,
-              "code_review": 2, "comments_unresolved": 0, "attention_reasons": [], "severity": "ok" }
+              "code_review": 2, "comments_unresolved": 0, "attention_reasons": [], "severity": "ok",
+              "your_turn": true, "not_ready": null }
           ]
         }
       ]
@@ -252,7 +266,7 @@ A section line counts its chains and changes (`none` when empty). A chain line i
 }
 ```
 
-A member's `sha` is the commit of its current patch set (`null` when Gerrit did not send it).
+A member's `sha` is the commit of its current patch set (`null` when Gerrit did not send it). `your_turn` is [whose turn](#your-turn) it is, per member and for the chain; never true on a change of yours, nor on a member that is not ready. Under *to review*, `not_ready` says why a member of a listed chain is not ready (`not verified yet`, `WIP`, `private`, `not asked of you`); `null` for one that is. The *to review* `summary` counts the chains whose turn is yours, and `waiting_on_author` the others.
 
 `attention_reasons` reuses the vocabulary from `ger log` ([Reading-ger-log.md](../../Reading-ger-log.md#attention-hints-trailing--)) so one consumer handles both. Inbox members only emit `ci-failed`, `unresolved-comments` (a comment chain waits on you), `awaiting-reply` (every one waits on the other side: your published comment is its last word) and `review-issues` — there is no local patchset to align. `comments_awaiting_reply` beside `comments_unresolved` counts those waiting on the other side; telling them apart reads each commented change's comments once, from the cache while the change has not moved. `severity` is the most urgent of them, as `ger log --json` says it ([log](log.md#json-fields)).
 

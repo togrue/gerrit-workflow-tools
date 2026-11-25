@@ -67,6 +67,10 @@ export interface Member {
   local_sha: string | null;
   /** The commit of the current patch set on Gerrit. */
   sha: string | null;
+  /** Somebody else's change whose turn is yours: Gerrit's attention set holds you (else: not reviewed since its last patchset). */
+  your_turn?: boolean;
+  /** Under To review, a change of the chain the section's query left out, and why: `not verified yet`, `WIP`, `private`, `not asked of you`. */
+  not_ready?: string | null;
 }
 
 export interface Chain {
@@ -88,6 +92,11 @@ export interface Chain {
   attention_reasons: string[];
   severity: Severity;
   partial_chain: boolean;
+  /** Per label, the worst vote cast on a member (`verified`, `code_review` above count a missing one as worse), and how many members have none. */
+  votes_cast?: { verified: number | null; code_review: number | null };
+  votes_missing?: { verified: number; code_review: number };
+  /** Under To review: a member's turn is yours. False: you reviewed it, and it waits on its author. */
+  your_turn?: boolean;
   members: Member[];
   local?: boolean;
 }
@@ -97,6 +106,7 @@ export type SectionName = "to-review" | "outgoing";
 export interface Section {
   name: SectionName;
   query: string;
+  /** Counts over the chains that want you (To review: those whose turn is yours); To review adds `waiting_on_author`. */
   summary: Record<string, number>;
   chains: Chain[];
 }
@@ -531,6 +541,8 @@ export interface VoteChange {
   own: boolean;
   permitted: Record<string, number[]>;
   ruled_out: string[];
+  /** Your votes on its current patchset, by label. */
+  yours?: Record<string, number>;
   drafts: VoteDraft[];
 }
 
@@ -540,6 +552,8 @@ export interface VoteOption {
   value: number;
   meaning: string;
   takes: number[];
+  /** A chain vote: of `takes`, the changes that keep your vote on this label; the vote does not go there. */
+  keeps?: number[];
 }
 
 /** `GET /vote`: what a vote would send. Nothing is sent. */
@@ -552,7 +566,7 @@ export interface VotePlan {
 
 /** `POST /vote`'s answer: where it went, and where it did not. */
 export interface VoteSent {
-  changes: { change: string; number: number; drafts: number; labels: Record<string, number>; message: string | null; status: string }[];
+  changes: { change: string; number: number; drafts: number; labels: Record<string, number>; keeps?: Record<string, number>; message: string | null; status: string }[];
   skipped: { change: string; number: number; ruled_out: string[] }[];
 }
 

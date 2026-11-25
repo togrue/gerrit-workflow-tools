@@ -120,8 +120,8 @@ REVIEWER, AUTHOR = "reviewer", "author"
 
 
 def other_side(reasons: Collection[str]) -> str:
-    """The other side of a change's comment chains: its author when it waits on your review, else its reviewer."""
-    return AUTHOR if Attention.WAITING_ON_YOU in reasons else REVIEWER
+    """The other side of a change's comment chains: its author on a change you review, else its reviewer."""
+    return AUTHOR if {Attention.WAITING_ON_YOU, Attention.WAITING_ON_AUTHOR} & set(reasons) else REVIEWER
 
 
 def unresolved_comments_text(count: int, awaiting: int = 0, *, side: str = REVIEWER) -> str:
