@@ -24,7 +24,7 @@ A comment has one of four **comment states**:
 ## Usage
 
 ```
-ger comment LOCATION (-m MSG ... | -F FILE) [--change CHANGEISH] [--resolved] [--note | --local] [--json | --ai]
+ger comment [LOCATION] (-m MSG ... | -F FILE) [--change CHANGEISH] [--resolved] [--note | --local] [--json | --ai]
 ger comment --edit ID (-m MSG ... | -F FILE) [--change CHANGEISH] [--resolved] [--json | --ai]
 ger comment --discard ID [--change CHANGEISH] [--json | --ai]
 ```
@@ -41,6 +41,10 @@ ger comment --discard ID [--change CHANGEISH] [--json | --ai]
 | `PATH:LINE` | `app.py:42` | `line` |
 | `PATH:START-END` | `app.py:40-42` | `range` over whole lines, `line` = END |
 | `PATH:L.C-L.C` | `app.py:40.5-42.17` | `range` to the character, `line` = end line |
+| `/COMMIT_MSG:LINE` (and the other forms) | `/COMMIT_MSG:7` | the commit message, `path` `/COMMIT_MSG`; lines as Gerrit numbers its commit-message file, after its header lines (the subject is line 7), as `ger show` names such a chain: `Commit message:7` |
+| none, or `/PATCHSET_LEVEL` | `ger comment -m "Overall: …"` | the change itself (Gerrit's patchset-level comment), `path` `/PATCHSET_LEVEL`, no line |
+
+The two Gerrit paths are Gerrit's own names, which no repository path can be (they start with `/`): `ger show` lists such chains as `Commit message:7` and `Patchset-level comment`, and the output says `draft on Commit message:7 (patchset 2)`, `draft on the change (patchset 2)`. They are drafts on Gerrit only: `--note` and `--local`, which anchor to a file of a commit, refuse them with exit `2`. ger does not check a commit-message line against the message; Gerrit takes it as it is.
 
 Lines and columns count from 1, as editors show them. Columns are inclusive: `40.5-42.17` starts at the fifth character of line 40 and ends after the seventeenth of line 42. ger converts to Gerrit's 0-based, end-exclusive comment range.
 

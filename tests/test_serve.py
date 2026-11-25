@@ -1144,6 +1144,18 @@ def test_new_comments_go_to_gerrit_as_drafts_or_stay_here_as_notes(stack_repo: P
     assert states == ["draft", "note"]
 
 
+def test_a_new_comment_on_the_change_or_its_commit_message_is_served_as_on_the_command_line(stack_repo: Path) -> None:
+    """``ger comment``'s Gerrit paths, for a change-level draft and one on the commit message."""
+    store, _keys, _rows = _gerrit(stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+    change = _post(api, "/comments/new", {"rev": "HEAD", "location": "/PATCHSET_LEVEL", "message": "Overall fine."})
+    assert (change["state"], change["path"], change["line"]) == ("draft", "/PATCHSET_LEVEL", None)
+    message = _post(api, "/comments/new", {"rev": "HEAD", "location": "/COMMIT_MSG:7", "message": "typo"})
+    assert (message["path"], message["line"]) == ("/COMMIT_MSG", 7)
+    [commit] = _get(api, "/show", rev="HEAD", comments="all")["commits"]
+    assert sorted(chain["path"] for chain in commit["comment_chains"]) == ["/COMMIT_MSG", "/PATCHSET_LEVEL"]
+
+
 def test_a_new_comment_goes_on_the_version_of_the_change_that_was_shown(stack_repo: Path) -> None:
     store, keys, rows = _gerrit(stack_repo)
     old = rows[3].sha

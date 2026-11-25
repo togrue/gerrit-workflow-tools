@@ -19,6 +19,11 @@ from gerrit_workflow_tools.core.git_state import repo_toplevel
 from gerrit_workflow_tools.core.words import counted
 
 
+PATCHSET_LEVEL = "/PATCHSET_LEVEL"
+COMMIT_MSG = "/COMMIT_MSG"
+SPECIAL_PATHS = {PATCHSET_LEVEL: "Patchset-level comment", COMMIT_MSG: "Commit message", "/MERGE_LIST": "Merge list"}
+"""Gerrit's paths for what is not a file, as a person reads them. A comment may start on the first two."""
+
 _POSITION = r"(\d+)(?:\.(\d+))?"
 _LOCATION_SUFFIX = re.compile(rf"^{_POSITION}(?:-{_POSITION})?$")
 
@@ -71,9 +76,17 @@ class CommentLocation:
             fields["range"] = self.range.as_gerrit()
         return fields
 
+    @property
+    def on_gerrit_only(self) -> bool:
+        """On the change or its commit message: Gerrit's paths, which no file of a commit has."""
+        return self.path in (PATCHSET_LEVEL, COMMIT_MSG)
+
     def describe(self) -> str:
-        """``path``, ``path:line`` or ``path:start-end``, as ``ger show`` prints a chain."""
-        start, path = self.start_line, printable_path(self.path)
+        """``path``, ``path:line`` or ``path:start-end``, as ``ger show`` prints a chain; the change
+        itself is ``the change``, its commit message ``Commit message:3``."""
+        if self.path == PATCHSET_LEVEL:
+            return "the change"
+        start, path = self.start_line, SPECIAL_PATHS.get(self.path) or printable_path(self.path)
         if self.line is None:
             return path
         if start is not None and start != self.line:
@@ -126,8 +139,14 @@ def anchor_at(cwd: Path | str, commit: str, location: CommentLocation, lines: li
 
 
 def parse_location(text: str) -> CommentLocation:
-    """Parse a LOCATION. Raises :class:`LocationError` for a malformed or backwards one."""
+    """Parse a LOCATION. Raises :class:`LocationError` for a malformed or backwards one.
+
+    Gerrit's own paths name what is no file: ``/PATCHSET_LEVEL`` the change itself, and
+    ``/COMMIT_MSG`` (with lines, as Gerrit numbers them: after its header lines) the commit message.
+    """
     raw = text.strip()
+    if raw == PATCHSET_LEVEL:
+        return CommentLocation(path=PATCHSET_LEVEL)
     path, sep, suffix = raw.rpartition(":")
     match = _LOCATION_SUFFIX.match(suffix) if sep else None
     if match is None:
@@ -160,6 +179,10 @@ def _positive(value: int, raw: str) -> int:
 
 
 def _clean_path(path: str) -> str:
+    if path == COMMIT_MSG:
+        return path
+    if path == PATCHSET_LEVEL:
+        raise LocationError(f"{path}: a comment on the change has no lines")
     cleaned = PurePosixPath(path.replace("\\", "/")).as_posix().removeprefix("./")
     if not cleaned or cleaned in (".", "/") or cleaned.startswith("/") or ".." in PurePosixPath(cleaned).parts:
         raise LocationError(f"{path!r}: give a path inside the repository")

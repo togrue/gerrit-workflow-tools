@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 
 from gerrit_workflow_tools.core.changeish import change_label
+from gerrit_workflow_tools.core.comment_anchor import SPECIAL_PATHS
 from gerrit_workflow_tools.core.comment_chains import CommentSelection
 from gerrit_workflow_tools.core.gerrit.rest import printable_path
 from gerrit_workflow_tools.core.gerrit_change_status import (
@@ -65,14 +66,6 @@ def comment_meta(comment: InlineComment, *, now: datetime | None = None) -> str:
 def _with_meta(label: str, comment: InlineComment) -> str:
     meta = comment_meta(comment)
     return f"{label} · {meta}" if meta else label
-
-
-# Gerrit's names for what is not a file, as a person reads them.
-SPECIAL_PATHS = {
-    "/PATCHSET_LEVEL": "Patchset-level comment",
-    "/COMMIT_MSG": "Commit message",
-    "/MERGE_LIST": "Merge list",
-}
 
 
 def chain_location(chain: CommentChain) -> str:

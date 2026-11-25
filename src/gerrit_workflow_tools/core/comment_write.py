@@ -21,7 +21,6 @@ from gerrit_workflow_tools.core.comment_anchor import (
     repository_path,
 )
 from gerrit_workflow_tools.core.comment_target import CommentTarget
-from gerrit_workflow_tools.core.gerrit.rest import printable_path
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_change_status import (
@@ -31,6 +30,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
     gerrit_inline_comment_url,
 )
 from gerrit_workflow_tools.core.local_comments import LocalCommentStore, new_comment
+from gerrit_workflow_tools.core.usage import UsageError
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,10 @@ def locate(cwd: Path, raw: str, target: CommentTarget) -> CommentLocation:
     Raises :class:`~gerrit_workflow_tools.core.comment_anchor.LocationError` for a location that
     does not fit the file.
     """
-    location = repository_path(cwd, parse_location(raw))
+    location = parse_location(raw)
+    if location.on_gerrit_only:  # no file of the commit: Gerrit checks it
+        return location
+    location = repository_path(cwd, location)
     if target.commit is None:
         return close_unchecked(location)
     return fit_to_file(location, file_lines(cwd, target.commit, location.path), commit=target.commit)
@@ -85,7 +88,14 @@ def write_comment(
     state: CommentState,
     unresolved: bool,
 ) -> WrittenComment:
-    """Start a chain at *location*: a draft on Gerrit, or a note / local draft in the local comment store."""
+    """Start a chain at *location*: a draft on Gerrit, or a note / local draft in the local comment store.
+
+    One on the change or its commit message is a draft on Gerrit only: no local comment can be anchored there.
+    """
+    if location.on_gerrit_only and state != "draft":
+        raise UsageError(
+            f"a comment on {location.describe()} is a draft on Gerrit: a note or local draft goes on a file"
+        )
     if state == "draft":
         if service is None or not target.on_gerrit or target.patch_set is None:
             raise ChangeResolutionError(f"{target.key}: Gerrit has no patchset of it to write a draft on")
@@ -116,7 +126,7 @@ class ChangedComment:
 
 
 def _where(path: str, line: int | None) -> str:
-    return printable_path(path) if line is None else f"{printable_path(path)}:{line}"
+    return CommentLocation(path=path, line=line).describe()
 
 
 def _not_yours(target: CommentTarget, comment_id: str) -> ChangeResolutionError:

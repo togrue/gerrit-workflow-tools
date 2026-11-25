@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from gerrit_workflow_tools.core.comment_anchor import SPECIAL_PATHS
 from gerrit_workflow_tools.core.comment_chains import CommentSelection
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain
 from gerrit_workflow_tools.core.suggested_edits import SuggestedEdit
 from gerrit_workflow_tools.render.comments import (
-    SPECIAL_PATHS,
     anchor_suffix,
     chain_context_lines,
     chain_location,
