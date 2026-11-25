@@ -223,7 +223,7 @@ def test_edit_says_where_it_stopped_and_what_comes_next(stack_repo: Path, monkey
     _configure_repo(stack_repo)
     rows = stack_rows_mb_to_head(stack_repo)
     overrides: list[dict] = [{}] * len(rows)
-    overrides[0] = {"unresolved_comment_count": 1, "verified": -1}
+    overrides[0] = {"unresolved_comment_count": 1, "verified": -1, "cr": -1}
     store = ChangeStore(build_details_by_change_id(rows, per_index_overrides=overrides))
 
     code, _out, err = run_cli(stack_repo, edit_main, [rows[0].sha], monkeypatch, gerrit=store)
@@ -234,7 +234,7 @@ def test_edit_says_where_it_stopped_and_what_comes_next(stack_repo: Path, monkey
         # Named by REV, not walked to: `ger edit -n` is not the way on here.
         "next: amend it (`git commit --amend`), then `ger rebase --continue` to finish",
         "once fixed, answer each comment `ger show` lists: `ger reply PATH:LINE --done` (or `-m TEXT`); "
-        "`ger ci` shows what failed in the build",
+        "`ger ci` shows what failed in the build; the reviewer says why in their comments or their message on Gerrit",
     ]
 
 
@@ -465,7 +465,7 @@ def test_the_walk_ending_after_a_continued_rebase_is_no_error(
     assert code == ExitCode.NO_EDIT_ATTENTION
     assert err.rstrip().endswith(
         "rebase finished: nothing changed, the local stack is as it was (4 commits)\n"
-        "no commit needs edit attention (unresolved comments or build failed)"
+        "no commit needs edit attention (comments to answer, a failed build or a negative vote)"
     )
     assert "error:" not in err
 

@@ -87,7 +87,7 @@ The **local stack** after the **Gerrit overlay** and **attention** have been app
 _Avoid_: stack view, review stack, enriched commits
 
 **Attention**:
-The verdict that a commit needs the author's action — unresolved comments, failed CI, missing Code-Review +2, or a blocked position in the chain. Shown, not an exit code: `ger log` exits `0` either way ([exit codes](docu/spec/exit-codes.md#attention-is-not-failure)). A subset (**edit attention**: unresolved comments waiting on you, or failed CI) drives the attention walk.
+The verdict that a commit needs the author's action — unresolved comments, failed CI, missing Code-Review +2, or a blocked position in the chain. Shown, not an exit code: `ger log` exits `0` either way ([exit codes](docu/spec/exit-codes.md#attention-is-not-failure)). A subset (**edit attention**: unresolved comments waiting on you, failed CI, or a negative vote) drives the attention walk.
 _Avoid_: needs work, flagged, blocked
 
 **Attention cursor**:

@@ -6,7 +6,7 @@
 | **Module** | `src/gerrit_workflow_tools/cli_edit.py`, `reword_run.py` |
 | **Requires** | Git; attention targeting needs `ger.webUrl` + credentials, as does a `change:<n>` / URL / `q:` target |
 
-Interactive rebase to **edit** or **drop** one commit in the current stack (by SHA or Change-Id), or a message-only **reword** of it with no rebase at all, including an **attention walk** over edit-attention commits (unresolved comments or CI failed).
+Interactive rebase to **edit** or **drop** one commit in the current stack (by SHA or Change-Id), or a message-only **reword** of it with no rebase at all, including an **attention walk** over edit-attention commits (comments to answer, CI failed, or a negative vote).
 
 ---
 
@@ -46,7 +46,7 @@ A **Change-Id** or **triplet** matches offline; `change:<n>`, a URL or a `q:` qu
 
 ## Attention walk
 
-**Edit attention** = unresolved comments or CI failed (same reasons as `--first-attention-commit` historically).
+**Edit attention** = unresolved comments waiting on you, a failed build (a `Verified -1` among it), or a negative Code-Review vote (`core.attention.EDIT_ATTENTION_REASONS`). A vote, like a failed build, belongs to the patch set it was given on: once you have amended the commit with other code (push pending), Gerrit's vote is on a patch set you replaced, so the walk no longer stops there. Only rebasing it keeps the vote, as Gerrit carries it over. A comment chain stops the walk until it is answered, a draft reply included ([reply.md](reply.md)).
 
 Bare `ger edit` (**resume**):
 
@@ -54,9 +54,9 @@ Bare `ger edit` (**resume**):
 2. No usable cursor → oldest edit-attention commit; set cursor.
 3. Cursor still has edit attention → stop there; refresh `touchedAt`.
 4. Cursor no longer has edit attention → next tip-ward; advance cursor.
-5. None left → `no commit needs edit attention…`, exit `10`, then a line for each kind of commit the walk passed over that `ger log` still marks: `2 commits have a negative vote: ger show 33e6b1b`, `1 commit has comments waiting on a reply: ger show 4583d2f` (the first of them). A negative vote with nothing to answer is not edit attention: the reviewer may say why only in a message, or keep the vote until a new patchset, and stopping there on every walk would cost a step each time; naming it once at the end costs a line. The normal end of a walk, so it carries no `error:` prefix; after `-n` finished a stopped rebase it follows that rebase's closing line (`rebase finished: …`, [rebase.md](rebase.md#after-a-rebase-finishes)), with no `next:`: the walk is the next step.
+5. None left → `no commit needs edit attention…`, exit `10`, then, when the walk passed over commits whose comments all wait on the other side (`ger log` still marks them), a line naming the first of them: `1 commit has comments waiting on a reply: ger show 4583d2f`. The normal end of a walk, so it carries no `error:` prefix; after `-n` finished a stopped rebase it follows that rebase's closing line (`rebase finished: …`, [rebase.md](rebase.md#after-a-rebase-finishes)), with no `next:`: the walk is the next step.
 
-Before the editor opens, a walk-chosen target is announced on stderr, e.g. `rewording 89d87be Add feature 3 (next needing attention: 1 unresolved comment)`. An explicit `REV` is not announced: you named it.
+Before the editor opens, a walk-chosen target is announced on stderr, e.g. `rewording 89d87be Add feature 3 (next needing attention: 1 unresolved comment)` or `editing 33e6b1b Add feature 2 (attention walk: Code-Review -1 from Bob)`. An explicit `REV` is not announced: you named it.
 
 Cursor identity is a **Change-Id** (survives rebase). Config keys: [Configuration.md](../../Configuration.md#attention-cursor-ger-and-branch-local). ADR: [0009](../../adr/0009-attention-cursor-is-change-id-walk-state.md).
 
@@ -82,7 +82,7 @@ Cursor identity is a **Change-Id** (survives rebase). Config keys: [Configuratio
    `--drop` says what it dropped and how to undo the whole rewrite, in the words `ger rebase --skip` uses (`rebase_run.print_dropped`): `dropped <sha> <subject>; its change <n> stays open on Gerrit` (the change as the cache last saw it: dropping a commit abandons nothing), then `to get it back: git reset --keep <pre-rebase HEAD>` (keeps uncommitted edits, refuses to overwrite them; the rewrite changed nothing else). Then the closing lines every finished rebase has ([rebase.md](rebase.md#after-a-rebase-finishes)): `rebase finished: dropped 1 commit; the other 2 commits as they were`, `next: `ger push` uploads the stack as it is now`. No question is asked: the drop is said, and can be taken back.
    A rebase that stops on a conflict (here, or in the `git rebase --continue` that `-n` runs) ends with one shared next step, the same for every ger-started rebase: `next: resolve the conflicts in <paths>, `git add` them, then `ger rebase --continue` to finish; `ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started` ([rebase.md](rebase.md#going-on-with-a-rebase-underway) has every stop's). During an attention walk (`ger edit -n`, `--first-attention-commit`, or the cursor) it also names the way on, between the two: `` `ger edit -n` finishes and goes on to the next commit needing attention``. `rebase_run.run_interactive_rebase` / `go_on_with_rebase` print it from `rebase_next_step.stop_next_step`.
 6. The attention cursor moves only once the rebase has started (it exited `0`, or stopped with a conflict) and the target's Change-Id is known.
-7. For `edit`, the stop says `stopped at <sha> <subject>`, then `next: amend it (`git commit --amend`), then `ger rebase --continue` to finish` (`rebase_next_step.edit_stop_next_step`). During an attention walk it goes on `; `ger edit -n` finishes and goes on to the next commit needing attention`: `ger rebase --continue` only finishes the rewrite; `ger edit -n` continues the rebase and walks to the next edit-attention commit. At a commit with edit attention (from the overlay the target was found by, no request of its own) one more line says how to see why and answer (`rebase_next_step.attention_stop_hint`): `once fixed, answer each comment `ger show` lists: `ger reply PATH:LINE --done` (or `-m TEXT`)`, and for a failed build `` `ger ci` shows what failed in the build``.
+7. For `edit`, the stop says `stopped at <sha> <subject>`, then `next: amend it (`git commit --amend`), then `ger rebase --continue` to finish` (`rebase_next_step.edit_stop_next_step`). During an attention walk it goes on `; `ger edit -n` finishes and goes on to the next commit needing attention`: `ger rebase --continue` only finishes the rewrite; `ger edit -n` continues the rebase and walks to the next edit-attention commit. At a commit with edit attention (from the overlay the target was found by, no request of its own) one more line says how to see why and answer (`rebase_next_step.attention_stop_hint`): `once fixed, answer each comment `ger show` lists: `ger reply PATH:LINE --done` (or `-m TEXT`)`, for a failed build `` `ger ci` shows what failed in the build``, and for a negative vote `the reviewer says why in their comments or their message on Gerrit`.
 8. When `ger.showAfterEdit` is on (the default), this was `ger edit --next` or `ger edit --first-attention-commit` (not `ger reword`, not `ger edit REV`), and the rebase exits 0, run `ger show` on that commit. Show exiting 1 (attention) leaves the rebase's 0 in place. Any other show failure is returned as-is. Off, the walk only moves.
 
 ---

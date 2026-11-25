@@ -173,13 +173,16 @@ def edit_stop_next_step(walk_on: str | None) -> str:
 def attention_stop_hint(reasons: Collection[str]) -> str | None:
     """How to see why a walk stopped at a commit with edit attention *reasons*, and how to answer; ``None``: none.
 
-    An attention walk stops where comments are unresolved or the build failed (``EDIT_ATTENTION_REASONS``).
+    An attention walk stops where comments are unresolved, the build failed or a reviewer voted
+    against the change (``EDIT_ATTENTION_REASONS``).
     """
     hints = []
     if Attention.UNRESOLVED_COMMENTS in reasons:
         hints.append("once fixed, answer each comment `ger show` lists: `ger reply PATH:LINE --done` (or `-m TEXT`)")
     if Attention.CI_FAILED in reasons:
         hints.append("`ger ci` shows what failed in the build")
+    if Attention.REVIEW_ISSUES in reasons:
+        hints.append("the reviewer says why in their comments or their message on Gerrit")
     return "; ".join(hints) or None
 
 

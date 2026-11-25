@@ -266,6 +266,8 @@ publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to t
 
 - A comment that needs your decision, not a fix: **Keep for Me** on it (person icon). The
   runbook lists it as left for a human, and a commit with nothing else is skipped.
+- A negative vote stops the walk, but it is yours to answer: a commit with nothing else is listed
+  as left for a human, with the vote (`Code-Review -1 from Bob`).
 - CI findings a commit only inherits from the one below are not handed out twice.
 - Afterwards the stack view shows the amended commits; you review, then `ger push` sends the
   patchsets and publishes the draft replies.

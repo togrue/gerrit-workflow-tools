@@ -145,6 +145,16 @@ def comments_text(commit: LogCommit) -> str:
     return unresolved_comments_text(commit.comments_unresolved, commit.comments_awaiting_reply, side=side)
 
 
+def review_issues_text(commit: LogCommit) -> str:
+    """*commit*'s negative Code-Review votes, by whom: ``Code-Review -1 from Bob``."""
+    against = [
+        f"{vote.value:+d} from {vote.by}" for vote in commit.votes if vote.label == "Code-Review" and vote.value < 0
+    ]
+    if not against:
+        return f"Code-Review {commit.code_review:+d}" if commit.code_review else "negative vote"
+    return "Code-Review " + ", ".join(against)
+
+
 SECTION_HEADINGS = {TO_REVIEW: "to review", OUTGOING: "outgoing"}
 """What ``ger inbox`` calls each **inbox section**, in every view."""
 
@@ -263,6 +273,8 @@ def attention_text(commit: LogCommit) -> str:
         parts.append(f"CI failed: {commit.ci_failures[0]}" if commit.ci_failures else "build failed")
     if Attention.UNRESOLVED_COMMENTS in reasons or Attention.AWAITING_REPLY in reasons:
         parts.append(comments_text(commit))
+    if Attention.REVIEW_ISSUES in reasons:
+        parts.append(review_issues_text(commit))
     if not parts and commit.submittable:
         return "submittable"
     return ", ".join(parts)

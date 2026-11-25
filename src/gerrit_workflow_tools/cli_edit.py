@@ -82,7 +82,7 @@ def _build_parser(*, prog: str, description: str, default_action: Literal["edit"
         action="store_true",
         help=(
             "Reset the attention walk to the oldest commit that needs edit attention "
-            "(unresolved comments or failed build; a vote alone does not count)."
+            "(comments to answer, a failed build or a negative vote)."
         ),
     )
     p.add_argument(

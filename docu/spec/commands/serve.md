@@ -474,8 +474,8 @@ to one commit.
 
 Two things are kept from the agent. A comment chain on **hold** is listed as left for a human.
 A finding a commit merely inherits is listed as such and not to be fixed there; where the
-origin cannot be told, the finding counts as to fix. A commit with nothing but holds and
-inherited findings is not a step: it is listed as waiting for a human.
+origin cannot be told, the finding counts as to fix. A commit with nothing but holds,
+inherited findings or a negative vote is not a step: it is listed as waiting for a human.
 
 Commits are named by **Change-Id**, because their ids change as the commits below are amended.
 

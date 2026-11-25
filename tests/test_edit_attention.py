@@ -56,6 +56,11 @@ def test_commit_needs_edit_attention_filters_log_reasons() -> None:
     annotate_attention([comments])
     assert commit_needs_edit_attention(comments)
 
+    vetoed = _commit(code_review=-2)
+    annotate_attention([vetoed])
+    assert "review-issues" in vetoed.attention_reasons
+    assert commit_needs_edit_attention(vetoed)
+
 
 def test_first_commit_needing_edit_attention_oldest_first() -> None:
     oldest = _commit(sha="1" * 40, short_sha="1111111", verified=-1)
