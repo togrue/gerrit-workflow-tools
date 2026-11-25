@@ -1304,6 +1304,42 @@ export async function run(): Promise<void> {
       );
     }
 
+    // --- Reviewing someone's change here, staged (ger.reviewCheckout = branch) ---------------
+    {
+      await meanwhile("in a terminal, git config ger.reviewCheckout branch", () => execFileSync("git", ["config", "ger.reviewCheckout", "branch"], { cwd: repo }));
+      try {
+        await press(
+          "Inline Review Change on change 900, ger.reviewCheckout being branch",
+          "This checkout switches to change-900 with 900's changes staged, and the notification says so. Local stack lists 900's chain: its row is marked under review, not HEAD, with no Rebase onto origin/main (nothing there is yours to rewrite). The Change view shows 900, and all its files open in one editor (here one, added by the change).",
+          exec("ger.review", await chainRow("Add retry to the uploader")),
+        );
+        await press(
+          "Change › Files › uploader.txt",
+          "Your file opens, not the commit's copy: the working files hold the change, so comments are drawn where they are written and language features work.",
+          async () => {
+            await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+            await page.receive({ type: "file", index: 0 });
+          },
+        );
+        const working = { uri: vscode.Uri.file(path.join(repo, "uploader.txt")), range: new vscode.Range(0, 0, 0, 0), dispose: () => undefined };
+        await press(
+          "\"+\" on line 1 of uploader.txt, your file › Save Draft",
+          "The draft is saved on Gerrit as on the commit's lines, and listed as yours in the Change view.",
+          exec("ger.comment.saveDraft", { thread: working, text: "Is 3 enough on a slow link?" }),
+        );
+        await press("Next Unresolved Comment (Alt+F9)", "900 is not yours: the walk takes your draft too, so it counts four (the three open comments and yours), in the Change view's order.", exec("ger.nextComment"));
+        await press(
+          "Change › Review Next Change in Chain",
+          "900 is the only change of its chain: it says so and offers Vote on the Chain… and Leave Review. Nothing moves.",
+          exec("ger.reviewNext"),
+          [{ dismiss: true }],
+        );
+        await press("Change › … › Leave Review Checkout", "Back on the branch it came from; the views are your stack again.", exec("ger.reviewDone"));
+      } finally {
+        execFileSync("git", ["config", "--unset", "ger.reviewCheckout"], { cwd: repo });
+      }
+    }
+
     out.push("## At the end", "", "```", ...before, "```", "");
     if (problems.length) {
       out.push("## The script and the extension disagreed", "", ...problems.map((p) => `- ${p}`), "");

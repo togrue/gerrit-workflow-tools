@@ -123,7 +123,7 @@ export class ScriptedUi implements Ui {
     }
     const resolved = answer.resolved ?? options.resolved;
     const flipped = resolved !== options.resolved ? `, set Resolved to ${resolved ? "Yes" : "No"}` : "";
-    this.say(`    → typed "${answer.type}"${flipped} and pressed Enter`);
+    this.say(`    → ${options.value ? "changed it to" : "typed"} "${answer.type}"${flipped} and pressed Enter`);
     return Promise.resolve({ text: answer.type, resolved });
   }
 
