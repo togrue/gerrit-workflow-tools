@@ -11,13 +11,20 @@ batch like that gets the same answer one pick at a time.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
 from gerrit_workflow_tools.core.git_run import git
-from gerrit_workflow_tools.core.stack import Commit
+from gerrit_workflow_tools.core.stack import (
+    Commit,
+    StackSnapshot,
+    autosquash_order,
+    fixup_target_sha,
+    pinned_count,
+    rewrite_base,
+)
 
 
 # The scratch commits are never reachable from a ref; they only need to be writable.
@@ -146,6 +153,79 @@ def _started_empty(cwd: Path | str, commit: Commit) -> bool:
     trees = git("rev-parse", f"{commit.sha}^{{tree}}", f"{commit.sha}^^{{tree}}", cwd=cwd, check=False)
     own, parent = [*trees.stdout.split(), "", ""][:2]
     return trees.returncode == 0 and own == parent
+
+
+@dataclass(frozen=True)
+class FoldConflict:
+    """Why a fixup would not fold cleanly into its target with ``git rebase --autosquash``."""
+
+    target: Commit
+    stop: PickConflict
+    """The pick the autosquash would stop on: the fixup itself, or a commit above the target after it."""
+    in_the_way: tuple[Commit, ...]
+    """When the fixup itself conflicts: the commits above the target that change the files it conflicts in.
+    Its lines were written against what they made of them."""
+
+
+def fixup_fold_conflict(
+    cwd: Path | str, snapshot: StackSnapshot, target: Commit, *, all_tracked: bool
+) -> FoldConflict | None:
+    """Would the fixup ``ger fix`` is about to make of *target* fold cleanly? ``None`` when it does.
+
+    The fixup is the index (*all_tracked*: every change to tracked files) on the stack's tip.
+    Raises :class:`PreviewUnavailable` where it cannot be told: this git, or a target at or below a
+    merge, which no rebase replays.
+    """
+    pinned = pinned_count(cwd, snapshot.commits)
+    movable = snapshot.commits[pinned:]
+    if target not in movable:
+        raise PreviewUnavailable(f"{target.short_sha} is at or below a merge commit")
+    fixup = scratch_fixup(cwd, movable[-1].sha, target, all_tracked=all_tracked)
+    return fold_conflict(cwd, lambda: rewrite_base(cwd, snapshot, pinned), movable, fixup)
+
+
+def scratch_fixup(cwd: Path | str, head: str, target: Commit, *, all_tracked: bool) -> Commit:
+    """The commit ``git commit --fixup`` of *target* would make of the index on *head*, written but on no ref.
+
+    *all_tracked*: of every change to tracked files (``-a``), as ``git stash create`` saves them.
+    """
+    if all_tracked:
+        saved = _plumbing(cwd, "stash", "create")
+        tree = _plumbing(cwd, "rev-parse", f"{saved or head}^{{tree}}")
+    else:
+        tree = _plumbing(cwd, "write-tree")
+    subject = f"fixup! {target.subject}"
+    sha = _plumbing(cwd, "commit-tree", tree, "-p", head, "-m", subject)
+    return Commit(sha=sha, short_sha=sha[:7], subject=subject, body="", change_id=None)
+
+
+def fold_conflict(
+    cwd: Path | str, base: Callable[[], str], stack: Sequence[Commit], fixup: Commit
+) -> FoldConflict | None:
+    """Where ``git rebase --autosquash`` would stop with *fixup* (sitting on *stack*'s tip) in the stack.
+
+    ``None`` when it folds cleanly, or when the stack's own fixups stop it anyway: then this one is
+    not why. *base* gives the commit *stack* sits on, asked only where the replay starts below the
+    target. Raises :class:`PreviewUnavailable` where this git cannot tell.
+    """
+    commits = [*stack, fixup]
+    target = next(c for c in stack if c.sha == fixup_target_sha(commits, fixup.sha))
+    order = autosquash_order(commits)
+    at = order.index(target)
+    if order[:at] == list(stack[:at]):
+        # Nothing moves below the target: the autosquash replays what follows it onto it, as it is.
+        stop = replay_conflict(cwd, target.sha, [c for c in order[at + 1 :] if c.sha != target.sha])
+    else:
+        stop = first_conflict(cwd, base(), order, commits)
+    if stop is not None and stop.kind is PickStop.EMPTY and stop.commit.sha == fixup.sha:
+        stop = None  # the fix is in the target already: it folds into nothing, without a stop
+    if stop is None or (stop.commit.sha != fixup.sha and first_conflict(cwd, base(), autosquash_order(stack), stack)):
+        return None
+    if stop.commit.sha != fixup.sha:
+        return FoldConflict(target, stop, (stop.commit,))
+    touched = git("log", "--format=%H", f"{target.sha}..{stack[-1].sha}", "--", *stop.files, cwd=cwd, check=False)
+    shas = set(touched.stdout.split())
+    return FoldConflict(target, stop, tuple(c for c in stack if c.sha in shas))
 
 
 def _swapped(commits: Sequence[Commit], i: int) -> list[Commit]:

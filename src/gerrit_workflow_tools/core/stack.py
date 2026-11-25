@@ -356,3 +356,17 @@ def fixup_target_sha(commits: Sequence[Commit], sha: str) -> str:
     while subject.startswith(_FIXUP_PREFIX):
         subject = subject.removeprefix(_FIXUP_PREFIX)
     return next((commit.sha for commit in reversed(commits[:index]) if commit.subject == subject), sha)
+
+
+def autosquash_order(commits: Sequence[Commit]) -> list[Commit]:
+    """*commits* (oldest first) as ``git rebase --autosquash`` orders them: each fixup after its target.
+
+    A fixup lands after the commit its subject names (:func:`fixup_target_sha`) and after the
+    fixups of that commit before it; one whose target is not there stays where it is.
+    """
+    target = {c.sha: fixup_target_sha(commits, c.sha) for c in commits if c.subject.startswith(_FIXUP_PREFIX)}
+    order: list[Commit] = []
+    for commit in commits:
+        if target.get(commit.sha, commit.sha) == commit.sha:
+            order += [commit, *(c for c in commits if c.sha != commit.sha and target.get(c.sha) == commit.sha)]
+    return order

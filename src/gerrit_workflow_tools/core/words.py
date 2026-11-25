@@ -14,3 +14,8 @@ def plural(count: int, noun: str, plural_form: str | None = None) -> str:
 def counted(count: int, noun: str, plural_form: str | None = None) -> str:
     """*count* and its *noun*, agreeing: ``1 commit``, ``0 commits``, ``3 commits``."""
     return f"{count} {plural(count, noun, plural_form)}"
+
+
+def listed(items: list[str]) -> str:
+    """``a``, ``a and b``, ``a, b and c``."""
+    return " and ".join([", ".join(items[:-1]), items[-1]] if len(items) > 2 else items)

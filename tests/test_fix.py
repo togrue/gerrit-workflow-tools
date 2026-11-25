@@ -62,8 +62,8 @@ def test_ger_fix_refs_changes_local_ref(stack_repo: Path, monkeypatch: pytest.Mo
     """``refs/changes/…`` form resolves via local ref (no fetch)."""
     tip = git_out("rev-parse", "HEAD~1", cwd=stack_repo)
     git("update-ref", "refs/changes/07/12345/2", tip, cwd=stack_repo)
-    (stack_repo / "d.txt").write_text("touch d\n", encoding="utf-8")
-    git("add", "d.txt", cwd=stack_repo)
+    (stack_repo / "fixed.txt").write_text("touch it\n", encoding="utf-8")
+    git("add", "fixed.txt", cwd=stack_repo)
     code, _out, err = run_cli(stack_repo, ger_fix_main, ["refs/changes/07/12345/2"], monkeypatch)
     assert code == 0, err
     subj = git_out("log", "-1", "--format=%s", cwd=stack_repo)
@@ -155,8 +155,8 @@ def test_ger_fix_json_includes_resolution_for_change_id(web_stack_repo: Path, mo
     assert cid
     ch = change_info_for_sha(sha, cid, number=5151)
     details = {str(ch["id"]): ch}
-    (web_stack_repo / "d.txt").write_text("json fix\n", encoding="utf-8")
-    git("add", "d.txt", cwd=web_stack_repo)
+    (web_stack_repo / "fixed.txt").write_text("json fix\n", encoding="utf-8")
+    git("add", "fixed.txt", cwd=web_stack_repo)
     code, out, err = run_cli(web_stack_repo, ger_fix_main, ["--json", cid], monkeypatch, gerrit=ChangeStore(details))
     assert code == 0, err
     import json
@@ -252,3 +252,82 @@ def test_fix_during_a_rebase_says_to_finish_it_the_ger_way(stack_repo: Path, mon
     assert err.strip().endswith(
         "next: finish the rebase (`ger rebase --continue`), then squash it with `ger rebase --autosquash`"
     )
+
+
+# --- Whether the fixup folds cleanly ---------------------------------------------
+
+
+_NOTES = "one\ntwo\nthree\nfour\nfive\nsix\n"
+
+
+def _notes_chain(repo: Path) -> tuple[str, str]:
+    """Two commits on the stack: one adds notes.txt, the next changes its fifth line. Their short ids."""
+    (repo / "notes.txt").write_text(_NOTES, encoding="utf-8")
+    git("add", "notes.txt", cwd=repo)
+    git("commit", "-q", "-m", "notes: add", cwd=repo)
+    adds = git_out("rev-parse", "--short=7", "HEAD", cwd=repo)
+    (repo / "notes.txt").write_text(_NOTES.replace("five", "FIVE"), encoding="utf-8")
+    git("commit", "-q", "-am", "notes: shout two", cwd=repo)
+    return adds, git_out("rev-parse", "--short=7", "HEAD", cwd=repo)
+
+
+def test_a_fixup_that_would_conflict_is_refused_and_says_what_is_in_the_way(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Written at the tip on a line a later commit changed: folding it would drag that commit's work down."""
+    adds, shouts = _notes_chain(stack_repo)
+    head = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    (stack_repo / "notes.txt").write_text(_NOTES.replace("five", "FIVE!"), encoding="utf-8")
+    code, out, err = run_cli(stack_repo, ger_fix_main, ["-a", adds], monkeypatch)
+    assert code != 0 and out == ""
+    assert (
+        f'would not fold cleanly into {adds} "notes: add": its change to notes.txt conflicts with what {shouts} change'
+        in err
+    )
+    assert f"`ger edit {adds}`" in err and f"`ger fix --force -a {adds}`" in err
+    assert git_out("rev-parse", "HEAD", cwd=stack_repo) == head, "no fixup made"
+    assert git("stash", "list", cwd=stack_repo).stdout == "", "the check left no stash behind"
+
+    code, _out, err = run_cli(stack_repo, ger_fix_main, ["-a", "--force", adds], monkeypatch)
+    assert code == 0, err
+    assert "folds cleanly" not in err
+    assert git_out("log", "-1", "--format=%s", cwd=stack_repo) == "fixup! notes: add"
+
+
+def test_a_fixup_that_folds_cleanly_says_so(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    adds, _shouts = _notes_chain(stack_repo)
+    (stack_repo / "notes.txt").write_text(_NOTES.replace("one", "ONE").replace("five", "FIVE"), encoding="utf-8")
+    git("add", "notes.txt", cwd=stack_repo)
+    code, _out, err = run_cli(stack_repo, ger_fix_main, ["--json", adds], monkeypatch)
+    assert code == 0, err
+    assert '"folds_cleanly": true' in _out
+    git("reset", "-q", "--soft", "HEAD~1", cwd=stack_repo)
+    code, _out, err = run_cli(stack_repo, ger_fix_main, [adds], monkeypatch)
+    assert code == 0, err
+    assert f"it folds cleanly into {adds}; next: squash it with `ger rebase --autosquash`" in err
+
+
+def test_a_later_commit_that_no_longer_applies_is_named(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The fix applies to its target, but a commit above it then conflicts: that commit is named."""
+    adds, shouts = _notes_chain(stack_repo)
+    (stack_repo / "notes.txt").write_text(_NOTES, encoding="utf-8")
+    git("commit", "-q", "-am", "notes: quiet again", cwd=stack_repo)
+    (stack_repo / "notes.txt").write_text(_NOTES.replace("five", "5"), encoding="utf-8")
+    code, _out, err = run_cli(stack_repo, ger_fix_main, ["-a", adds], monkeypatch)
+    assert code != 0
+    assert f'into {adds} "notes: add": once it is in, {shouts} "notes: shout two" no longer applies' in err
+    assert "(conflict in notes.txt)" in err
+
+
+def test_fix_fold_folds_it_at_once(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    adds, _shouts = _notes_chain(stack_repo)
+    count = len(git_out("rev-list", "@{u}..HEAD", cwd=stack_repo).split())
+    (stack_repo / "notes.txt").write_text(_NOTES.replace("one", "ONE").replace("five", "FIVE"), encoding="utf-8")
+    (stack_repo / "a.txt").write_text("left as it was, unstaged\n", encoding="utf-8")
+    git("add", "notes.txt", cwd=stack_repo)
+    code, out, err = run_cli(stack_repo, ger_fix_main, ["--fold", adds], monkeypatch)
+    assert code == 0, err
+    assert out.startswith("folded into ") and "notes: add (1 commit above it rewritten)" in out
+    assert len(git_out("rev-list", "@{u}..HEAD", cwd=stack_repo).split()) == count, "nothing left as a fixup"
+    assert git_out("show", "HEAD~1:notes.txt", cwd=stack_repo).splitlines()[0] == "ONE"
+    assert (stack_repo / "a.txt").read_text(encoding="utf-8") == "left as it was, unstaged\n"

@@ -30,7 +30,10 @@ from tests.fixtures import configure_gerrit_target
 # Leave modest headroom for small refactors; fail hard on O(N) storms.
 _LOG_GIT_BUDGET = 6
 _SHOW_GIT_BUDGET = 12
-_FIX_GIT_BUDGET = 10
+_FIX_GIT_BUDGET = 18
+"""10 to make the fixup; up to 4 more and one ``merge-tree`` per commit it replays for whether it folds
+cleanly into its target (a fixup that would conflict at the autosquash is refused before it is made).
+The warm run replays 4: the cold run's fixup is on the stack by then."""
 _RESOLVE_GIT_BUDGET = 10
 
 

@@ -194,7 +194,7 @@ _ger_fix() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help -a --all --no-verify --json --format --ai --debug-log --refresh
+        __gwt_flags "$cur" -h --help -a --all --no-verify --force --fold --json --format --ai --debug-log --refresh
         return
     fi
     case "$prev" in
