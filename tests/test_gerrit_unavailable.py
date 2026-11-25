@@ -20,7 +20,8 @@ from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_push import main as push_main
 from gerrit_workflow_tools.cli_show import main as show_main
 from gerrit_workflow_tools.core.gerrit import http_rest
-from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth, HttpGerritRest
+from gerrit_workflow_tools.core.gerrit.credentials import GerritAuth
+from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
 from gerrit_workflow_tools.core.gerrit.rest import GerritUnavailableError
 from gerrit_workflow_tools.core.git_run import git
 from tests.conftest import json_stdout, run_cli
@@ -119,8 +120,8 @@ def test_show_change_number_with_rejected_credentials_is_not_not_found(
         ),
         (
             HTTPError("https://g.example:8081/a/changes/", 401, "Unauthorized", {}, None),  # type: ignore[arg-type]
-            "Gerrit at g.example:8081 rejected the credentials (HTTP 401); check ger.user and ger.token, "
-            "or run `ger setup`",
+            "Gerrit at g.example:8081 rejected the credentials (HTTP 401); check ger.https://g.example:8081.user "
+            "and ger.https://g.example:8081.token, or run `ger setup`",
         ),
     ],
 )

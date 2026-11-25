@@ -83,7 +83,7 @@ service behaves exactly as without it: same answers, same Gerrit calls, no faile
 `ger.eventStreamPort` and `ger.eventStreamUser` override where it connects. Otherwise: the
 `ger.remote` URL when it is an ssh URL (`ssh://user@host:29418/…`, `user@host:…`; without
 a port, ssh's own config decides), else the host of `ger.webUrl` on port 29418 as
-`ger.user`. Nothing is asked over the network to find out. The settings are read once,
+the Gerrit user (`ger.<webUrl>.user`, else `ger.user`). Nothing is asked over the network to find out. The settings are read once,
 when the service starts.
 
 **ssh never prompts.** It runs with `-T`, `BatchMode=yes`, `ConnectTimeout=10` and
@@ -118,7 +118,7 @@ the event cannot store its answer after the event dropped it.
 
 Then the **activity sequence** goes up, when the event concerns this repository: the change
 was cached here, it is in the repository's Gerrit project or in `ger.inboxProjects`, or it names
-you (owner, author, reviewer … with `ger.user` or the ssh user as username). It also goes
+you (owner, author, reviewer … with the Gerrit user or the ssh user as username). It also goes
 up when a branch of those projects moves (`ref-updated` on `refs/heads/…`), when Gerrit says
 it dropped events (`dropped-output`), and when the stream becomes live, stops being live or
 turns out unavailable — a client then switches between following and polling. Every other

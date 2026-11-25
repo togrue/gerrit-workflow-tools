@@ -134,10 +134,14 @@ class Settings:
         old_canon = canonical_cfg_key(old) if old else canon
         if old is None or self._value(canon) is not None or self._value(old_canon) is None:
             return canon
-        if old_canon not in self._warned:
-            self._warned.add(old_canon)
-            logger.warning("%s", legacy_key_warning(old, key, self.scopes.get(old_canon)))
+        self.warn_once(old_canon, legacy_key_warning(old, key, self.scopes.get(old_canon)))
         return old_canon
+
+    def warn_once(self, key: str, message: str) -> None:
+        """Log *message* as a warning about *key*, once per snapshot however often it is read."""
+        if key not in self._warned:
+            self._warned.add(key)
+            logger.warning("%s", message)
 
     def get(self, key: str) -> str | None:
         """Return the value for *key*, stripped, or ``None`` when unset or blank.
@@ -201,21 +205,6 @@ class Settings:
         Domain registries live at ``<scriptsDir>/<domain>/registry.py``.
         """
         return self.get("ger.scriptsDir") or DEFAULT_SCRIPTS_DIR
-
-    @property
-    def gerrit_user(self) -> str | None:
-        """``ger.user`` for HTTP Basic auth, if set."""
-        return self.get("ger.user")
-
-    @property
-    def gerrit_password(self) -> str | None:
-        """``ger.password`` for HTTP Basic auth, if set."""
-        return self.get("ger.password")
-
-    @property
-    def gerrit_token(self) -> str | None:
-        """``ger.token``, preferred over password for Basic auth, if set."""
-        return self.get("ger.token")
 
     # -- Branch-scoped ------------------------------------------------------------
 

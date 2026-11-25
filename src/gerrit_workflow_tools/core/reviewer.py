@@ -9,7 +9,7 @@ from functools import partial
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.http_rest import gerrit_auth_from_settings
+from gerrit_workflow_tools.core.gerrit.credentials import gerrit_auth_from_settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, parallel_map
 from gerrit_workflow_tools.core.gerrit.stack_context import stack_project
 from gerrit_workflow_tools.core.git_state import repo_toplevel

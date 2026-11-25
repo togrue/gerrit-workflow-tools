@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from gerrit_workflow_tools.cli_common import init_cli_runtime, run_cli_command
-from gerrit_workflow_tools.core.config_keys import ConfigScope, legacy_key
+from gerrit_workflow_tools.core.config_keys import ConfigScope, gerrit_host_key, legacy_key
 from gerrit_workflow_tools.core.config_write import ConfigWrite, apply_config_write
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.upstream_interactive import prompt_toolkit_can_run
@@ -22,12 +22,12 @@ _PROMPTS: tuple[tuple[str, str, str], ...] = (
         "The web URL used to access your Gerrit instance (e.g. https://gerrit.your.domain/).",
     ),
     (
-        "ger.user",
+        "ger.<webUrl>.user",
         "user",
         "Your Gerrit username.",
     ),
     (
-        "ger.token",
+        "ger.<webUrl>.token",
         "token",
         "An HTTP token for the Gerrit REST API (see your user settings in the Gerrit web UI).",
     ),
@@ -50,9 +50,17 @@ def _git_config_get(*, global_config: bool, key: str, cwd: Path | None) -> str |
     return None
 
 
+def _existing(*, global_config: bool, keys: tuple[str, ...], cwd: Path | None) -> str | None:
+    """The first of *keys* set at the setup scope."""
+    return next((v for key in keys if (v := _git_config_get(global_config=global_config, key=key, cwd=cwd))), None)
+
+
+def _scope(global_config: bool) -> ConfigScope:
+    return ConfigScope.GLOBAL if global_config else ConfigScope.LOCAL
+
+
 def _git_config_set(*, global_config: bool, key: str, value: str, cwd: Path | None) -> None:
-    scope = ConfigScope.GLOBAL if global_config else ConfigScope.LOCAL
-    apply_config_write(cwd, ConfigWrite(key, "set", value, scope))
+    apply_config_write(cwd, ConfigWrite(key, "set", value, _scope(global_config)))
 
 
 def _normalize_web_url(raw: str) -> str:
@@ -104,8 +112,8 @@ def _run_interactive_setup(*, global_config: bool, cwd: Path | None) -> int:
         print(
             "Set git config manually, e.g.:\n"
             "  git config --global ger.webUrl https://gerrit.example.com\n"
-            "  git config --global ger.user YOUR_USER\n"
-            "  git config --global ger.token YOUR_TOKEN",
+            "  git config --global ger.https://gerrit.example.com.user YOUR_USER\n"
+            "  git config --global ger.https://gerrit.example.com.token YOUR_TOKEN",
             file=sys.stderr,
         )
         raise UsageError("ger setup requires an interactive terminal")
@@ -118,8 +126,6 @@ def _run_interactive_setup(*, global_config: bool, cwd: Path | None) -> int:
 
     session: PromptSession[str] = PromptSession()
     existing_web = _git_config_get(global_config=global_config, key="ger.webUrl", cwd=cwd)
-    existing_user = _git_config_get(global_config=global_config, key="ger.user", cwd=cwd)
-    existing_token = _git_config_get(global_config=global_config, key="ger.token", cwd=cwd)
 
     web_url = _prompt_value(
         session,
@@ -134,6 +140,10 @@ def _run_interactive_setup(*, global_config: bool, cwd: Path | None) -> int:
         print(f"error: {web_err}", file=sys.stderr)
         return 1
     web_url = _normalize_web_url(web_url)
+    user_key, token_key = gerrit_host_key(web_url, "user"), gerrit_host_key(web_url, "token")
+    existing_user = _existing(global_config=global_config, keys=(user_key, "ger.user"), cwd=cwd)
+    unscoped_token = _git_config_get(global_config=global_config, key="ger.token", cwd=cwd)
+    existing_token = _existing(global_config=global_config, keys=(token_key,), cwd=cwd) or unscoped_token
 
     user = _prompt_value(
         session,
@@ -162,22 +172,40 @@ def _run_interactive_setup(*, global_config: bool, cwd: Path | None) -> int:
         return 1
 
     _git_config_set(global_config=global_config, key="ger.webUrl", value=web_url, cwd=cwd)
-    _git_config_set(global_config=global_config, key="ger.user", value=user, cwd=cwd)
-    _git_config_set(global_config=global_config, key="ger.token", value=token, cwd=cwd)
+    _git_config_set(global_config=global_config, key=user_key, value=user, cwd=cwd)
+    _git_config_set(global_config=global_config, key=token_key, value=token, cwd=cwd)
 
     print(
-        f"\nConfigured ({scope}): ger.webUrl={web_url!r}, ger.user={user!r}, ger.token=<set>",
+        f"\nConfigured ({scope}): ger.webUrl={web_url!r}, {user_key}={user!r}, {token_key}=<set>",
         file=sys.stderr,
     )
+    _scope_unscoped_secrets(global_config=global_config, web_url=web_url, cwd=cwd)
     return 0
+
+
+def _scope_unscoped_secrets(*, global_config: bool, web_url: str, cwd: Path | None) -> None:
+    """Remove ``ger.token`` / ``ger.password`` (and old names) at the setup scope: they go to any host.
+
+    The token was just written for the host; a password moves to ``ger.<webUrl>.password``
+    unless the host has one, so no secret is lost.
+    """
+    for name in ("token", "password"):
+        unscoped = _git_config_get(global_config=global_config, key=f"ger.{name}", cwd=cwd)
+        if not unscoped:
+            continue
+        host_key = gerrit_host_key(web_url, name)
+        if name == "password" and not _git_config_get(global_config=global_config, key=host_key, cwd=cwd):
+            _git_config_set(global_config=global_config, key=host_key, value=unscoped, cwd=cwd)
+        apply_config_write(cwd, ConfigWrite(f"ger.{name}", "unset", scope=_scope(global_config)))
+        print(f"Moved the unscoped ger.{name} to {host_key}: it went to any host ger.webUrl named.", file=sys.stderr)
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ger setup",
         description=(
-            "Interactively configure ger.webUrl, ger.user, and ger.token "
-            "in git config (required for Gerrit REST API commands)."
+            "Interactively configure ger.webUrl and that host's user and token "
+            "(ger.<webUrl>.user, ger.<webUrl>.token) in git config (required for Gerrit REST API commands)."
         ),
     )
     parser.add_argument(

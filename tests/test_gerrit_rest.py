@@ -51,7 +51,7 @@ def test_encode_gerrit_path_segment_does_not_double_encode() -> None:
 
 def test_get_messages_uses_single_encoded_project_path() -> None:
     """Follow-ups pass Gerrit's compact id; REST paths must not double-encode."""
-    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+    from gerrit_workflow_tools.core.gerrit.credentials import GerritAuth
 
     client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
     paths: list[str] = []
@@ -69,7 +69,7 @@ def test_get_messages_uses_single_encoded_project_path() -> None:
 
 def test_get_change_requests_the_batch_row_options() -> None:
     """``/detail`` has no ``current_revision``; ChangeStore.get_change assumes these options."""
-    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+    from gerrit_workflow_tools.core.gerrit.credentials import GerritAuth
     from gerrit_workflow_tools.core.gerrit.rest import LOG_QUERY_OPTIONS
 
     client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
@@ -87,7 +87,7 @@ def test_get_change_requests_the_batch_row_options() -> None:
 
 
 def test_get_comments_enable_context_query_params() -> None:
-    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+    from gerrit_workflow_tools.core.gerrit.credentials import GerritAuth
 
     client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
     captured: list[tuple[str, object]] = []
@@ -111,7 +111,7 @@ def test_get_comments_enable_context_query_params() -> None:
 def test_set_reviewers_batch_confirms_reviewers_on_the_review_request() -> None:
     """Set Review rejects the whole body with HTTP 400 unless large groups are confirmed."""
 
-    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+    from gerrit_workflow_tools.core.gerrit.credentials import GerritAuth
 
     client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
     calls: list[tuple[str, object]] = []
@@ -399,7 +399,7 @@ def test_ambiguous_query_says_when_the_list_is_cut_short() -> None:
 
 
 def _capturing_client() -> tuple[HttpGerritRest, list[tuple[str, str, object]]]:
-    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+    from gerrit_workflow_tools.core.gerrit.credentials import GerritAuth
 
     client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
     calls: list[tuple[str, str, object]] = []
@@ -453,7 +453,7 @@ def test_an_http_error_says_gerrits_own_reason_on_one_line(
     body: bytes, reason: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from gerrit_workflow_tools.core.gerrit import http_rest
-    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+    from gerrit_workflow_tools.core.gerrit.credentials import GerritAuth
 
     def _urlopen(request: Any, **_kwargs: object) -> Any:
         raise HTTPError(request.full_url, 400, "Bad Request", {}, io.BytesIO(body))  # type: ignore[arg-type]
@@ -473,7 +473,7 @@ def test_a_bare_change_id_never_reaches_a_changes_url(bare: str) -> None:
     Gerrit answers a bare Change-Id with 404 ("Multiple changes found") once it is on a second
     branch (GitHub #31), so the URL seam refuses it outright, whatever the caller.
     """
-    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+    from gerrit_workflow_tools.core.gerrit.credentials import GerritAuth
     from gerrit_workflow_tools.core.gerrit.rest import BareChangeIdError
 
     client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
@@ -490,7 +490,7 @@ def test_a_bare_change_id_never_reaches_a_changes_url(bare: str) -> None:
 
 @pytest.mark.parametrize("ref", ["12345", "proj~main~I" + "a" * 40, "tools%2FSomeProject~59446"])
 def test_a_triplet_gerrit_id_or_number_reaches_its_changes_url(ref: str) -> None:
-    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+    from gerrit_workflow_tools.core.gerrit.credentials import GerritAuth
 
     client = HttpGerritRest("https://g.example", auth=GerritAuth(user="u", secret="s"))
     paths: list[str] = []
@@ -512,7 +512,7 @@ def test_gerrit_text_reaches_core_without_terminal_control_characters(monkeypatc
     as Gerrit sent them: two files whose names differ by a control character keep their comments.
     """
     from gerrit_workflow_tools.core.gerrit import http_rest
-    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+    from gerrit_workflow_tools.core.gerrit.credentials import GerritAuth
 
     payload = (
         b')]}\'\n{"src/a\\u001b.py": [{"id": "c1", "path": "src/a\\u001b.py", "author": {"name": "Mallory\\u009b2J"},'
@@ -544,7 +544,7 @@ def test_gerrit_text_reaches_core_without_terminal_control_characters(monkeypatc
 
 def test_gerrits_error_reason_carries_no_terminal_control_characters(monkeypatch: pytest.MonkeyPatch) -> None:
     from gerrit_workflow_tools.core.gerrit import http_rest
-    from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth
+    from gerrit_workflow_tools.core.gerrit.credentials import GerritAuth
 
     def _urlopen(request: Any, **_kwargs: object) -> Any:
         body = io.BytesIO(b"\x1b]0;pwned\x07no such\x1b[2K change")

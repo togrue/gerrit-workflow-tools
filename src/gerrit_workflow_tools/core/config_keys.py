@@ -90,12 +90,17 @@ def legacy_key(key: str) -> str | None:
     return None
 
 
-def legacy_key_warning(old: str, new: str, scope: ConfigScope | None) -> str:
-    """One line naming the ``git config`` commands that move *old* to *new* at *scope*."""
+def legacy_key_warning(old: str, new: str, scope: ConfigScope | None, why: str = "is deprecated") -> str:
+    """One line saying *why* *old* is out, and the ``git config`` commands that move it to *new* at *scope*."""
     if scope is None or scope.flag is None:  # `git -c`: nothing on disk to move
-        return f"git config key {old} is deprecated; use {new}"
+        return f"git config key {old} {why}; use {new}"
     git_config = f"git config {scope.flag}"
     return (
-        f"git config key {old} is deprecated; move it with: "
+        f"git config key {old} {why}; move it with: "
         f'{git_config} {new} "$({git_config} {old})" && {git_config} --unset {old}'
     )
+
+
+def gerrit_host_key(web_url: str, name: str) -> str:
+    """``ger.<web_url>.<name>``: *name* (``user``, ``token``, ``password``) for one Gerrit host (#111)."""
+    return f"ger.{web_url.strip().rstrip('/')}.{name}"

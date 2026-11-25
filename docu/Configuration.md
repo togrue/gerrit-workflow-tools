@@ -13,8 +13,10 @@ Git config drives defaults for Gerrit workflow tools. Values are read from repo 
 | `ger.remote` | Remote name for `git push` to Gerrit (default: `origin`). |
 | `ger.webUrl` | HTTPS base for Gerrit REST API and web links (required for API commands). Must start with `https://`: every REST call carries the Basic-auth credentials, so a plain `http://` URL is refused with a config error unless `ger.allowInsecureHttp` is set. |
 | `ger.allowInsecureHttp` | When `true`, accept an `http://` `ger.webUrl` (credentials then travel in cleartext). Default off. Only for a local test Gerrit, such as the one in `testenv/` or the integration tests. |
-| `ger.user` | Username for HTTP Basic auth to the REST API. |
-| `ger.password` / `ger.token` | Password or HTTP access token (token preferred). |
+| `ger.<url>.user` | Username for HTTP Basic auth to the Gerrit at `<url>`, e.g. `git config --global ger.https://gerrit.example.com.user alice`. Falls back to `ger.user`. See [Credentials are per host](#credentials-are-per-host). |
+| `ger.<url>.token` / `ger.<url>.password` | HTTP access token or password for the Gerrit at `<url>` (token preferred). Sent only when `ger.webUrl` names that host. |
+| `ger.user` | Username for every host without a `ger.<url>.user`. |
+| `ger.token` / `ger.password` | **Deprecated.** An unscoped secret, sent to whatever host `ger.webUrl` names. Still read when no `ger.<url>.token` / `….password` matches, with one warning naming the command that ties it to the host. `ger setup` moves it. |
 | `ger.stopPattern` | Regex matched against **commit subject** (first line only in practice). The first matching commit starts the non-pushable tail unless `ger push --all` applies. If unset, built-in default: `^(?:dropme!|todo\b|test!|wip\b)` (case-insensitive). Override with `git config ger.stopPattern '…'`. |
 | `ger.warningPattern` | Regex matched against commit subject for warning highlighting in `ger log`, `ger push`, `ger show`, and `ger inbox` when color output is enabled. If unset, built-in default: `(?:^[^\s]+$|(?i:\b(?:wip|todo)\b))`. Stop-pattern highlighting takes precedence when both match the same text span. Override with `git config ger.warningPattern '…'`. |
 | `ger.wrapWidth` | Max visible width for `ger show` commit-message lines and comment-box text (default `120`). Comment bodies and context lines break on spaces and tabs; a token with no space is sliced. An over-long path header keeps its tail (the filename). The chain URL is not wrapped. Unset, blank, or a value below 1 uses 120. |
@@ -128,7 +130,7 @@ the *Stream Events* capability. Without it everything works as before, by pollin
 | `ger.eventStream` | `auto` (default): try once at startup, quietly; when it never comes up, poll. `on`: keep retrying and log each failure (still polling meanwhile). `off`: never connect. `true`/`false` read as `on`/`off`. |
 | `ger.eventStreamHost` | ssh host of Gerrit. Default: the host of the `ger.remote` URL when it is an ssh URL, else the host of `ger.webUrl`. |
 | `ger.eventStreamPort` | ssh port. Default: the port in an ssh remote URL (none: ssh's own config decides), else Gerrit's `29418`. |
-| `ger.eventStreamUser` | ssh user. Default: the user in an ssh remote URL, else `ger.user`, else ssh's own config. |
+| `ger.eventStreamUser` | ssh user. Default: the user in an ssh remote URL, else the Gerrit user (`ger.<webUrl>.user`, else `ger.user`), else ssh's own config. |
 
 ssh runs non-interactively (`BatchMode=yes`, no tty, 10-second connect timeout): it never asks
 for a password or to accept a host key. Connect once by hand (`ssh -p 29418 you@host gerrit
@@ -157,6 +159,22 @@ capability (or is an administrator).
 Set via `git config` (or `set_branch_config` / attention-cursor helpers in `core/config_write.py`).
 
 ---
+
+## Credentials are per host
+
+The token is tied to the Gerrit it belongs to, the way git scopes `http.<url>.*`: the `<url>`
+in `ger.<url>.token` is a subsection, written in a config file as
+
+```ini
+[ger "https://gerrit.example.com"]
+	user = alice
+	token = …
+```
+
+The `<url>` must be `ger.webUrl` exactly, without a trailing slash (`ger setup` writes
+it that way). So a repository whose `ger.webUrl` points at another server (a per-repo
+override, a typo) gets no credentials and an error that names the host, not this host's
+token. There is no prefix or case-insensitive matching as in `git config --get-urlmatch`.
 
 ## Renamed keys (`gerrit.*`, `inbox.*`, `branch.<name>.gerrit*`)
 
@@ -228,7 +246,7 @@ Red subject highlighting in `ger log`, `ger push`, and `ger show` uses the same 
 
 ### Trusting project registries
 
-A `registry.py` is Python that ger imports, so it runs as you and can read everything you can, `ger.token` included. A project-local one arrives with the work tree: a change you check out to review, or a repository you clone, can add `.ger/ci/registry.py`. Git does not clone hooks for this reason, and ger does not run a project-local registry just because it is there. It runs when one of these holds:
+A `registry.py` is Python that ger imports, so it runs as you and can read everything you can, your Gerrit token included. A project-local one arrives with the work tree: a change you check out to review, or a repository you clone, can add `.ger/ci/registry.py`. Git does not clone hooks for this reason, and ger does not run a project-local registry just because it is there. It runs when one of these holds:
 
 1. **`ger.scriptsDir` is set where a checkout cannot write.** In the repository's own config (`git config ger.scriptsDir .ger`: `.git/config` is never cloned), a worktree's config, or `git -c`. Set in global or system config, it trusts only a directory outside the work tree (an absolute path to your own scripts); a relative or in-tree path there would trust every repository you open.
 2. **You said you trust its contents.** Otherwise, before a command runs, ger shows the path and asks `Trust it and run it?` (default no). A yes records a SHA-256 digest of every `*.py` file in that registry directory (`registry.py` and the helpers it imports, symlinked directories followed under every name that reaches them; a registry of more than 2000 such files is refused) in `$XDG_CONFIG_HOME/ger/trusted-registries.json` (default `~/.config/ger/`). The same contents are then trusted wherever they appear, every worktree of the project included. Any edit changes the digest, so ger asks again before running a changed registry. ger reads those files once, hashes them, and runs exactly those bytes: it never runs bytecode from `__pycache__` or a `.pyc`, nor imports anything from the registry directory that is not part of the digest.
