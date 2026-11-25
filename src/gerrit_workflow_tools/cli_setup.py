@@ -179,10 +179,25 @@ def _run_interactive_setup(*, global_config: bool, cwd: Path | None) -> int:
         f"\nConfigured ({scope}): ger.webUrl={web_url!r}, {user_key}={user!r}, {token_key}=<set>",
         file=sys.stderr,
     )
-    if unscoped_token:
-        apply_config_write(cwd, ConfigWrite("ger.token", "unset", scope=_scope(global_config)))
-        print(f"Removed the unscoped ger.token ({scope}): it went to any host ger.webUrl named.", file=sys.stderr)
+    _scope_unscoped_secrets(global_config=global_config, web_url=web_url, cwd=cwd)
     return 0
+
+
+def _scope_unscoped_secrets(*, global_config: bool, web_url: str, cwd: Path | None) -> None:
+    """Remove ``ger.token`` / ``ger.password`` (and old names) at the setup scope: they go to any host.
+
+    The token was just written for the host; a password moves to ``ger.<webUrl>.password``
+    unless the host has one, so no secret is lost.
+    """
+    for name in ("token", "password"):
+        unscoped = _git_config_get(global_config=global_config, key=f"ger.{name}", cwd=cwd)
+        if not unscoped:
+            continue
+        host_key = gerrit_host_key(web_url, name)
+        if name == "password" and not _git_config_get(global_config=global_config, key=host_key, cwd=cwd):
+            _git_config_set(global_config=global_config, key=host_key, value=unscoped, cwd=cwd)
+        apply_config_write(cwd, ConfigWrite(f"ger.{name}", "unset", scope=_scope(global_config)))
+        print(f"Moved the unscoped ger.{name} to {host_key}: it went to any host ger.webUrl named.", file=sys.stderr)
 
 
 def _build_parser() -> argparse.ArgumentParser:

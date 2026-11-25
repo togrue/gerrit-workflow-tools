@@ -31,7 +31,7 @@ Prompts (with short descriptions):
 
 The user and token are written for the entered host only ([Credentials are per host](../../Configuration.md#credentials-are-per-host)).
 
-When a token is already configured, leaving the token prompt empty keeps the existing value: the host's `ger.<webUrl>.token`, else the unscoped `ger.token`. The user defaults to `ger.<webUrl>.user`, else `ger.user`. A value still stored under its old name (`gerrit.webUrl`, `gerrit.user`, `gerrit.token`) is offered as the default too. Saving writes the scoped keys and removes the unscoped `ger.token` (and `gerrit.token`) at that scope, since it would go to any host `ger.webUrl` names ([Renamed keys](../../Configuration.md#renamed-keys-gerrit-inbox-branchnamegerrit)).
+When a token is already configured, leaving the token prompt empty keeps the existing value: the host's `ger.<webUrl>.token`, else the unscoped `ger.token`. The user defaults to `ger.<webUrl>.user`, else `ger.user`. A value still stored under its old name (`gerrit.webUrl`, `gerrit.user`, `gerrit.token`) is offered as the default too. Saving writes the scoped keys and removes the unscoped `ger.token` and `ger.password` (and their `gerrit.*` names) at that scope, since they would go to any host `ger.webUrl` names; a password moves to `ger.<webUrl>.password` unless the host has one ([Renamed keys](../../Configuration.md#renamed-keys-gerrit-inbox-branchnamegerrit)).
 
 Non-interactive environments print manual `git config` examples and exit with an error.
 

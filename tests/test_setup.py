@@ -97,7 +97,7 @@ def test_ger_setup_moves_an_unscoped_token_to_the_host(stack_repo: Path, monkeyp
     code, _out, err = run_cli(stack_repo, ger_main, ["setup"], monkeypatch)
 
     assert code == 0
-    assert "Removed the unscoped ger.token" in err
+    assert "Moved the unscoped ger.token" in err
     host = "ger.https://gerrit.example.com"
     assert git("config", "--global", "--get", f"{host}.token", cwd=stack_repo).stdout.strip() == "old-tok"
     for key in ("ger.token", "gerrit.token"):
@@ -111,7 +111,22 @@ def test_ger_setup_rerun_offers_the_hosts_token(stack_repo: Path, monkeypatch: p
     code, _out, err = run_cli(stack_repo, ger_main, ["setup"], monkeypatch)
 
     assert code == 0
-    assert "Removed" not in err
+    assert "Moved" not in err
     assert git(
         "config", "--global", "--get", "ger.https://gerrit.example.com.token", cwd=stack_repo
     ).stdout.strip() == ("kept")
+
+
+def test_ger_setup_moves_an_unscoped_password_to_the_host(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An unscoped password left in place would still go to any host; it moves to the host's key."""
+    git("config", "--global", "gerrit.password", "pw", cwd=stack_repo)
+    _scripted_setup(monkeypatch, ["https://gerrit.example.com", "erin", "tok"])
+
+    code, _out, err = run_cli(stack_repo, ger_main, ["setup"], monkeypatch)
+
+    assert code == 0
+    assert "Moved the unscoped ger.password" in err
+    host = "ger.https://gerrit.example.com"
+    assert git("config", "--global", "--get", f"{host}.password", cwd=stack_repo).stdout.strip() == "pw"
+    for key in ("ger.password", "gerrit.password"):
+        assert git("config", "--global", "--get", key, cwd=stack_repo, check=False).returncode != 0
