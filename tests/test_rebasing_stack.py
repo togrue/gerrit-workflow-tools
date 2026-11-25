@@ -520,3 +520,54 @@ def test_an_explicit_range_during_a_live_rebase_is_not_served_as_before(
     assert code == 0, err
     assert json.loads(out)["rebase"]["as_before"] is False
     assert "as it was before the rebase" not in err and "the range asked for, as it is now" in err
+
+
+def test_a_conflict_folding_a_fixup_is_named_by_the_commit_it_folds_into(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two fixups of one commit, the second conflicting: git commits the first fold with its squash template.
+
+    The target keeps its subject and Change-Id in the stack (`ger log`, `/stack`), and every shell names the
+    stop by it: what is folded into what.
+    """
+    store = _store(stack_repo)
+    target = git_out("log", "-1", "--format=%h", "HEAD~2", cwd=stack_repo)
+    subject = git_out("log", "-1", "--format=%s", "HEAD~2", cwd=stack_repo)
+    rows = stack_rows_mb_to_head(stack_repo)
+    number, change_id = next((100 + i, r.change_id) for i, r in enumerate(rows) if r.short_sha.startswith(target))
+    (stack_repo / "folded.txt").write_text("one\n", encoding="utf-8")
+    git("add", "folded.txt", cwd=stack_repo)
+    git("commit", "-q", f"--fixup={target}", cwd=stack_repo)
+    # The last commit adds d.txt: written at the tip and aimed lower, the second fixup conflicts there.
+    (stack_repo / "d.txt").write_text("changed at the tip\n", encoding="utf-8")
+    git("commit", "-q", "-a", f"--fixup={target}", cwd=stack_repo)
+    fixup = git_out("log", "-1", "--format=%h", cwd=stack_repo)
+    from gerrit_workflow_tools.cli_rebase import main as rebase_main
+
+    monkeypatch.setenv("GIT_EDITOR", "true")
+    code, _out, err = run_cli(stack_repo, rebase_main, ["--autosquash"], monkeypatch, gerrit=store)
+    assert code != 0, "the second fixup conflicts"
+    head = git_out("rev-parse", "--short=7", "HEAD", cwd=stack_repo)
+    assert f"stopped while folding fixup {fixup} into {head} {subject} (conflict)" in err
+    assert git_out("log", "-1", "--format=%s", cwd=stack_repo).startswith("# This is a combination of 2 commits")
+
+    progress = rebase_progress(stack_repo)
+    assert progress is not None and progress.folding_into == git_out("rev-parse", "HEAD", cwd=stack_repo)
+    stack = _load(stack_repo, store)
+    assert stack.rebase is not None and stack.rebase.folding_into is not None
+    folded = stack.rebase.folding_into
+    assert (folded.subject, folded.valid_change_id) == (subject, change_id), "read past git's comments"
+
+    code, out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=store)
+    assert code == ExitCode.OK, err
+    assert f'stopped on a conflict while folding fixup {fixup} into {folded.short_sha} "{subject}" in d.txt' in err
+    assert "# This is a combination" not in out + err
+
+    api = GerApi(stack_repo, gerrit=store)
+    served = _get(api, "/stack")
+    assert served["rebase"]["folding_into"] == folded.sha
+    row = next(c for c in served["commits"] if c["sha"] == folded.sha)
+    assert (row["summary"], row["number"]) == (subject, number), "the target keeps its change in the stack"
+    headline = _get(api, "/overview")["headline"]
+    assert (headline["sha"], headline["folding"]) == (folded.sha, True)
+    assert headline["text"].endswith(f"{subject} (folding a fixup into it)")

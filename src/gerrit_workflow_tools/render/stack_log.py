@@ -219,6 +219,8 @@ def rebase_note(progress: RebaseProgress, rebasing: RebasingStack | None) -> str
     """The note above a stack a rebase is underway on: whose, where it stopped, what is shown as it was."""
     current = rebasing.current if rebasing else None
     at = f' at {current.short_sha} "{current.subject}"' if current else ""
+    if current and rebasing and (target := rebasing.folding_into):
+        at = f' while folding fixup {current.short_sha} into {target.short_sha} "{target.subject}"'
     if not current and progress.current and progress.stop is RebaseStop.SPLIT:
         at = f" at {progress.current[:7]}"
     stop = progress.stop

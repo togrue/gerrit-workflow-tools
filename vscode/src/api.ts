@@ -131,6 +131,8 @@ export interface RebaseHeadline {
   subject: string | null;
   sha: string | null;
   url: string | null;
+  /** Stopped on a fixup folding into that commit: the stop is about it (API 1.2). */
+  folding?: boolean;
   text: string;
 }
 
@@ -220,6 +222,8 @@ export interface Rebase {
   applied: boolean;
   /** The commit it stopped at, as the stack shows it. */
   current: string | null;
+  /** Stopped on a fixup or squash: the commit it folds into (API 1.2). */
+  folding_into?: string | null;
   /** Paths the index still holds as unresolved conflicts. */
   unmerged: string[];
   /** The stack is the branch as it was before the rebase (git's `am` backend keeps no todo): no commit has a step. */

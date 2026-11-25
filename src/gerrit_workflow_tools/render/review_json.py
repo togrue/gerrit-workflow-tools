@@ -103,7 +103,8 @@ def _rebase_headline_text(headline: RebaseHeadline) -> str:
         return "Rebase paused" if stop is RebaseStop.PAUSED else "Rebase stopped" if stop else "Rebase underway"
     # A subject alone is quoted, so "Conflict in" does not read as naming a file.
     what = f"{commit.number}: {commit.summary}" if commit.number else f'"{commit.summary}"'
-    return (_REBASE_STOPS[stop] if stop else "Rebase underway at {}").format(what)
+    folding = " (folding a fixup into it)" if headline.folding else ""
+    return (_REBASE_STOPS[stop] if stop else "Rebase underway at {}").format(what) + folding
 
 
 def _rebase_headline_json(headline: RebaseHeadline) -> dict[str, object]:
@@ -118,6 +119,7 @@ def _rebase_headline_json(headline: RebaseHeadline) -> dict[str, object]:
         "subject": commit.summary if commit else None,
         "sha": commit.sha if commit else None,
         "url": commit.gerrit_url if commit else None,
+        "folding": headline.folding,
         "text": _rebase_headline_text(headline),
     }
 

@@ -98,6 +98,9 @@ class RebaseProgress:
     clean: bool = False
     """The index and work tree hold nothing ``git rebase --skip`` would throw away; told only
     where the commit it stopped at was committed by hand (:attr:`committed_by_hand`)."""
+    folding_into: str | None = None
+    """Stopped on a ``fixup``/``squash`` not applied yet: the commit it folds into (``HEAD``, the
+    target as folded so far). The stop is about that commit's change, not the ``fixup!`` commit's."""
 
     @property
     def committed_by_hand(self) -> bool:
@@ -229,6 +232,7 @@ def rebase_progress(cwd: Path | str | None, *, repo_dir: Path | None = None) -> 
         settled=settled,
         moved=moved,
         clean=moved and _nothing_uncommitted(cwd),
+        folding_into=(amend or _state_word(repo_dir / "HEAD")) if folding and not applied and not moved else None,
     )
 
 

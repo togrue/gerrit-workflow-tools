@@ -205,6 +205,7 @@ def rebase_json(stack: AnnotatedStack, progress: RebaseProgress | None) -> dict[
         "stop": progress.stop.value if progress.stop else None,
         "applied": progress.applied,
         "current": current.sha if current else None,
+        "folding_into": progress.folding_into,
         "unmerged": list(progress.unmerged),
         "as_before": not progress.keeps_todo,
         "actions": [action.value for action in progress.actions],

@@ -210,16 +210,33 @@ def read_commit_rows(cwd: Path | str | None, *log_args: str) -> list[Commit]:
     The one commit reader: a single ``git log`` in ``git log`` order. Raises :class:`GitError`
     when git fails.
     """
-    return [
-        Commit(
-            sha=sha.strip(),
-            short_sha=short_sha.strip(),
-            subject=subject.strip(),
-            body=body.strip(),
-            change_id=parse_change_id_footer(body.strip()),
+    rows = []
+    for sha, short_sha, subject, body in _log_records(cwd, _COMMIT_ROW_FMT, 4, *log_args):
+        subject, body = squash_cleaned(subject.strip(), body.strip())
+        rows.append(
+            Commit(
+                sha=sha.strip(),
+                short_sha=short_sha.strip(),
+                subject=subject,
+                body=body,
+                change_id=parse_change_id_footer(body),
+            )
         )
-        for sha, short_sha, subject, body in _log_records(cwd, _COMMIT_ROW_FMT, 4, *log_args)
-    ]
+    return rows
+
+
+def squash_cleaned(subject: str, body: str) -> tuple[str, str]:
+    """*subject* and *body* as the message will be once a fold underway is done.
+
+    Folding fixups one after the other, ``git rebase`` commits each step with its squash template
+    (``# This is a combination of 2 commits.``) and cleans the comments out only at the last.
+    Such a message's first lines are comments; anything else is left as it is.
+    """
+    lines = body.splitlines()
+    if len(lines) < 2 or not (lines[0].startswith("# ") and lines[1].startswith("# ")):
+        return subject, body
+    kept = "\n".join(line for line in lines if not line.startswith("#")).strip()
+    return " ".join(kept.split("\n\n", 1)[0].split()) or subject, kept
 
 
 @dataclass(frozen=True)

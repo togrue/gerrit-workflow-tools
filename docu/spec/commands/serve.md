@@ -220,6 +220,8 @@ Everything the first screen needs, in one call.
   `warning`), `chain` `null`, and the commit it stopped at, as the stack shows it: `number`
   (`null` when it is not on Gerrit), `subject`, `sha` and `url`, all `null` when it is between
   commits. `text` says it: `Rebase stopped at 102: Refactor parser init`, `Conflict in 103: …`.
+  Stopped on a fixup folding into a commit, the commit is that one and `folding` is `true`
+  (else `false`): `Conflict in 2168: stats: add median() (folding a fixup into it)`.
 - `local` — the answer of `GET /stack`.
 - `projects` — the Gerrit projects both sections are narrowed to: the repository's own
   (from `ger.project` or the remote URL), as `ger inbox` does inside a clone. `all=1` drops
@@ -281,6 +283,9 @@ The top-level `rebase` is `null` without a rebase, else:
 - `applied` — `false` while the `current` commit is only partly there, stopped on a conflict.
 - `current` — the id of the commit it stopped at as the stack shows it, else `null` (between
   commits, or reset away at a `split`).
+- `folding_into` — stopped on a `fixup` or `squash` not applied yet: the id of the commit it
+  folds into (`HEAD`, a `done` commit of the stack), else `null`. The stop is about that
+  commit's change: the `fixup!` commit is not on Gerrit.
 - `unmerged` — the paths the index holds as unresolved conflicts, at whatever stop (a `git stash
   pop` at an `edit` stop can leave some). Each is the literal path relative to the worktree's top,
   as the file is named (`café.txt`), never git's C-quoted form (`"caf\303\251.txt"`).
