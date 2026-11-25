@@ -13,7 +13,7 @@ from gerrit_workflow_tools.core.gerrit.change_queries import (
     change_freshness_key,
     probe_changes_updated,
 )
-from gerrit_workflow_tools.core.gerrit.change_view import ChangeView, missing_parent_shas
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import (
     LIGHT_QUERY_OPTIONS,
     LOG_QUERY_OPTIONS,
@@ -28,6 +28,13 @@ if TYPE_CHECKING:
 
 # Up to this many moved changes are fetched by number; past it, asking the query again in full is one request too.
 _FETCH_BY_NUMBER_LIMIT = 25
+
+
+def missing_parent_shas(changes: list[ChangeView]) -> list[str]:
+    """First-parent SHAs that are not another change's current revision."""
+    known = {change.current_revision for change in changes if change.current_revision}
+    parents = (change.first_parent for change in changes if change.first_parent)
+    return list(dict.fromkeys(parent for parent in parents if parent not in known))
 
 
 class ChangeApi:
