@@ -195,6 +195,8 @@ def vote_plan_json(plan: VotePlan, options: list[VoteOption], *, web_base: str) 
             "own": target.own,
             "permitted": {label: list(values) for label, values in target.change.permitted_votes.items()},
             "ruled_out": list(target.ruled_out),
+            "yours": dict(target.yours),
+            "keeps": plan.keeps(target),
             "drafts": [_draft_json(chain, draft) for chain, draft in drafts_in(list(target.drafts))],
         }
         for target in plan.targets
@@ -203,7 +205,7 @@ def vote_plan_json(plan: VotePlan, options: list[VoteOption], *, web_base: str) 
         "changes": changes,
         "votes": dict(plan.votes),
         "drafts": plan.draft_count,
-        "options": [{**asdict(option), "takes": list(option.takes)} for option in options],
+        "options": [{**asdict(option), "takes": list(option.takes), "keeps": list(option.keeps)} for option in options],
     }
 
 
@@ -214,11 +216,12 @@ def sent_vote_json(plan: VotePlan, status: str) -> dict[str, list[dict[str, obje
             "change": target.change.key,
             "number": target.number,
             "drafts": target.draft_count,
-            "labels": dict(plan.votes),
+            "labels": plan.votes_on(target),
+            "keeps": plan.keeps(target),
             "message": plan.message,
             "status": status,
         }
-        for target in plan.takes
+        for target in plan.sends
     ]
     skipped: list[dict[str, object]] = [
         {"change": t.change.key, "number": t.number, "ruled_out": list(t.ruled_out)} for t in plan.skipped

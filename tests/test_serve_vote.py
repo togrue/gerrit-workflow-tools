@@ -130,6 +130,7 @@ def test_the_served_vote_sends_what_ger_review_vote_sends(stack_repo: Path, monk
         "number": 101,
         "drafts": 1,
         "labels": {"Code-Review": 1},
+        "keeps": {},
         "message": "lgtm",
         "status": "published",
     }
@@ -197,3 +198,24 @@ def test_show_says_your_own_commit_is_published_by_your_push(stack_repo: Path) -
 def _show(api: GerApi, rev: str) -> dict[str, Any]:
     [commit] = api.handle("GET", f"{V1}/show", {"rev": [rev]})["commits"]
     return commit
+
+
+def test_a_chain_vote_keeps_your_vote_and_says_so_before_it_is_sent(stack_repo: Path) -> None:
+    """The editor's chain-level Vote and Publish: the plan says which changes keep your vote, and the
+    publish leaves them alone (finding 2 of the 2026-11-25 review walk)."""
+    git("config", "ger.webUrl", WEB, cwd=stack_repo)
+    store, keys = _bobs(stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+    _post(api, {"change": 101, "votes": {"Code-Review": -1}, "patch_sets": {"101": 1}})
+    plan = _get(api, change="101", chain="1")
+    assert [change["yours"] for change in plan["changes"]] == [{}, {"Code-Review": -1}, {}, {}]
+    [plus_one] = [o for o in plan["options"] if (o["label"], o["value"]) == ("Code-Review", 1)]
+    assert plus_one["keeps"] == [101]
+    assert _get(api, change="101", chain="1", vote="+1")["changes"][1]["keeps"] == {"Code-Review": -1}
+    del store.calls[:]
+    sent = _post(
+        api,
+        {"change": 101, "chain": True, "votes": {"Code-Review": 1}, "patch_sets": {str(n): 1 for n in range(100, 104)}},
+    )
+    assert [row["number"] for row in sent["changes"]] == [100, 102, 103]
+    assert [call.args[0] for call in store.calls_to("publish_drafts")] == [keys[0], keys[2], keys[3]]

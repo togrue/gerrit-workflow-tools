@@ -495,15 +495,18 @@ a vote no change takes is `USAGE`, as on the command line.
 
 - `changes` — per change: `number`, `change` (its key), `subject`, `patch_set` (the current one:
   what `POST /vote` names back), `url`, `owner` (a name), `own` (you own it), `permitted` (what
-  you may vote, per label; `{}` when Gerrit did not say), `ruled_out`, and `drafts`: each draft
+  you may vote, per label; `{}` when Gerrit did not say), `ruled_out`, `yours` (your votes on its
+  current patchset, per label), `keeps` (with `chain=1` and `vote`: the votes of yours it keeps,
+  per label; the vote does not go there), and `drafts`: each draft
   of yours a publish sends, with `path`, `line`, `location` (`path:line`, in words for the
   commit message and the patchset level), `text` (its first line) and `transition` (`resolves`,
   `reopens` or `null`: what it does to its chain).
 - `drafts` — how many drafts go out, on the changes that take the votes.
 - `options` — every vote some change lets you give, Code-Review first, each label's highest
   value first: `label`, `value`, `meaning` (the project's words for it, "Looks good to me, but
-  someone else must approve"; empty when Gerrit did not say) and `takes` (the change numbers that
-  take it: a chain vote skips the others). Where Gerrit did not say what you may give,
+  someone else must approve"; empty when Gerrit did not say), `takes` (the change numbers that
+  take it: a chain vote skips the others) and `keeps` (with `chain=1`: of those, the changes that
+  carry your vote on its label and keep it). Where Gerrit did not say what you may give,
   Code-Review -2 to +2 is offered and Gerrit itself refuses what you may not.
 
 ---
@@ -516,7 +519,7 @@ a vote no change takes is `USAGE`, as on the command line.
 |----------|------|------|
 | `/review/open` | `change`, optional `patchset`, `mode`, `stage`, `force` | `ger review CHANGEISH`: the **review checkout**. Answers `review` and `moved_from`. |
 | `/review/done` | — | `ger review --done`. |
-| `/vote` | `change`, `patch_sets`, optional `chain`, `votes`, `message` | `ger review --vote`: publish your drafts on the change (with `chain`, on every open change of its chain), with `votes` (`{label: value}`; `{}` or none: the drafts go out without a vote, as `ger reply --publish CHANGEISH`) and `message` on each. `patch_sets` (`{change number: patchset}`) is what `GET /vote` showed: when the changes or a patchset are not that any more, nothing is sent and it is `REFUSED`. A change that rules a vote out is skipped; when none takes it, or there is nothing to send (no draft, no vote, no message), or `GER_NO_PUBLISH` is set, it is `USAGE`. Answers as `ger review --vote --json` for several changes: `changes` (each `change`, `number`, `drafts`, `labels`, `message`, `status`) and `skipped` (`change`, `number`, `ruled_out`). |
+| `/vote` | `change`, `patch_sets`, optional `chain`, `votes`, `message` | `ger review --vote`: publish your drafts on the change (with `chain`, on every open change of its chain), with `votes` (`{label: value}`; `{}` or none: the drafts go out without a vote, as `ger reply --publish CHANGEISH`) and `message` on each. With `chain`, a change that carries your vote on a label keeps it: the vote goes to the others, and your drafts and the message still go there. `patch_sets` (`{change number: patchset}`) is what `GET /vote` showed: when the changes or a patchset are not that any more, nothing is sent and it is `REFUSED`. A change that rules a vote out is skipped; when none takes it, or there is nothing to send (no draft, no vote, no message), or `GER_NO_PUBLISH` is set, it is `USAGE`. Answers as `ger review --vote --json` for several changes: `changes` (each `change`, `number`, `drafts`, `labels` (the votes that went there), `keeps` (your votes it kept), `message`, `status`) and `skipped` (`change`, `number`, `ruled_out`). |
 | `/comments/reply` | `rev`, `comment_id`, `message`, optional `resolved` | `ger reply`: a **draft** reply in that chain. Publishing stays with `ger push` and `ger review --vote`. |
 | `/comments/new` | `rev`, `location`, `message`, optional `state`, `resolved`, `commit` | `ger comment`: start a chain. `location` is `PATH`, `PATH:LINE`, `PATH:START-END` or `PATH:L.C-L.C`, lines from 1. `state`: `draft` (on Gerrit), `local-draft` or `note` (both only here); the default is a draft where Gerrit has the change, else a local draft. `commit` (a commit id, as `/diff` answers it) is the version of the change whose lines were shown, when a viewer shows another one than `rev` names (an older patchset, or Gerrit's current one beside your rewritten commit): `location` is checked against it and the comment goes on it, a draft on that patchset by default. It is `NOT_FOUND` when it is neither the commit `rev` names nor a patchset Gerrit has of the change. Answers `ger comment --json`. |
 | `/comments/edit` | `rev`, `comment_id`, `message`, optional `resolved` | `ger comment --edit`: give one of your unpublished comments a new text: a **draft** on Gerrit (a chain you started or a reply), a **local draft** or a **note**. It stays where it is; without `resolved` it stays as open as it was. Answers `action` (`updated`), `state`, `id`, `change` and `message`: what it said before. A published comment, or an id that is not yours, is not found. |

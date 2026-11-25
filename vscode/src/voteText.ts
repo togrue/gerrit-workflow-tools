@@ -2,7 +2,7 @@
 // What goes out, what each vote means and which changes take it are core's (`GET /vote`); this
 // only words them. No `vscode` import: unit-tested.
 
-import { VoteOption, VotePlan, VoteSent } from "./api";
+import { VoteChange, VoteOption, VotePlan, VoteSent } from "./api";
 import { plural } from "./format";
 
 /** A row of the vote picker: a vote, or (no `option`) your drafts without one. */
@@ -51,7 +51,12 @@ export function voteItems(plan: VotePlan): VoteItem[] {
   const items: VoteItem[] = plan.options.map((option) => ({
     label: `${ICONS[option.value > 0 ? "up" : option.value < 0 ? "down" : "none"]} ${voteName(option)}`,
     description: option.meaning || undefined,
-    detail: option.takes.length < all ? `only on ${changesNamed(option.takes)}: the other changes do not take it` : undefined,
+    detail: [
+      option.takes.length < all ? `only on ${changesNamed(option.takes)}: the other changes do not take it` : "",
+      option.keeps?.length ? `${changesNamed(option.keeps)} ${option.keeps.length === 1 ? "keeps" : "keep"} your vote` : "",
+    ]
+      .filter(Boolean)
+      .join("; ") || undefined,
     option,
   }));
   if (plan.drafts) {
@@ -77,24 +82,38 @@ export function takers(plan: VotePlan, option: VoteOption | undefined): number[]
   return option ? option.takes : plan.changes.map((change) => change.number);
 }
 
+/** `keeps your Code-Review -1`: what a change of a chain vote keeps instead of the vote (core's `keeps`). */
+export function keptVote(change: VoteChange, option: VoteOption | undefined): string {
+  return option && option.keeps?.includes(change.number) ? `keeps your ${option.label} ${signed(change.yours?.[option.label] ?? 0)}` : "";
+}
+
 /** The one question, a modal one (it cannot be taken back): what goes out, on which changes, draft by draft. */
 export function confirmVote(plan: VotePlan, option: VoteOption | undefined, message: string): { text: string; detail: string } {
   const on = takers(plan, option);
   const changes = plan.changes.filter((change) => on.includes(change.number));
+  const kept = changes.filter((change) => keptVote(change, option));
+  const voted = changes.filter((change) => !kept.includes(change));
+  // A change that keeps your vote still gets your drafts and the message; with neither, nothing goes there.
+  const reached = changes.filter((change) => voted.includes(change) || change.drafts.length || message);
   const drafts = changes.reduce((sum, change) => sum + change.drafts.length, 0);
-  const what = [option ? voteName(option) : "no vote", drafts ? plural(drafts, "draft") : "no drafts", message ? `message "${message}"` : ""].filter(Boolean).join(" · ");
+  const vote = option ? `${voteName(option)}${kept.length && voted.length ? ` on ${changesNamed(voted.map((change) => change.number))}` : ""}` : "no vote";
+  const what = [vote, drafts ? plural(drafts, "draft") : "no drafts", message ? `message "${message}"` : ""].filter(Boolean).join(" · ");
   const lines = [what];
   // Each change with its drafts; a single change without any needs no line of its own.
-  for (const change of changes.length > 1 || drafts ? changes : []) {
-    lines.push("", `${change.number} ${change.subject}${change.drafts.length ? "" : ": no drafts"}`);
+  for (const change of changes.length > 1 || drafts || kept.length ? changes : []) {
+    const notes = [keptVote(change, option), change.drafts.length ? "" : "no drafts"].filter(Boolean).join(", ");
+    lines.push("", `${change.number} ${change.subject}${notes ? `: ${notes}` : ""}`);
     lines.push(...change.drafts.map((draft) => `  ${draft.location}  "${draft.text}"${draft.transition ? ` (${draft.transition})` : ""}`));
   }
   const skipped = plan.changes.filter((change) => !on.includes(change.number));
   if (skipped.length) {
     lines.push("", `Skipped (it does not take ${option ? voteName(option) : "it"}): ${changesNamed(skipped.map((change) => change.number))}`);
   }
+  if (kept.length) {
+    lines.push("", "A chain vote never replaces a vote you gave: vote on that change alone to change it.");
+  }
   lines.push("", "Everyone on the change sees it at once; it cannot be taken back.");
-  return { text: `Publish on ${changesNamed(on)}?`, detail: lines.join("\n") };
+  return { text: `Publish on ${changesNamed((reached.length ? reached : changes).map((change) => change.number))}?`, detail: lines.join("\n") };
 }
 
 /** What a notification says once it went out. */
@@ -102,5 +121,7 @@ export function sentVote(sent: VoteSent, option: VoteOption | undefined): string
   const drafts = sent.changes.reduce((sum, change) => sum + change.drafts, 0);
   const what = [option ? voteName(option) : "", drafts || !option ? plural(drafts, "draft") : ""].filter(Boolean).join(" and ");
   const skipped = sent.skipped.length ? ` Skipped ${changesNamed(sent.skipped.map((change) => change.number))}.` : "";
-  return `Published ${what} on ${changesNamed(sent.changes.map((change) => change.number))}.${skipped}`;
+  const kept = sent.changes.filter((change) => Object.keys(change.keeps ?? {}).length);
+  const keptWords = kept.length ? ` Kept your vote on ${changesNamed(kept.map((change) => change.number))}.` : "";
+  return `Published ${what} on ${changesNamed(sent.changes.map((change) => change.number))}.${keptWords}${skipped}`;
 }

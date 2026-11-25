@@ -240,7 +240,9 @@ The commits above your upstream, newest first. One row per commit:
   the votes Gerrit lets you give there, each with what the project says it means, opening on
   Code-Review +1, and your drafts without a vote. Then an optional message, then one dialog listing
   everything that goes out: the vote, each draft (`path:line` and its first words), the message,
-  on which changes, and the changes of a chain that do not take the vote. Publish sends it; a
+  on which changes, and the changes of a chain that do not take the vote. A chain vote never
+  replaces a vote you gave: a change that carries yours keeps it (*2156 …: keeps your
+  Code-Review -1*) and still gets your drafts; Vote and Publish on that change alone replaces it. Publish sends it; a
   notification says what went out and the views refresh, so the chain leaves *To review* when
   Gerrit says so. Should the change get a new patchset meanwhile, nothing is sent and **Look
   Again** starts over on what is there now. **Publish Drafts…** (the Change view's `…` menu, the

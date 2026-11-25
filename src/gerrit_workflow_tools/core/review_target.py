@@ -57,6 +57,8 @@ class VoteTarget:
     """Votes Gerrit does not let you give here (``votes_ruled_out``); empty: it takes them all."""
     own: bool = False
     """You own the change: a reviewer's vote on it is rare, publishing your drafts is not."""
+    yours: Mapping[str, int] = field(default_factory=dict)
+    """Your votes on its current patch set, by label: what a new patch set did not reset."""
 
     @property
     def number(self) -> int:
@@ -94,9 +96,19 @@ def vote_targets(
             else (),
             ruled_out=tuple(votes_ruled_out(votes, change.permitted_votes)),
             own=change.owned_by(me),
+            yours=your_votes(change, me),
         )
         for change in changes
     ]
+
+
+def your_votes(change: ChangeView, me: int | None) -> dict[str, int]:
+    """Your non-zero votes on *change*'s current patch set, by label; none without *me*."""
+    if me is None:
+        return {}
+    return {
+        label: v.value for label, votes in change.label_votes.items() for v in votes if v.account_id == me and v.value
+    }
 
 
 def vote_changes(
@@ -158,6 +170,23 @@ class VotePlan:
     votes: Mapping[str, int] = field(default_factory=dict)
     """Empty: your drafts (and the message) go out without a vote."""
     message: str | None = None
+    keep_yours: bool = False
+    """A chain vote: a change that carries your vote on a label keeps it (:meth:`keeps`); only a
+    change you name gets a vote over yours."""
+
+    def keeps(self, target: VoteTarget) -> dict[str, int]:
+        """Your votes *target* keeps, by label: on a chain vote, those of the labels voted on."""
+        return {label: target.yours[label] for label in self.votes if self.keep_yours and label in target.yours}
+
+    def votes_on(self, target: VoteTarget) -> dict[str, int]:
+        """The votes that go to *target*: all of them, but the labels where it keeps yours."""
+        kept = self.keeps(target)
+        return {label: value for label, value in self.votes.items() if label not in kept}
+
+    @property
+    def sends(self) -> list[VoteTarget]:
+        """The changes something goes to: a vote, a draft, the message."""
+        return [t for t in self.takes if self.votes_on(t) or t.draft_count or self.message]
 
     @property
     def takes(self) -> list[VoteTarget]:
@@ -185,13 +214,16 @@ class VoteOption:
     """Gerrit's words for it ("Looks good to me, but someone else must approve"); empty when it did not say."""
     takes: tuple[int, ...]
     """The change numbers that let you give it: a chain vote skips the others."""
+    keeps: tuple[int, ...] = ()
+    """Of :attr:`takes`, the changes that keep your vote on the label (a chain vote): it does not go there."""
 
 
 _DEFAULT_RANGE = (-2, -1, 0, 1, 2)
 
 
-def vote_options(targets: Sequence[VoteTarget]) -> list[VoteOption]:
+def vote_options(targets: Sequence[VoteTarget], *, keep_yours: bool = False) -> list[VoteOption]:
     """Every vote some change of *targets* lets you give: Code-Review first, each label's highest value first.
+    With *keep_yours* (a chain vote), each says which changes keep your vote on its label.
 
     Where Gerrit did not say what you may give (no ``permitted_labels``), Code-Review -2 to +2 is
     offered, and taken by every such change: Gerrit itself then refuses what you may not.
@@ -210,7 +242,8 @@ def vote_options(targets: Sequence[VoteTarget]) -> list[VoteOption]:
             takes = tuple(t.number for t in targets if not votes_ruled_out({label: value}, t.change.permitted_votes))
             meanings = (t.change.label_meanings.get(label, {}).get(value) for t in targets)
             meaning = next((text for text in meanings if text), "")
-            options.append(VoteOption(label, value, meaning, takes))
+            keeps = tuple(t.number for t in targets if keep_yours and t.number in takes and label in t.yours)
+            options.append(VoteOption(label, value, meaning, takes, keeps))
     return options
 
 
@@ -221,12 +254,17 @@ def plan_vote(
     message: str | None = None,
     *,
     me: int | None = None,
+    keep_yours: bool = False,
 ) -> VotePlan:
     """The plan of a vote with *votes* and *message* on *changes*; :class:`UsageError` when no change takes it.
 
-    *me* (your account id) tells which changes are yours.
+    *me* (your account id) tells which changes are yours and your votes on each. With
+    *keep_yours* (a chain vote over several changes), a change that carries your vote on a label
+    keeps it: the vote goes to the others, never silently over yours.
     """
-    plan = VotePlan(tuple(vote_targets(service, changes, votes, me=me)), dict(votes), message or None)
+    targets = tuple(vote_targets(service, changes, votes, me=me))
+    # A chain of one change is that change, named: a vote there replaces yours.
+    plan = VotePlan(targets, dict(votes), message or None, keep_yours=keep_yours and len(targets) > 1)
     if votes and not plan.takes:
         raise UsageError("; ".join(f"change {t.number} does not take {', '.join(t.ruled_out)}" for t in plan.skipped))
     return plan
@@ -235,16 +273,17 @@ def plan_vote(
 def send_vote(
     service: GerritService, plan: VotePlan, *, sent: Callable[[VoteTarget], None] = lambda _target: None
 ) -> list[VoteTarget]:
-    """Publish *plan*: your drafts, its votes and message on each change that takes them; one REST call each.
+    """Publish *plan*: on each change it sends to, your drafts, its votes there and the message; one REST call each.
 
     *sent* hears of each change once it went out. Refused (:class:`UsageError`) while
     :data:`PUBLISH_GUARD_ENV` is set, and when there is nothing to send.
     """
     if publish_blocked():
         raise UsageError(f"publishing is blocked: {PUBLISH_GUARD_ENV} is set in the environment")
-    if not plan.votes and not plan.message and not plan.draft_count:
-        raise UsageError("nothing to publish: no drafts of yours, no vote and no message")
-    for target in plan.takes:
-        service.comments.publish_drafts(target.change.key, message=plan.message, labels=plan.votes)
+    if not plan.sends:
+        kept = "every change keeps your vote; " if plan.votes else ""
+        raise UsageError(f"nothing to publish: {kept}no drafts of yours, no message")
+    for target in plan.sends:
+        service.comments.publish_drafts(target.change.key, message=plan.message, labels=plan.votes_on(target))
         sent(target)
-    return plan.takes
+    return plan.sends

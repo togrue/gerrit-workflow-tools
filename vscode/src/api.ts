@@ -518,6 +518,8 @@ export interface VoteChange {
   own: boolean;
   permitted: Record<string, number[]>;
   ruled_out: string[];
+  /** Your votes on its current patchset, by label. */
+  yours?: Record<string, number>;
   drafts: VoteDraft[];
 }
 
@@ -527,6 +529,8 @@ export interface VoteOption {
   value: number;
   meaning: string;
   takes: number[];
+  /** A chain vote: of `takes`, the changes that keep your vote on this label; the vote does not go there. */
+  keeps?: number[];
 }
 
 /** `GET /vote`: what a vote would send. Nothing is sent. */
@@ -539,7 +543,7 @@ export interface VotePlan {
 
 /** `POST /vote`'s answer: where it went, and where it did not. */
 export interface VoteSent {
-  changes: { change: string; number: number; drafts: number; labels: Record<string, number>; message: string | null; status: string }[];
+  changes: { change: string; number: number; drafts: number; labels: Record<string, number>; keeps?: Record<string, number>; message: string | null; status: string }[];
   skipped: { change: string; number: number; ruled_out: string[] }[];
 }
 

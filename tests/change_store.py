@@ -583,8 +583,9 @@ class ChangeStore:
         )
         key = self._require_unique_change_ref(change_id)
         payload_labels = self._unique_row_or_raise(change_id).setdefault("labels", {})
+        voter = {"_account_id": self._self_account_id} if self._self_account_id is not None else {}
         for name, value in (labels or {}).items():
-            payload_labels[name] = {"value": value, "all": [{"value": value}]}
+            payload_labels[name] = {"value": value, "all": [{"value": value, **voter}]}
         published = self._comments.setdefault(key, {})
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f000")
         if message:

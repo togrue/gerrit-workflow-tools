@@ -32,16 +32,19 @@ def _changes(ctx: Context, change: str | int, *, chain: bool) -> list[ChangeView
 def vote_plan(ctx: Context, req: Request) -> dict[str, Any]:
     """What a vote on ``change`` (``chain=1``: every open change of its chain) would send; nothing is sent.
 
-    Per change: your drafts on it, what you may vote, whether it is yours. ``options`` are the
-    votes to offer, each with what it means and which changes take it. ``vote`` (as
+    Per change: your drafts on it, what you may vote, whether it is yours, your votes on it. ``options``
+    are the votes to offer, each with what it means, which changes take it and (a chain) which
+    keep your vote on its label. ``vote`` (as
     ``ger review --vote`` takes it, repeatable) fills ``ruled_out`` per change.
     """
     change = req.one("change")
     if change is None:
         raise BadRequest("missing parameter 'change'")
-    changes = _changes(ctx, change, chain=req.flag("chain"))
-    plan = plan_vote(ctx.service, changes, parse_votes(req.many("vote")), me=ctx.service.self_account_id())
-    return vote_plan_json(plan, vote_options(plan.targets), web_base=ctx.service.web_base)
+    chain = req.flag("chain")
+    changes = _changes(ctx, change, chain=chain)
+    votes = parse_votes(req.many("vote"))
+    plan = plan_vote(ctx.service, changes, votes, me=ctx.service.self_account_id(), keep_yours=chain)
+    return vote_plan_json(plan, vote_options(plan.targets, keep_yours=plan.keep_yours), web_base=ctx.service.web_base)
 
 
 def _votes(raw: dict[str, Any]) -> dict[str, int]:
@@ -68,9 +71,10 @@ def vote(ctx: Context, req: Request) -> dict[str, Any]:
     votes = _votes(req.body_field("votes", dict) or {})
     message = (req.body_field("message", str) or "").strip() or None
     previewed = _previewed(req.body_field("patch_sets", dict, required=True))
-    changes = _changes(ctx, change, chain=bool(req.body_field("chain", bool)))
+    chain = bool(req.body_field("chain", bool))
+    changes = _changes(ctx, change, chain=chain)
     if moved := moved_since_preview(changes, previewed):
         raise VoteMoved(moved)
-    plan = plan_vote(ctx.service, changes, votes, message, me=ctx.service.self_account_id())
+    plan = plan_vote(ctx.service, changes, votes, message, me=ctx.service.self_account_id(), keep_yours=chain)
     send_vote(ctx.service, plan)
     return sent_vote_json(plan, "published")
