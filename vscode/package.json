@@ -213,6 +213,9 @@
       { "command": "ger.comment.saveLocalDraft", "title": "Save Local Draft (not on Gerrit yet)", "category": "ger" },
       { "command": "ger.comment.saveNote", "title": "Save Private Note (never uploaded)", "category": "ger" },
       { "command": "ger.comment.add", "title": "Add Comment", "category": "ger", "icon": "$(comment)" },
+      { "command": "ger.comment.suggest", "title": "Suggest Edit", "category": "ger", "icon": "$(lightbulb-sparkle)" },
+      { "command": "ger.comment.applySuggestion", "title": "Apply Suggested Edit to Your File", "category": "ger", "icon": "$(lightbulb-autofix)" },
+      { "command": "ger.applySuggestion", "title": "Apply Suggested Edit to Your File", "category": "ger", "icon": "$(lightbulb-autofix)" },
       { "command": "ger.comment.cancelNew", "title": "Cancel", "category": "ger" },
       { "command": "ger.comment.file", "title": "Comment on This File…", "category": "ger" },
       { "command": "ger.comment.edit", "title": "Edit Comment", "category": "ger", "icon": "$(edit)" },
@@ -280,6 +283,9 @@
         { "command": "ger.comment.saveLocalDraft", "when": "false" },
         { "command": "ger.comment.saveNote", "when": "false" },
         { "command": "ger.comment.add", "when": "ger.ready" },
+        { "command": "ger.comment.suggest", "when": "ger.ready && ger.canComment" },
+        { "command": "ger.comment.applySuggestion", "when": "false" },
+        { "command": "ger.applySuggestion", "when": "false" },
         { "command": "ger.comment.cancelNew", "when": "false" },
         { "command": "ger.comment.file", "when": "false" },
         { "command": "ger.comment.edit", "when": "false" },
@@ -293,13 +299,15 @@
         { "command": "ger.chain.delete", "when": "false" }
       ],
       "editor/context": [
-        { "command": "ger.comment.add", "when": "ger.ready && ger.canComment", "group": "1_ger@1" }
+        { "command": "ger.comment.add", "when": "ger.ready && ger.canComment", "group": "1_ger@1" },
+        { "command": "ger.comment.suggest", "when": "ger.ready && ger.canComment", "group": "1_ger@2" }
       ],
       "editor/lineNumber/context": [
         { "command": "ger.comment.add", "when": "ger.ready && ger.canComment", "group": "1_ger@1" }
       ],
       "comments/comment/title": [
         { "command": "ger.comment.edit", "when": "commentController == ger && comment == yours", "group": "inline@1" },
+        { "command": "ger.comment.applySuggestion", "when": "commentController == ger && comment == suggestion", "group": "inline@0" },
         { "command": "ger.comment.delete", "when": "commentController == ger && comment == yours", "group": "inline@2" }
       ],
       "comments/comment/context": [

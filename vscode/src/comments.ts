@@ -1,8 +1,10 @@
 // Unresolved comment chains of the shown change as editor comment threads, with draft replies.
 // For a local stack commit they sit on your files; for any other change, on the commit's own
 // documents — the right-hand side of its diffs. What you wrote and have not published (a draft,
-// a local draft, a private note) can be edited and deleted where it stands.
+// a local draft, a private note) can be edited and deleted where it stands. A suggested edit shows
+// as old → new; on your own commit Apply writes it into your file. Suggest Edit writes one.
 
+import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { Comment, CommentChain, NewCommentState, ShownCommit } from "./api";
@@ -11,6 +13,7 @@ import { ChangeView } from "./changeView";
 import { FILE_SCHEME, filePath, repoPath } from "./diffTabs";
 import { commentLocation } from "./format";
 import { Model, describeError } from "./model";
+import { APPLY_WORDS, Place, applyPlan, latestSuggestion, suggestionMarkdown } from "./suggestions";
 import { ui } from "./ui";
 
 const FILE_PROMPT: Record<NewCommentState, string> = {
@@ -40,21 +43,29 @@ const YOURS: Record<string, string> = { draft: "draft", "local-draft": "local dr
 
 const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
+/** A comment as a thread shows it: an edit it suggests as old → new, under *Suggested edit*. */
+function shownBody(source: Comment): vscode.MarkdownString {
+  return new vscode.MarkdownString(suggestionMarkdown(source, (replacement) => replacement.original));
+}
+
 /** A comment as its thread shows it. One you wrote and have not published can be edited in place. */
 export class ThreadComment implements vscode.Comment {
   body: vscode.MarkdownString | string;
   mode = vscode.CommentMode.Preview;
   readonly author: vscode.CommentAuthorInformation;
   readonly label: string | undefined;
-  /** `yours`: the manifest offers Edit and Delete on it. */
+  /** `yours`: the manifest offers Edit and Delete on it; `suggestion`: Apply, the edit it suggests written into your file. */
   readonly contextValue: string | undefined;
   thread: vscode.CommentThread | undefined;
 
-  constructor(readonly source: Comment) {
-    this.body = new vscode.MarkdownString(source.markdown);
+  constructor(
+    readonly source: Comment,
+    applies = false,
+  ) {
+    this.body = shownBody(source);
     this.author = { name: source.author ?? "you" };
     this.label = source.state === "published" ? undefined : source.state;
-    this.contextValue = source.state !== "published" && source.comment_id ? "yours" : undefined;
+    this.contextValue = source.state !== "published" && source.comment_id ? "yours" : applies ? "suggestion" : undefined;
   }
 
   /** What the comment says now: while it is edited, what you typed. */
@@ -319,7 +330,9 @@ export class CommentThreads implements vscode.Disposable {
       const place = this.view.placeOf(chain);
       const line = Math.max(0, (place.line ?? 1) - 1);
       const first = place.start ? Math.max(0, place.start - 1) : line;
-      const comments = chain.comments.map((comment) => new ThreadComment(comment));
+      // Apply is offered on the newest comment that suggests an edit, on your own commit's threads.
+      const suggestion = this.applies() ? latestSuggestion(chain.comments)?.comment : undefined;
+      const comments = chain.comments.map((comment) => new ThreadComment(comment, comment === suggestion));
       const thread = this.controller.createCommentThread(this.view.locationUri(chain.path), new vscode.Range(first, 0, line, 0), comments);
       comments.forEach((comment) => (comment.thread = thread));
       const root = chain.comments[0]?.state;
@@ -514,6 +527,115 @@ export class CommentThreads implements vscode.Disposable {
     void Promise.resolve(ui().message("info", text, {}, [how.button])).then((picked) => (picked ? vscode.commands.executeCommand(how.command) : undefined));
   }
 
+  // --- Suggested edits ------------------------------------------------------------------
+
+  /** Whether an edit a comment suggests may be written into your file: the shown change is your own local commit, not a review. */
+  private applies(): boolean {
+    return Boolean(this.view.target?.local) && this.view.shown?.own !== false && !this.model.stack?.staged_review;
+  }
+
+  /** Apply on a thread's comment (its title bar). */
+  async applyInThread(comment: ThreadComment): Promise<void> {
+    const anchor = comment.thread && this.anchors.get(comment.thread);
+    if (anchor) {
+      await this.applySuggestion(anchor.chain);
+    }
+  }
+
+  /**
+   * Write the edit `chain`'s newest suggesting comment suggests into your file, where its lines are
+   * now (core's `worktree`), once they still say what it replaces; else say why not. Nothing is saved
+   * or committed: the edit is in the editor, to undo or amend in. Then Reply Done is offered.
+   */
+  async applySuggestion(chain: CommentChain): Promise<void> {
+    const found = latestSuggestion(chain.comments);
+    if (!found || !this.applies()) {
+      return;
+    }
+    const files = new Map<string, vscode.TextDocument>();
+    try {
+      for (const rep of found.edit.replacements) {
+        files.set(rep.path, files.get(rep.path) ?? (await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(this.model.repo, rep.path)))));
+      }
+    } catch (error) {
+      void ui().message("warning", `The suggested edit was not applied: ${describeError(error)}`, {}, []);
+      return;
+    }
+    const range = (place: Place) => new vscode.Range(place.start.line, place.start.character, place.end.line, place.end.character);
+    const plan = applyPlan(found.edit, (place) => files.get(place.path)?.getText(range(place)));
+    if ("refused" in plan) {
+      void ui().message("warning", plan.refused, {}, []);
+      return;
+    }
+    const edit = new vscode.WorkspaceEdit();
+    plan.places.forEach((place) => edit.replace(files.get(place.path)!.uri, range(place), place.replacement));
+    if (!(await vscode.workspace.applyEdit(edit))) {
+      void ui().message("warning", "The suggested edit was not applied: VS Code refused the edit.", {}, []);
+      return;
+    }
+    const [first] = plan.places;
+    const where = `${first.path}:${first.start.line + 1}`;
+    await vscode.window.showTextDocument(files.get(first.path)!, { selection: new vscode.Range(first.start.line, 0, first.start.line, 0), preview: true });
+    const done = "Reply Done";
+    if ((await ui().message("info", APPLY_WORDS.applied(where), {}, [done])) === done) {
+      await this.replyToChain(chain, true);
+    }
+  }
+
+  /** Suggestion boxes Suggest Edit opened, not saved yet: the comment being written, by its thread. */
+  private readonly suggesting = new Map<ThreadComment, vscode.CommentThread>();
+
+  /**
+   * Suggest Edit: a comment box on the selected lines (the cursor's line without a selection),
+   * holding them in a ```` ```suggestion ```` block to change into what they should say, as Gerrit's
+   * own "Suggest edit" writes it. Saved as a new comment, a draft where Gerrit has the commit.
+   */
+  async suggest(): Promise<void> {
+    const editor = vscode.window.activeTextEditor;
+    const uri = editor?.document.uri;
+    if (uri && this.ofHead(uri)) {
+      await this.showHead();
+    }
+    const file = uri && this.pathOf(uri);
+    if (!editor || !uri || file === undefined) {
+      await this.add(); // says why there is nothing to comment on here
+      return;
+    }
+    const { start, end } = editor.selection;
+    const last = end.line > start.line && end.character === 0 ? end.line - 1 : end.line;
+    const lines = editor.document.getText(new vscode.Range(start.line, 0, last, editor.document.lineAt(last).text.length));
+    const body = `\`\`\`suggestion\n${lines}\n\`\`\``;
+    const box = this.controller.createCommentThread(uri, new vscode.Range(start.line, 0, last, 0), []);
+    const comment = new ThreadComment({ path: file, line: last + 1, message: body, text: body, markdown: body, patch_set: null, state: "published", url: null, author: "you" });
+    comment.body = body;
+    comment.mode = vscode.CommentMode.Editing;
+    comment.thread = box;
+    box.comments = [comment];
+    box.canReply = false;
+    box.label = "Suggest an edit: change the lines in the block";
+    box.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
+    this.suggesting.set(comment, box);
+  }
+
+  /** Save a suggestion box: a new comment on its lines, as the version looked at has them. */
+  private async saveSuggestion(comment: ThreadComment, box: vscode.CommentThread): Promise<void> {
+    const [target, file, text] = [this.view.target, this.pathOf(box.uri), comment.text.trim()];
+    const range = box.range as vscode.Range | undefined;
+    if (!target || file === undefined || !text) {
+      return;
+    }
+    const state: NewCommentState = this.view.newComment ?? "local-draft";
+    try {
+      await (await this.model.client()).newComment(target.rev, commentLocation(file, range && { start: range.start.line + 1, end: range.end.line + 1 }), text, state, this.view.diff?.commit);
+      this.suggesting.delete(comment);
+      box.dispose();
+      this.saved(state, "Draft with a suggested edit saved on Gerrit");
+      await this.view.open();
+    } catch (error) {
+      void ui().message("error", `Comment not saved: ${describeError(error)}`, {}, []);
+    }
+  }
+
   // --- Your own unpublished comments --------------------------------------------------
 
   /** Redraw `comment`'s thread: a comment's mode and body only show once the list is set again. */
@@ -535,9 +657,15 @@ export class CommentThreads implements vscode.Disposable {
     this.redraw(comment);
   }
 
-  /** Leave the text box: the comment says again what is saved. */
+  /** Leave the text box: the comment says again what is saved. A suggestion box not saved goes. */
   cancelEdit(comment: ThreadComment): void {
-    comment.body = new vscode.MarkdownString(comment.source.markdown);
+    const box = this.suggesting.get(comment);
+    if (box) {
+      this.suggesting.delete(comment);
+      box.dispose();
+      return;
+    }
+    comment.body = shownBody(comment.source);
     comment.mode = vscode.CommentMode.Preview;
     this.editing.delete(comment);
     this.redraw(comment);
@@ -548,6 +676,10 @@ export class CommentThreads implements vscode.Disposable {
 
   /** Save what the text box says. Empty or unchanged text leaves the comment as it was. */
   async saveEdit(comment: ThreadComment): Promise<void> {
+    const box = this.suggesting.get(comment);
+    if (box) {
+      return this.saveSuggestion(comment, box);
+    }
     const text = comment.text.trim();
     const rev = (comment.thread && this.anchors.get(comment.thread)?.rev) ?? this.view.target?.rev;
     if (!text || text === comment.source.message.trim() || !rev) {

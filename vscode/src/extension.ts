@@ -398,6 +398,12 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.comment.saveNote": (reply: vscode.CommentReply) => threads.saveNew(reply, "note"),
     "ger.comment.add": (arg?: { lineNumber?: number }) => threads.add(typeof arg?.lineNumber === "number" ? arg.lineNumber - 1 : undefined),
     "ger.comment.cancelNew": (reply: vscode.CommentReply) => threads.cancelNew(reply),
+    "ger.comment.suggest": () => threads.suggest(),
+    "ger.comment.applySuggestion": (comment: ThreadComment) => threads.applyInThread(comment),
+    "ger.applySuggestion": (arg: unknown) => {
+      const chain = threadOf(arg);
+      return chain ? threads.applySuggestion(chain) : undefined;
+    },
     "ger.comment.file": (file: string) => threads.commentOnFile(file),
     "ger.comment.edit": (comment: ThreadComment) => threads.startEdit(comment),
     "ger.comment.save": (comment: ThreadComment) => threads.saveEdit(comment),

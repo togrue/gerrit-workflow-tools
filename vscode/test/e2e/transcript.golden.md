@@ -462,7 +462,7 @@ status bar message: $(check) Refreshed from Gerrit
 - change | Showing — Patchset 1 (current) · Against its base commit
 + change |   b.txt — added +1 −0
 + change | Comments — 2 to answer
-+ change |   Please rename this. — b.txt:1 · Alice Reviewer  [open]
++ change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer  [open]
 + change |   Is this the right design? — b.txt:1 · Bob Architect  [open]
 + change |   Looks good overall. — whole change · Alice Reviewer  [resolved]
 - change |   uploader.txt — added +1 −0
@@ -627,10 +627,10 @@ notification (info): Draft saved, visible only to you: your next push publishes 
     → dismissed
 --- on screen:
 + change | Comments — 1 to answer · 1 answered by your drafts (push publishes them)
-+ change |   Please rename this. — b.txt:1 · Alice Reviewer · 1 reply  [open]
++ change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
 + change |     you — [draft] Renamed it.
 - change | Comments — 2 to answer
-- change |   Please rename this. — b.txt:1 · Alice Reviewer  [open]
+- change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer  [open]
 ```
 
 ## 39. Next Unresolved Comment (Alt+F9) after the reply
@@ -692,8 +692,8 @@ status bar message: $(pass) No comments left to answer on this change · 2 answe
 ```
 status bar message: $(check) Draft updated, resolving the comment, visible only to you: your next push publishes it.
 --- on screen:
-+ change |   Please rename this. — your draft resolves it · b.txt:1 · Alice Reviewer · 1 reply  [open]
-- change |   Please rename this. — b.txt:1 · Alice Reviewer · 1 reply  [open]
++ change |   Please rename this. — your draft resolves it · suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
+- change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
 ```
 
 ## 44. Expand "Looks good overall." (about the whole change) in the Change view, type a reply, Resolved left ticked › Save
@@ -735,8 +735,8 @@ status bar message: $(check) Draft updated, resolving the comment, visible only 
 ```
 status bar message: $(check) Draft updated, leaving the comment unresolved, visible only to you: your next push publishes it.
 --- on screen:
-+ change |   Please rename this. — b.txt:1 · Alice Reviewer · 1 reply  [open]
-- change |   Please rename this. — your draft resolves it · b.txt:1 · Alice Reviewer · 1 reply  [open]
++ change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
+- change |   Please rename this. — your draft resolves it · suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
 ```
 
 ## 48. Click the Resolved toggle in the header of the editor thread of "Please rename this." again
@@ -746,8 +746,8 @@ status bar message: $(check) Draft updated, leaving the comment unresolved, visi
 ```
 status bar message: $(check) Draft updated, resolving the comment, visible only to you: your next push publishes it.
 --- on screen:
-+ change |   Please rename this. — your draft resolves it · b.txt:1 · Alice Reviewer · 1 reply  [open]
-- change |   Please rename this. — b.txt:1 · Alice Reviewer · 1 reply  [open]
++ change |   Please rename this. — your draft resolves it · suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
+- change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
 ```
 
 ## 49. "+" on line 1 of b.txt in the diff › Save Draft
@@ -928,7 +928,7 @@ browser opens: https://g.example/c/testproj/+/101
 - change |   b.txt — added +1 −0
 - change | Comments — 2 answered by your drafts (push publishes them) · 3 of yours, not published
 - change |   This file needs a header. — your draft · b.txt  [yours]
-- change |   Please rename this. — your draft resolves it · b.txt:1 · Alice Reviewer · 1 reply  [open]
+- change |   Please rename this. — your draft resolves it · suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
 - change |     you — [draft] Renamed it to route().
 - change |   Is this the right design? — your draft resolves it · b.txt:1 · Bob Architect · 1 reply  [open]
 - change |     you — [draft] Done

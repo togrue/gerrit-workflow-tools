@@ -273,8 +273,21 @@ The commits above your upstream, newest first. One row per commit:
   draft, local draft or note of yours you edit in an editor thread: it deletes it, asking first, as
   the trash does; Save is bottom right, as on Gerrit. In a thread, Esc in the reply box steps back
   to its comments; Esc again (or Esc in the editor) closes it. A reviewer's suggested edit shows in
-  the comment: a ```` ```suggestion ```` block of its text as a code block, a Gerrit fix suggestion
-  as **Suggested fix**, where it applies and the new text. It is shown, not applied.
+  the editor thread as **Suggested edit**, old → new as a small diff: a ```` ```suggestion ````
+  block of the comment's text in its place, a Gerrit fix suggestion below the text with where it
+  applies (the old lines where `ger serve` has them: on your own commits; elsewhere the new lines
+  alone). The Change view's row says *suggested edit*. On your own commit, **Apply Suggested Edit to
+  Your File** (the lightbulb in the thread's title, and on the row) writes it into your file where
+  the lines are now (see *For a local commit* above), unsaved edits included, and offers **Reply
+  Done**. It refuses, saying so, when those lines no longer say what the suggestion replaces, or
+  ger cannot tell where they are: then apply it by hand. Nothing is saved or committed: undo it with
+  `Ctrl+Z`, amend it in (or `ger fix`) once you are done.
+- **Suggest Edit** (the editor's context menu, the palette): on the selected lines (the cursor's
+  line without a selection) of the change's diff, a comment box opens holding them in a
+  ```` ```suggestion ```` block, as Gerrit's own *Suggest edit* writes it: change them into what
+  they should say, add a sentence above it, **Save**. It is a new comment as below (a draft on
+  Gerrit where Gerrit has the commit), Gerrit's web UI offers to apply it too, and Vote and
+  Publish lists it *(with a suggested edit)*.
 - **New comments**: hover a line (or select lines) in the change's diff — or in your file, when
   your working files hold the shown commit (see *Files*) — and click **+**. Save it as:
   - **Draft**, when Gerrit has this very commit: on Gerrit, visible only to you until published.
@@ -582,7 +595,8 @@ printed.
 | `src/model.ts` | The shared state the views read; refresh; what you have seen. |
 | `src/overviewView.ts`, `src/stackView.ts`, `src/changeView.ts` | The three views. |
 | `src/rows.ts` | The `contextValue` of every tree row, which the menus in `package.json` match with `viewItem =~ /…/`. Pinned against them by `test/package.test.ts`. |
-| `src/comments.ts` | Editor comment threads, stepping, draft replies. |
+| `src/comments.ts` | Editor comment threads, stepping, draft replies, Suggest Edit and Apply. |
+| `src/suggestions.ts` | Suggested edits as a thread shows them (old → new), and where Apply writes one, or why not. Pure, unit-tested. |
 | `src/statusBar.ts` | The status bar item: the headline (a rebase underway, when core says so) and the activity bell. |
 | `src/follow.ts` | The Change view following its commit through rewrites and amends. |
 | `src/diffTabs.ts`, `src/staleDiffs.ts` | `ger-file:` documents and the diff tabs of them: opening one, knowing it again, marking it stale or closing it once its right side is no longer the commit its title names, unmarking it once it is again (the rule is pure, unit-tested); your files' repository paths; saving before a rebase continues. |

@@ -539,8 +539,9 @@ a vote no change takes is `USAGE`, as on the command line.
   what `POST /vote` names back), `url`, `owner` (a name), `own` (you own it), `permitted` (what
   you may vote, per label; `{}` when Gerrit did not say), `ruled_out`, and `drafts`: each draft
   of yours a publish sends, with `path`, `line`, `location` (`path:line`, in words for the
-  commit message and the patchset level), `text` (its first line) and `transition` (`resolves`,
-  `reopens` or `null`: what it does to its chain).
+  commit message and the patchset level), `text` (its first line), `transition` (`resolves`,
+  `reopens` or `null`: what it does to its chain) and `suggested_edit` (it suggests an edit: a
+  ```` ```suggestion ```` block or a fix suggestion, which its first line may not show).
 - `drafts` — how many drafts go out, on the changes that take the votes.
 - `options` — every vote some change lets you give, Code-Review first, each label's highest
   value first: `label`, `value`, `meaning` (the project's words for it, "Looks good to me, but

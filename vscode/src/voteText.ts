@@ -87,7 +87,7 @@ export function confirmVote(plan: VotePlan, option: VoteOption | undefined, mess
   // Each change with its drafts; a single change without any needs no line of its own.
   for (const change of changes.length > 1 || drafts ? changes : []) {
     lines.push("", `${change.number} ${change.subject}${change.drafts.length ? "" : ": no drafts"}`);
-    lines.push(...change.drafts.map((draft) => `  ${draft.location}  "${draft.text}"${draft.transition ? ` (${draft.transition})` : ""}`));
+    lines.push(...change.drafts.map((draft) => `  ${draft.location}  "${draft.text}"${draft.suggested_edit ? " (with a suggested edit)" : ""}${draft.transition ? ` (${draft.transition})` : ""}`));
   }
   const skipped = plan.changes.filter((change) => !on.includes(change.number));
   if (skipped.length) {

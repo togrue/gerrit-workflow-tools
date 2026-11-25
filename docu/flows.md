@@ -131,6 +131,9 @@ A **gap** names the work that would close it.
 | `ger.comment.saveNote` | `ger comment --note PATH:LINE -m MSG` | |
 | `ger.comment.add` | `ger comment PATH:LINE -m MSG` | opens the comment box on the selected lines |
 | `ger.comment.cancelNew` | UI only | closes a comment box |
+| `ger.comment.suggest` | `ger comment PATH:START-END -m MSG` with a ```` ```suggestion ```` block in MSG | opens the comment box on the selected lines with them in a suggestion block, to change |
+| `ger.comment.applySuggestion` | `ger show --json` (each comment's `suggested_edits`: path, range, new text), then edit the file | writes the edit a comment suggests into your file where its lines are now (the thread's title bar); nothing is committed. No ger command writes it for you yet |
+| `ger.applySuggestion` | `ger show --json`, as above | the same, from the comment's row in the Change view |
 | `ger.comment.file` | `ger comment PATH -m MSG` | |
 | `ger.comment.edit` | `ger comment --edit ID -m MSG` | turns your comment into a text box; *Save* writes it |
 | `ger.comment.save` | `ger comment --edit ID -m MSG` | |

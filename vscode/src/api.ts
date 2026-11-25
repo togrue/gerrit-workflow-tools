@@ -517,6 +517,8 @@ export interface VoteDraft {
   location: string;
   text: string;
   transition: "resolves" | "reopens" | null;
+  /** It suggests an edit (a ```suggestion block, a fix suggestion): said in the dialog, as its first line may not show it. */
+  suggested_edit?: boolean;
 }
 
 /** One change a vote goes to, as `GET /vote` serves it. */
