@@ -111,6 +111,10 @@ class Revision:
     committer_date: datetime | None
     first_parent: str | None
     uploader_account_id: int | None = None
+    message: str | None = None
+    """The full commit message, when Gerrit sent the commit (``CURRENT_COMMIT``: the current one)."""
+    author: tuple[str, str | None, datetime | None] | None = None
+    """The commit's author: name, email and date, when Gerrit sent the commit."""
 
 
 def _revision(raw: Mapping[str, Any]) -> Revision:
@@ -118,7 +122,9 @@ def _revision(raw: Mapping[str, Any]) -> Revision:
     commit = raw.get("commit")
     committer_date: datetime | None = None
     first_parent: str | None = None
-    if isinstance(commit, dict):
+    commit = commit if isinstance(commit, dict) else {}
+    who = commit.get("author") if isinstance(commit.get("author"), dict) else None
+    if commit:
         committer = commit.get("committer")
         if isinstance(committer, dict):
             committer_date = parse_gerrit_time(committer.get("date"))
@@ -132,6 +138,10 @@ def _revision(raw: Mapping[str, Any]) -> Revision:
         committer_date=committer_date,
         first_parent=first_parent,
         uploader_account_id=_account_id(raw.get("uploader")),
+        message=_str(commit.get("message")),
+        author=(_str(who.get("name")) or "", _str(who.get("email")), parse_gerrit_time(who.get("date")))
+        if who
+        else None,
     )
 
 

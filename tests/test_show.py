@@ -1270,3 +1270,23 @@ def test_show_says_who_voted_what(web_stack_repo: Path, monkeypatch: pytest.Monk
     data = json_stdout(out)
     votes = data.get("commits", [data])[-1]["votes"]
     assert {"label": "Code-Review", "value": -1, "by": "bob"} in votes and len(votes) == 3
+
+
+def test_a_change_with_no_local_commit_shows_gerrits_whole_message_and_author(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finding 9 of the 2026-11-25 review walk: outside the review worktree only the subject was shown."""
+    from tests.test_waiting_on_your_review import _store, _theirs  # pylint: disable=import-outside-toplevel
+
+    change = _theirs(900, asks_you=True)
+    [revision] = change["revisions"].values()
+    revision["commit"].update(
+        message="Alice's change 900\n\nWhy it is needed, at length.\n\nChange-Id: " + change["change_id"] + "\n",
+        author={"name": "Alice", "email": "alice@example.com", "date": "2026-11-08 09:00:00.000000000"},
+    )
+    store = _store(stack_repo, change)
+    code, out, err = run_cli(stack_repo, gshow_main, ["change:900", "--color=never"], monkeypatch, gerrit=store)
+    assert code == ExitCode.OK, err
+    assert "Author: Alice <alice@example.com>" in out
+    assert "    Why it is needed, at length." in out
+    assert f"    Change-Id: {change['change_id']}" in out

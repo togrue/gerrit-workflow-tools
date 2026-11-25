@@ -55,7 +55,7 @@ def _when(iso_date: str) -> str:
 def commit_lines(
     item: ShownCommit, meta: CommitMeta | None, *, summary_highlighter: SummaryHighlighter, wrap_width: int
 ) -> list[str]:
-    """One commit in full; *meta* is the local commit's author and message (``None``: not local)."""
+    """One commit in full; *meta* is its author and message: the local commit's, else Gerrit's (``None``: neither)."""
     commit, chains, ci_contents = item.commit, item.chains, item.ci_contents
     out = [show_headline(commit)]
     # A blocked commit names its blocker on a line of its own, so the reasons need not say chain-blocked too.

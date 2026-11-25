@@ -243,7 +243,8 @@ def _print_shown(
         if multi and not item.chains and not item.ci_contents:
             lines = brief_commit_lines(commit, comments=args.comments)
         else:
-            meta = read_commit_meta(run.cwd, commit.sha) if item.target.is_local_commit and commit.sha else None
+            local = item.target.is_local_commit and commit.sha
+            meta = read_commit_meta(run.cwd, commit.sha) if local else item.target.gerrit_meta
             lines = commit_lines(item, meta, summary_highlighter=highlighter, wrap_width=run.settings.wrap_width)
         print("\n".join(lines))
 
