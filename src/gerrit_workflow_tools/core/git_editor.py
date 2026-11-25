@@ -1,4 +1,5 @@
-"""Resolve and run the user's git editor (``GIT_EDITOR`` / ``core.editor`` / …), an editor's CLI and its build tools."""
+"""Resolve and run the user's git editor (``GIT_EDITOR`` / ``core.editor`` / …) and git pager, an editor's CLI
+and its build tools."""
 
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ import sys
 from pathlib import Path
 
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.git_run import git
 
 
 def module_editor_command(module: str) -> str:
@@ -70,3 +72,14 @@ def run_editor_cli(argv: list[str], cwd: Path | None = None) -> int:
     """Run an editor's command-line program (``code --install-extension …``), or the tooling that
     builds its extension (``npm``), in *cwd* on this terminal; return its exit code."""
     return subprocess.run(argv, cwd=cwd, check=False).returncode
+
+
+def run_git_pager(text: str, cwd: Path | str | None = None) -> bool:
+    """Show *text* through the user's git pager (``git var GIT_PAGER``; ``LESS=FRX`` unless set, as git
+    does). ``False`` when there is none (``cat``): the caller prints it."""
+    pager = git("var", "GIT_PAGER", cwd=cwd, check=False).stdout.strip()
+    if not pager or pager == "cat":
+        return False
+    env = {**os.environ, "LESS": os.environ.get("LESS", "FRX"), "LV": os.environ.get("LV", "-c")}
+    subprocess.run(pager, shell=True, input=text, text=True, env=env, cwd=cwd, check=False)
+    return True

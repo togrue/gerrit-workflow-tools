@@ -40,6 +40,7 @@ Single changeishes go through **`core/gerrit/change_resolution.py`** (same as ot
 | `--comments {unresolved,all,resolved}` | Which inline comment chains to print (default: `unresolved`) |
 | `--context` | Include source lines around each comment (`enable-context` on `GET …/comments` and `GET …/drafts`; padding 2) |
 | `--context-padding N` | Extra source lines before/after the comment (implies `--context`) |
+| `--diff` | After each commit, its diff against its first parent (`git show`'s), each line behind a gutter with its number in the new version, the number `ger comment PATH:LINE` takes (a removed line has none); git's colours; through git's pager on a terminal (`git var GIT_PAGER`, `LESS=FRX` unless set). A commit not in this repository says so and names `ger review c<n>`, which fetches it. Human output only: with `--json` / `--ai` it exits `2` |
 | `--ci` / `--no-ci` | Attach **CI findings** from failed **CI links** (fetches CI logs). Default: `ger.showCiContent`, off. See [CI content](#ci-content) |
 | `--json` | JSON payload |
 | `--format {human,markdown,ai}` | Output format (default: human); `ai` is the Markdown view |

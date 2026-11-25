@@ -486,7 +486,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/config_write.py` | Write helpers for branch / attention-cursor git config keys |
 | `core/config_form.py` | Editable settings catalog for `ger config`: sections, defaults, resolution |
 | `core/config_editor_file.py` | Temp-file key=value render/parse/diff for `ger config` |
-| `core/git_editor.py` | Resolve and run `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`; `module_editor_command` for a `GIT_SEQUENCE_EDITOR` that is one of our modules; `run_editor_cli` runs an editor's own command-line program, or the npm that builds its extension |
+| `core/git_editor.py` | Resolve and run `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`; `module_editor_command` for a `GIT_SEQUENCE_EDITOR` that is one of our modules; `run_editor_cli` runs an editor's own command-line program, or the npm that builds its extension; `run_git_pager` shows text through git's pager |
 | `core/editor_extension.py` | The VS Code extension that goes with ger: the one a release bundles (`bundled_extension`), a checkout's sources (`source_extension`) and packaging them (`build_extension`), the editor's CLI (`find_editor_cli`), and installing it |
 | `core/git_state.py` | Repository state: branch, HEAD, upstream, Gerrit push destination, and the branch a stopped rebase belongs to |
 | `core/tracked_changes.py` | What the index and work tree hold of yours, by what `git stash` saves of it (`tracked_changes`, `TrackedChanges`): changes to tracked files, submodules staged at another commit, submodules a file replaced. A submodule's own state is none of them |
@@ -546,7 +546,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/registry_trust.py` | Whether a project-local registry may run: `ger.scriptsDir` from uncloned config, or a trusted digest of its code (`record_trust`, `untrusted_local_registries`); `RegistrySource` (`read_registry_source`: a registry's sources, read once, what is hashed is what runs); `source_digest` |
 | `core/gerrit_show.py` | `ger show` row resolution, including remote-only changes; `load_shown_commits` (overlay, comment chains and CI content per target; a change that waits on your review leads with that) |
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |
-| `core/commit_diff.py` | What one commit changed: `commit_diff` (files against the first parent), `diff_between` and `file_text` |
+| `core/commit_diff.py` | What one commit changed: `commit_diff` (files against the first parent), `diff_between`, `file_text`, and its unified diff with each line numbered (`numbered_diff`) |
 | `core/review_delta.py` | The **review delta**: `last_reviewed_patch_set`, `load_review_delta` (the patchset you reviewed against the current one, another patchset, or the local commit) |
 | `core/reorder.py` | Rewriting the local stack, all or nothing: `rewrite_stack` (reorder, fold, drop; `autostash`), `undo_rewrite`, `ReorderRefusal`; also the sequence editor that run uses |
 | `core/rewrite_outcome.py` | What a finished rewrite of the local stack did, as data (`rewrite_outcome`, `RewriteOutcome`): commits rewritten, how many of them now ahead of Gerrit (from the cache, no request), fixups squashed, commits already upstream, and the commits it dropped (`DroppedCommit`, `dropped_commit`), against the stack before it (`stack_before`) |
@@ -604,6 +604,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `render/checkout_text.py` | What `ger checkout` says once it checked a change out (`checkout_lines`) |
 | `render/show_text.py` | `ger show`'s human text for one commit (`commit_lines`), the brief one of a multi-commit view (`brief_commit_lines`) and the line between them (`commit_separator`) |
 | `render/show_markdown.py` | `ger show`'s Markdown (`--ai`) for one commit: `commit_markdown` |
+| `render/diff_text.py` | A commit's diff for a reviewer: git's colours and each line's new-side number in a gutter (`diff_lines`; `ger show --diff`) |
 | `render/inbox_text.py` | `ger inbox`'s human text: a row per review chain by inbox section, and each section's summary (`render_inbox_text`) |
 | `render/ai_text.py` | `--ai` text for `ger log` (`stack_ai_lines`) and `ger inbox` (`inbox_ai_lines`): one plain line per commit or chain, in `status_fmt`'s words |
 | `render/show_json.py` | JSON for one commit's overlay state: `log_commit_json` (shared by `ger log` and `ger show`), comment chains |

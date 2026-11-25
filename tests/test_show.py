@@ -1290,3 +1290,50 @@ def test_a_change_with_no_local_commit_shows_gerrits_whole_message_and_author(
     assert "Author: Alice <alice@example.com>" in out
     assert "    Why it is needed, at length." in out
     assert f"    Change-Id: {change['change_id']}" in out
+
+
+def test_a_diff_line_carries_the_number_ger_comment_takes() -> None:
+    """Finding 19 of the 2026-11-25 review walk: `git diff --cached` shows no line numbers."""
+    from gerrit_workflow_tools.core.commit_diff import number_diff  # pylint: disable=import-outside-toplevel
+
+    lines = number_diff(
+        [
+            "diff --git a/x.py b/x.py",
+            "--- a/x.py",
+            "+++ b/x.py",
+            "@@ -17,3 +17,4 @@ def divide(a, b):",
+            "     if b == 0:",
+            "-        raise ZeroDivisionError",
+            "+        raise DivisionByZero(a)",
+            "+        # why",
+            " ",
+            "\\ No newline at end of file",
+            "diff --git a/y.py b/y.py",
+        ]
+    )
+    assert [(line.kind, line.old, line.new) for line in lines] == [
+        ("file", None, None),
+        ("file", None, None),
+        ("file", None, None),
+        ("hunk", None, None),
+        ("context", 17, 17),
+        ("removed", 18, None),
+        ("added", None, 18),
+        ("added", None, 19),
+        ("context", 19, 20),
+        ("note", None, None),
+        ("file", None, None),
+    ]
+
+
+def test_show_diff_numbers_each_line_of_a_commit_here(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = ChangeStore({})
+    code, out, err = run_cli(stack_repo, gshow_main, ["--diff", "--color=never"], monkeypatch, gerrit=store)
+    assert code == ExitCode.OK, err
+    assert "+++ b/d.txt" in out
+    [added] = [line for line in out.splitlines() if line.endswith("│+file d.txt")]
+    assert added.split("│")[0].strip() == "1"
+    code, _out, err = run_cli(
+        stack_repo, gshow_main, ["--diff", "--json"], monkeypatch, gerrit=store, catch_sys_exit=True
+    )
+    assert code == ExitCode.USAGE and "--diff is for the terminal" in err

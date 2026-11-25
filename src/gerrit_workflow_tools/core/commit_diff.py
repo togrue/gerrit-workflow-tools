@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -148,3 +149,46 @@ def file_text(cwd: Path | str | None, rev: str, path: str) -> str | None:
     """Text of *path* at *rev* (a commit or tree); ``None`` when the file is not there."""
     shown = git("show", f"{rev}:{path}", cwd=cwd, check=False)
     return shown.stdout if shown.returncode == 0 else None
+
+
+@dataclass(frozen=True)
+class DiffLine:
+    """One line of a commit's unified diff, numbered on each side as ``ger comment`` counts lines (from 1)."""
+
+    kind: str
+    """``file`` (a file's header lines), ``hunk`` (``@@ … @@``), ``context``, ``added``, ``removed``, ``note``."""
+    text: str
+    old: int | None = None
+    new: int | None = None
+    """The line's number in the new version, where it has one: what ``ger comment PATH:LINE`` takes."""
+
+
+_HUNK = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+_IN_HUNK = {"+": "added", "-": "removed", " ": "context"}
+
+
+def numbered_diff(cwd: Path | str | None, rev: str) -> list[DiffLine]:
+    """*rev*'s changes against its first parent, as ``git show`` diffs them, each line numbered."""
+    flags = ("--format=", "--patch", "-M", "--no-color", "--no-ext-diff", "--no-relative", "--diff-merges=first-parent")
+    return number_diff(git("show", *flags, f"{rev}^{{commit}}", "--", cwd=cwd).stdout.splitlines())
+
+
+def number_diff(lines: Sequence[str]) -> list[DiffLine]:
+    """Unified diff *lines*, each with its old and new line number where it has one."""
+    out: list[DiffLine] = []
+    old = new = 0
+    in_hunk = False
+    for line in lines:
+        if match := _HUNK.match(line):
+            old, new, in_hunk = int(match[1]), int(match[2]), True
+            out.append(DiffLine("hunk", line))
+            continue
+        kind = _IN_HUNK.get(line[:1] or " ") if in_hunk else None
+        if kind is None:  # a file's header, or "\ No newline at end of file"
+            in_hunk = in_hunk and line.startswith("\\")
+            out.append(DiffLine("note" if in_hunk else "file", line))
+            continue
+        out.append(DiffLine(kind, line, None if kind == "added" else old, None if kind == "removed" else new))
+        old += kind != "added"
+        new += kind != "removed"
+    return out
