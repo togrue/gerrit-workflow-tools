@@ -25,6 +25,8 @@ class ReviewerAccount:
     account_id: int | None = None
     cc: bool = False
     """Gerrit lists the account as ``CC``, not as a ``REVIEWER``."""
+    service: bool = False
+    """Gerrit tags the account ``SERVICE_USER``: a bot (CI), not a person."""
 
 
 class ReviewerStrategy(str, Enum):
@@ -80,9 +82,13 @@ def _reviewer_accounts(accounts: Iterable[tuple[object, str | None]]) -> list[Re
         slug = account_slug_from_gerrit(account)
         if slug:
             account_id = account.get("_account_id")
+            tags = account.get("tags")
             out.append(
                 ReviewerAccount(
-                    slug=slug, account_id=account_id if isinstance(account_id, int) else None, cc=role == "CC"
+                    slug=slug,
+                    account_id=account_id if isinstance(account_id, int) else None,
+                    cc=role == "CC",
+                    service=isinstance(tags, list) and "SERVICE_USER" in tags,
                 )
             )
     return out

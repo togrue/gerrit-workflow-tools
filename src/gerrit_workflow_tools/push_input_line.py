@@ -12,7 +12,7 @@ Grammar (best effort, case-insensitive keywords)::
     removal  := '-' (keyword | reviewer)
     rclause  := ('r' '=' list) | ('r' WS+ list)        # list = name (',' name)*
     topic    := ('topic' '=' value) | ('topic' WS+ value)
-    flag     := 'wip' | 'private' | 'publish-drafts'
+    flag     := 'wip' | 'private' | 'publish-drafts' | 'chain-reviewers'
     strategy := 'push' | 'lazy' | 'overwrite'
     answer   := 'y' | 'yes' | 'n' | 'no' | 'q' | 'quit' | '?' | 'help'
     reviewer := bare-word that is not a reserved keyword
@@ -39,6 +39,7 @@ KW_PUSH = "push"
 KW_LAZY = "lazy"
 KW_OVERWRITE = "overwrite"
 KW_PUBLISH_DRAFTS = "publish-drafts"
+KW_CHAIN_REVIEWERS = "chain-reviewers"
 
 LineAnswer = Literal["push", "cancel", "help"]
 ANSWERS: dict[str, LineAnswer] = {
@@ -47,7 +48,7 @@ ANSWERS: dict[str, LineAnswer] = {
     **dict.fromkeys(("?", "help"), "help"),
 }
 """Words that answer the prompt instead of naming a reviewer."""
-KEYWORDS_HINT = "keywords: r= topic= wip private push lazy overwrite publish-drafts  ·  y n ? (help)"
+KEYWORDS_HINT = "keywords: r= topic= wip private push lazy overwrite publish-drafts chain-reviewers  ·  y n ? (help)"
 """The prompt's toolbar when it has nothing else to say."""
 
 SpanKind = Literal[
@@ -61,6 +62,7 @@ SpanKind = Literal[
     "keyword_lazy",
     "keyword_overwrite",
     "keyword_publish_drafts",
+    "keyword_chain_reviewers",
     "keyword_answer",
     "equals",
     "comma",
@@ -112,6 +114,8 @@ class PushLineState:
     strategy: ReviewerStrategy = "push"
     publish_drafts: bool = False
     """Publish your drafts on the updated changes with the push (``publish-drafts``)."""
+    chain_reviewers: bool = False
+    """Give a change the push creates the people of the rest of its chain (``chain-reviewers``)."""
     answer: LineAnswer | None = None
     """What the line answers besides its options: push, cancel, or show the grammar (:data:`ANSWERS`)."""
 
@@ -195,12 +199,14 @@ _KEYWORD_KINDS: dict[str, SpanKind] = {
     KW_LAZY: "keyword_lazy",
     KW_OVERWRITE: "keyword_overwrite",
     KW_PUBLISH_DRAFTS: "keyword_publish_drafts",
+    KW_CHAIN_REVIEWERS: "keyword_chain_reviewers",
     **dict.fromkeys(ANSWERS, "keyword_answer"),
 }
 _FLAG_FIELDS: dict[SpanKind, str] = {
     "keyword_wip": "wip",
     "keyword_private": "private",
     "keyword_publish_drafts": "publish_drafts",
+    "keyword_chain_reviewers": "chain_reviewers",
 }
 """The keywords that switch a :class:`PushLineState` flag on (and, after ``-``, off), by the field they set."""
 _STRATEGIES: dict[SpanKind, ReviewerStrategy] = {
@@ -353,7 +359,7 @@ def format_canonical(state: PushLineState, *, include_strategy: bool = True) -> 
 
     Reviewers come first as ``r=alice,bob``, then optional ``topic=…``, then
     flags (``wip private``), then a non-default strategy keyword
-    (``lazy``/``overwrite``) when ``include_strategy`` is true, and ``publish-drafts`` last.
+    (``lazy``/``overwrite``) when ``include_strategy`` is true, and ``publish-drafts chain-reviewers`` last.
 
     Persisted push-options history omits strategy (``include_strategy=False``).
     """
@@ -363,15 +369,11 @@ def format_canonical(state: PushLineState, *, include_strategy: bool = True) -> 
     if state.topic is not None:
         value = _quote(state.topic) if _needs_quoting(state.topic) else state.topic
         parts.append(f"topic={value}")
-    if state.wip:
-        parts.append("wip")
-    if state.private:
-        parts.append("private")
+    parts += [word for word, on in ((KW_WIP, state.wip), (KW_PRIVATE, state.private)) if on]
     if include_strategy and state.strategy != "push":
         parts.append(state.strategy)
-    if state.publish_drafts:
-        parts.append(KW_PUBLISH_DRAFTS)
-    return " ".join(parts)
+    after = ((KW_PUBLISH_DRAFTS, state.publish_drafts), (KW_CHAIN_REVIEWERS, state.chain_reviewers))
+    return " ".join([*parts, *(word for word, on in after if on)])
 
 
 def apply_session_strategy(line: str, strategy: str | None) -> str:

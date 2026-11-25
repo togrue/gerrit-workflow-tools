@@ -277,6 +277,7 @@ class Settings:
             "show_attributes": self.flag("ger.pushShowAttributes"),
             "last_pushed_branch": self.flag("ger.lastPushedBranch", default=True),
             "publish_drafts": self.flag("ger.pushPublishDrafts", default=True),
+            "chain_reviewers": self.flag("ger.pushChainReviewers", default=True),
         }
 
     @property

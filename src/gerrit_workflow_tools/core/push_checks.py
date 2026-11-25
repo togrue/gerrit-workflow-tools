@@ -30,6 +30,7 @@ from gerrit_workflow_tools.core.gerrit_change_status import (
 )
 from gerrit_workflow_tools.core.git_run import GitError, UnknownRevisionError, git, git_out
 from gerrit_workflow_tools.core.git_state import current_branch, head_is_linear_on_remote_gerrit_target
+from gerrit_workflow_tools.core.push_reviewers import chain_people
 from gerrit_workflow_tools.core.push_targets import NextPatchset, next_patchsets
 from gerrit_workflow_tools.core.push_unchanged import AbandonedChange, OutdatedChange, UnchangedChange
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
@@ -190,6 +191,8 @@ class ExistingChanges(NamedTuple):
     """The lowest sent commit above each outdated one: its patch set would not sit on Gerrit's current one."""
     reviewers: frozenset[str] = frozenset()
     """Who already reviews one of these changes: accounts Gerrit has, known without asking."""
+    people: tuple[str, ...] = ()
+    """Of :attr:`reviewers`, the people (:func:`core.push_reviewers.chain_people`), in order."""
     abandoned: tuple[AbandonedChange, ...] = ()
     """Commits Gerrit has as a patch set of an abandoned change: a push sends them nowhere."""
     next_patchsets: Mapping[str, NextPatchset] | None = None
@@ -267,6 +270,7 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
             diverged.append(DivergedChange(commit.short_sha, view.number, view.current_revision_number))
         built_on_outdated += (BuiltOnOutdated(commit.short_sha, change) for change in below)
         below.clear()
+    you = run.settings.get("ger.user")
     return ExistingChanges(
         tuple(warnings),
         tuple(unchanged),
@@ -275,8 +279,9 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
         outdated=tuple(outdated),
         built_on_outdated=tuple(built_on_outdated),
         reviewers=frozenset(account.slug for view in views.values() for account in view.reviewers or ()),
+        people=chain_people(views.values(), ci_label=run.settings.inbox_verified_label, you=you),
         abandoned=tuple(abandoned),
-        next_patchsets=next_patchsets(commits, views, facts, user=run.settings.get("ger.user")),
+        next_patchsets=next_patchsets(commits, views, facts, user=you),
     )
 
 

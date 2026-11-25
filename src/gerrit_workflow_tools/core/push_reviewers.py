@@ -9,9 +9,10 @@ from pathlib import Path
 from gerrit_workflow_tools.core.change_id import change_id_of_rev
 from gerrit_workflow_tools.core.changeish import parse
 from gerrit_workflow_tools.core.config import ConfigError, Settings
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, resolve_gerrit_web_base
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit.stack_context import build_triplet
+from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, build_triplet
 from gerrit_workflow_tools.core.gerrit_project_id import resolve_gerrit_project_name
 from gerrit_workflow_tools.core.reviewer import (
     ReviewerStrategy,
@@ -59,6 +60,44 @@ class PushMark:
     reviewers: tuple[str, ...]
     wip: bool
     private: bool
+
+
+def chain_people(views: Iterable[ChangeView], *, ci_label: str = "Verified", you: str | None = None) -> tuple[str, ...]:
+    """The people who review the changes *views* (a chain): their ``REVIEWER`` accounts in order, not CCs, not *you*.
+
+    Service accounts are left out: those Gerrit tags ``SERVICE_USER``, and those whose only votes on
+    these changes are on *ci_label* (a CI posts Verified and never Code-Review). What a push proposes
+    for a change it creates in the chain (:attr:`core.push.PushPlan.chain_people`).
+    """
+    views = list(views)
+    voted = {
+        (label == ci_label, vote.account_id) for v in views for label, votes in v.label_votes.items() for vote in votes
+    }
+    ci_only = {account for on_ci, account in voted if on_ci} - {account for on_ci, account in voted if not on_ci}
+    people: dict[str, None] = {}
+    for view in views:
+        for account in view.reviewers or ():
+            human = not account.cc and not account.service and account.account_id not in ci_only
+            if human and (you is None or account.slug.casefold() != you.casefold()):
+                people.setdefault(account.slug)
+    return tuple(people)
+
+
+def add_chain_people(service: GerritService, names: Sequence[str], change_refs: Sequence[str]) -> ReviewerApplyResult:
+    """Add *names*, the chain's people, as reviewers of the changes *change_refs* a push just created.
+
+    Over REST after the push: ``%r=`` would add them to every change the push sends.
+    """
+    issues: list[ReviewerApplyIssue] = []
+    outcomes: list[ReviewerApplyChangeOutcome] = []
+    for ref in change_refs:
+        try:
+            service.changes.set_reviewers(ref, add=list(names))
+        except (GerritApiError, ChangeResolutionError) as error:
+            issues.append(_not_applied(f"could not add {', '.join(names)} to {ref}: {error}"))
+            continue
+        outcomes.append(ReviewerApplyChangeOutcome(parse(ref).change_id or ref, tuple(names)))
+    return ReviewerApplyResult(ok=not issues, issues=issues, outcomes=outcomes)
 
 
 def change_ref_of(cwd: Path, push_branch: str, rev: str, *, settings: Settings) -> str | None:
