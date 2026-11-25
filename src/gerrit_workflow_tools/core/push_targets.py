@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
-from gerrit_workflow_tools.core.code_facts import CodeChange, CodeFacts, code_change
+from gerrit_workflow_tools.core.code_facts import CodeChange, CodeFacts, code_change, files_dropped
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError, build_triplet
@@ -33,12 +33,22 @@ class NextPatchset:
     """The change owner's name, when the change is somebody else's."""
     reviewers: tuple[str, ...]
     """Who reviews the change already."""
+    dropped: tuple[str, ...] = ()
+    """Files the patch set Gerrit has changes that this commit no longer does: lost in a conflict
+    resolution, perhaps. Said beside it, never refused."""
 
     def describe(self) -> str:
         """``change 2101, patchset 3 (code changed), owner Alice``."""
         what = [_CODE_WORDS[self.code]] if self.code in _CODE_WORDS else []
         what += [f"owner {self.owner}"] if self.owner else []
         return f"change {self.number}, patchset {self.patch_set}" + (f" ({', '.join(what)})" if what else "")
+
+    def dropped_note(self) -> str | None:
+        """``no longer changes README.md (patchset 2 did)``, or ``None``."""
+        if not self.dropped:
+            return None
+        before = f"patchset {self.patch_set - 1}" if self.patch_set else "the last pushed patchset"
+        return f"no longer changes {', '.join(self.dropped)} ({before} did)"
 
 
 NEW_CHANGE = "new change"
@@ -70,6 +80,7 @@ def next_patchsets(
             code_change(commit.sha, view, facts),
             view.owner_name if you and owners and not owners & you else None,
             tuple(account.slug for account in view.reviewers or ()),
+            files_dropped(commit.sha, view, facts),
         )
     return out
 

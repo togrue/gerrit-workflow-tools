@@ -502,7 +502,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/ready_strategy.py` | Loading ready-boundary strategies from `.ger/ready/` |
 | `core/annotated_stack.py` | Annotated stack: local stack + Gerrit overlay + attention; the stack overview `ger log` and `GET /stack` answer from (`load_stack_overview`), with what `ger push` would upload (`StackOverview.to_upload`) and the stack's next steps (`StackOverview.next_steps`: `NextStep`, `NextStepKind`) |
 | `core/gerrit_change_status.py` | `LogCommit`, patchset status, whether a `newer` commit has **diverged** (`is_diverged`) |
-| `core/code_facts.py` | What the repository knows about the code an overlay compares (`CodeFacts`, `read_code_facts`: one git batch) and merged equivalence (`merged_equivalent`) |
+| `core/code_facts.py` | What the repository knows about the code an overlay compares (`CodeFacts`, `read_code_facts`: one git batch) merged equivalence (`merged_equivalent`), and the files a commit ahead of Gerrit no longer changes (`files_dropped`) |
 | `core/patchset_history.py` | Whether Gerrit's patchset is in a local commit's history (`built_on`: branch, reflog, `lastPush/<branch>`), and ger's record of a patchset it took over (`refs/ger/taken/`, `record_taken`); ADR-0015 |
 | `core/annotated_targets.py` | Commits named on the command line (`ger show`, `ger ci`) judged as the local stack sees them: within the whole stack, and merged when the upstream contains them (`annotate_targets`, `local_stack_or_none`) |
 | `core/attention.py` | Attention: reason names, `determine_attention()`, `ci_failed()`, `comment_reason()` (unresolved comments or awaiting a reply, by whose turn), chain-blocking (the commit that blocks, `LogCommit.blocks_chain`, and why: `blocking_reason()`), edit attention |
@@ -556,7 +556,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/push_result.py` | What `git push` answered and what `ger push` did after it: `PushResult`, Gerrit's `no new changes` |
 | `core/push_options.py` | Push options (`PushOptions`) and their magic-ref form on the refspec (`push_refspec`) |
 | `core/push_unchanged.py` | Push options on changes Gerrit already has at that commit: `planned_updates` (only what differs), `apply_updates` over REST, `OutdatedChange` (Gerrit has a newer patch set: nothing is set), and the warning when options reached nothing |
-| `core/push_targets.py` | What each commit a push sends becomes on Gerrit: a new change, or the next patch set of one (`NextPatchset`: rebase only or code changed, owner, reviewers), read from what the push loads anyway; after it, `pushed_changes`: the patch set each became, for the closing lines |
+| `core/push_targets.py` | What each commit a push sends becomes on Gerrit: a new change, or the next patch set of one (`NextPatchset`: rebase only or code changed, owner, reviewers, files it no longer changes), read from what the push loads anyway; after it, `pushed_changes`: the patch set each became, for the closing lines |
 | `core/push_checks.py` | What a push looks at before it runs: the branch it pushes, its ready boundary and the commits below it, the remote rebase check, what Gerrit already holds |
 | `core/push_reviewers.py` | Post-push reviewer strategies and the reviewer marks a push preview reads |
 | `core/reviewer.py` | `ReviewerAccount`, reviewer-name parsing and resolution to account ids, and who a push asks for |
