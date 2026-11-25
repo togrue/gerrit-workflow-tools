@@ -280,14 +280,20 @@ function changeScenarios(): Scenario[] {
     scenario("Change: a commit of your stack, its message editable", { change: change({ shown: theChange(voted) }) }),
     scenario("Change: not on Gerrit yet", { change: change({ shown: shown(unpushed(SUBJECT)), patchsets: undefined }) }),
     scenario("Change: ahead of Gerrit, compared with it", {
-      change: change({ shown: theChange({ patchset_status: "newer", code_change: "changed", last_pushed_votes: { verified: 1, code_review: 2 }, attention_reasons: ["ahead-of-gerrit"] }), mode: "gerrit", delta: itsDiff({ files: FILES.slice(3, 6), since: { ...since, patch_set: 5 } }) }),
+      change: change({ shown: theChange({ patchset_status: "newer", code_change: "changed", last_pushed_votes: { verified: 1, code_review: 2 }, attention_reasons: ["ahead-of-gerrit"] }), from: "current", mode: "gerrit", delta: itsDiff({ files: FILES.slice(3, 6), since: { ...since, patch_set: 5 } }) }),
+    }),
+    scenario("Change: two patchsets picked by hand", {
+      change: change({ from: 3, version: 5, readOnly: "This is a patchset on Gerrit: choose the local commit to edit its message.", delta: itsDiff({ files: FILES.slice(2, 5), since: { ...since, patch_set: 3, to_patch_set: 5 } }) }),
+    }),
+    scenario("Change: your commit since your last review, the default mode", {
+      change: change({ from: "reviewed", version: "current", mode: "reviewed", readOnly: "This is a patchset on Gerrit: choose the local commit to edit its message.", delta: itsDiff({ files: FILES.slice(4, 6), since: { ...since, to_patch_set: 5 } }) }),
     }),
     scenario("Change: Gerrit has a newer patchset", { change: change({ shown: theChange({ patchset_status: "outdated", attention_reasons: ["outdated-patchset"] }) }) }),
     scenario("Change: someone's change, new since your review", {
       change: change({ local: false, shown: theChange({ local_commit: false, code_review: 1 }), version: "current", readOnly: REMOTE, delta: itsDiff({ files: FILES.slice(4, 6), since: { ...since, to_patch_set: 5 } }) }),
     }),
     scenario("Change: someone's change since your review, rebased", {
-      change: change({ local: false, shown: theChange({ local_commit: false }), version: "current", mode: "reviewed", readOnly: REMOTE, delta: itsDiff({ files: FILES.slice(4, 6), since: { ...since, to_patch_set: 5, rebased: true } }) }),
+      change: change({ local: false, shown: theChange({ local_commit: false }), version: "current", from: "reviewed", mode: "reviewed", readOnly: REMOTE, delta: itsDiff({ files: FILES.slice(4, 6), since: { ...since, to_patch_set: 5, rebased: true } }) }),
     }),
     scenario("Change: comments as they arrive", { change: commented() }),
     scenario("Change: comments opened in full", { change: commented(), click: [".thread .twist"] }),

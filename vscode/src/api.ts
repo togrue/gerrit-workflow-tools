@@ -151,6 +151,8 @@ export interface CommitStatus {
   gerrit_url: string | null;
   /** The Gerrit change number; null before the first push. */
   number: number | null;
+  /** The number of Gerrit's current patchset; null before the first push, absent from an older ger or a Review chains member. */
+  current_patch_set?: number | null;
   /** The pushed patchset's votes while this commit is ahead of it with other code (its own votes are then null). */
   last_pushed_votes: { verified: number | null; code_review: number | null } | null;
   /**

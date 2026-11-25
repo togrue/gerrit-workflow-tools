@@ -419,23 +419,98 @@ button.twist:hover {
   text-decoration: underline;
 }
 
-.pickers {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  padding: 4px 12px 6px;
-}
-
-.picker {
-  display: flex;
-  flex: 1 1 160px;
+/* From and To (change.js compareBlock): labels, the selects at full width, the mode toggle beside both. */
+.compare {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
+  gap: 4px 8px;
+  padding: 4px 12px 8px;
 }
 
-.picker .detail {
+.compare .side {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+}
+
+.compare select {
+  width: 100%;
+}
+
+/* The default mode: a toggle as VS Code draws one (the search box's Aa), spanning both rows. */
+.mode-toggle {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+
+.mode-toggle:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+  color: var(--vscode-foreground);
+}
+
+.mode-toggle.active {
+  border-color: var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder));
+  background: var(--vscode-inputOption-activeBackground, transparent);
+  color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
+}
+
+.mode-toggle:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.mode-toggle:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* Explanations (change.js explain) wrap instead of ending in "…": the words flow, the icon stays on the first line. */
+.head.explain {
+  align-items: flex-start;
+  height: auto;
+  min-height: 22px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  line-height: 18px;
+  white-space: normal;
+}
+
+.head.explain > .codicon {
   flex: none;
+  margin-top: 1px;
+}
+
+.head.explain .words {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.head.explain .words .label,
+.head.explain .words .detail {
+  overflow: visible;
+}
+
+/* What the explanation means, under it: quieter, as a list row's description. */
+.head.explain .words .detail {
+  display: block;
+}
+
+.head.explain .link {
+  line-height: 18px;
 }
 
 select {
