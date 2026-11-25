@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -254,3 +256,37 @@ def test_resolve_registry_callable_none_without_files(stack_repo: Path) -> None:
         )
         is None
     )
+
+
+def test_a_registry_loaded_by_two_threads_at_once_loads_for_both(stack_repo: Path) -> None:
+    """The cause of a flaky test_service_fetch_populates_ci_links: a run's CI follow-ups (one thread per
+    CI-failed change) load the same registry at once. A load swaps its package's modules in
+    ``sys.modules``, so the second removed ``ger_ci.registry`` under the first's import, which failed
+    with KeyError, and the failure stayed cached: no CI links for the process (``ger serve``)."""
+    _write_domain_registry(
+        stack_repo / ".ger",
+        "ci",
+        """
+import time
+time.sleep(0.2)  # the first load is still importing when the second one starts
+STRATEGIES = {"testproj": lambda **_kw: ["linked"]}
+""",
+    )
+    trust_local_registries(stack_repo)
+    settings = Settings.from_cwd(stack_repo)
+    found: list[object] = []
+
+    def load() -> None:
+        strategy = resolve_registry_callable(
+            stack_repo, "testproj", domain="ci", package_name="ger_ci", settings=settings
+        )
+        found.append(strategy() if strategy else None)
+
+    first = threading.Thread(target=load)
+    first.start()
+    time.sleep(0.05)
+    second = threading.Thread(target=load)
+    second.start()
+    first.join()
+    second.join()
+    assert found == [["linked"], ["linked"]]

@@ -20,6 +20,7 @@ import importlib.machinery
 import importlib.util
 import logging
 import sys
+import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -44,6 +45,10 @@ T = TypeVar("T")
 _MODULE_CACHE: dict[str, ModuleType | None] = {}
 _UNTRUSTED: set[str] = set()
 """Cache keys of local registries refused this process: refused once, warned once."""
+_LOAD_LOCK = threading.RLock()
+"""One registry load at a time: a load swaps its package's modules in ``sys.modules``, and a run's
+parallel follow-ups (one per CI-failed change) load the same registry at once. Unlocked, one load
+removed ``ger_ci.registry`` under another's import, which failed, and the failure stayed cached."""
 
 TrustGate = Callable[[str], bool]
 """Asked with the digest of a registry's source (``RegistrySource.digest``) before it first runs; ``False`` skips it."""
@@ -135,6 +140,11 @@ def clear_extension_registry_cache(*, package_prefix: str | None = None) -> None
     When *package_prefix* is set, only modules under that name are cleared.
     """
 
+    with _LOAD_LOCK:
+        _clear_registry_cache(package_prefix)
+
+
+def _clear_registry_cache(package_prefix: str | None) -> None:
     if package_prefix is None:
         _MODULE_CACHE.clear()
         _UNTRUSTED.clear()
@@ -153,11 +163,15 @@ def clear_extension_registry_cache(*, package_prefix: str | None = None) -> None
 
 
 def _load_registry_module(domain_dir: Path, package_name: str, trust: TrustGate | None = None) -> ModuleType | None:
-    """Import ``registry.py`` from *domain_dir* once per absolute path.
+    """Import ``registry.py`` from *domain_dir* once per absolute path, one thread at a time (:data:`_LOAD_LOCK`).
 
     *trust*, when given, decides from the code's digest whether it may run at all (the local tier).
     """
+    with _LOAD_LOCK:
+        return _load_registry_module_locked(domain_dir, package_name, trust)
 
+
+def _load_registry_module_locked(domain_dir: Path, package_name: str, trust: TrustGate | None) -> ModuleType | None:
     registry = domain_dir / "registry.py"
     try:
         cache_key = f"{package_name}:{registry.resolve()}"
