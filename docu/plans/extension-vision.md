@@ -61,11 +61,9 @@ needed to finish a review.
 | Item | Why it follows | Needs from core |
 |------|----------------|-----------------|
 | **Push from the views**: the preview (what each commit becomes, which votes a code change drops, the drafts that go along) and one confirmation | The author loop still ends in a terminal prompt. The preview data and the readiness verdict already live in core | the push plan served; the command names the head it previewed ([ADR-0008](../adr/0008-push-confirm-loop-stays-in-the-command.md) stands) |
-| **Whose turn it is** on every row: a chain whose last word is yours waits on the other side | The headline and the bell should point at what needs you, not at what you answered | attention that tells *your turn* from *their turn*; Gerrit's attention set where the server has it |
-| **One Next walk**: one key through unresolved chains, CI findings and unreviewed files of the open change, then the next member of the chain | Principle 2; today each has its own command | the walk order served, as the attention walk is for `ger edit` |
+| **One Next walk**: one key through unresolved chains, CI findings and unreviewed files of the open change, then the next member of the chain | Principle 2; today there are three: the comment walk, Work on Next and Review Next Change | the walk order served, as the attention walk is for `ger edit` |
 | **Combined diff of a chain** in one editor tab, with all its comments | 64 and 44 together | a chain-wide diff and comment listing |
 | **Undo for every rewrite**, and with it Drop, Squash and Skip without a question | Principle 5 depends on it | the operation log of the commit-chain roadmap |
-| **Apply a suggested edit** from a comment chain into the commit it belongs to | The author retypes what the reviewer already wrote | applying a suggestion as a fixup |
 | **Show the command**: each action's tooltip names the `ger` line it runs | Teaches the command line and makes the view trustworthy | nothing new |
 
 ### Later: named only, beyond what the issues state
@@ -73,6 +71,43 @@ needed to finish a review.
 Agent-suggested review order (137), delegation of comments to an agent in the views (114),
 absorb and split from the stack view, a sync button, single-key bindings in the views,
 publishing to the marketplaces and a dev container (87, 88, 48). Each needs its own decision.
+
+## The two loops, as walked on 2026-11-25
+
+Both loops were walked on a live Gerrit in a real VS Code; what was cheap was fixed, and this is
+what is left. The proposals below are not decided.
+
+### Reviewing a chain
+
+Today: *To review* (your turn only) → Review Change → the window opens on the change with all its
+files in one editor → comment in place, with the language server working → Suggest Edit → Vote and
+Publish → Next Change.
+
+| Open | Proposal |
+|------|----------|
+| Nothing says which file matters or in which order to read (137) | One agent call per patchset, cached by commit: three to five summary bullets, a risk line with its reason, and a **file order with one line per file**. Shown above the commit message; the Files list and the combined diff follow it. Hunks are not reordered across files: a hunk away from its file is harder to judge, and "have I seen everything" loses its answer |
+| "Have I seen every file" | Gerrit's per-file *reviewed* flag, set when a file's diff was scrolled through; `3 / 4 files seen` in the Change view |
+| The Change view is a third of the side bar (64) | While a change is reviewed or reworked, the Change view takes the side bar and the two lists fold to their headline |
+| A suggested edit is text in a fence | Kept as text (it is what Gerrit's own UI reads); the agent's findings arrive as draft comments with suggested edits the reviewer accepts or discards |
+
+### Reworking a reviewed chain
+
+Today: Work on Next → the commit's first comment to answer, at its line → fix, or Apply the
+suggested edit → Reply Done → next comment → Work on Next → Push, which publishes the replies.
+The terminal is needed to amend and to run tests.
+
+**Edit each commit (A) or fix from the top (B).** Both stay, and the tool says which one fits a
+given fix. B is right for small fixes in lines no later commit touches; A for anything else. The
+line between them is one check that core has: does this change fold cleanly into its commit, and do
+the commits above it still replay. `ger fix` refuses a fixup that fails it and names `ger edit`.
+
+| Open | Proposal |
+|------|----------|
+| Amend at an edit stop is a terminal command | Continue amends what changed since the stop (132) |
+| B needs a commit id typed per fix | **Absorb**: edit at the top, one command; each hunk goes to the commit that last touched its lines when the fold check passes, the rest are listed with the reason. No target to name, no fixup rows |
+| B has no place that shows the whole chain (44) | A chain overview in the editor area: one collapsible section per change that needs attention, its hunks with the comment chains and CI findings at their lines. Per hunk two actions: *Edit Commit Here* (A) and *Fix into this commit* (B, behind the fold check). Editing happens in the working file, never inside a rendered old hunk |
+| A comment whose fix belongs in a new commit on top | **Fix on top** as a reply, instead of comments that float in a local overlay: a draft "Fixed in {change}" on the original comment, a trailer on the new commit naming the comment, and `ger push` fills in the new change and resolves the chain. At the top of the chain the commit lists what it addresses. Gerrit holds the truth and nothing local can drift across machines, reorders or squashes |
+| Tests are run by hand at every stop | A `ger.testCommand` the views run at a stop, with its result on the row |
 
 ## What was looked at elsewhere
 
