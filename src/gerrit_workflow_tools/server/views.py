@@ -60,7 +60,7 @@ from gerrit_workflow_tools.render.show_json import (
 )
 from gerrit_workflow_tools.render.show_markdown import commit_markdown
 from gerrit_workflow_tools.render.suggested_fixes import comment_text
-from gerrit_workflow_tools.server.diff_views import commit_files
+from gerrit_workflow_tools.server.diff_views import add_worktree_places, commit_files
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
 
@@ -104,8 +104,7 @@ def stack(ctx: Context, req: Request) -> dict[str, Any]:
 
 
 def rebase_refusal(ctx: Context, req: Request) -> dict[str, Any]:
-    """Why ``ger rebase --<action>`` would refuse now, in its words, or ``null``: the one check every
-    ger "go on" makes (``ger edit -n`` too), the work tree's unstaged changes included."""
+    """Why ``ger rebase --<action>`` would refuse now (``go_on_refusal``: unstaged changes too), or ``null``."""
     try:
         action = RebaseAction(req.one("action", RebaseAction.CONTINUE.value))
     except ValueError as exc:
@@ -345,6 +344,8 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
             for entry, comment in zip(chain_payload["comments"], chain.comments, strict=True):
                 entry["text"] = comment_text(comment.message, comment.suggested_edits)
                 entry["markdown"] = comment_text(comment.message, comment.suggested_edits, markdown=True)
+        if item.target.is_local_commit:
+            add_worktree_places(ctx.cwd, served_chains, item.chains)
         payload["updated"] = iso_utc(parse_gerrit_time(item.commit.updated))
         if req.flag("markdown"):
             lines = commit_markdown(

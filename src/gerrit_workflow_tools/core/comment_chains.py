@@ -120,6 +120,7 @@ def _inline_comment_from_raw(path: str, comment: dict[str, Any], *, draft: bool 
         author_account_id=author_id,
         context_lines=_context_lines_from_raw(comment),
         patch_set=patch_set if isinstance(patch_set, int) else None,
+        commit_id=commit_id if isinstance(commit_id := comment.get("commit_id"), str) else None,
         unresolved=comment.get("unresolved") is True,
         draft=draft,
         suggested_edits=suggested_edits_from_raw(path, comment, start_line=_comment_start_line(comment), line=line),

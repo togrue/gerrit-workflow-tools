@@ -81,6 +81,8 @@ class InlineComment:
     """Who wrote it (Gerrit's ``author._account_id``): what tells your comments from others'."""
     context_lines: tuple[ContextLine, ...] = ()
     patch_set: int | None = None
+    commit_id: str | None = None
+    """The commit of that patch set (Gerrit's ``commit_id``): the version *line* counts in."""
     unresolved: bool = False
     """This comment's own flag. The chain takes the flag of its last comment."""
     draft: bool = False

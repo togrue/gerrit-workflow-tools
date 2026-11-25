@@ -85,13 +85,11 @@ export async function closeComment(): Promise<void> {
  * Set a thread's Resolved toggle (in its header) and its label to match: `resolved` or
  * `unresolved`, whether the reply saved next resolves the chain.
  */
-function mark(thread: vscode.CommentThread, chain: CommentChain, resolved: boolean): void {
+function mark(thread: vscode.CommentThread, chain: CommentChain, resolved: boolean, outdated = false): void {
   thread.contextValue = resolved ? "resolved" : "unresolved";
-  thread.label = !resolved
-    ? "Gerrit — unresolved"
-    : chain.resolved_after_publish
-      ? "Gerrit — your draft resolves this"
-      : "Gerrit — your reply will resolve this";
+  const label = !resolved ? "Gerrit — unresolved" : chain.resolved_after_publish ? "Gerrit — your draft resolves this" : "Gerrit — your reply will resolve this";
+  // Its lines changed in your file since the version it was written on: drawn where they were.
+  thread.label = outdated ? `${label} · outdated: line ${chain.line} has changed since` : label;
 }
 
 /** Your unpublished reply in `chain`: a chain holds at most one. */
@@ -127,6 +125,8 @@ function stepFrom(position: { id: string; order: string[] } | undefined, ids: st
 interface Anchor {
   rev: string;
   chain: CommentChain;
+  /** Drawn where its lines were: they changed in your file since the version it was written on. */
+  outdated: boolean;
 }
 
 export class CommentThreads implements vscode.Disposable {
@@ -316,21 +316,22 @@ export class CommentThreads implements vscode.Disposable {
       if (chain.path.startsWith("/")) {
         continue; // commit message and patchset-level chains have no line in a file
       }
-      const line = Math.max(0, (chain.line ?? 1) - 1);
-      const first = chain.start_line ? Math.max(0, chain.start_line - 1) : line;
+      const place = this.view.placeOf(chain);
+      const line = Math.max(0, (place.line ?? 1) - 1);
+      const first = place.start ? Math.max(0, place.start - 1) : line;
       const comments = chain.comments.map((comment) => new ThreadComment(comment));
       const thread = this.controller.createCommentThread(this.view.locationUri(chain.path), new vscode.Range(first, 0, line, 0), comments);
       comments.forEach((comment) => (comment.thread = thread));
       const root = chain.comments[0]?.state;
       if (root === "published") {
-        mark(thread, chain, chain.resolved_after_publish);
+        mark(thread, chain, chain.resolved_after_publish, place.outdated);
       } else {
         thread.label = root === "note" ? "Your private note" : "Your new comment (not published yet)";
         thread.contextValue = "yours";
       }
       thread.canReply = root === "published"; // a reply answers someone on Gerrit
       thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
-      this.anchors.set(thread, { rev: target.rev, chain });
+      this.anchors.set(thread, { rev: target.rev, chain, outdated: place.outdated });
     }
   }
 
@@ -370,7 +371,7 @@ export class CommentThreads implements vscode.Disposable {
    * A chain the editor shows no thread for (a resolved one) just opens its line.
    */
   async show(chain: CommentChain): Promise<void> {
-    await this.view.openLocation({ path: chain.path, line: chain.line });
+    await this.view.openLocation({ path: chain.path, line: this.view.placeOf(chain).line });
     for (const [thread, anchor] of this.anchors) {
       const here = anchor.chain.root_id === chain.root_id;
       thread.collapsibleState = here ? vscode.CommentThreadCollapsibleState.Expanded : vscode.CommentThreadCollapsibleState.Collapsed;
@@ -403,7 +404,7 @@ export class CommentThreads implements vscode.Disposable {
   cancelReply(reply: vscode.CommentReply): void {
     const anchor = this.anchors.get(reply.thread);
     if (anchor) {
-      mark(reply.thread, anchor.chain, anchor.chain.resolved_after_publish);
+      mark(reply.thread, anchor.chain, anchor.chain.resolved_after_publish, anchor.outdated);
     }
     reply.thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
   }
@@ -418,7 +419,7 @@ export class CommentThreads implements vscode.Disposable {
     if (!anchor) {
       return;
     }
-    mark(thread, anchor.chain, resolved);
+    mark(thread, anchor.chain, resolved, anchor.outdated);
     if (yourDraft(anchor.chain)) {
       await this.replyWith(anchor.chain, "", resolved);
     }
@@ -628,7 +629,7 @@ export class CommentThreads implements vscode.Disposable {
     }
     const shown = this.ownInThread(chain);
     if (shown) {
-      await this.view.openLocation({ path: chain.path, line: chain.line });
+      await this.view.openLocation({ path: chain.path, line: this.view.placeOf(chain).line });
       this.startEdit(shown);
       return;
     }

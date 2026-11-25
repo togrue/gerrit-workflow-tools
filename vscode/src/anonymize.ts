@@ -249,7 +249,7 @@ const FILE_DIR = string((text, names, row) => (typeof row.path === "string" && r
 /** A file's name, with the line when there is one: where a comment is. */
 const WHERE = around(/(.*?)(?::(\d+))?/, (names, file, line) => `${names.fileName(file)}${line ? `:${names.number(line)}` : ""}`);
 /** Under a comment: our words, then where it is, then who wrote it. */
-const THREAD_NOTE = ours([...Object.values(YOURS), "kept for you", "your draft resolves it", "waits on a reply", "whole change"], (value, names, row) => (value === row.author ? PERSON(value, names, row) : WHERE(value, names, row)));
+const THREAD_NOTE = ours([...Object.values(YOURS), "kept for you", "your draft resolves it", "waits on a reply", "whole change", "outdated: changed since"], (value, names, row) => (value === row.author ? PERSON(value, names, row) : WHERE(value, names, row)));
 const WHO = ours(["you", "?", ""], PERSON);
 
 /** Under a CI finding: the tool that found it (theirs), our words, and the file and line it stands in. */

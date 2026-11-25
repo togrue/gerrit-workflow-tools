@@ -418,6 +418,11 @@ def test_show_carries_suggested_edits_as_ger_show_json_does(stack_repo: Path, mo
         }
 
     served = edits(commit)
+    # Where each replacement sits in the working files is the editor's (`worktree`, `original`), not `ger show`'s.
+    placed = {"worktree", "original"}
+    for found in served.values():
+        for edit in found or []:
+            edit["replacements"] = [{k: v for k, v in r.items() if k not in placed} for r in edit["replacements"]]
     assert served == edits(json_stdout(out)), err
     assert served["4f0a1c2b_8d9e7f60"][0]["fix_id"] == "a6b3c2d1_0e9f8a7b"
     assert served["7c6d5e4f_3a2b1c0d"][0]["in_message"] is True
@@ -433,6 +438,34 @@ def test_show_carries_suggested_edits_as_ger_show_json_does(stack_repo: Path, mo
     )
     block = BLOCK_COMMENT["message"]
     assert texts["7c6d5e4f_3a2b1c0d"] == (block, block), "a suggestion block is in the text already"
+
+
+def test_show_places_a_comment_of_a_stack_commit_in_the_working_file(stack_repo: Path) -> None:
+    """A comment on an earlier commit, drawn in the working file: at its line there, or outdated."""
+    store, keys, rows = _gerrit(stack_repo, [{}, {"unresolved_comment_count": 1}, {}, {}])
+    block = "Say what it is.\n\n```suggestion\nfile b.txt, the router\n```"
+    comment = {"id": "c1", "line": 1, "message": block, "unresolved": True, "patch_set": 1, "commit_id": rows[1].sha}
+    store.set_comments(keys[1], {"b.txt": [comment]})
+    api = GerApi(stack_repo, gerrit=store)
+
+    def shown() -> tuple[Any, Any]:
+        [chain] = _get(api, "/show", rev=rows[1].sha, comments="all")["commits"][0]["comment_chains"]
+        [replacement] = chain["comments"][0]["suggested_edits"][0]["replacements"]
+        return chain["worktree"], (replacement["worktree"], replacement["original"])
+
+    (stack_repo / "b.txt").write_text("a line above\nfile b.txt\n", encoding="utf-8")
+    moved = {"start_line": 2, "start_character": 0, "end_line": 3, "end_character": 0}
+    assert shown() == ({"start_line": 2, "line": 2, "outdated": False}, (moved, "file b.txt\n"))
+    (stack_repo / "b.txt").write_text("a line above\nfile b.txt, changed\n", encoding="utf-8")
+    assert shown() == ({"start_line": 1, "line": 1, "outdated": True}, (None, "file b.txt\n"))
+
+
+def test_show_claims_no_place_for_a_comment_on_a_version_that_is_not_here(stack_repo: Path) -> None:
+    store, keys, rows = _gerrit(stack_repo, [{}, {"unresolved_comment_count": 1}, {}, {}])
+    comment = {"id": "c1", "line": 1, "message": "x", "unresolved": True, "patch_set": 1, "commit_id": "f" * 40}
+    store.set_comments(keys[1], {"b.txt": [comment]})
+    [chain] = _get(GerApi(stack_repo, gerrit=store), "/show", rev=rows[1].sha)["commits"][0]["comment_chains"]
+    assert chain["worktree"] is None
 
 
 def test_show_marks_the_change_that_introduced_a_ci_finding(stack_repo: Path) -> None:

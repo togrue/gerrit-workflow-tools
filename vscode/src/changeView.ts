@@ -678,6 +678,15 @@ export class ChangeView extends WebView<ChangeVm> {
     return yours ? vscode.Uri.file(path.join(this.model.repo, file)) : fileUri(commit, file);
   }
 
+  /**
+   * Where `chain` is drawn: in your file, where its lines are now (core's `worktree`) when core could
+   * tell, `outdated` when they changed there; else at its lines as Gerrit has them.
+   */
+  placeOf(chain: CommentChain): { start: number | null; line: number | null; outdated: boolean } {
+    const now = this.locationUri(chain.path).scheme === "file" ? chain.worktree : undefined;
+    return now ? { start: now.start_line, line: now.line, outdated: now.outdated } : { start: chain.start_line, line: chain.line, outdated: false };
+  }
+
   /** Open where a comment or a CI finding points. */
   async openLocation(location: Location): Promise<void> {
     if (NOT_FILES.includes(location.path)) {

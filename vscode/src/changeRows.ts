@@ -351,7 +351,10 @@ function thread(chain: CommentChain): ThreadRow {
   // Your published comment is its last word (core's turn): open, but waiting on the other side.
   const waiting = !mine && !chain.resolved && chain.turn === "theirs";
   const own = ownComment(chain);
-  const notes = [mine ?? "", held ? "kept for you" : "", answered ? "your draft resolves it" : "", waiting ? "waits on a reply" : "", where, mine ? "" : (first?.author ?? "")];
+  // In your file its lines may sit elsewhere now (core's `worktree`): said beside Gerrit's line.
+  const now = chain.worktree;
+  const moved = now ? (now.outdated ? "outdated: changed since" : now.line !== chain.line ? `line ${now.line} in your file` : "") : "";
+  const notes = [mine ?? "", held ? "kept for you" : "", answered ? "your draft resolves it" : "", waiting ? "waits on a reply" : "", where, moved, mine ? "" : (first?.author ?? "")];
   const icon: Icon = mine
     ? { icon: first?.state === "note" ? "note" : "edit" }
     : chain.resolved

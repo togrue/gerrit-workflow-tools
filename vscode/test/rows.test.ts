@@ -590,3 +590,23 @@ test("Work on Next: on from the stop to the next commit that needs edits, else t
   const resting = (needs: number) => stack([commit("A")], { summary: { commits: 1, ready: 0, attention: 0, needs_edit: needs, not_on_gerrit: 0 } });
   assert.deepEqual([workOnNext(resting(2)).kind, workOnNext(resting(0)).kind], ["start", "nothing"]);
 });
+
+test("a thread of your local commit says where its lines are in your file now, or that they changed", () => {
+  const threads = changeVm(
+    state({
+      chains: [
+        chain("moved", [comment("Sort a copy.")], { line: 11, worktree: { start_line: 13, line: 13, outdated: false } }),
+        chain("gone", [comment("Typo.")], { line: 4, worktree: { start_line: 3, line: 3, outdated: true } }),
+        chain("same", [comment("Nit.")], { line: 4, worktree: { start_line: 4, line: 4, outdated: false } }),
+      ],
+    }),
+  ).comments?.threads;
+  assert.deepEqual(
+    threads?.map((row) => row.notes),
+    [
+      ["a.py:11", "line 13 in your file", "Alice"],
+      ["a.py:4", "outdated: changed since", "Alice"],
+      ["a.py:4", "Alice"],
+    ],
+  );
+});

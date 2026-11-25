@@ -327,6 +327,10 @@ export interface FixReplacement {
   range: { start_line: number; start_character: number; end_line: number; end_character: number };
   replacement: string;
   location: string;
+  /** For a comment of a local commit: `range` in your working file, while the lines it covers are there unchanged; null otherwise. */
+  worktree?: FixReplacement["range"] | null;
+  /** For a comment of a local commit: the text it replaces in the version commented on; null when that version is not here. */
+  original?: string | null;
 }
 
 /** An edit a comment suggests: a Gerrit fix suggestion, or a ```suggestion block of its text (`in_message`). */
@@ -366,6 +370,12 @@ export interface CommentChain {
   /** Whose turn it is, core's verdict: somebody else spoke last (`yours`), and your answer is a draft (`draft`); your published comment is the last word (`theirs`). Null for a local chain. */
   turn?: ChainTurn | null;
   outdated: boolean;
+  /**
+   * For an open Gerrit chain of a local commit: where its lines are in your working file, mapped from
+   * the version it was written on; `outdated` when they changed or are gone there. Null when that
+   * cannot be told (absent from an older ger).
+   */
+  worktree?: { start_line: number; line: number; outdated: boolean } | null;
   /** On hold: you keep this chain for yourself, the agent runbook leaves it alone. */
   held: boolean;
   comments: Comment[];

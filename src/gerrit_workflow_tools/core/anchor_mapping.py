@@ -4,7 +4,8 @@ A pure function of (anchor blob, range) and the shown commit (ADR-0011): always 
 from the anchored blob straight to the shown one, never chained through earlier
 mappings, and nothing written back. Lines outside the diff's hunks shift by the hunks
 before them; a range touching a hunk is **outdated** and sits just before that hunk.
-Spec: docu/spec/commands/comment.md § Re-anchoring.
+Spec: docu/spec/commands/comment.md § Re-anchoring. :class:`WorktreeMap` maps the same way
+onto the working files: where a Gerrit comment's lines sit in the file an editor shows.
 """
 
 from __future__ import annotations
@@ -13,9 +14,10 @@ import re
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from gerrit_workflow_tools.core.comment_anchor import Anchor, CommentLocation, blob_of
+from gerrit_workflow_tools.core.comment_anchor import Anchor, CommentLocation, CommentRange, blob_of
 from gerrit_workflow_tools.core.gerrit_change_status import ContextLine
 from gerrit_workflow_tools.core.git_run import git
+from gerrit_workflow_tools.core.git_state import repo_toplevel
 
 
 _EMPTY_BLOB = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
@@ -221,3 +223,75 @@ def place_anchor(cwd: Path | str, anchor: Anchor, commit: str | None) -> AnchorP
     rng = location.range
     shown_range = replace(rng, start_line=mapped.start, end_line=mapped.end) if rng is not None else None
     return placement.moved_to(replace(location, path=path, line=mapped.end, range=shown_range))
+
+
+@dataclass(frozen=True)
+class WorktreePlace:
+    """Where lines of a commented version of a file sit in the working file, as :func:`map_lines` maps them."""
+
+    start_line: int
+    line: int
+    outdated: bool
+    """They changed or are gone there: *line* is the one just before where they were."""
+
+
+class WorktreeMap:
+    """Lines of commits' files mapped onto the working files, for one answer.
+
+    Each (commit, path) is diffed once, the commit's blob against the working file as git would
+    store it (``git hash-object -w``, its filters applied), so the two diff as any two blobs do.
+    ``None`` where it cannot be told: the commit or its file is not here, the working file is
+    gone, or it is binary.
+    """
+
+    def __init__(self, cwd: Path | str) -> None:
+        self._cwd = cwd
+        self._top = repo_toplevel(cwd)
+        self._hunks: dict[tuple[str, str], tuple[Hunk, ...] | None] = {}
+        self._texts: dict[tuple[str, str], str | None] = {}
+
+    def _diff(self, commit: str, path: str) -> tuple[Hunk, ...] | None:
+        key = (commit, path)
+        if key not in self._hunks:
+            self._hunks[key] = self._hunks_of(commit, path)
+        return self._hunks[key]
+
+    def _hunks_of(self, commit: str, path: str) -> tuple[Hunk, ...] | None:
+        old = blob_of(self._cwd, commit, path)
+        if old is None or self._top is None or not (self._top / path).is_file():
+            return None
+        new = git("hash-object", "-w", "--", path, cwd=self._top, check=False)
+        return blob_hunks(self._cwd, old, new.stdout.strip()) if new.returncode == 0 else None
+
+    def place(self, commit: str | None, path: str, start: int, end: int) -> WorktreePlace | None:
+        """Where lines *start*..*end* of *path* in *commit* are in the working file."""
+        hunks = self._diff(commit, path) if commit else None
+        if hunks is None:
+            return None
+        mapped = map_lines(hunks, start, end)
+        return WorktreePlace(start_line=mapped.start, line=mapped.end, outdated=mapped.outdated)
+
+    def range(self, commit: str | None, path: str, rng: CommentRange) -> CommentRange | None:
+        """*rng* of *path* in *commit*, in the working file, while the lines it covers are there unchanged."""
+        last = rng.end_line - 1 if rng.end_character == 0 and rng.end_line > rng.start_line else rng.end_line
+        placed = self.place(commit, path, rng.start_line, last)
+        if placed is None or placed.outdated or placed.line - placed.start_line != last - rng.start_line:
+            return None
+        shift = placed.start_line - rng.start_line
+        return replace(rng, start_line=rng.start_line + shift, end_line=rng.end_line + shift)
+
+    def text(self, commit: str | None, path: str, rng: CommentRange) -> str | None:
+        """What *rng* covers in *path* of *commit*: the text a suggested edit replaces."""
+        key = (commit or "", path)
+        if key not in self._texts:
+            shown = git("cat-file", "blob", f"{commit}:{path}", cwd=self._cwd, check=False) if commit else None
+            self._texts[key] = shown.stdout if shown is not None and shown.returncode == 0 else None
+        content = self._texts[key]
+        if content is None:
+            return None
+        lines = content.splitlines(keepends=True)
+
+        def offset(line: int, character: int) -> int:
+            return sum(len(text) for text in lines[: line - 1]) + character
+
+        return content[offset(rng.start_line, rng.start_character) : offset(rng.end_line, rng.end_character)]

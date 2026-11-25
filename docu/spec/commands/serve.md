@@ -407,6 +407,22 @@ Each comment also carries its whole text with the Gerrit fix suggestions written
 plain, as `ger show` prints them without its box and colours, and `markdown` with each
 replacement fenced. A ```` ```suggestion ```` block is in the message already and is not repeated.
 
+For a commit of the local stack (`local_commit: true`), an editor draws the threads in the working
+files, which may hold another version of a commented file than the patchset the comment was written
+on (a comment on an earlier commit, seen at the tip; a commit changed since its push). So each open
+Gerrit chain there also carries `worktree`: where its lines are in the working file, mapped from the
+version the comment was written on (Gerrit's `commit_id`) as local comments are re-anchored
+([comment](comment.md#re-anchoring), `core/anchor_mapping.py`, `WorktreeMap`): `start_line`, `line`,
+and `outdated` when those lines changed or are gone there (`line` is then the one just before where
+they were). It is `null` where that cannot be told: the version is not in this repository, the
+working file is gone or binary, a resolved chain, a local chain (whose own anchor is mapped onto the
+shown commit), or no line. Each replacement a comment of such a chain suggests carries `worktree`
+too, its `range` in the working file while the lines it covers are there unchanged (else `null`),
+and `original`, the text it replaces in the version commented on: what a client checks the file
+against before it applies the edit. Cost, once per commented file: a `git rev-parse`, a `git
+hash-object -w` of the working file (so it diffs as a blob), a `git diff` (remembered by blob pair),
+and a `git cat-file` where an edit is suggested.
+
 Each commit also says what a new comment on it becomes by default, in `new_comment`: `draft`
 when Gerrit has that very commit as a patchset (or the change is only on Gerrit), else
 `local-draft` — never pushed, or rewritten here since. A `note` is always possible.

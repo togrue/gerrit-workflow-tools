@@ -5,11 +5,15 @@ Spec: docu/spec/commands/serve.md.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
+from gerrit_workflow_tools.core.anchor_mapping import WorktreeMap
 from gerrit_workflow_tools.core.change_id import split_change_id_footer
 from gerrit_workflow_tools.core.commit_diff import EMPTY_TREE, file_text, show_commit_diff
+from gerrit_workflow_tools.core.gerrit_change_status import CommentChain
 from gerrit_workflow_tools.core.gerrit_patchset import fetch_patchset, resolve_change, resolve_patchset
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_targets
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
@@ -130,3 +134,23 @@ def file(ctx: Context, req: Request) -> dict[str, Any]:
         raise BadRequest("path is missing or not a repository path")
     content = None if rev == EMPTY_TREE else file_text(ctx.cwd, rev, path)
     return {"rev": rev, "path": path, "content": content}
+
+
+def add_worktree_places(cwd: Path, served: list[dict[str, Any]], chains: Sequence[CommentChain]) -> None:
+    """Where each open Gerrit chain of a local commit sits in the working files, ``worktree``; and
+    for each replacement its comments suggest, its range there (``worktree``, while those lines are
+    unchanged) and the text it replaces in the commented version (``original``). ``null`` where it
+    cannot be told. Mapped from the version each comment was written on (``commit_id``)."""
+    places = WorktreeMap(cwd)
+    for payload, chain in zip(served, chains, strict=True):
+        root = chain.comments[0] if chain.comments else None
+        commit = root.commit_id if root and not chain.local and not chain.resolved and chain.line else None
+        placed = places.place(commit, chain.path, chain.start_line or chain.line or 1, chain.line or 1)
+        payload["worktree"] = asdict(placed) if placed else None
+        for entry, comment in zip(payload["comments"], chain.comments, strict=True):
+            for edit_json, edit in zip(entry.get("suggested_edits", []), comment.suggested_edits, strict=True):
+                for rep_json, rep in zip(edit_json["replacements"], edit.replacements, strict=True):
+                    at = comment.commit_id if commit else None
+                    rng = places.range(at, rep.path, rep.range)
+                    rep_json["worktree"] = rng.as_gerrit() if rng else None
+                    rep_json["original"] = places.text(at, rep.path, rep.range)

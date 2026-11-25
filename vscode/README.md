@@ -256,7 +256,11 @@ The commits above your upstream, newest first. One row per commit:
   about to publish. `Alt+F9` / `Shift+Alt+F9` do it too while the Change view or a
   diff of the change has focus; anywhere else they stay VS Code's own next / previous comment thread, which only
   walks the open file. For a local commit they also appear as comment threads in the
-  editor. Reply, or reply "Done" and resolve — saved as **drafts** on Gerrit, published later:
+  editor, in your file: drawn where the commented lines are in it now, mapped by `ger serve` from the
+  version each comment was written on (a comment on an earlier commit of the stack, seen at the tip,
+  sits on its line there, not on the line number it had). A comment whose lines have changed since
+  is drawn where they were, its thread saying *outdated: line 11 has changed since*, and its row in
+  the Change view *outdated: changed since*; one that moved says *line 13 in your file*. Reply, or reply "Done" and resolve — saved as **drafts** on Gerrit, published later:
   on your own commit by your next `ger push`, anywhere else by *Vote and Publish…*. A reply box has **Save** and **Cancel**, and Gerrit's **Resolved**
   checkbox: by the box in the Change view; in an editor thread a toggle in the thread's header
   (VS Code empties the reply box on any button beside it), its label saying what Save will do;
