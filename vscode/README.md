@@ -127,7 +127,9 @@ The commits above your upstream, newest first. One row per commit:
   look, and closed on the next. Only the tabs of the branch checked out are judged: another branch
   checked out (`ger checkout`, a review checkout, `git switch`) leaves them as they are, and a
   stale tab whose commit is back (the branch switched back, the rebase aborted) loses its mark.
-  Gerrit's patchsets, compared with each other, never go stale.
+  Gerrit's patchsets, compared with each other, never go stale. In a staged review, the diffs
+  with your file on the right are of the change the review holds: once it moves on (to the next
+  change of the chain, or a newer patchset) they are stale too.
 - **The upstream moved on** (after a `git fetch`, `origin/main` has commits your branch has not):
   a row above the stack says so, *origin/main has 1 new commit*, with **Rebase onto
   origin/main**, which runs core's one command for it in the *ger* terminal (it shows the todo
@@ -195,8 +197,15 @@ The commits above your upstream, newest first. One row per commit:
   says there is nothing to push). On someone else's change you reviewed
   before, a line says what is new since, with **Show** to switch to it.
 - **Files**: added and removed lines per file, in the colours git gives them. Click for the
-  diff of what is compared; an added or deleted file opens on its own. The commit you are
-  standing on diffs against the real file, so you can fix things in the diff editor.
+  diff of what is compared; an added or deleted file opens on its own. What your working files
+  hold diffs against the real file: the commit you are standing on, so you can fix things in the
+  diff editor; and in a **staged review** (`ger review`, in the review worktree or in place), the
+  change under review, at the patchset checked out, against its base or since your last review.
+  There the comment threads are drawn where you write them, VS Code's Comments panel lists them,
+  and go to definition and references work as in any file. The right side is your file, so it can
+  be edited: an edit shows as an unstaged change in Source Control, and `ger review` refuses to
+  move on (`--next`, `--done`) until it is put back, saying how. Another patchset, a commit below
+  HEAD, or a file the change deletes is shown as it is in the commit, read-only.
 - **Comments**: unresolved first. Click one to open its file at the line, its thread expanded there. The chevron shows a chain whole: every comment in full; one about the whole change (no line in a file) opens that way on a click and has a box to reply right there. *Next / Previous Unresolved Comment* (command palette) step
   through the unresolved ones, across files. `Alt+F9` / `Shift+Alt+F9` do it too while the Change view or a
   diff of the change has focus; anywhere else they stay VS Code's own next / previous comment thread, which only
@@ -213,7 +222,7 @@ The commits above your upstream, newest first. One row per commit:
   the comment: a ```` ```suggestion ```` block of its text as a code block, a Gerrit fix suggestion
   as **Suggested fix**, where it applies and the new text. It is shown, not applied.
 - **New comments**: hover a line (or select lines) in the change's diff — or in your file, when
-  the shown commit is HEAD — and click **+**. Save it as:
+  your working files hold the shown commit (see *Files*) — and click **+**. Save it as:
   - **Draft**, when Gerrit has this very commit: on Gerrit, visible only to you until published.
     The first draft on a change says what publishes it, with a button that does it now: on your own
     commit your next push (**Publish Drafts…**), on anyone else's **Vote and Publish…**;

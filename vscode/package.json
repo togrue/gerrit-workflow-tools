@@ -354,8 +354,8 @@
       { "command": "ger.comment.escape", "key": "escape", "when": "commentEditorFocused && commentController == ger && !commentThreadIsEmpty && !comment" },
       { "command": "ger.comment.close", "key": "escape", "when": "commentFocused && !commentEditorFocused && commentController == ger" },
       { "command": "ger.comment.close", "key": "escape", "when": "editorTextFocus && !commentEditorFocused && !commentFocused && commentWidgetVisible && ger.canComment && !editorHasSelection && !editorHasMultipleSelections && !findWidgetVisible && !suggestWidgetVisible && !parameterHintsVisible && !inlineSuggestionVisible && !renameInputVisible && !referenceSearchVisible && !markersNavigationVisible && !inSnippetMode && !editorHoverVisible && !isInEmbeddedEditor" },
-      { "command": "ger.nextComment", "key": "alt+f9", "when": "ger.ready && ger.changeShown && (focusedView == ger.change || resourceScheme == ger-file)" },
-      { "command": "ger.prevComment", "key": "shift+alt+f9", "when": "ger.ready && ger.changeShown && (focusedView == ger.change || resourceScheme == ger-file)" }
+      { "command": "ger.nextComment", "key": "alt+f9", "when": "ger.ready && ger.changeShown && (focusedView == ger.change || resourceScheme == ger-file || ger.canComment)" },
+      { "command": "ger.prevComment", "key": "shift+alt+f9", "when": "ger.ready && ger.changeShown && (focusedView == ger.change || resourceScheme == ger-file || ger.canComment)" }
     ]
   }
 }

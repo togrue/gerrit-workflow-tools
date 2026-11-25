@@ -145,8 +145,9 @@ export class CommentThreads implements vscode.Disposable {
 
   /**
    * The repository path of `uri` when it shows the shown change's lines: the right side of its
-   * diffs, or your own file when the shown commit is HEAD. Elsewhere a line number would point
-   * at other text, so no new comment starts there.
+   * diffs, or your own file when the working files hold the shown commit (`worktreeHolds`: the
+   * commit you stand on, or a staged review's change). Elsewhere a line number would point at
+   * other text, so no new comment starts there.
    */
   private pathOf(uri: vscode.Uri): string | undefined {
     const [target, shown] = [this.view.target, this.view.shown];
@@ -157,7 +158,7 @@ export class CommentThreads implements vscode.Disposable {
     if (uri.scheme === FILE_SCHEME) {
       return uri.query === commit ? uri.path.slice(1) : undefined;
     }
-    return target.local && this.model.stack?.head === commit ? repoPath(this.model.repo, uri) : undefined;
+    return this.view.worktreeHolds(commit) ? repoPath(this.model.repo, uri) : undefined;
   }
 
   /** With no change shown, your own file is commented on as the commit you stand on has it: whether `uri` is such a file. */

@@ -46,7 +46,8 @@ export function stackBranch(stack: Stack): string | null {
  * the very commit of. `own`: its right side is your file.
  */
 export function markOf(diff: Diff, stack: Stack | undefined, own: boolean): DiffMark | undefined {
-  const local = diff.local_commit && typeof diff.since?.to_patch_set !== "number";
+  // Your file on the right is the commit only while the working files hold it, whichever way it was named.
+  const local = own || (diff.local_commit && typeof diff.since?.to_patch_set !== "number");
   if (!stack || !local || !stack.commits.some((commit) => commit.sha === diff.commit)) {
     return undefined;
   }
@@ -68,14 +69,16 @@ export function liveTitle(title: string): string {
 /** What the tabs are judged against: the stack as `GET /stack` has it now. */
 export interface StackNow {
   branch: string | null;
-  /** HEAD. */
+  /** HEAD, or in a staged review the change it stands for. */
   head: string | null;
   /** The stack's commits (during a rebase, the rebasing stack: what is replayed so far, the commit it stopped at, the todo as it was). */
   commits: ReadonlySet<string>;
 }
 
+/** In a staged review HEAD sits at the change's parent, and the change (what the working files hold) is what it stands for, as core says. */
 export function stackNow(stack: Stack): StackNow {
-  return { branch: stackBranch(stack), head: stack.head, commits: new Set(stack.commits.map((commit) => commit.sha)) };
+  const head = stack.staged_review?.commit ?? stack.head;
+  return { branch: stackBranch(stack), head, commits: new Set(stack.commits.map((commit) => commit.sha)) };
 }
 
 export type Fate = "keep" | "mark" | "unmark" | "close";

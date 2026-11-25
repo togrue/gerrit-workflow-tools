@@ -152,6 +152,21 @@ export class ChangeView extends WebView<ChangeVm> {
     return Boolean(this.target?.local) && this.version === "local";
   }
 
+  /**
+   * Whether the working files are `commit`'s content, so a diff of it shows your file on the right
+   * and its comment threads sit there, where language features work: the change a staged review
+   * holds here (core's `staged_review`), seen at that very commit; or, looking at your local
+   * commit, the one you stand on. Any other commit (another patchset, a commit below HEAD) is read
+   * from git as it is in the commit.
+   */
+  worktreeHolds(commit: string | null | undefined): boolean {
+    const stack = this.model.stack;
+    if (!commit || !stack) {
+      return false;
+    }
+    return stack.staged_review?.commit === commit || (this.showsLocal() && stack.head === commit);
+  }
+
   /** A new selection token (from `select`): the loads under the previous ones are dropped, and their requests called off. */
   private supersede(select: () => number): number {
     this.requests.abort();
@@ -521,8 +536,8 @@ export class ChangeView extends WebView<ChangeVm> {
       await vscode.commands.executeCommand("vscode.open", left);
       return;
     }
-    // The commit you are standing on diffs against the real file, so you can edit in place.
-    const editable = this.showsLocal() && this.model.stack?.head === diff.commit;
+    // What the working files hold diffs against the real file: comments drawn where they are written, F12, edits in place.
+    const editable = this.worktreeHolds(diff.commit);
     const right = editable ? vscode.Uri.file(path.join(this.model.repo, file.path)) : fileUri(diff.commit, file.path);
     if (file.status === "A") {
       await vscode.commands.executeCommand("vscode.open", right);
@@ -534,10 +549,11 @@ export class ChangeView extends WebView<ChangeVm> {
     await openDiff(left, right, title, markOf(diff, this.model.stack, editable));
   }
 
-  /** The document a path of the shown change lives in: your file for your local commit, the commit's otherwise. */
+  /** The document a path of the shown change lives in: your file for your local commit and for what the working files hold, the commit's otherwise. */
   locationUri(file: string): vscode.Uri {
     const commit = this.diff?.commit ?? this.shown?.sha;
-    return this.showsLocal() || !commit ? vscode.Uri.file(path.join(this.model.repo, file)) : fileUri(commit, file);
+    const yours = this.showsLocal() || this.worktreeHolds(commit) || !commit;
+    return yours ? vscode.Uri.file(path.join(this.model.repo, file)) : fileUri(commit, file);
   }
 
   /** Open where a comment or a CI finding points. */

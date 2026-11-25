@@ -100,6 +100,22 @@ test("during a rebase the tab is judged against the branch being rebased", () =>
   assert.deepEqual(stackNow(rebasing), { branch: "feature", head: commit("One").sha, commits: new Set([commit("One").sha, commit("Two").sha]) });
 });
 
+test("in a staged review, a diff with your file on its right is true while the review holds its change", () => {
+  const [base, change, next] = [commit("Base"), commit("Change"), commit("Next")];
+  const review = (held: typeof change) => ({ number: 2155, patch_set: 1, commit: held.sha, subject: held.summary, staged: true, worktree: "/r", branch: "change-2155" });
+  // HEAD sits at the change's parent; the change is what it stands for.
+  const staged = stack([base, change], { branch: null, head: base.sha, staged_review: review(change) });
+  assert.equal(stackNow(staged).head, change.sha);
+  // The interdiff to the patchset the review holds has your file on its right too: marked.
+  const between = { patch_set: 1, current_patch_set: 2, to_patch_set: 2, up_to_date: false, identical: false, rebased: false };
+  const mark = markOf(diff({ commit: change.sha, local_commit: false, since: between }), staged, true);
+  assert.deepEqual(mark, { commit: change.sha, branch: null, own: true, stale: false });
+  assert.equal(fateOf(mark!, clean, stackNow(staged), false), "keep");
+  // Review Next Change: the working files hold the next change, and the tab says it is stale.
+  const moved = stack([base, change, next], { branch: null, head: change.sha, staged_review: review(next) });
+  assert.equal(fateOf(mark!, clean, stackNow(moved), false), "mark");
+});
+
 test("only a diff whose right side is a local commit of the stack is marked", () => {
   const one = commit("One");
   const local = stack([one]);
