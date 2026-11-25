@@ -574,6 +574,25 @@ export async function run(): Promise<void> {
       },
     );
     await press(
+      "Select two rows, right-click › Copy SHA",
+      "Both SHAs are on the clipboard, one per line, oldest first: ready for git cherry-pick.",
+      async () => {
+        const [one, two] = [await stackRow("Refactor parser init"), await stackRow("Extract command routing")];
+        await vscode.commands.executeCommand("ger.copySha", { ...one, shas: [one.sha, two.sha] });
+        const oldestFirst = (api.model.stack?.commits ?? []).map((commit) => commit.sha).filter((sha) => sha === one.sha || sha === two.sha);
+        assert.deepEqual(ui.copied.split("\n"), oldestFirst);
+      },
+    );
+    await press(
+      "Select two rows, press l, then d",
+      "A picker titled \"Copy 2 changes\" lists what both can be copied as, each with its letter; d copies both Change-Ids, newest first.",
+      async () => {
+        const [one, two] = [await stackRow("Refactor parser init"), await stackRow("Extract command routing")];
+        await vscode.commands.executeCommand("ger.copy", { ...one, shas: [one.sha, two.sha] });
+      },
+      [{ pick: "Change-Id" }],
+    );
+    await press(
       "Drag \"Refactor parser init\" to the line above \"Extract command routing\"",
       "It swaps places with the commit above it; a notification offers Undo. Every commit keeps its votes: none changed its code, so Gerrit keeps them on the push.",
       drag(["Refactor parser init"], () => shownAt("Extract command routing")),

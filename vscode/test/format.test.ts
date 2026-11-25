@@ -5,6 +5,9 @@ import { test } from "node:test";
 
 import { Chain, CommitStatus, EventsStatus, Headline, Overview, Rebase, RebaseHeadline, RebaseStop } from "../src/api";
 import {
+  copyItems,
+  copyText,
+  formatOf,
   age,
   attentionIcon,
   blockedMove,
@@ -258,4 +261,34 @@ test("a review checkout says where the change is: the review worktree, or this c
     reviewOpened({ ...review, staged: false }, true),
     "Change 900 (patchset 2) is checked out for review: this checkout was switched to change-900. Leave Review Checkout switches back.",
   );
+});
+
+const pushed = { rev: "a1", title: "Add demo calc project with tests", number: 279, url: "http://gerrit/c/demo/+/279", local: true, changeId: "Iaec1460", sha: "a1b2c3" };
+const second = { rev: "d4", title: "Add calc tests", number: 281, url: "http://gerrit/c/demo/+/281", local: true, changeId: "Ibbb2222", sha: "d4e5f6" };
+const unpushed = { rev: "f7", title: "Work in progress", local: true, changeId: "Iccc3333", sha: "f7a8b9" };
+
+test("the copy forms are Gerrit's, with its letters, and the SHA", () => {
+  const of = (key: string) => copyText([pushed], formatOf(key));
+  assert.deepEqual(of("n"), ["279"]);
+  assert.deepEqual(of("u"), ["http://gerrit/c/demo/+/279"]);
+  assert.deepEqual(of("t"), ["279: Add demo calc project with tests | http://gerrit/c/demo/+/279"]);
+  assert.deepEqual(of("r"), ["http://gerrit/c/demo/+/279: Add demo calc project with tests"]);
+  assert.deepEqual(of("m"), ["[Add demo calc project with tests](http://gerrit/c/demo/+/279)"]);
+  assert.deepEqual(of("d"), ["Iaec1460"]);
+  assert.deepEqual(of("s"), ["a1b2c3"]);
+});
+
+test("several selected changes copy one line each, newest first as shown, SHAs oldest first for git cherry-pick; one never pushed has only its Change-Id and SHA", () => {
+  const targets = [second, unpushed, pushed];
+  assert.deepEqual(copyText(targets, formatOf("d")), ["Ibbb2222", "Iccc3333", "Iaec1460"]);
+  assert.deepEqual(copyText(targets, formatOf("s")), ["a1b2c3", "f7a8b9", "d4e5f6"]);
+  assert.deepEqual(copyText(targets, formatOf("n")), ["281", "279"]);
+  assert.deepEqual(
+    copyItems([unpushed]).map((item) => [item.shortcut, item.label, item.description]),
+    [
+      ["d", "Change-Id", "d  ·  Iccc3333"],
+      ["s", "SHA", "s  ·  f7a8b9"],
+    ],
+  );
+  assert.equal(copyItems(targets).find((item) => item.shortcut === "s")?.description, "s  ·  3 changes: a1b2c3 …");
 });

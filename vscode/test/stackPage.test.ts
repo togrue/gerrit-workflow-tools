@@ -187,3 +187,18 @@ test("Enter on a row's button is the button's, and Enter or Escape with no row f
   assert.equal(enter.defaultPrevented, false, "the browser presses the button");
   assert.deepEqual(page.opened(), [["Third", true]], "Enter on First's button does not show Third again");
 });
+
+test("l opens the copy menu for the selected rows, newest first; with no row selected, or with a modifier, it does nothing", () => {
+  const page = stackPage();
+  const commands = () => (page.flush(), page.posted).filter((message) => message.type === "command");
+  page.key("l");
+  assert.deepEqual(commands(), []);
+  page.click("Second");
+  page.click("Third", { shiftKey: true });
+  page.key("l", { ctrlKey: true });
+  assert.deepEqual(commands(), []);
+  const event = page.key("l");
+  assert.equal(event.defaultPrevented, true);
+  const [third, second] = [page.commits[2].sha, page.commits[1].sha];
+  assert.deepEqual(commands(), [{ type: "command", command: "ger.copy", args: [{ sha: third, shas: [third, second] }] }]);
+});

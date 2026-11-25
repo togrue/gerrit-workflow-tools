@@ -93,12 +93,45 @@ class Terminals {
 
 const terminals = new Terminals();
 
+const shortcutOf = (item: vscode.QuickPickItem): string | undefined => (item as { shortcut?: unknown }).shortcut as string | undefined;
+
+/**
+ * A picker whose items carry a `shortcut` letter: typing that letter picks the item at once, as
+ * Gerrit's menus do. Anything else typed filters as usual; the arrows and Enter still work.
+ */
+function pickByLetter<T extends vscode.QuickPickItem>(items: T[], options: vscode.QuickPickOptions): Thenable<T | undefined> {
+  return new Promise((resolve) => {
+    const picker = vscode.window.createQuickPick<T>();
+    picker.items = items;
+    picker.title = options.title;
+    picker.placeholder = options.placeHolder;
+    picker.matchOnDescription = options.matchOnDescription ?? false;
+    let picked: T | undefined;
+    const done = (item: T | undefined) => {
+      picked = item;
+      picker.hide();
+    };
+    picker.onDidChangeValue((value) => {
+      const hit = items.find((item) => shortcutOf(item) === value);
+      if (hit) {
+        done(hit);
+      }
+    });
+    picker.onDidAccept(() => done(picker.selectedItems[0] ?? picker.activeItems[0]));
+    picker.onDidHide(() => {
+      picker.dispose();
+      resolve(picked);
+    });
+    picker.show();
+  });
+}
+
 export const vscodeUi: Ui = {
   message(level, text, options, buttons) {
     const show = level === "error" ? vscode.window.showErrorMessage : level === "warning" ? vscode.window.showWarningMessage : vscode.window.showInformationMessage;
     return options.modal || options.detail ? show(text, { modal: options.modal, detail: options.detail }, ...buttons) : show(text, ...buttons);
   },
-  pick: (items, options) => vscode.window.showQuickPick(items, options),
+  pick: (items, options) => (items.some((item) => shortcutOf(item)) ? pickByLetter(items, options) : vscode.window.showQuickPick(items, options)),
   input: (options) => vscode.window.showInputBox(options),
   status(text, milliseconds) {
     vscode.window.setStatusBarMessage(text, milliseconds);

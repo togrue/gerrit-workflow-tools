@@ -1,5 +1,6 @@
 // How review state is put into words; how urgent it is, core says (`severity`). Pure: no `vscode`, no I/O.
 
+import type { ChangeTarget } from "./model";
 import { Attended, Chain, CommitStatus, EventsStatus, Headline, MoveConflict, Overview, Rebase, RebaseHeadline, RebaseStop, ReviewState, Severity, StackMoves } from "./api";
 
 /** Every reason core names (`Attention`, core/attention.py), in words: test/format.test.ts checks them against test/attention.json, which tests/test_attention_severity.py checks against core. */
@@ -313,4 +314,59 @@ export function commentLocation(file: string, lines?: { start: number; end: numb
   }
   const [start, end] = [Math.min(lines.start, lines.end), Math.max(lines.start, lines.end)];
   return start === end ? `${file}:${start}` : `${file}:${start}-${end}`;
+}
+
+// --- Copying what names a change ----------------------------------------------------
+// The forms Gerrit's "l" menu offers, with its letters, and the SHA. One value per change.
+
+export interface CopyFormat {
+  /** The letter that picks it in the menu, as in Gerrit's web UI. */
+  key: string;
+  label: string;
+  /** What is copied for `target`; undefined when the change does not have it (a commit never pushed has no number). */
+  of(target: ChangeTarget): string | undefined;
+  /** An id: the feedback shows its first 12 characters. */
+  id?: boolean;
+  /** Several changes are copied oldest first, the order `git cherry-pick` applies them in; the others go newest first, as shown. */
+  oldestFirst?: boolean;
+}
+
+const withUrl = (target: ChangeTarget, text: (url: string) => string) => (target.url ? text(target.url) : undefined);
+
+export const COPY_FORMATS: CopyFormat[] = [
+  { key: "n", label: "Change Number", of: (target) => (target.number === undefined ? undefined : String(target.number)) },
+  { key: "u", label: "Change URL", of: (target) => target.url ?? undefined },
+  { key: "t", label: "Title and URL", of: (target) => withUrl(target, (url) => `${target.number === undefined ? "" : `${target.number}: `}${target.title} | ${url}`) },
+  { key: "r", label: "URL and Title", of: (target) => withUrl(target, (url) => `${url}: ${target.title}`) },
+  { key: "m", label: "Markdown", of: (target) => withUrl(target, (url) => `[${target.title}](${url})`) },
+  { key: "d", label: "Change-Id", of: (target) => target.changeId ?? undefined, id: true },
+  { key: "s", label: "SHA", of: (target) => target.sha ?? undefined, id: true, oldestFirst: true },
+];
+
+export const formatOf = (key: string): CopyFormat => COPY_FORMATS.find((format) => format.key === key) as CopyFormat;
+
+/** What `format` copies for `targets` (newest first, as shown): one line per change that has it. */
+export function copyText(targets: ChangeTarget[], format: CopyFormat): string[] {
+  return (format.oldestFirst ? [...targets].reverse() : targets).map((target) => format.of(target)).filter((value): value is string => Boolean(value));
+}
+
+/** A picker item (a `vscode.QuickPickItem`). */
+export interface CopyItem {
+  label: string;
+  description: string;
+  format: CopyFormat;
+  /** The letter that picks this item at once, without Enter. */
+  shortcut: string;
+}
+
+/** The menu of what `targets` can be copied as, each with its letter and a preview of the first value. */
+export function copyItems(targets: ChangeTarget[]): CopyItem[] {
+  return COPY_FORMATS.flatMap((format) => {
+    const values = copyText(targets, format);
+    if (!values.length) {
+      return [];
+    }
+    const preview = values.length === 1 ? values[0] : `${values.length} changes: ${values[0]} …`;
+    return [{ label: format.label, description: `${format.key}  ·  ${preview}`, format, shortcut: format.key }];
+  });
 }
