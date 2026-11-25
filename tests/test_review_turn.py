@@ -20,8 +20,16 @@ import pytest
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_inbox import main as inbox_main
 from gerrit_workflow_tools.core.attention import Attention
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
-from gerrit_workflow_tools.core.inbox import OUTGOING, TO_REVIEW, Headline, InboxSection, pick_headline
+from gerrit_workflow_tools.core.inbox import (
+    OUTGOING,
+    TO_REVIEW,
+    Headline,
+    InboxSection,
+    build_to_review_query,
+    pick_headline,
+)
 from gerrit_workflow_tools.core.review_chain import assemble_review_chains, your_turn_since
 from tests.conftest import json_stdout, run_cli
 from tests.test_inbox import SELF, _change, _store
@@ -136,3 +144,32 @@ def test_the_headline_opens_the_base_most_change_whose_turn_is_yours() -> None:
     top = _alice(11, "b2", parent="b1", attention_since="2026-08-17 12:00:00.000000000")
     headline = pick_headline(_sections([base, top], []))
     assert isinstance(headline, Headline) and headline.member.number == 11
+
+
+def test_a_chain_in_the_queue_is_shown_whole_its_unready_changes_said_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A new patchset at the bottom lost the Verified vote above it: the chain stays whole
+    (finding 3 of the 2026-11-25 review walk), its changes that are not ready marked."""
+    base = _alice(40, "c1", attention_since="2026-08-17 12:00:00.000000000")
+    middle = _alice(41, "c2", parent="c1", verified=0, attention_since="2026-08-17 12:00:00.000000000")
+    top = _alice(42, "c3", parent="c2", verified=0)
+    alone = _alice(50, "x1", verified=0)  # a chain with nothing ready: counted, not listed
+    store = _store(base, middle, top, alone, stub=[base])
+    unready = build_to_review_query(Settings.from_cwd(tmp_path), projects=[], include_unready=True)
+    store.stub_query(unready, [base, middle, top, alone])
+    code, out, err = run_cli(tmp_path, inbox_main, ["--color=never", "--no-url"], monkeypatch, gerrit=store)
+    assert code == int(ExitCode.OK), err
+    assert "to review (1; 1 not ready, --unready shows it)" in out
+    assert "c42  3 changes" in out
+    assert "  └ c41  v?  cr?       # not ready: not verified yet" in out
+    assert "  └ c42  v?  cr?       # not ready: not verified yet" in out
+    assert "c50" not in out
+
+    _code, out, _err = run_cli(tmp_path, inbox_main, ["--json"], monkeypatch, gerrit=store)
+    [chain] = json_stdout(out)["sections"][0]["chains"]
+    assert [(m["number"], m["not_ready"], m["your_turn"]) for m in chain["members"]] == [
+        (40, None, True),
+        (41, "not verified yet", False),  # Gerrit's attention set holds you, but it is not in your queue
+        (42, "not verified yet", False),
+    ]

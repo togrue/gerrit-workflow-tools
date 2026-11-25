@@ -10,7 +10,14 @@ import sys
 
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.changeish import change_label
-from gerrit_workflow_tools.core.inbox import OUTGOING, TO_REVIEW, InboxSection, needs_author, section_summary
+from gerrit_workflow_tools.core.inbox import (
+    OUTGOING,
+    TO_REVIEW,
+    InboxSection,
+    needs_author,
+    not_ready_why,
+    section_summary,
+)
 from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain, format_age
 from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.commit_row import fmt_code_review, fmt_comments, fmt_verified
@@ -142,13 +149,17 @@ def _chain_cells(chain: ReviewChain, *, outgoing: bool) -> list[str]:
 def _member_lines(
     chain: ReviewChain, *, verbose: bool, outgoing: bool, columns: int | None, highlighter: SummaryHighlighter
 ) -> list[str]:
-    """The members below a chain's row: those with attention, every one with *verbose*."""
+    """The members below a chain's row: those with attention, to review those not ready, every one with *verbose*."""
     lines: list[str] = []
     for member in chain.members:
+        not_ready = not outgoing and not member.matched
         # A single change's own row says it all; a chain's row says the worst, so the member says which.
-        if chain.depth == 1 or not (verbose or member.attention_reasons):
+        if chain.depth == 1 or not (verbose or member.attention_reasons or not_ready):
             continue
         head = f"{color_text('  └ ', ANSI_DIM)}{_fmt_change_number(member.number, member.url)}  {_fmt_votes(member)}  "
+        if not_ready:  # in the chain, not in your queue: dim, and why
+            lines.append(f"{head}{color_text(f'# not ready: {not_ready_why(member)}', ANSI_DIM)}")
+            continue
         note = _attention_note(member, outgoing=outgoing)
         if note:
             lines.append(f"{head}{color_text('# ', ANSI_DIM)}{note}")

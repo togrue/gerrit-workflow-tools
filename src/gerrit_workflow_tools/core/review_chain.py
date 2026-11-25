@@ -47,7 +47,11 @@ class ChainMember:  # pylint: disable=too-many-instance-attributes
     """Of :attr:`comments_unresolved`, the chains whose last published comment is yours: they wait
     on the other side (``ChainTurn.THEIRS``)."""
     your_turn: bool = False
-    """It is your turn to review it (:func:`your_turn_since`); never on a change of yours."""
+    """It is your turn to review it (:func:`your_turn_since`), and the query matched it; never on a
+    change of yours."""
+    matched: bool = True
+    """The section's query matched it. Otherwise it is context: a parent the chain sits on, or a
+    change of the chain the *to review* query leaves out as not ready (no Verified, WIP, private)."""
 
 
 @dataclass(frozen=True)
@@ -78,6 +82,11 @@ class ReviewChain:  # pylint: disable=too-many-instance-attributes
     your_turn: bool = False
     """It is your turn to review a member: the chain waits on you. Otherwise a chain you review
     waits on its author; :attr:`unreviewed_age_seconds` is then 0."""
+
+    @property
+    def matched(self) -> bool:
+        """Whether the section's query matched a member: else the chain is all context (not ready)."""
+        return any(member.matched for member in self.members)
 
     @property
     def work_in_progress(self) -> bool:
@@ -167,7 +176,7 @@ def _worst_label(values: list[int | None]) -> int | None:
 
 
 def _to_member(
-    change: ChangeView, web_base: str, self_account_id: int | None = None, awaiting_reply: int = 0
+    change: ChangeView, web_base: str, self_account_id: int | None, awaiting_reply: int, *, matched: bool
 ) -> ChainMember | None:
     if change.number is None:
         return None
@@ -190,7 +199,8 @@ def _to_member(
         private=change.private,
         updated_by_you=change.updated_by(self_account_id),
         comments_awaiting_reply=awaiting_reply,
-        your_turn=your_turn_since(change, self_account_id) is not None,
+        your_turn=matched and your_turn_since(change, self_account_id) is not None,
+        matched=matched,
     )
 
 
@@ -211,13 +221,23 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
     self_account_id: int | None,
     unmatched: set[str],
     awaiting_reply: Mapping[str, int],
+    matched: set[str],
 ) -> ReviewChain | None:
-    """Build one ReviewChain from a connected component, or None if it has no numbers."""
+    """Build one ReviewChain from a connected component, or None if it has no numbers. Its clock
+    runs from the *matched* members whose turn is yours."""
     ordered_ids = component.ordered
     members = [
         member
         for member_id in ordered_ids
-        if (member := _to_member(payloads[member_id], web_base, self_account_id, awaiting_reply.get(member_id, 0)))
+        if (
+            member := _to_member(
+                payloads[member_id],
+                web_base,
+                self_account_id,
+                awaiting_reply.get(member_id, 0),
+                matched=member_id in matched,
+            )
+        )
     ]
     if not members:
         return None
@@ -225,7 +245,9 @@ def _chain_from_component(  # pylint: disable=too-many-arguments,too-many-locals
     top_member = next((member for member in members if member.number == top_number), members[-1])
     last_activity = max((member.updated for member in members if member.updated is not None), default=None)
     last = [member for member in members if member.updated == last_activity]
-    stamps = (your_turn_since(payloads[member_id], self_account_id) for member_id in ordered_ids)
+    stamps = (
+        your_turn_since(payloads[member_id], self_account_id) for member_id in ordered_ids if member_id in matched
+    )
     unreviewed_at = min((stamp for stamp in stamps if stamp is not None), default=None)
     project = top_member.project
     return ReviewChain(
@@ -265,7 +287,8 @@ def assemble_review_chains(  # pylint: disable=too-many-arguments,too-many-local
     """Assemble review chains from a query result plus optional parent follow-up rows.
 
     *queried* members seed chains even when you are not a reviewer on every
-    follow-up row — those extra open changes are context. Merged/abandoned
+    follow-up row — those extra open changes are context (:attr:`ChainMember.matched` false); a
+    chain of follow-up rows alone has no member matched. Merged/abandoned
     follow-up rows are ignored (they are the ground the chain sits on).
     *follow_up_unmatched* are parent SHAs that a follow-up returned for a
     non-current revision: the chain is then flagged ``partial_chain``. *awaiting_reply* says, by
@@ -287,6 +310,7 @@ def assemble_review_chains(  # pylint: disable=too-many-arguments,too-many-local
             self_account_id=self_account_id,
             unmatched=unmatched,
             awaiting_reply=awaiting_reply or {},
+            matched=queried_ids,
         )
         if chain is not None:
             chains.append(chain)

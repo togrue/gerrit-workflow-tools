@@ -385,7 +385,6 @@ def test_module_size_ratchet() -> None:
 TOO_MANY_BASELINE = {
     "cli_log.py": 1,
     "core/gerrit/change_view.py": 1,
-    "core/gerrit/service.py": 1,
     "core/gerrit_change_status.py": 1,
     "core/ready_calc.py": 1,
     "core/review_chain.py": 6,

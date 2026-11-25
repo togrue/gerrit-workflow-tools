@@ -69,6 +69,8 @@ export interface Member {
   sha: string | null;
   /** Somebody else's change whose turn is yours: Gerrit's attention set holds you (else: not reviewed since its last patchset). */
   your_turn?: boolean;
+  /** Under To review, a change of the chain the section's query left out, and why: `not verified yet`, `WIP`, `private`, `not asked of you`. */
+  not_ready?: string | null;
 }
 
 export interface Chain {

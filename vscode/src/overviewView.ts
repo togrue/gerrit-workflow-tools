@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 
 import { Chain, Headline, Member, Section, Stack } from "./api";
 import { memberTarget } from "./changeLoad";
-import { CHAIN_SORTS, ChainSort, chainDescription, plural, reasonWords, sortedChains, votes } from "./format";
+import { CHAIN_SORTS, ChainSort, chainDescription, plural, reasonWords, sentence, sortedChains, votes } from "./format";
 import { attentionThemeIcon, icon } from "./icons";
 import { ChangeTarget, Model } from "./model";
 import { SECTION_TITLES, TREE_WORDS, changeRowContext, waitsOnYou } from "./rows";
@@ -205,10 +205,18 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
   private memberItem(member: Member, chain: Chain, section: Section): vscode.TreeItem {
     const item = new vscode.TreeItem(member.subject);
     item.id = `${chain.key}/${member.number}`;
-    item.description = `${member.number} · ${votes(member)}${member.local_sha ? " · in your stack" : ""}`;
-    // Under To review, a change with nothing wrong shows whose turn it is: an eye while it is yours.
-    item.iconPath = section.name === "to-review" && member.severity === "ok" && member.your_turn ? icon("eye") : attentionThemeIcon(member);
-    item.tooltip = reasonWords(member.attention_reasons) || (member.your_turn ? "waiting for your review" : "no open issues");
+    const notReady = member.not_ready ? ` · ${member.not_ready}` : "";
+    item.description = `${member.number} · ${votes(member)}${notReady}${member.local_sha ? " · in your stack" : ""}`;
+    // Under To review, a change with nothing wrong shows whose turn it is: an eye while it is yours. One
+    // not ready yet is part of the chain, not of your queue: greyed out.
+    const toReview = section.name === "to-review";
+    item.iconPath = member.not_ready
+      ? icon("circle-slash", "disabledForeground")
+      : toReview && member.severity === "ok" && member.your_turn
+        ? icon("eye")
+        : attentionThemeIcon(member);
+    const words = reasonWords(member.attention_reasons) || (member.your_turn ? "waiting for your review" : "no open issues");
+    item.tooltip = member.not_ready ? `Not ready for review: ${member.not_ready}. ${sentence(words)}.` : words;
     item.contextValue = changeRowContext({ kind: "change", url: Boolean(member.url), local: member.local_sha !== null });
     item.command = { command: "ger.openChange", title: "Show Change", arguments: [memberTarget(member, chain, this.model.stack)] };
     return item;

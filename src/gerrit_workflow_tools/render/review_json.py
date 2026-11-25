@@ -8,7 +8,14 @@ from datetime import datetime
 
 from gerrit_workflow_tools.core.attention import Attention, attention_severity
 from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
-from gerrit_workflow_tools.core.inbox import Headline, InboxSection, RebaseHeadline, section_summary
+from gerrit_workflow_tools.core.inbox import (
+    TO_REVIEW,
+    Headline,
+    InboxSection,
+    RebaseHeadline,
+    not_ready_why,
+    section_summary,
+)
 from gerrit_workflow_tools.core.rebase_state import RebaseStop
 from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain, format_age
 from gerrit_workflow_tools.core.review_checkout import ReviewState
@@ -22,8 +29,9 @@ def iso_utc(moment: datetime | None) -> str | None:
     return moment.isoformat().replace("+00:00", "Z") if moment else None
 
 
-def member_json(member: ChainMember) -> dict[str, object]:
-    """One chain member: identity, current patch set, votes, unresolved comments, attention."""
+def member_json(member: ChainMember, *, to_review: bool = False) -> dict[str, object]:
+    """One chain member: identity, current patch set, votes, unresolved comments, attention; under
+    *to review*, why it is not ready when the section's query left it out."""
     return {
         "number": member.number,
         "change_id": member.change_id,
@@ -37,11 +45,12 @@ def member_json(member: ChainMember) -> dict[str, object]:
         "url": member.url,
         "sha": member.sha,
         "your_turn": member.your_turn,
+        "not_ready": not_ready_why(member) if to_review and not member.matched else None,
     }
 
 
-def chain_json(chain: ReviewChain) -> dict[str, object]:
-    """One review chain: its top, clocks, worst votes, and members base to top."""
+def chain_json(chain: ReviewChain, *, to_review: bool = False) -> dict[str, object]:
+    """One review chain: its top, clocks, worst votes, and members base to top (*to review*: :func:`member_json`)."""
     return {
         "key": chain.key,
         "top": {
@@ -66,7 +75,7 @@ def chain_json(chain: ReviewChain) -> dict[str, object]:
         "severity": attention_severity(chain.attention_reasons).value,
         "partial_chain": chain.partial_chain,
         "your_turn": chain.your_turn,
-        "members": [member_json(member) for member in chain.members],
+        "members": [member_json(member, to_review=to_review) for member in chain.members],
     }
 
 
@@ -131,7 +140,7 @@ def sections_json(sections: list[InboxSection]) -> list[dict[str, object]]:
             "name": section.name,
             "query": section.query,
             "summary": section_summary(section),
-            "chains": [chain_json(chain) for chain in section.chains],
+            "chains": [chain_json(chain, to_review=section.name == TO_REVIEW) for chain in section.chains],
         }
         for section in sections
     ]

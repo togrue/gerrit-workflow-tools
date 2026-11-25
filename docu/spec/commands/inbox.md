@@ -57,7 +57,7 @@ This keeps assembly at a few round trips regardless of chain count: one light re
 
 ### Ready
 
-A change is **ready to review** when it is open, not WIP, not private, and passes the CI gate (`ger.inboxRequireVerified`, default on). Everything else is filtered out unless `--all` is given.
+A change is **ready to review** when it is open, not WIP, not private, and passes the CI gate (`ger.inboxRequireVerified`, default on). Readiness is a **chain's**: a chain is listed when any member is ready, and then whole. Its members that are not ready (a new patchset at the bottom took the Verified vote of those above it, a WIP change on top) stay in the chain, marked `# not ready: not verified yet` (`WIP`, `private`, or `not asked of you` when you are no reviewer of it), and are never your turn. A chain with no ready member is left out unless `--unready` is given; the heading counts it.
 
 ### Your turn
 
@@ -170,11 +170,11 @@ An *outgoing* line is yours: it has no waiting clock and no owner, and ends in `
 | `# drafts of yours on c<n>` | Members holding drafts of yours: nobody sees them until you publish (`ger reply --publish c<n>`). One light `has:draft` query beside the section queries, text view only (`InboxSection.drafted`) |
 | URL | Gerrit page for the **chain top** (default on) |
 
-**The heading** counts the chains shown. *To review* adds how many are your turn, when some wait on their author, and the chains its query leaves out as not ready (WIP, private, no `Verified`), when there are any: one more query beside it, asked only for the text view and never with `--unready` or a custom `ger.inboxToReviewQuery`. *Outgoing* adds how many need you (`core.inbox.needs_author`: failed CI, unresolved comments, a negative vote, or WIP).
+**The heading** counts the chains shown. *To review* adds how many are your turn, when some wait on their author, and the chains its query leaves out as not ready (WIP, private, no `Verified`), when there are any. Both come from one more query beside it, the same without the readiness terms (`build_to_review_query(include_unready=True)`), which also finds the members of a listed chain that are not ready; never with `--unready` or a custom `ger.inboxToReviewQuery`, which leave nothing out. *Outgoing* adds how many need you (`core.inbox.needs_author`: failed CI, unresolved comments, a negative vote, or WIP).
 
 **Quiet chains fold**: outgoing, those waiting only on reviewers or CI become one dim line, `+ N chains wait on reviewers or CI (-v lists them)`; to review, those you reviewed that wait on their author, `+ N chains wait on the author (-v lists them)`. They sort after the ones that need you. `--json` and `--ai` list every chain. With nothing your turn, *to review* prints `(nothing waits on your review)` and no summary or `next:` line.
 
-**Indented member lines** appear for members with attention reasons — CI failure, unresolved comments, negative vote — on a chain of several changes, the top included. A single change's row already says it all. A healthy chain stays one line plus its URL.
+**Indented member lines** appear for members with attention reasons — CI failure, unresolved comments, negative vote — and, to review, for members that are not ready (dim, `# not ready: not verified yet`), on a chain of several changes, the top included. A single change's row already says it all. A healthy chain stays one line plus its URL.
 
 **The summary** of *to review* counts the chains whose turn is yours. **The footer** names the command that starts on the longest-waiting of them where review begins, its bottom: `next: ger review c4321 --bottom, then --next`. A row names its chain by the top, and `ger review` checks out the change named, so `--bottom` starts at the chain's lowest open change instead: the same command works for every row.
 
@@ -253,7 +253,7 @@ A section line counts its chains and changes (`none` when empty). A chain line i
           "members": [
             { "number": 4317, "subject": "feat: config plumbing", "sha": "3f2a…", "verified": 1,
               "code_review": 2, "comments_unresolved": 0, "attention_reasons": [], "severity": "ok",
-              "your_turn": true }
+              "your_turn": true, "not_ready": null }
           ]
         }
       ]
@@ -263,7 +263,7 @@ A section line counts its chains and changes (`none` when empty). A chain line i
 }
 ```
 
-A member's `sha` is the commit of its current patch set (`null` when Gerrit did not send it). `your_turn` is [whose turn](#your-turn) it is, per member and for the chain; never true on a change of yours. The *to review* `summary` counts the chains whose turn is yours, and `waiting_on_author` the others.
+A member's `sha` is the commit of its current patch set (`null` when Gerrit did not send it). `your_turn` is [whose turn](#your-turn) it is, per member and for the chain; never true on a change of yours, nor on a member that is not ready. Under *to review*, `not_ready` says why a member of a listed chain is not ready (`not verified yet`, `WIP`, `private`, `not asked of you`); `null` for one that is. The *to review* `summary` counts the chains whose turn is yours, and `waiting_on_author` the others.
 
 `attention_reasons` reuses the vocabulary from `ger log` ([Reading-ger-log.md](../../Reading-ger-log.md#attention-hints-trailing--)) so one consumer handles both. Inbox members only emit `ci-failed`, `unresolved-comments` (a comment chain waits on you), `awaiting-reply` (every one waits on the other side: your published comment is its last word) and `review-issues` — there is no local patchset to align. `comments_awaiting_reply` beside `comments_unresolved` counts those waiting on the other side; telling them apart reads each commented change's comments once, from the cache while the change has not moved. `severity` is the most urgent of them, as `ger log --json` says it ([log](log.md#json-fields)).
 

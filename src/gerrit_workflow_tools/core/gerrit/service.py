@@ -240,12 +240,13 @@ class GerritService:
                 except Exception as exc:  # pylint: disable=broad-exception-caught
                     logger.debug("%s follow-up failed for %s: %s", kind, change.key, exc)
 
-    def fetch_review_chains(  # pylint: disable=too-many-locals
+    def fetch_review_chains(
         self,
         query: str,
         *,
         now: datetime | None = None,
         self_account_id: int | None = None,
+        context_query: str | None = None,
     ) -> list[ReviewChain]:
         """Query Gerrit and assemble **review chains**. Never resolves stack context.
 
@@ -253,11 +254,20 @@ class GerritService:
         must not call :func:`resolve_stack_context`. Gerrit is always asked what matches
         (:meth:`ChangeApi.query`: a light listing, details from the cache where current),
         then once more, batched, for parents missing from the result set.
+
+        *context_query*, asked beside *query*, finds the rest of each chain: its changes join the
+        chain they belong to as members *query* did not match (``ChainMember.matched``); a chain
+        of its changes alone has no member matched.
         """
         moment = now if now is not None else datetime.now(timezone.utc)
-        rows = [ChangeView.from_payload(row) for row in self.changes.query(query)]
+        asked = [query] if context_query is None else [query, context_query]
+        answers = parallel_map([partial(self.changes.query, q) for q in asked])
+        rows, *context = [[ChangeView.from_payload(row) for row in answer] for answer in answers]
         account_id = self_account_id if self_account_id is not None else self.self_account_id()
-        follow_up_rows, unmatched = self.changes.parents(rows)
+        follow_up_rows = [view for views in context for view in views]  # the queried ones among them are skipped
+        parents, unmatched = self.changes.parents([*rows, *follow_up_rows])
+        follow_up_rows += parents
+        every = list({change.key: change for change in [*follow_up_rows, *rows]}.values())
         return assemble_review_chains(
             rows,
             follow_up_rows,
@@ -265,7 +275,7 @@ class GerritService:
             now=moment,
             self_account_id=account_id,
             follow_up_unmatched=unmatched,
-            awaiting_reply=self._comments_awaiting_reply([*rows, *follow_up_rows], account_id),
+            awaiting_reply=self._comments_awaiting_reply(every, account_id),
         )
 
     def _comments_awaiting_reply(self, changes: Sequence[ChangeView], me: int | None) -> dict[str, int]:

@@ -38,7 +38,8 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
   when it is your turn again. The activity bar's badge counts the chains whose turn is yours.
   *Outgoing*: your open chains.
 - One row per chain, showing its top change, worst votes, unresolved comments and age. Expand
-  it for the chain's changes. A `●` marks new activity.
+  it for the chain's changes: all of them, also those not ready for review yet (greyed out, with
+  why: *not verified yet*, *WIP*). A `●` marks new activity.
 - The icon in front is the most urgent thing about the chain or change: an error for failed CI or
   a broken change (abandoned, merged drift, invalid or missing Change-Id), a comment bubble for
   unresolved comments (the ones the Change view lists as open), a warning for a negative vote, a

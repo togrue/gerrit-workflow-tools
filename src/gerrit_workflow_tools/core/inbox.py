@@ -151,6 +151,19 @@ def review_turns(service: GerritService, numbers: Collection[int]) -> dict[int, 
     return {number: turns[number] for number in numbers if number in turns}
 
 
+def not_ready_why(member: ChainMember) -> str:
+    """Why the *to review* query left out *member* of a chain it lists, as far as the change's
+    facts tell: ``WIP``, ``private``, ``not verified yet``; else ``not asked of you`` (you are no
+    reviewer of it)."""
+    if member.work_in_progress:
+        return "WIP"
+    if member.private:
+        return "private"
+    if member.verified is None or member.verified < 1:
+        return "not verified yet"
+    return "not asked of you"
+
+
 def project_scope(
     cwd: Path | str | None,
     settings: Settings,
@@ -227,16 +240,18 @@ def load_inbox(
     include_unready: bool = False,
     limit: int | None = None,
     sections: Sequence[str] = (TO_REVIEW, OUTGOING),
-    count_not_ready: bool = False,
     with_drafts: bool = False,
 ) -> list[InboxSection]:
     """The wanted inbox *sections*, queried in parallel: *to review*, then *outgoing* (your open
     chains). A section not wanted is not asked for.
 
-    *count_not_ready* also asks, beside them, for the *to review* chains its built-in query leaves
-    out as not ready (:attr:`InboxSection.not_ready`); never with ``--unready`` or a custom query.
-    *with_drafts* asks, beside them, which changes hold drafts of yours (one light ``has:draft``
-    query, :attr:`InboxSection.drafted`).
+    Readiness is a chain's: *to review* lists a chain when its query matches a member, and then
+    the whole chain, its members that are not ready among them (:attr:`ChainMember.matched`
+    false). Its built-in query is asked beside the same query without the readiness terms, which
+    finds them; the chains of that one alone are counted as not ready
+    (:attr:`InboxSection.not_ready`). Not with ``--unready`` or a custom query, which leave
+    nothing out. *with_drafts* asks, beside them, which changes hold drafts of yours (one light
+    ``has:draft`` query, :attr:`InboxSection.drafted`).
 
     Both are narrowed to :func:`project_scope` of the service's directory. *To review* keeps the
     inbox order (longest unreviewed first) and honours *limit*, else ``ger.inboxLimit``.
@@ -252,21 +267,22 @@ def load_inbox(
     queries = {name: build() for name, build in every.items() if name in sections}
     if not queries:
         return []
-    counted = count_not_ready and TO_REVIEW in queries and not include_unready and not settings.inbox_to_review_query
-    asked = (
-        {**queries, _UNREADY: build_to_review_query(settings, projects=names, include_unready=True)}
-        if counted
-        else queries
-    )
+    gated = TO_REVIEW in queries and not include_unready and not settings.inbox_to_review_query
+    context = {TO_REVIEW: build_to_review_query(settings, projects=names, include_unready=True)} if gated else {}
     account = service.self_account_id()
     fetch = partial(service.fetch_review_chains, now=moment, self_account_id=account)
-    jobs: list[Callable[[], Any]] = [partial(fetch, query) for query in asked.values()]
+    jobs: list[Callable[[], Any]] = [
+        partial(fetch, query, context_query=context.get(name)) for name, query in queries.items()
+    ]
     if with_drafts:  # beside the sections, not after them: no wait added
         jobs.append(partial(service.comments.drafted_changes, None, n=100))
     answers = parallel_map(jobs)
     drafted = frozenset(view.number for view in answers.pop()) if with_drafts else frozenset()
-    fetched: dict[str, list[ReviewChain]] = dict(zip(asked, answers, strict=True))
-    not_ready = _not_ready(fetched.pop(_UNREADY), fetched[TO_REVIEW]) if counted else None
+    fetched: dict[str, list[ReviewChain]] = dict(zip(queries, answers, strict=True))
+    not_ready = None
+    if TO_REVIEW in fetched:
+        not_ready = sum(1 for chain in fetched[TO_REVIEW] if not chain.matched) if gated else None
+        fetched[TO_REVIEW] = [chain for chain in fetched[TO_REVIEW] if chain.matched]
     cap = limit if limit is not None else settings.inbox_limit
     if cap is not None and TO_REVIEW in fetched:
         fetched[TO_REVIEW] = fetched[TO_REVIEW][: max(0, cap)]
@@ -282,15 +298,6 @@ def load_inbox(
         )
         for name, chains in fetched.items()
     ]
-
-
-_UNREADY = "unready"
-
-
-def _not_ready(every: list[ReviewChain], ready: list[ReviewChain]) -> int:
-    """How many of *every* chain share no change with the *ready* ones."""
-    shown = {member.number for chain in ready for member in chain.members}
-    return sum(1 for chain in every if not any(member.number in shown for member in chain.members))
 
 
 def pick_headline(
