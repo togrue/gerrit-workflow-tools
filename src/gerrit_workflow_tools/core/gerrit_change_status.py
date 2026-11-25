@@ -164,6 +164,8 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     ci_pipelines: list[CiPipeline] = field(default_factory=list)
     gerrit_url: str | None = None
     number: int | None = None  # the Gerrit change number, once pushed
+    current_patch_set: int | None = None
+    """The number of Gerrit's current patch set, once pushed: what "Gerrit's patchset 15" names."""
     last_pushed_votes: tuple[int | None, int | None] | None = None
     """(Verified, Code-Review) on the pushed patchset while this commit is ahead of it with other code.
 
@@ -327,6 +329,7 @@ def build_log_commit(
             comments_unresolved=change.unresolved_comments or 0,
             gerrit_url=change.url(web_base),
             number=change.number,
+            current_patch_set=change.current_revision_number,
             last_pushed_votes=(change.verified, change.code_review) if votes_moved_on else None,
             submittable=change.submittable and not newer,
             votes=()

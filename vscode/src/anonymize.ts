@@ -237,7 +237,7 @@ const STACK: Shape = {
 };
 
 /** `Local commit 1a2b3c4`, `Patchset 3 (current)`, `Base commit`: a side From or To names. A patchset's number says how many there were, as a count does. */
-const SIDE_LABEL = around(/Local commit ([0-9a-f]+)/, (names, sha) => `Local commit ${names.hex(sha)}`, ours([new RegExp(`Patchset ${PATCHSET}( \\((current|you reviewed it|current, you reviewed it)\\))?`), ...Object.values(SIDE_WORDS)]));
+const SIDE_LABEL = around(/Local commit ([0-9a-f]+)/, (names, sha) => `Local commit ${names.hex(sha)}`, ours([new RegExp(`Patchset ${PATCHSET}( \\((current|you reviewed it|current, you reviewed it)\\))?`), ...Object.values(SIDE_WORDS).filter((words) => typeof words === "string"), new RegExp(`Gerrit's patchset ${PATCHSET} \\(current\\)`)]));
 const SIDE = ours([new RegExp(`base|local|current|reviewed|${PATCHSET}`)]);
 const PICKER: Shape = { options: [{ value: SIDE, label: SIDE_LABEL, disabled: KEEP }], selected: SIDE };
 const MODE = ours(Object.keys(MODES));

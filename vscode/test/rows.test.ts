@@ -360,6 +360,14 @@ test("To starts on the local commit and lists Gerrit's patchsets, newest first; 
   assert.deepEqual([unpushed?.from.options.map((option) => option.value), unpushed?.to.options.map((option) => option.value)], [["base"], ["local"]]);
 });
 
+test("before the patchset list has come, Gerrit's current patchset is named by its number when the commit's status says it", () => {
+  const numbered = changeVm(state({ shown: shown({ current_patch_set: 15 }) })).compare;
+  assert.deepEqual(numbered?.to.options.at(-1), { value: "current", label: "Gerrit's patchset 15 (current)" });
+  assert.equal(numbered?.from.options[0].label, "Gerrit's patchset 15 (current)");
+  // An older ger serve does not say it: the words alone, as before.
+  assert.equal(changeVm(state()).compare?.to.options.at(-1)?.label, "Gerrit's current patchset");
+});
+
 test("From offers only patchsets older than To; the symbolic sides show as the patchsets they are", () => {
   const disabled = (extra: Partial<ChangeState>) => changeVm(state({ patchsets, ...extra })).compare?.from.options.filter((option) => option.disabled).map((option) => option.value);
   assert.deepEqual(disabled({}), [], "against your commit, every patchset is older");

@@ -314,7 +314,19 @@ function patchsetLabel(number: number, patchsets: Patchsets): string {
 }
 
 /** What each picker says while the patchsets are not known yet, for the sides that name one. */
-export const SIDE_WORDS = { base: "Base commit", current: "Gerrit's current patchset", reviewed: "Patchset you last reviewed", notReviewed: "Patchset you last reviewed (none)" };
+export const SIDE_WORDS = {
+  base: "Base commit",
+  current: "Gerrit's current patchset",
+  /** Gerrit's current patchset by its number, as the commit's status names it: the list need not have come. */
+  currentNumbered: (number: number) => `Gerrit's patchset ${number} (current)`,
+  reviewed: "Patchset you last reviewed",
+  notReviewed: "Patchset you last reviewed (none)",
+};
+
+/** Gerrit's current patchset before the list has come: by its number when the commit's status says it. */
+function currentLabel(shown: ShownCommit): string {
+  return shown.current_patch_set ? SIDE_WORDS.currentNumbered(shown.current_patch_set) : SIDE_WORDS.current;
+}
 
 /** The patchsets newest first: both pickers list the versions as a timeline, the newest on top. */
 function newestFirst(patchsets: Patchsets): number[] {
@@ -331,7 +343,7 @@ function toPicker(state: ChangeState): { options: Option[]; selected: string } {
   if (shown.pushed && patchsets) {
     options.push(...newestFirst(patchsets).map((number) => ({ value: String(number), label: patchsetLabel(number, patchsets) })));
   } else if (shown.pushed) {
-    options.push({ value: "current", label: SIDE_WORDS.current });
+    options.push({ value: "current", label: currentLabel(shown) });
   }
   const wanted = String(resolveSide(state.version, patchsets));
   return { options, selected: options.some((option) => option.value === wanted) ? wanted : (options[0]?.value ?? "") };
@@ -348,7 +360,7 @@ function fromPicker(state: ChangeState): { options: Option[]; selected: string }
       options.push({ value: "reviewed", label: SIDE_WORDS.notReviewed, disabled: true });
     }
   } else if (shown.pushed) {
-    options.push({ value: "current", label: SIDE_WORDS.current, disabled: to === "current" }, { value: "reviewed", label: SIDE_WORDS.reviewed });
+    options.push({ value: "current", label: currentLabel(shown), disabled: to === "current" }, { value: "reviewed", label: SIDE_WORDS.reviewed });
   }
   options.push({ value: "base", label: SIDE_WORDS.base });
   const wanted = String(resolveSide(state.from, patchsets));
