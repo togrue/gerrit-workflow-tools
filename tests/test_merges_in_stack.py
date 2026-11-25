@@ -82,14 +82,25 @@ def _below_merge(repo: Path) -> str:
     return git_out("rev-parse", f"{_merge(repo)}^1", cwd=repo)
 
 
-def test_ger_rebase_refuses_to_flatten_a_merge_and_changes_nothing(
+def test_ger_rebase_below_a_merge_refuses_to_flatten_it_and_changes_nothing(
     merged: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     head = git_out("rev-parse", "HEAD", cwd=merged)
-    code, _out, err = run_cli(merged, rebase_main, [], monkeypatch)
+    code, _out, err = run_cli(merged, rebase_main, [_below_merge(merged)], monkeypatch)
     assert code == ExitCode.USAGE, err
     assert "is a merge commit, which git rebase would leave out" in err
     assert "nothing was changed" in err and "git rebase -i --rebase-merges" in err and "rerere" in err
+    assert git_out("rev-parse", "HEAD", cwd=merged) == head
+
+
+def test_ger_rebase_in_place_rebases_above_the_merge_and_keeps_it(
+    merged: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    head, merge = git_out("rev-parse", "HEAD", cwd=merged), _merge(merged)
+    monkeypatch.setenv("GIT_EDITOR", "true")
+    code, _out, err = run_cli(merged, rebase_main, [], monkeypatch)
+    assert code == 0, err
+    assert f"({merge[:7]}) is a merge commit; it and the commits below it stay as they are" in err
     assert git_out("rev-parse", "HEAD", cwd=merged) == head
 
 

@@ -345,7 +345,7 @@ sequenceDiagram
 | Command | Flow |
 |---------|------|
 | **`ger edit` / `ger reword`** | Resolve REV via `resolve_stack_changeish` → set `GIT_SEQUENCE_EDITOR=rebase_sequence_editor` → `git rebase -i` |
-| **`ger rebase`** | Compute onto ref via `stack.merge_base_with_target` → set `GIT_SEQUENCE_EDITOR=rebase_enricher` → `git rebase -i` (enricher fetches Gerrit data, then opens real editor) |
+| **`ger rebase`** | Compute onto ref: `REV`, `--onto-remote`, else where the stack sits (`stack.rewrite_base`) → set `GIT_SEQUENCE_EDITOR=rebase_enricher` → `git rebase -i` (enricher fetches Gerrit data, then opens real editor) |
 | **`ger fix`** | `resolve_stack_changeish` → `git commit --fixup` |
 | **`ger change-id --fix`** | `commit-tree` message rewrite using `change_id` helpers |
 | **`ger push`** | See push pipeline above |
