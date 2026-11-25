@@ -17,8 +17,6 @@ from gerrit_workflow_tools.core.config_write import ConfigWrite, apply_config_wr
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit_setup import (
     INSECURE_HTTP,
-    commit_msg_hook_path,
-    install_commit_msg_hook,
     needs_insecure_opt_in,
     normalize_web_url,
     run_with,
@@ -157,20 +155,6 @@ def _save(values: _Values, *, global_config: bool, cwd: Path | None) -> str:
     return f"saved to your {'global' if global_config else 'repository'} git config: {keys} and ger.token"
 
 
-def _hook(run: RunContext, *, skip: bool) -> None:
-    """Install Gerrit's commit-msg hook where the repository lacks one, and say how to take it out again."""
-    path = commit_msg_hook_path(run.cwd) if run.settings.in_repository else None
-    if skip or path is None or path.exists():
-        return
-    try:
-        install_commit_msg_hook(run, path)
-    except (GerritApiError, OSError) as error:
-        print(f"could not install Gerrit's commit-msg hook ({error}); `ger setup` again retries it", file=sys.stderr)
-        return
-    print(f"installed Gerrit's commit-msg hook, so each new commit gets a Change-Id: {path}", file=sys.stderr)
-    print(f"to take it out: rm {path}", file=sys.stderr)
-
-
 def _run_setup(args: argparse.Namespace, run: RunContext, gerrit: GerritRest | None) -> int:
     global_config = not args.local
     cwd = run.cwd
@@ -215,7 +199,6 @@ def _run_setup(args: argparse.Namespace, run: RunContext, gerrit: GerritRest | N
         print(f"Signed in as {who}{email} on {values.url}", file=sys.stderr)
         break
     print(_save(values, global_config=global_config, cwd=cwd), file=sys.stderr)
-    _hook(checked, skip=args.no_hook)
     say("next: `ger log` shows your stack and its reviews; `ger inbox` the changes waiting for you")
     return int(ExitCode.OK)
 
@@ -225,8 +208,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="ger setup",
         description=(
             "Configure ger.webUrl, ger.user and ger.token in git config (what every Gerrit command needs), "
-            "check them with Gerrit before saving, and install Gerrit's commit-msg hook in this repository "
-            "when it has none. Asks in a terminal; without one, takes the flags."
+            "and check them with Gerrit before saving. Asks in a terminal; without one, takes the flags."
         ),
     )
     parser.add_argument(
@@ -247,7 +229,6 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-check", action="store_true", help="Save without asking Gerrit whether the credentials work."
     )
-    parser.add_argument("--no-hook", action="store_true", help="Do not install Gerrit's commit-msg hook.")
     return parser
 
 

@@ -237,10 +237,6 @@ class HttpGerritRest:
         """GET account detail by Gerrit account id, username, email, or ``self``."""
         return self._request_dict("account detail", f"accounts/{encode_gerrit_path_segment(account_id)}/detail")
 
-    def get_commit_msg_hook(self) -> str:
-        """GET ``tools/hooks/commit-msg``, served outside ``/a/``: the script as text."""
-        return self._request(f"{self.web_base}/tools/hooks/commit-msg")
-
     def suggest_change_reviewers(
         self,
         change_id: str,

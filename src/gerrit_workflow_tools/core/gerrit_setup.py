@@ -1,4 +1,4 @@
-"""The Gerrit connection a first run sets up: the web URL's form, who the credentials sign in as, the hook.
+"""The Gerrit connection a first run sets up: the web URL's form and who the credentials sign in as.
 
 ``ger setup`` checks what it is given here before it saves anything, so a setup that cannot work
 says so at once instead of at the next command. The check is one ``GET /accounts/self`` through
@@ -7,8 +7,6 @@ the service of a run opened on the values as they would be saved. Asking for the
 
 from __future__ import annotations
 
-import os
-import stat
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,7 +15,6 @@ from urllib.parse import urlparse
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
-from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.run_context import RunContext
 
 
@@ -82,18 +79,3 @@ def run_with(cwd: Path, settings: Settings, values: Mapping[str, str], *, gerrit
 def signed_in(run: RunContext) -> SignedIn:
     """Who *run*'s credentials sign in as: one request, never the cache (it checks them). Raises ``GerritApiError``."""
     return SignedIn.from_payload(run.gerrit.rest.get_account("self"))
-
-
-def commit_msg_hook_path(cwd: Path) -> Path | None:
-    """Where git runs this repository's ``commit-msg`` hook from (``core.hooksPath`` honoured); ``None`` outside one."""
-    found = git("rev-parse", "--path-format=absolute", "--git-path", "hooks/commit-msg", cwd=cwd, check=False)
-    return Path(found.stdout.strip()) if found.returncode == 0 and found.stdout.strip() else None
-
-
-def install_commit_msg_hook(run: RunContext, path: Path) -> None:
-    """Write Gerrit's ``commit-msg`` hook to *path*, executable. Raises ``GerritApiError`` or ``OSError``."""
-    script = run.gerrit.rest.get_commit_msg_hook()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(script, encoding="utf-8", newline="\n")
-    mode = path.stat().st_mode
-    os.chmod(path, mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
