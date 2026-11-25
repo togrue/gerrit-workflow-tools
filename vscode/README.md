@@ -226,7 +226,10 @@ The commits above your upstream, newest first. One row per commit:
   message, opens no editor. A review that moves on (*Review Next Change*) closes the combined diff
   of the change it left, as its right side is your file. VS Code before 1.86 has no multi-diff
   editor: the first file's diff opens instead.
-- **Comments**: unresolved first. Click one to open its file at the line, its thread expanded there. The chevron shows a chain whole: every comment in full; one about the whole change (no line in a file) opens that way on a click and has a box to reply right there. *Next / Previous Unresolved Comment* (command palette) step
+- **Comments**: unresolved first. On your own change the header says what is left for you:
+  *2 to answer · 3 answered by your drafts (push publishes them) · 1 waiting on a reply* — a comment
+  your draft answers is still unresolved on Gerrit until the draft is published, but it is no longer
+  yours to answer; on a change you review, how many are unresolved. Click one to open its file at the line, its thread expanded there. The chevron shows a chain whole: every comment in full; one about the whole change (no line in a file) opens that way on a click and has a box to reply right there. *Next / Previous Unresolved Comment* (command palette) step
   through what is left for you to answer, across files: not a comment your draft already answers,
   nor one whose last word is your published reply (it waits on a reply). The status bar counts what
   is left, *Comment 2 of 3 to answer*; saving a reply does not send the walk back to the first: it

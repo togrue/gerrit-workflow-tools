@@ -461,7 +461,7 @@ status bar message: $(check) Refreshed from Gerrit
 - change | Commit message — Add retry to the uploader  (read-only)
 - change | Showing — Patchset 1 (current) · Against its base commit
 + change |   b.txt — added +1 −0
-+ change | Comments — 2 unresolved of 3
++ change | Comments — 2 to answer
 + change |   Please rename this. — b.txt:1 · Alice Reviewer  [open]
 + change |   Is this the right design? — b.txt:1 · Bob Architect  [open]
 + change |   Looks good overall. — whole change · Alice Reviewer  [resolved]
@@ -626,8 +626,10 @@ reply box: Reply to Alice Reviewer — b.txt:1
 notification (info): Draft saved, visible only to you: your next push publishes it.  [Publish Drafts…]
     → dismissed
 --- on screen:
++ change | Comments — 1 to answer · 1 answered by your drafts (push publishes them)
 + change |   Please rename this. — b.txt:1 · Alice Reviewer · 1 reply  [open]
 + change |     you — [draft] Renamed it.
+- change | Comments — 2 to answer
 - change |   Please rename this. — b.txt:1 · Alice Reviewer  [open]
 ```
 
@@ -666,6 +668,8 @@ status bar message: $(check) Draft updated, visible only to you: your next push 
 ```
 status bar message: $(check) Draft saved, resolving the comment, visible only to you: your next push publishes it.
 --- on screen:
++ change | Comments — 2 answered by your drafts (push publishes them)
+- change | Comments — 1 to answer · 1 answered by your drafts (push publishes them)
 + change |   Is this the right design? — your draft resolves it · b.txt:1 · Bob Architect · 1 reply  [open]
 + change |     you — [draft] Done
 - change |   Is this the right design? — b.txt:1 · Bob Architect  [open]
@@ -753,8 +757,8 @@ status bar message: $(check) Draft updated, resolving the comment, visible only 
 ```
 status bar message: $(check) Draft saved on Gerrit, visible only to you: your next push publishes it.
 --- on screen:
-+ change | Comments — 2 unresolved of 3 · 1 of yours, not published
-- change | Comments — 2 unresolved of 3
++ change | Comments — 2 answered by your drafts (push publishes them) · 1 of yours, not published
+- change | Comments — 2 answered by your drafts (push publishes them)
 + change |   Should this be configurable? — your draft · b.txt:1  [yours]
 ```
 
@@ -765,8 +769,8 @@ status bar message: $(check) Draft saved on Gerrit, visible only to you: your ne
 ```
 status bar message: $(check) Private note saved here. It never leaves this repository.
 --- on screen:
-+ change | Comments — 2 unresolved of 3 · 2 of yours, not published
-- change | Comments — 2 unresolved of 3 · 1 of yours, not published
++ change | Comments — 2 answered by your drafts (push publishes them) · 2 of yours, not published
+- change | Comments — 2 answered by your drafts (push publishes them) · 1 of yours, not published
 + change |   Remember to check the docs. — your private note · b.txt:1  [yours]
 ```
 
@@ -826,8 +830,8 @@ dialog (warning): Delete your private note on b.txt:1?  [Delete] [Cancel]
     → pressed "Delete"
 status bar message: $(check) Private note deleted.
 --- on screen:
-+ change | Comments — 2 unresolved of 3 · 1 of yours, not published
-- change | Comments — 2 unresolved of 3 · 2 of yours, not published
++ change | Comments — 2 answered by your drafts (push publishes them) · 1 of yours, not published
+- change | Comments — 2 answered by your drafts (push publishes them) · 2 of yours, not published
 - change |   Remember to check the docs. — your private note · b.txt:1  [yours]
 ```
 
@@ -848,8 +852,8 @@ notification (info): These are not the lines of "Extract command routing", the c
 ```
 status bar message: $(check) Draft saved on Gerrit, visible only to you: your next push publishes it.
 --- on screen:
-+ change | Comments — 2 unresolved of 3 · 2 of yours, not published
-- change | Comments — 2 unresolved of 3 · 1 of yours, not published
++ change | Comments — 2 answered by your drafts (push publishes them) · 2 of yours, not published
+- change | Comments — 2 answered by your drafts (push publishes them) · 1 of yours, not published
 + change |   Added from the keyboard. — your draft · b.txt:1  [yours]
 + editor | b.txt (ger-file, line 1)
 - editor | b.txt (file, line 1)
@@ -875,9 +879,9 @@ input box: Comment on b.txt
     → typed "This file needs a header." and pressed Enter
 status bar message: $(check) Draft saved on Gerrit, visible only to you: your next push publishes it.
 --- on screen:
-+ change | Comments — 2 unresolved of 3 · 3 of yours, not published
++ change | Comments — 2 answered by your drafts (push publishes them) · 3 of yours, not published
 + change |   This file needs a header. — your draft · b.txt  [yours]
-- change | Comments — 2 unresolved of 3 · 2 of yours, not published
+- change | Comments — 2 answered by your drafts (push publishes them) · 2 of yours, not published
 ```
 
 ## 60. Change › Edit Commit Here
@@ -922,7 +926,7 @@ browser opens: https://g.example/c/testproj/+/101
 + change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · introduced here
 + change |     FAILURE — generic · introduced here
 - change |   b.txt — added +1 −0
-- change | Comments — 2 unresolved of 3 · 3 of yours, not published
+- change | Comments — 2 answered by your drafts (push publishes them) · 3 of yours, not published
 - change |   This file needs a header. — your draft · b.txt  [yours]
 - change |   Please rename this. — your draft resolves it · b.txt:1 · Alice Reviewer · 1 reply  [open]
 - change |     you — [draft] Renamed it to route().

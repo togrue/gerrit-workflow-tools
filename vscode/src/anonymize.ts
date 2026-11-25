@@ -335,7 +335,19 @@ const CHANGE: Shape = {
     ],
   },
   comments: {
-    summary: each(" · ", ours([LOADING, "none", new RegExp(`${COUNT} unresolved of ${COUNT}`), new RegExp(`${COUNT} of yours, not published`)])),
+    summary: each(
+      " · ",
+      ours([
+        LOADING,
+        "none",
+        new RegExp(`${COUNT} unresolved of ${COUNT}`),
+        new RegExp(`${COUNT} to answer`),
+        new RegExp(`${COUNT} answered by your drafts \\((push publishes them|Vote and Publish sends them)\\)`),
+        new RegExp(`${COUNT} waiting on a reply`),
+        new RegExp(`all ${COUNT} resolved`),
+        new RegExp(`${COUNT} of yours, not published`),
+      ]),
+    ),
     open: KEEP,
     threads: [
       {

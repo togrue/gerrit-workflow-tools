@@ -429,6 +429,23 @@ function ciLinks(ci: CiView): CiLinkRow[] {
   });
 }
 
+/**
+ * What the comments from Gerrit leave for you: on a change you review (not yours), how many are
+ * unresolved; else what is left to answer, what your drafts answer (and what publishes them), and
+ * what waits on a reply. Unresolved on Gerrit, all three, until the drafts are published.
+ */
+function commentCounts(commit: ShownCommit, chains: CommentChain[], open: number, fromGerrit: number): string {
+  if (commit.own === false) {
+    return `${open} unresolved of ${fromGerrit}`;
+  }
+  const answered = chains.filter((chain) => !chain.resolved && answeredByDraft(chain)).length;
+  const waiting = chains.filter((chain) => !chain.resolved && !isYours(chain) && !answeredByDraft(chain) && chain.turn === "theirs").length;
+  const left = chains.filter(toAnswer).length;
+  const publish = commit.drafts_published_by === "push" ? "push publishes them" : "Vote and Publish sends them";
+  const parts = [left ? `${left} to answer` : "", answered ? `${answered} answered by your drafts (${publish})` : "", waiting ? `${waiting} waiting on a reply` : ""];
+  return parts.filter(Boolean).join(" · ") || `all ${fromGerrit} resolved`;
+}
+
 export function changeVm(state: ChangeState): ChangeVm {
   const { shown: commit, chains } = state;
   const notes: NonNullable<ChangeVm["notes"]> = [];
@@ -465,7 +482,7 @@ export function changeVm(state: ChangeState): ChangeVm {
   const open = chains.filter((chain) => !chain.resolved && !isYours(chain)).length;
   const fromGerrit = chains.filter((chain) => !isYours(chain)).length;
   const yours = chains.length - fromGerrit;
-  const counts = [fromGerrit ? `${open} unresolved of ${fromGerrit}` : "", yours ? `${yours} of yours, not published` : ""];
+  const counts = [fromGerrit ? commentCounts(commit, chains, open, fromGerrit) : "", yours ? `${yours} of yours, not published` : ""];
   const hasCi = commit.ci_failures.length > 0 || commit.ci_links.length > 0 || commit.attention_reasons.includes("ci-failed");
   const loading = state.loading;
   const words = sentence(reasonWords(commit.attention_reasons));

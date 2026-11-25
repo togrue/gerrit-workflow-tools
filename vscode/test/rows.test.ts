@@ -474,9 +474,9 @@ test("the commit message is read-only with the reason, and comment chains say wh
       ["closed", true, false],
     ],
   );
-  assert.equal(vm.comments?.summary, "1 unresolved of 2 · 1 of yours, not published");
+  assert.equal(vm.comments?.summary, "1 answered by your drafts (Vote and Publish sends them) · 1 of yours, not published");
   assert.deepEqual(changeLines(vm).slice(-5), [
-    "Comments — 1 unresolved of 2 · 1 of yours, not published",
+    "Comments — 1 answered by your drafts (Vote and Publish sends them) · 1 of yours, not published",
     "  Please rename this. — kept for you · a.py:4 · Alice · 1 reply  [open, kept for you]",
     "    you — [draft] Renamed it.",
     "  Check the docs. — your private note · a.py:4  [yours]",
