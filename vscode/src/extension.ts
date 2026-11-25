@@ -25,7 +25,7 @@ import { GerProcess } from "./server";
 import { CommitArg, StackView, commitTarget } from "./stackView";
 import { waitsForYou } from "./state";
 import { statusBar } from "./statusBar";
-import { Ui, feedback, ui, useUi } from "./ui";
+import { Ui, feedback, saveReplyResolved, ui, useUi } from "./ui";
 import { setUpstream } from "./upstream";
 import { voteAndPublish } from "./vote";
 import { staticView } from "./webview";
@@ -371,6 +371,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       const chain = threadOf(arg);
       return chain ? threads.replyToChain(chain, false) : undefined;
     },
+    "ger.replySaveResolved": () => saveReplyResolved(),
     "ger.replyDone": (arg: unknown) => {
       const chain = threadOf(arg);
       return chain ? threads.replyToChain(chain, true) : undefined;

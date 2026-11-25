@@ -118,7 +118,8 @@ A **gap** names the work that would close it.
 | `ger.openLocation` | UI only | |
 | `ger.nextComment` | UI only | `ger show` lists every unresolved chain |
 | `ger.prevComment` | UI only | |
-| `ger.reply` | `ger reply CHAIN -m MSG` | |
+| `ger.reply` | `ger reply CHAIN -m MSG`, with `--resolve` / `--unresolve` | the box's Resolved toggle starts where the comment stands |
+| `ger.replySaveResolved` | `ger reply CHAIN -m MSG --resolve` | Ctrl+Shift+Enter in the *Reply as Draft…* box |
 | `ger.replyDone` | `ger reply CHAIN --done` | |
 | `ger.thread.reply` | `ger reply CHAIN -m MSG --resolve` / `--unresolve` | Save in a thread's reply box, as its Resolved toggle says |
 | `ger.thread.cancel` | UI only | Cancel in a thread's reply box |

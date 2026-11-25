@@ -234,7 +234,9 @@ The commits above your upstream, newest first. One row per commit:
   editor. Reply, or reply "Done" and resolve — saved as **drafts** on Gerrit, published later:
   on your own commit by your next `ger push`, anywhere else by *Vote and Publish…*. A reply box has **Save** and **Cancel**, and Gerrit's **Resolved**
   checkbox: by the box in the Change view; in an editor thread a toggle in the thread's header
-  (VS Code empties the reply box on any button beside it), its label saying what Save will do. It
+  (VS Code empties the reply box on any button beside it), its label saying what Save will do;
+  in the *Reply as Draft…* box (a row's reply button) a toggle in the box's title bar, the line
+  under the box saying what Enter saves, and `Ctrl+Shift+Enter` saves and resolves at once. It
   starts where the comment stands, and with your draft there already it changes that draft at once.
   With your draft reply there, the Change view's box also has **Discard**, and so has the box of a
   draft, local draft or note of yours you edit in an editor thread: it deletes it, asking first, as

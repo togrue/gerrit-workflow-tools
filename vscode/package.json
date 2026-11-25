@@ -203,6 +203,7 @@
       { "command": "ger.prevComment", "title": "Previous Unresolved Comment", "category": "ger", "icon": "$(arrow-up)" },
       { "command": "ger.reply", "title": "Reply as Draft…", "category": "ger", "icon": "$(reply)" },
       { "command": "ger.replyDone", "title": "Reply Done and Resolve as Draft", "category": "ger", "icon": "$(check)" },
+      { "command": "ger.replySaveResolved", "title": "Save the Reply and Resolve the Comment", "category": "ger" },
       { "command": "ger.thread.reply", "title": "Save", "category": "ger" },
       { "command": "ger.thread.cancel", "title": "Cancel", "category": "ger" },
       { "command": "ger.thread.markResolved", "title": "Resolved: No (Click to Resolve It with Your Reply)", "category": "ger", "icon": "$(circle-large-outline)" },
@@ -268,6 +269,7 @@
         { "command": "ger.hold", "when": "false" },
         { "command": "ger.release", "when": "false" },
         { "command": "ger.replyDone", "when": "false" },
+        { "command": "ger.replySaveResolved", "when": "false" },
         { "command": "ger.thread.reply", "when": "false" },
         { "command": "ger.thread.cancel", "when": "false" },
         { "command": "ger.thread.markResolved", "when": "false" },
@@ -364,6 +366,7 @@
       ]
     },
     "keybindings": [
+      { "command": "ger.replySaveResolved", "key": "ctrl+shift+enter", "mac": "cmd+shift+enter", "when": "ger.replyBox && inQuickOpen" },
       { "command": "ger.reviewNext", "key": "ctrl+alt+pagedown", "when": "ger.ready && ger.stagedReview" },
       { "command": "ger.reviewPrev", "key": "ctrl+alt+pageup", "when": "ger.ready && ger.stagedReview" },
       { "command": "ger.comment.add", "key": "ctrl+alt+c", "when": "ger.ready && ger.canComment && editorTextFocus" },

@@ -398,19 +398,28 @@ export class CommentThreads implements vscode.Disposable {
    * box opens on its text to edit. `done` resolves the chain: with no draft yet it writes "Done",
    * else it keeps what you wrote.
    */
+  /**
+   * Reply as Draft… (or Done): the reply box has Gerrit's Resolved choice as the Change view's
+   * box does, starting where the comment stands; Enter saves with it, the toggle in the box's
+   * title bar flips it, Ctrl+Shift+Enter saves and resolves.
+   */
   async replyToChain(chain: CommentChain, done: boolean): Promise<void> {
     const draft = yourDraft(chain);
     const where = `${chain.path}${chain.line ? `:${chain.line}` : ""}`;
-    const text = done
-      ? (draft?.message ?? "Done")
-      : await ui().input({
-          title: draft ? `Edit your draft reply — ${where}` : `Reply to ${chain.comments.at(-1)?.author ?? "comment"} — ${where}`,
-          prompt: `Saved as a draft on Gerrit, visible only to you: ${publishing(this.view.shown).words}.`,
-          placeHolder: chain.comments.at(-1)?.message.split("\n")[0],
-          value: draft?.message,
-        });
-    if (text?.trim()) {
-      await this.save(chain, text, done ? true : undefined);
+    if (done) {
+      await this.save(chain, draft?.message ?? "Done", true);
+      return;
+    }
+    const words = publishing(this.view.shown).words;
+    const reply = await ui().reply({
+      title: draft ? `Edit your draft reply — ${where}` : `Reply to ${chain.comments.at(-1)?.author ?? "comment"} — ${where}`,
+      prompt: (resolved) => `Saved as a draft${resolved ? " that resolves the comment" : ", the comment left unresolved"}; visible only to you: ${words}.`,
+      placeHolder: chain.comments.at(-1)?.message.split("\n")[0],
+      value: draft?.message,
+      resolved: chain.resolved_after_publish,
+    });
+    if (reply?.text.trim()) {
+      await this.save(chain, reply.text, reply.resolved);
     }
   }
 
