@@ -27,7 +27,9 @@ from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_s
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.inbox import RebaseHeadline, load_inbox, pick_headline, project_scope
 from gerrit_workflow_tools.core.push_checks import push_blocked
-from gerrit_workflow_tools.core.rebase_state import rebase_underway
+from gerrit_workflow_tools.core.rebase_next_step import go_on_refusal
+from gerrit_workflow_tools.core.rebase_state import RebaseAction, rebase_underway
+from gerrit_workflow_tools.core.rebasing_stack import stopped_rebase
 from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_conflicts
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import find_review, staged_review
@@ -62,7 +64,7 @@ from gerrit_workflow_tools.server.diff_views import commit_files
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
 
-API_VERSION = "1.2.0"
+API_VERSION = "1.3.0"
 """The serve contract's version, ``MAJOR.MINOR.PATCH`` (bump rules: ``docu/spec/commands/serve.md``)."""
 _T = TypeVar("_T")
 _NOT_ON_GERRIT = frozenset({Attention.NOT_PUSHED, Attention.AHEAD_OF_GERRIT, Attention.DIVERGED})
@@ -99,6 +101,16 @@ def health(ctx: Context, _req: Request) -> dict[str, Any]:
 def stack(ctx: Context, req: Request) -> dict[str, Any]:
     """The **annotated stack** of the working branch, with the ready boundary: ``ger log`` as JSON."""
     return _stack(ctx, req)[0]
+
+
+def rebase_refusal(ctx: Context, req: Request) -> dict[str, Any]:
+    """Why ``ger rebase --<action>`` would refuse now, in its words, or ``null``: the one check every
+    ger "go on" makes (``ger edit -n`` too), the work tree's unstaged changes included."""
+    try:
+        action = RebaseAction(req.one("action", RebaseAction.CONTINUE.value))
+    except ValueError as exc:
+        raise BadRequest(f"action must be one of {', '.join(a.value for a in RebaseAction)}") from exc
+    return {"action": action.value, "refused": go_on_refusal(ctx.cwd, action, stopped_rebase(ctx.cwd))}
 
 
 def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline | None]:

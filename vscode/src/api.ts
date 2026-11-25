@@ -659,6 +659,11 @@ export class GerClient {
     return (await this.call<{ content: string | null }>("GET", "/file", { rev, path })).content;
   }
 
+  /** Why `ger rebase --<action>` (and `ger edit -n`) would refuse now, in its words, the work tree's unstaged changes too; null when it would run. */
+  async rebaseRefusal(action: RebaseAction): Promise<string | null> {
+    return (await this.call<{ refused: string | null }>("GET", "/rebase/refusal", { action })).refused;
+  }
+
   /** The review going on here or in the review worktree; with `chain`, its review chain too (one Gerrit request). */
   async review(chain = false): Promise<ReviewState | null> {
     return (await this.call<{ review: ReviewState | null }>("GET", "/review", chain ? { chain: "1" } : undefined)).review;

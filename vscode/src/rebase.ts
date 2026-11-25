@@ -9,7 +9,7 @@ import * as vscode from "vscode";
 import { unsavedInRepo } from "./diffTabs";
 import { runInTerminal } from "./launch";
 import { sentence } from "./format";
-import { Model } from "./model";
+import { Model, describeError } from "./model";
 import { RebaseAction } from "./api";
 import { REBASE_ACTIONS, REBASE_WORDS, pushWaysOn, rebaseNotNowFresh, skipQuestion } from "./stackRows";
 import { saveBeforeContinue } from "./staleDiffs";
@@ -28,20 +28,42 @@ const SAID: Record<RebaseAction, string> = {
  * may have resolved it since). Skip asks first: it leaves a commit out. Continue asks to save the
  * repository's files with unsaved edits first: git goes on with the files on disk.
  */
-export async function rebaseStep(model: Model, step: RebaseAction): Promise<void> {
+export async function rebaseStep(model: Model, step: RebaseAction): Promise<boolean> {
   const notNow = await rebaseNotNowFresh(model, step);
   if (notNow) {
     await ui().message("warning", notNow, {}, []);
-    return;
+    return false;
   }
   if (step === "skip" && !(await confirmSkip(model))) {
-    return;
+    return false;
   }
   if (step === "continue" && !(await saveBeforeContinue(ui(), unsavedInRepo(model.repo)))) {
-    return;
+    return false;
+  }
+  if (step !== "abort" && (await refusedNow(model, step, `ger rebase --${step} did not run`))) {
+    return false;
   }
   runInTerminal(model.repo, ["rebase", `--${step}`]);
   feedback(SAID[step], { icon: "terminal", milliseconds: 8000 });
+  return true;
+}
+
+/**
+ * Whether `ger rebase --<step>` would refuse now, as core's one check before every "go on" says
+ * (`GET /rebase/refusal`: the stop, and for Continue the files changed and not amended or added).
+ * A refusal is said here, after `what`: in the terminal it would go unseen behind the views.
+ */
+export async function refusedNow(model: Model, step: RebaseAction, what: string): Promise<boolean> {
+  let refused: string | null;
+  try {
+    refused = await (await model.client()).rebaseRefusal(step);
+  } catch (error) {
+    refused = describeError(error);
+  }
+  if (refused) {
+    await ui().message("warning", `${what}: ${sentence(refused)}.`, {}, []);
+  }
+  return Boolean(refused);
 }
 
 /**

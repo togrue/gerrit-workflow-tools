@@ -161,7 +161,7 @@ a client words its own advice while `message` stays ger's.
 
 ## API version
 
-`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.2.0`); the URL
+`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.3.0`); the URL
 prefix carries only the major (`/api/v1`). It moves on its own, not with ger's package version:
 
 | Bump | When |
@@ -298,7 +298,8 @@ The top-level `rebase` is `null` without a rebase, else:
   `skip` once the index and work tree hold nothing it would throw away: it keeps `HEAD` and goes
   on. Then a rebase through `am` has nothing left to continue with (git would stop again, "No
   changes"), so `continue` is left out there. A client offers these and no others. `continue`
-  can still be refused over unstaged changes, which this does not look at.
+  can still be refused over unstaged changes, which this does not look at:
+  [`GET /rebase/refusal`](#get-rebaserefusalactioncontinue) does, when asked.
 - `refused` — for each way on `actions` leaves out, the refusal `ger rebase --<action>` prints
   for it, by action (`{"skip": "--skip leaves out …"}`): what a client says when one is asked for
   anyway.
@@ -377,6 +378,18 @@ The suggestion is the branch of the Gerrit remote the branch was created from, a
 tells (`git checkout -b topic origin/main`); else the remote branch nearest to it, by commits
 ahead plus behind. Two git calls: all remote branches are measured by one `for-each-ref`
 (git 2.41; older git measures them one by one).
+
+### `GET /rebase/refusal?action=continue`
+
+Why `ger rebase --<action>` (`continue`, `abort` or `skip`; `continue` when not given) would
+refuse now, in its words, as `refused`; `null` when it would run. This is the one check every ger
+"go on" makes before git runs (`ger rebase --continue|--skip`, `ger edit -n`): the stop as
+`rebase.refused` judges it, and for `continue` also the work tree, which `GET /stack` does not
+look at: unstaged changes to tracked files (`you have unstaged changes to a.txt; amend them in
+(…) or git stash them, then ger rebase --continue`). Without a rebase it says there is none. A
+client asks it just before it starts the step in a terminal, so a refusal is said where the
+client is, not only in the terminal. Cost: two git calls (`update-index --refresh`, `diff-files`)
+beyond reading the stop.
 
 ### `GET /chains/<number>`
 

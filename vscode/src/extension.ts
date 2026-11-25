@@ -28,6 +28,7 @@ import { statusBar } from "./statusBar";
 import { Ui, feedback, saveReplyResolved, ui, useUi } from "./ui";
 import { setUpstream } from "./upstream";
 import { voteAndPublish } from "./vote";
+import { AttentionWalk } from "./walk";
 import { staticView } from "./webview";
 import { RepoChoice, chooseRepo, gitDirs, repoNote } from "./workspace";
 
@@ -174,6 +175,16 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       await openChange(commitTarget(head), true);
     }
   };
+  /** Work on Next stopped at `commit`: shown, the keyboard on its first comment to answer, else its first CI finding. */
+  const walk = new AttentionWalk(model, async (commit) => {
+    await openChange(commitTarget(commit), true);
+    await changeView.idle();
+    if (changeView.toAnswer().length) {
+      await threads.step(1);
+    } else if (commit.attention_reasons.includes("ci-failed")) {
+      await changeView.openFirstFinding();
+    }
+  });
   changeView.reword = (sha, message, applied) => stackView.reword(sha, message, applied);
   changeView.showThread = (chain) => threads.show(chain);
   changeView.replyWith = (chain, text, resolved) => threads.replyWith(chain, text, resolved);
@@ -339,7 +350,12 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.reviewPrev": () => stepReview(model, -1, reviewWalk),
     "ger.publishDrafts": (arg: unknown) => voteAndPublish(model, targetOf(arg), { draftsOnly: true, after: afterVote }),
     "ger.push": () => push(model),
-    "ger.rebase.continue": () => rebaseStep(model, "continue"),
+    "ger.rebase.continue": async () => {
+      if (await rebaseStep(model, "continue")) {
+        walk.continued();
+      }
+    },
+    "ger.workOnNext": () => walk.next(),
     "ger.rebase.abort": () => rebaseStep(model, "abort"),
     "ger.rebase.skip": () => rebaseStep(model, "skip"),
     "ger.rebase.upstream": () => rebaseOntoUpstream(model),
@@ -436,6 +452,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     changePane,
     threads,
     follower,
+    walk,
     diffTabs,
     statusItem,
     vscode.workspace.registerTextDocumentContentProvider(FILE_SCHEME, files),

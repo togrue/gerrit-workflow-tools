@@ -29,6 +29,7 @@ ROUTES: tuple[tuple[str, str, Endpoint], ...] = (
     ("GET", "/stack", views.stack),
     ("GET", "/stack/moves", views.stack_moves),
     ("GET", "/stack/upstream", views.stack_upstream),
+    ("GET", "/rebase/refusal", views.rebase_refusal),
     ("GET", "/chains/([^/]+)", views.chain),
     ("GET", "/show", views.show),
     ("GET", "/diff", diff_views.diff),

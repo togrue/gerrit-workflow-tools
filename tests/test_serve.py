@@ -957,6 +957,21 @@ def test_reorder_off_the_branch_says_so_instead_of_missing_the_commits_it_was_sh
         rewrite_stack(stack_repo, [StackStep(sha) for sha in order], settings=settings)
 
 
+def test_rebase_refusal_is_the_check_every_go_on_makes_unstaged_changes_too(stack_repo: Path) -> None:
+    api = GerApi(stack_repo, gerrit=_gerrit(stack_repo)[0])
+    assert _get(api, "/rebase/refusal")["refused"].startswith("no rebase is in progress, nothing to continue")
+    stop = {"GIT_SEQUENCE_EDITOR": "sed -i 1s/^pick/edit/"}
+    git("rebase", "-q", "-i", "HEAD~2", cwd=stack_repo, env=stop, check=False)
+    assert _get(api, "/rebase/refusal", action="continue") == {"action": "continue", "refused": None}
+    (stack_repo / "a.txt").write_text("edited at the stop\n", encoding="utf-8")
+    refused = _get(api, "/rebase/refusal")["refused"]
+    assert refused.startswith("you have unstaged changes to a.txt; amend them in (`git commit --amend -a`)")
+    # The stack's own `refused` is told from the stop alone: it does not look at the work tree.
+    assert "continue" not in _get(api, "/stack")["rebase"]["refused"]
+    with pytest.raises(BadRequest, match="action must be one of continue, abort, skip"):
+        _get(api, "/rebase/refusal", action="onward")
+
+
 # --- Transport ---------------------------------------------------------------------
 
 
@@ -996,7 +1011,7 @@ def _http(
 def test_http_answers_only_with_the_token_on_a_loopback_host(served: GerHttpServer) -> None:
     status, body = _http(served, f"{V1}/health")
     assert status == 200
-    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.2.0", "feature", "g.example")
+    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.3.0", "feature", "g.example")
     assert _http(served, f"{V1}/health", token=None)[0] == 401
     assert _http(served, f"{V1}/health", token="wrong")[0] == 401
     # A page that rebinds its own name to 127.0.0.1 still sends its name as Host.

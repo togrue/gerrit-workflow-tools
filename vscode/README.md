@@ -116,11 +116,23 @@ The commits above your upstream, newest first. One row per commit:
 - **Continue saves first, asking.** `ger rebase --continue` sees only the files as they are on
   disk, so before it runs, any file of the repository with edits only in an editor (the diff of
   the commit you stand on has your file on its right side) is named in a dialog. **Save All**
-  saves them and runs `ger rebase --continue`; saved edits are not part of the rebase yet, so it
-  then refuses and says what they need (`git add` them at a conflict, amend them in at an edit
-  stop, or `git stash` them). **Continue without saving** runs it with the edits left in the
+  saves them; saved edits are not part of the rebase yet, so core's check before every "go on"
+  (`GET /rebase/refusal`) then refuses, and a warning says what they need (`git add` them at a
+  conflict, amend them in at an edit stop, or `git stash` them), with nothing run in the terminal.
+  So does Continue whenever files of the repository are changed and not amended or added. **Continue without saving** runs it with the edits left in the
   editor: git rewrites the files under them, and VS Code says so when you save. Cancel runs
   nothing. Nothing is saved unasked.
+- **Work on Next** (the step-over icon in *Local stack*'s and the Change view's title bars, the
+  palette): the attention walk of `ger edit -n`, in the *ger* terminal. During a rebase it continues
+  it and stops at the next commit tip-ward that needs edits (comments to answer, a failed build, a
+  negative vote); with no rebase it starts the walk (`ger edit`: where the walk stood, else the oldest
+  commit that needs edits). Once it has stopped, the Change view shows that commit and the keyboard is
+  on its first comment to answer (*Next Unresolved Comment*), else on its first CI finding. With no
+  commit left that needs edits it says so and offers **Push to Gerrit…**; so does a Continue that
+  finishes the rebase, with **Work on Next** too while commits still need edits. Before anything runs,
+  core's own check is asked (`GET /rebase/refusal`), as it is for **Continue** and **Skip**: when it
+  would refuse — files changed at the stop and not amended in, a conflict still open — a warning
+  says why in ger's words, and nothing runs in the terminal, where it would go unseen.
 - **Diff tabs of commits that left the stack.** A diff opened from the Change view of a local
   commit in your stack goes on showing that commit once it is no longer in the stack: rewritten
   (amended, replayed by the rebase, reordered), dropped, or merged past the upstream. Its title
@@ -566,6 +578,7 @@ printed.
 | `src/diffTabs.ts`, `src/staleDiffs.ts` | `ger-file:` documents and the diff tabs of them: opening one, knowing it again, marking it stale or closing it once its right side is no longer the commit its title names, unmarking it once it is again (the rule is pure, unit-tested); your files' repository paths; saving before a rebase continues. |
 | `src/changeLoad.ts` | Which change the Change view shows and what of it has come: drawn at once from the clicked row, filled in answer by answer, a stale answer dropped. Pure, unit-tested. |
 | `src/review.ts` | Review Change, Check Out to Work On, Leave Review Checkout, Edit Commit Here. |
+| `src/walk.ts` | Work on Next: the attention walk (`ger edit -n`) from the views, and what follows once it has stopped or the rebase is finished. |
 | `src/vote.ts`, `src/voteText.ts` | Vote and Publish, Publish Drafts: the questions, around `GET /vote` and `POST /vote`; their words (pure, unit-tested). |
 | `src/upstream.ts` | Giving the branch an upstream. |
 | `src/agent.ts` | Handing a runbook to a coding agent. |

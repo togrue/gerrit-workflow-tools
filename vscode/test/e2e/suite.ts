@@ -1010,6 +1010,25 @@ export async function run(): Promise<void> {
         () => editAt("test! temporary experiment"),
       );
       await inTerminal(
+        "you add a line to c.txt, do not amend it, and press Local stack › Work on Next",
+        "Nothing runs in the terminal: a warning says Work on Next did not continue the rebase, in ger's words: c.txt has unstaged changes, amend them in or stash them. The views stay as they were.",
+        undefined,
+        async () => {
+          write("c.txt", "file c.txt\namended at the stop\n");
+          await exec("ger.workOnNext")();
+        },
+        [],
+        true,
+      );
+      await inTerminal(
+        "Local stack › Continue, c.txt still not amended",
+        "The same: nothing runs, and a warning says why ger rebase --continue did not run.",
+        undefined,
+        () => exec("ger.rebase.continue")(),
+        [],
+        true,
+      );
+      await inTerminal(
         "you add a line to c.txt and amend the stopped commit",
         "The stopped commit shows what it is now: a new SHA, HEAD, its code changed since the last push. The Change view follows it to the amended commit: c.txt with +2 lines.",
         undefined,
@@ -1159,7 +1178,7 @@ export async function run(): Promise<void> {
       );
       await inTerminal(
         "Local stack › Continue (e.txt not saved) › Save All",
-        "Before anything runs, a dialog names e.txt, says ger rebase --continue sees only the files on disk and then says what saved edits still need, and offers Save All, Continue without saving (git would rewrite e.txt under the edits) and Cancel. Save All pressed, e.txt is saved, then ger rebase --continue runs in the ger terminal, where it refuses: e.txt is changed and not committed, amend it in or stash it. The rebase stays where it stopped.",
+        "Before anything runs, a dialog names e.txt, says ger rebase --continue sees only the files on disk and then says what saved edits still need, and offers Save All, Continue without saving (git would rewrite e.txt under the edits) and Cancel. Save All pressed, e.txt is saved; then ger's own check refuses before anything runs, and a warning says so in its words: e.txt is changed and not committed, amend it in or stash it. Nothing runs in the terminal; the rebase stays where it stopped.",
         undefined,
         async () => {
           await exec("ger.rebase.continue")();

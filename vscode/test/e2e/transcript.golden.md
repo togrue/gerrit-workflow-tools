@@ -1352,7 +1352,7 @@ notification (warning): Still out of date: fake ger: down for this test
 + status bar | $(warning) Gerrit
 + state  | incompatible
 + events | (not said)
-+ stack  | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
++ stack  | ger serve speaks API 2.0, the extension needs 1.3: update the extension, or install the ger release that matches it.
 - status bar | $(error) CI failed: 102
 - state  | ready
 - events | live
@@ -1369,7 +1369,7 @@ notification (warning): Still out of date: fake ger: down for this test
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
-+ change | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
++ change | ger serve speaks API 2.0, the extension needs 1.3: update the extension, or install the ger release that matches it.
 - change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 - change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | Commit message — test! temporary experiment  (editable)
@@ -1416,9 +1416,9 @@ status bar message: $(check) Refreshed from Gerrit
 - status bar | $(warning) Gerrit
 - state  | incompatible
 - events | (not said)
-- stack  | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
+- stack  | ger serve speaks API 2.0, the extension needs 1.3: update the extension, or install the ger release that matches it.
 - change | title: Change 102
-- change | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
+- change | ger serve speaks API 2.0, the extension needs 1.3: update the extension, or install the ger release that matches it.
 ```
 
 ## Meanwhile: a reviewer comments on change 900 on Gerrit, and its event stream says so
@@ -1498,6 +1498,76 @@ change |     FAILURE — generic · also fails on the parent
 change | (the commit shown is HEAD)
 ```
 
+## 86. you add a line to c.txt, do not amend it, and press Local stack › Work on Next
+
+**Expect:** Nothing runs in the terminal: a warning says Work on Next did not continue the rebase, in ger's words: c.txt has unstaged changes, amend them in or stash them. The views stay as they were.
+
+```
+notification (warning): Work on Next did not continue the rebase: You have unstaged changes to c.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`.
+(no change)
+--- shown now:
+status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
+stack header | feature (rebasing) → origin/main
+stack  | A rebase is in progress  [Continue] [Abort]
+stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
+stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
+stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
+stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
+stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
+stack  | (Cleanup after experiment is below HEAD)
+stack  | (Extract command routing is below HEAD)
+stack  | (Refactor parser init is below HEAD)
+stack  | (test! temporary experiment is HEAD)
+stack  | (Add e.txt is only on the branch as it was before)
+change | title: Change 103
+change | CI failed — V-1 CR+2
+change | Commit message — test! temporary experiment  (read-only)
+change | Showing — Local commit <sha> · Against its base commit
+change | Files — 1 · +1 −0
+change |   c.txt — added +1 −0
+change | Comments — none
+change | CI
+change |   Widget #55 — 2 findings
+change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · also fails on the parent
+change |     FAILURE — generic · also fails on the parent
+change | (the commit shown is HEAD)
+```
+
+## 87. Local stack › Continue, c.txt still not amended
+
+**Expect:** The same: nothing runs, and a warning says why ger rebase --continue did not run.
+
+```
+notification (warning): ger rebase --continue did not run: You have unstaged changes to c.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`.
+(no change)
+--- shown now:
+status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
+stack header | feature (rebasing) → origin/main
+stack  | A rebase is in progress  [Continue] [Abort]
+stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
+stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
+stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
+stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
+stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
+stack  | (Cleanup after experiment is below HEAD)
+stack  | (Extract command routing is below HEAD)
+stack  | (Refactor parser init is below HEAD)
+stack  | (test! temporary experiment is HEAD)
+stack  | (Add e.txt is only on the branch as it was before)
+change | title: Change 103
+change | CI failed — V-1 CR+2
+change | Commit message — test! temporary experiment  (read-only)
+change | Showing — Local commit <sha> · Against its base commit
+change | Files — 1 · +1 −0
+change |   c.txt — added +1 −0
+change | Comments — none
+change | CI
+change |   Widget #55 — 2 findings
+change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · also fails on the parent
+change |     FAILURE — generic · also fails on the parent
+change | (the commit shown is HEAD)
+```
+
 ## Meanwhile: you add a line to c.txt and amend the stopped commit
 
 **Expect:** The stopped commit shows what it is now: a new SHA, HEAD, its code changed since the last push. The Change view follows it to the amended commit: c.txt with +2 lines.
@@ -1541,13 +1611,15 @@ change | Comments — none
 change | (the commit shown is HEAD)
 ```
 
-## 86. Local stack › Continue (the rebase stopped at the amended commit)
+## 88. Local stack › Continue (the rebase stopped at the amended commit)
 
 **Expect:** ger rebase --continue runs in the ger terminal, and the status bar says so; once it has run, the banner and the marks go: the branch is back, the amended commit with its code changed since the last push and "Add e.txt" on top of it; the header names the branch; the Change view shows the amended commit, its message editable again.
 
 ```
 terminal "ger": runs `ger rebase --continue`
 status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
+notification (info): The rebase is finished. 2 commits of your stack still need edits.  [Work on Next] [Push to Gerrit…]
+    → dismissed
 + status bar | $(error) CI failed: 102  $(bell-dot) 1
 - status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
 + chains | CI failed on 102: Refactor parser init
@@ -1670,7 +1742,7 @@ change | Comments — none
 change | (the commit shown is HEAD)
 ```
 
-## 87. Local stack › click e.txt under the banner
+## 89. Local stack › click e.txt under the banner
 
 **Expect:** e.txt opens in VS Code's merge editor (its file in the worktree is what it writes); nothing else changes.
 
@@ -1744,13 +1816,15 @@ change | Comments — none
 change | (the commit shown is HEAD)
 ```
 
-## 88. Local stack › Continue (the conflict resolved)
+## 90. Local stack › Continue (the conflict resolved)
 
 **Expect:** ger rebase --continue runs in the ger terminal; once it has run, the banner and the marks go; Local stack shows the branch with "Refactor parser init" changed here since the last push and "Add e.txt" on top.
 
 ```
 terminal "ger": runs `ger rebase --continue`
 status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
+notification (info): The rebase is finished. 1 commit of your stack still needs edits.  [Work on Next] [Push to Gerrit…]
+    → dismissed
 + status bar | $(error) CI failed: 102  $(bell-dot) 1
 - status bar | $(warning) Conflict resolved in "Add e.txt"  $(bell-dot) 1
 + chains | CI failed on 102: Refactor parser init
@@ -1817,7 +1891,7 @@ change | Comments — none
 change | (the commit shown is below HEAD)
 ```
 
-## 89. Local stack › Rebase onto origin/main ("test! temporary experiment" conflicts in c.txt, as the row said)
+## 91. Local stack › Rebase onto origin/main ("test! temporary experiment" conflicts in c.txt, as the row said)
 
 **Expect:** ger rebase origin/main runs in the ger terminal, and the status bar says so; once it has run, the upstream row goes and Local stack says the rebase stopped on a conflict in c.txt, with Abort and Skip; "test! temporary experiment" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; "Add e.txt" is dimmed. The Change view of 103 says "Conflict in c.txt" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.
 
@@ -1877,7 +1951,7 @@ change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 90. Local stack › Skip › Cancel
+## 92. Local stack › Skip › Cancel
 
 **Expect:** A dialog asks before "test! temporary experiment" is left out: the commit and the conflict resolution so far would be thrown away, Abort brings back the branch as before the rebase but not the resolution, and its change stays open on Gerrit. Cancelled, nothing runs and nothing changes.
 
@@ -1913,7 +1987,7 @@ change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 91. Local stack › Push to Gerrit… (during the rebase) › Abort
+## 93. Local stack › Push to Gerrit… (during the rebase) › Abort
 
 **Expect:** No ger push: a dialog says to finish the rebase first, why (in ger push's own words), and offers only Abort: Continue is not a way on while c.txt is conflicted. Abort runs ger rebase --abort in the ger terminal; once it has run, everything is as before the rebase: the branch, its commits, the header; Local stack still says origin/main has 1 new commit.
 
@@ -2018,7 +2092,7 @@ change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 92. Local stack › click "Add e.txt" (still to be replayed)
+## 94. Local stack › click "Add e.txt" (still to be replayed)
 
 **Expect:** The Change view shows "Add e.txt" as it was: it changes e.txt.
 
@@ -2058,7 +2132,7 @@ change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 93. Change › click e.txt under Files
+## 95. Change › click e.txt under Files
 
 **Expect:** The diff of e.txt in "Add e.txt" opens, its title naming the commit; both sides are that commit's, as it is not the one you stand on. You keep it open (double-click its tab), so the next file opened does not take its place.
 
@@ -2090,7 +2164,7 @@ change | (the commit shown is only on the branch as it was before)
 diff tab | e.txt (<sha>) (ger-file on the right, active)
 ```
 
-## 94. Local stack › click "Refactor parser init" (where it stopped)
+## 96. Local stack › click "Refactor parser init" (where it stopped)
 
 **Expect:** The Change view shows the commit you stand on; the diff tab of "Add e.txt" stays as it is.
 
@@ -2134,7 +2208,7 @@ change | (the commit shown is HEAD)
 diff tab | e.txt (<sha>) (ger-file on the right, active)
 ```
 
-## 95. Change › click e.txt under Files
+## 97. Change › click e.txt under Files
 
 **Expect:** e.txt opens on its own (the commit adds it), as your file: you stand on this commit.
 
@@ -2202,16 +2276,15 @@ change | (the commit shown is HEAD)
 diff tab | e.txt (<sha>) (ger-file on the right)
 ```
 
-## 96. Local stack › Continue (e.txt not saved) › Save All
+## 98. Local stack › Continue (e.txt not saved) › Save All
 
-**Expect:** Before anything runs, a dialog names e.txt, says ger rebase --continue sees only the files on disk and then says what saved edits still need, and offers Save All, Continue without saving (git would rewrite e.txt under the edits) and Cancel. Save All pressed, e.txt is saved, then ger rebase --continue runs in the ger terminal, where it refuses: e.txt is changed and not committed, amend it in or stash it. The rebase stays where it stopped.
+**Expect:** Before anything runs, a dialog names e.txt, says ger rebase --continue sees only the files on disk and then says what saved edits still need, and offers Save All, Continue without saving (git would rewrite e.txt under the edits) and Cancel. Save All pressed, e.txt is saved; then ger's own check refuses before anything runs, and a warning says so in its words: e.txt is changed and not committed, amend it in or stash it. Nothing runs in the terminal; the rebase stays where it stopped.
 
 ```
 dialog (warning): Save e.txt first? ger rebase --continue then says what it still needs.  [Save All] [Continue without saving] [Cancel]
     detail: e.txt has edits that are not saved, and ger rebase --continue sees only the files on disk. Continue without saving: the edits stay in the editor, git rewrites the files under them, and VS Code says so when you save.
     → pressed "Save All"
-terminal "ger": runs `ger rebase --continue`
-status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
+notification (warning): ger rebase --continue did not run: You have unstaged changes to e.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`.
 ger terminal | error: you have unstaged changes to e.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`
 ger terminal | (exit 2)
 (no change)
@@ -2292,7 +2365,7 @@ change | (the commit shown is below HEAD)
 diff tab | e.txt (<sha>) — stale (ger-file on the right)
 ```
 
-## 97. Settings › ger.closeDiffsOnRebase: on
+## 99. Settings › ger.closeDiffsOnRebase: on
 
 **Expect:** The stale diff tab of "Add e.txt" closes.
 
@@ -2324,7 +2397,7 @@ change | Comments — none
 change | (the commit shown is below HEAD)
 ```
 
-## 98. Local stack › click "Add e.txt"
+## 100. Local stack › click "Add e.txt"
 
 **Expect:** The Change view shows "Add e.txt", now HEAD.
 
@@ -2365,7 +2438,7 @@ change | Comments — none
 change | (the commit shown is HEAD)
 ```
 
-## 99. Change › click e.txt under Files
+## 101. Change › click e.txt under Files
 
 **Expect:** The diff of e.txt in "Add e.txt" opens with your file on its right: you stand on this commit.
 
@@ -2552,7 +2625,7 @@ change | (the commit shown is only on the branch as it was before)
 diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 ```
 
-## 100. Local stack › Continue (e.txt and notes.txt not saved) › Cancel
+## 102. Local stack › Continue (e.txt and notes.txt not saved) › Cancel
 
 **Expect:** A dialog names e.txt, whose edits are only in the stale diff tab, and notes.txt, though git does not track it (asking once too often loses nothing), and offers Save All, Continue without saving and Cancel. Cancelled, nothing is saved and nothing runs: the rebase stays stopped, the tab stale and unsaved.
 
@@ -2648,7 +2721,7 @@ change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 101. Local stack › Continue (ger.closeDiffsOnRebase on)
+## 103. Local stack › Continue (ger.closeDiffsOnRebase on)
 
 **Expect:** Nothing is unsaved, so nothing is asked: ger rebase --continue runs in the ger terminal; once it has run, the rebase is finished, "Add e.txt" is replayed onto origin/main with a new SHA. The Change view follows "Add e.txt" to its new commit.
 
@@ -2657,6 +2730,8 @@ change | (the commit shown is only on the branch as it was before)
 ```
 terminal "ger": runs `ger rebase --continue`
 status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
+notification (info): The rebase is finished. 1 commit of your stack still needs edits.  [Work on Next] [Push to Gerrit…]
+    → dismissed
 + status bar | $(error) CI failed: 102  $(bell-dot) 1
 - status bar | $(warning) Conflict resolved in 103  $(bell-dot) 1
 + chains | CI failed on 102: Refactor parser init
@@ -2695,7 +2770,7 @@ change | Select a change in Review chains or a commit in Local stack to see its 
 change | (the commit shown is none)
 ```
 
-## 102. Click "Add retry to the uploader" under To review
+## 104. Click "Add retry to the uploader" under To review
 
 **Expect:** The Change view shows change 900, Alice's; its title bar offers Vote and Publish.
 
@@ -2719,7 +2794,7 @@ change | (the commit shown is none)
 - change | Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.
 ```
 
-## 103. "+" on line 1 of uploader.txt in the diff › Save Draft
+## 105. "+" on line 1 of uploader.txt in the diff › Save Draft
 
 **Expect:** The draft is saved on Gerrit and shows as yours in the Change view. Only you see it until it is published, and as it is not your change, ger push would not publish it: the notification offers Vote and Publish.
 
@@ -2732,7 +2807,7 @@ notification (info): Draft saved on Gerrit, visible only to you: Vote and Publis
 + change |   Cap the retries at 5? — your draft · uploader.txt:1  [yours]
 ```
 
-## 104. Change › Vote and Publish… › Escape
+## 106. Change › Vote and Publish… › Escape
 
 **Expect:** A picker offers the votes Gerrit lets you give on 900, each with what the project says it means, opening on Code-Review +1, and your draft without a vote. Escape sends nothing.
 
@@ -2750,7 +2825,7 @@ picker: Vote on 900 "Add retry to the uploader" — "1 draft of yours goes out w
 (no change)
 ```
 
-## 105. Change › Vote and Publish… › Code-Review +1 › type "Thanks!" › Publish
+## 107. Change › Vote and Publish… › Code-Review +1 › type "Thanks!" › Publish
 
 **Expect:** After the vote, an optional message; then one dialog lists what goes out (Code-Review +1, the draft at uploader.txt:1, the message, on change 900) and says it cannot be taken back. Publish sends it; a notification says what was published, the draft shows as published in the Change view and the vote on 900's row.
 
@@ -2789,7 +2864,7 @@ notification (info): Published Code-Review +1 and 1 draft on change 900.
 - change |   Cap the retries at 5? — your draft · uploader.txt:1  [yours]
 ```
 
-## 106. Inline Vote and Publish… on the To review row of 900 › Code-Review +2 › no message › Cancel
+## 108. Inline Vote and Publish… on the To review row of 900 › Code-Review +2 › no message › Cancel
 
 **Expect:** The row's button votes on its chain (here only 900): the same picker and message, and the dialog. Cancelled, nothing is sent.
 
@@ -2815,7 +2890,7 @@ Everyone on the change sees it at once; it cannot be taken back.
 (no change)
 ```
 
-## 107. Command palette › ger: Publish Drafts…, with no drafts left on 900
+## 109. Command palette › ger: Publish Drafts…, with no drafts left on 900
 
 **Expect:** It says there are no drafts of yours on 900 to publish, and asks nothing.
 
@@ -2831,7 +2906,7 @@ notification (info): You have no drafts on 900 to publish.
 ```
 ```
 
-## 108. Inline Review Change on change 900, ger.reviewCheckout being branch
+## 110. Inline Review Change on change 900, ger.reviewCheckout being branch
 
 **Expect:** This checkout switches to change-900 with 900's changes staged, and the notification says so. Local stack lists 900's chain: its row is marked under review, not HEAD, with no Rebase onto origin/main (nothing there is yours to rewrite). The Change view shows 900, and all its files open in one editor (here one, added by the change).
 
@@ -2867,7 +2942,7 @@ notification (info): Change 900 (patchset 1) is checked out for review: this che
 - editor | e.txt (file, line 2)
 ```
 
-## 109. Change › Files › uploader.txt
+## 111. Change › Files › uploader.txt
 
 **Expect:** Your file opens, not the commit's copy: the working files hold the change, so comments are drawn where they are written and language features work.
 
@@ -2878,7 +2953,7 @@ notification (info): Change 900 (patchset 1) is checked out for review: this che
 - editor | Change 900 (<sha>) (1 file) (webview)
 ```
 
-## 110. "+" on line 1 of uploader.txt, your file › Save Draft
+## 112. "+" on line 1 of uploader.txt, your file › Save Draft
 
 **Expect:** The draft is saved on Gerrit as on the commit's lines, and listed as yours in the Change view.
 
@@ -2890,7 +2965,7 @@ status bar message: $(check) Draft saved on Gerrit, visible only to you: Vote an
 + change |   Is 3 enough on a slow link? — your draft · uploader.txt:1  [yours]
 ```
 
-## 111. Next Unresolved Comment (Alt+F9)
+## 113. Next Unresolved Comment (Alt+F9)
 
 **Expect:** 900 is not yours: the walk takes your draft too, so it counts four (the three open comments and yours), in the Change view's order.
 
@@ -2900,7 +2975,7 @@ status bar message: Comment 1 of 4
 (no change)
 ```
 
-## 112. Change › Review Next Change in Chain
+## 114. Change › Review Next Change in Chain
 
 **Expect:** 900 is the only change of its chain: it says so and offers Vote on the Chain… and Leave Review. Nothing moves.
 
@@ -2912,7 +2987,7 @@ notification (info): Change 900 has no review chain to walk.  [Vote on the Chain
 (no change)
 ```
 
-## 113. Change › … › Leave Review Checkout
+## 115. Change › … › Leave Review Checkout
 
 **Expect:** Back on the branch it came from; the views are your stack again.
 

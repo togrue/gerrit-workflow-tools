@@ -269,6 +269,37 @@ export function rebaseButtons(rebase: Pick<Rebase, "stop" | "actions"> | null | 
   }));
 }
 
+/** What Work on Next says: the attention walk (`ger edit -n`) from the extension. */
+export const WALK_WORDS = {
+  title: "Work on Next",
+  continues: (next: string) => `ger edit -n runs in the ger terminal: it continues the rebase and stops at "${next}", the next commit that needs edits`,
+  last: "ger edit -n runs in the ger terminal: it continues the rebase; no commit after this one needs edits",
+  starts: "ger edit runs in the ger terminal: it stops at the commit the attention walk is at, or the first that needs edits",
+  notContinued: "Work on Next did not continue the rebase",
+  nothing: "No commit of your stack needs edits: no comments to answer, failed builds or negative votes.",
+  finished: "The rebase is finished, and no commit after it needs edits.",
+  finishedMore: (count: number) => `The rebase is finished. ${count === 1 ? "1 commit of your stack still needs" : `${count} commits of your stack still need`} edits.`,
+  review: "Work on Next walks your own stack: here a staged review holds somebody else's change.",
+};
+
+/**
+ * What Work on Next does from `stack`, by core's verdicts (`needs_edit`, the rebase's stop): go on
+ * with the rebase underway (`ger edit -n`), naming the next commit tip-ward of where it stopped that
+ * needs edits, if any; start the walk (`ger edit`) when one needs edits; else nothing is left.
+ */
+export function workOnNext(stack: Stack): { kind: "continue"; next: StackCommit | undefined } | { kind: "start" } | { kind: "nothing" } | { kind: "review" } {
+  if (stack.staged_review) {
+    return { kind: "review" };
+  }
+  if (stack.rebase_in_progress) {
+    // Oldest first, as GET /stack sends them: what is above the stop (or still to come, between commits) comes after it.
+    const at = stack.commits.findIndex((commit) => commit.rebase === "current");
+    const above = at >= 0 ? stack.commits.slice(at + 1) : stack.commits.filter((commit) => commit.rebase === "todo");
+    return { kind: "continue", next: above.find((commit) => commit.needs_edit) };
+  }
+  return stack.summary.needs_edit ? { kind: "start" } : { kind: "nothing" };
+}
+
 /** Why `ger rebase --<action>` is not to run now, in core's words (`rebase.refused`); undefined when it may, or core has said nothing yet (the CLI decides). */
 export function rebaseNotNow(stack: Stack | undefined, action: RebaseAction): string | undefined {
   if (!stack) {

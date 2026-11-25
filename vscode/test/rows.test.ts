@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { CommentChain, Rebase, RebaseAction, StackCommit } from "../src/api";
 import { ChangeState, READ_ONLY, answeredByDraft, changeHeading, changeLines, changeVm, toAnswer } from "../src/changeRows";
 import { attentionIcon, reasonWords } from "../src/format";
-import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, rebaseNotNowFresh, reviewerWords, skipQuestion, stackLines, stoppedAt, sync, stackVm, stackWhere } from "../src/stackRows";
+import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, workOnNext, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, rebaseNotNowFresh, reviewerWords, skipQuestion, stackLines, stoppedAt, sync, stackVm, stackWhere } from "../src/stackRows";
 import { waitingFor } from "../src/state";
 import { attended, chain, comment, commit, content, diff, finding, never, patchsets, shown, stack, state } from "./fixtures";
 
@@ -576,4 +576,17 @@ test("what is left to answer: not a chain your draft answers, nor one waiting on
   ];
   assert.deepEqual(chains.filter(toAnswer).map((c) => c.root_id), ["open"]);
   assert.deepEqual(chains.filter(answeredByDraft).map((c) => c.root_id), ["answered"]);
+});
+
+test("Work on Next: on from the stop to the next commit that needs edits, else the walk's start, else nothing", () => {
+  // Oldest first, as GET /stack sends them.
+  const bottom = commit("Bottom", { needs_edit: true, rebase: "done" });
+  const stopped = commit("Stopped", { needs_edit: true, rebase: "current" });
+  const middle = commit("Middle", { needs_edit: false, rebase: "todo" });
+  const top = commit("Top", { needs_edit: true, rebase: "todo" });
+  const after = commit("After", { needs_edit: true, rebase: "todo" });
+  assert.deepEqual(workOnNext(stack([bottom, stopped, middle, top, after], { rebase_in_progress: true })), { kind: "continue", next: top });
+  assert.deepEqual(workOnNext(stack([bottom, stopped, middle], { rebase_in_progress: true })), { kind: "continue", next: undefined });
+  const resting = (needs: number) => stack([commit("A")], { summary: { commits: 1, ready: 0, attention: 0, needs_edit: needs, not_on_gerrit: 0 } });
+  assert.deepEqual([workOnNext(resting(2)).kind, workOnNext(resting(0)).kind], ["start", "nothing"]);
 });

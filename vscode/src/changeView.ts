@@ -556,6 +556,16 @@ export class ChangeView extends WebView<ChangeVm> {
     }
   }
 
+  /** Open the CI section and the first finding of it that has a place in a file: what this change broke first. Whether there was one. */
+  async openFirstFinding(): Promise<boolean> {
+    await this.openCi();
+    const finding = this.vm().ci?.links.flatMap((link) => link.findings).find((row) => row.path);
+    if (finding?.path) {
+      await this.openLocation({ path: finding.path, line: finding.line });
+    }
+    return Boolean(finding);
+  }
+
   private async fetchCi(): Promise<CiView> {
     const target = this.target;
     if (!target) {
