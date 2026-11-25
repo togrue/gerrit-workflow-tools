@@ -73,7 +73,7 @@ def test_finished_numbered_build_may_cache_its_body() -> None:
     assert fetched.cache_verdict == "body"
     assert fetched.build == "Widget #55"
     assert fetched.url == f"{JENKINS}/console"
-    assert [f.tool for f in fetched.findings] == ["pytest", "generic"]
+    assert [f.tool for f in fetched.findings] == ["pytest"], "the job's own verdict is no finding beside it"
 
 
 def test_running_build_floating_url_or_unknown_state_is_not_cached() -> None:

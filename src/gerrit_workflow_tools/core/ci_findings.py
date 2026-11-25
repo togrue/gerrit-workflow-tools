@@ -70,6 +70,10 @@ _VERDICTS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("generic", re.compile(r"(?P<msg>Build step '.*' marked build as failure)")),
     ("generic", re.compile(r"^Finished: (?P<msg>FAILURE|UNSTABLE|ABORTED)$")),
 )
+_JOB_VERDICTS = frozenset(range(len(_VERDICTS) - 2, len(_VERDICTS)))
+"""Of :data:`_VERDICTS`, the job's own last words (Jenkins): they say the build failed, never where or why."""
+JOB_VERDICT = "verdict"
+"""The ``kind`` of a finding that is only the job's verdict: kept as the one summary when nothing else is found."""
 _RESTATED = re.compile(
     r"^(?:ninja: build stopped: .*|\[INFO\] BUILD FAILURE"
     r"|FAILURE: Build failed with an exception\.|BUILD FAILED in .*)$"
@@ -89,10 +93,11 @@ def find_generic(lines: Sequence[str], claimed: set[int]) -> list[CiFinding]:
         if _RESTATED.match(line):
             claimed.add(i)
             continue
-        for tool, rx in _VERDICTS:
+        for index, (tool, rx) in enumerate(_VERDICTS):
             if m := rx.search(line):
                 claimed.add(i)
-                findings.append(CiFinding(tool=tool, kind="error", message=m.group("msg").strip()))
+                kind = JOB_VERDICT if index in _JOB_VERDICTS else "error"
+                findings.append(CiFinding(tool=tool, kind=kind, message=m.group("msg").strip()))
                 break
     return findings
 
@@ -122,7 +127,9 @@ def find_ci_findings(text: str, *, finders: Sequence[Finder] = FINDERS) -> list[
     """Run *finders* in order over *text*; drop exact duplicates, keep first-seen order.
 
     A path under a workspace directory the log names is made relative to it, so the same
-    file reads the same from any build agent.
+    file reads the same from any build agent. The job's own verdict (``Build step … marked build
+    as failure``, ``Finished: FAILURE``) is no finding where anything else is found, and one
+    summary line where nothing is.
     """
     lines = clean_log_lines(text)
     roots = workspace_roots(lines)
@@ -137,4 +144,5 @@ def find_ci_findings(text: str, *, finders: Sequence[Finder] = FINDERS) -> list[
             if key not in seen:
                 seen.add(key)
                 findings.append(finding)
-    return findings
+    told = [f for f in findings if f.kind != JOB_VERDICT]
+    return told or findings[:1]
