@@ -106,6 +106,10 @@ The commits above your upstream, newest first. One row per commit:
   only throw away what is not committed yet, so `ger rebase --skip` refuses there too. Run from
   the palette where it is not offered, a way on says why not in `ger rebase`'s own words
   (`rebase.refused`).
+- **The Change view follows the rebase.** Each time it stops somewhere new — an edit stop, a
+  conflict, also from a `git rebase --continue` in a terminal — the Change view shows the commit it
+  stopped at, whatever was clicked before (the keyboard stays where it is). While it stays at that
+  stop (you amend, resolve, or click another row) the view is yours.
 - **Stopped on a conflict**, the commit it stopped at has a red conflict icon and is not dimmed:
   it is what wants you. The files still conflicted are listed under the banner; click one to
   resolve it in VS Code's merge editor (the file itself, with its conflict markers, where the

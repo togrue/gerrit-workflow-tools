@@ -131,7 +131,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     overviewTree.badge = waiting ? { value: waiting, tooltip: `${plural(waiting, "chain")} to review` } : undefined;
   });
   let pausedLogged = false;
-  const follower = new ShownCommitFollower(model, changeView);
+  // A rebase that stops somewhere new is shown there (the keyboard stays where it is): openChange is defined below.
+  const follower = new ShownCommitFollower(model, changeView, (commit) => openChange(commitTarget(commit), true));
   const diffTabs = new DiffTabs(model, (line) => log.appendLine(line));
   model.onDidGetNewHeadline(async (headline) => {
     if (setting("notify", true) && (await ui().message("info", headline.text, {}, ["Open"])) === "Open") {
