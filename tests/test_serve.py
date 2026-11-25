@@ -154,6 +154,7 @@ def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monk
             "number",
             "last_pushed_votes",
             "code_change",
+            "ci_patch_set",
             "submittable",
             "votes",
             "reviewers",

@@ -63,6 +63,11 @@ class CiFinding:
     fingerprint: str = ""
     severity: Severity = "error"
     """``warning`` for a diagnostic the tool itself ranks below an error; not part of the fingerprint."""
+    patchset_line: int | None = None
+    """The line CI logged on the patchset it built, when :attr:`line` is where that line sits now in the
+    commit shown (:attr:`CiContent.patch_set`) and differs from it."""
+    line_changed: bool = False
+    """The logged line was changed since CI ran (perhaps by the fix): :attr:`line` is next to where it was."""
 
     def __post_init__(self) -> None:
         if not self.fingerprint:
@@ -88,6 +93,8 @@ class CiFinding:
             "detail": self.detail,
             "fingerprint": self.fingerprint,
             "severity": self.severity,
+            "patchset_line": self.patchset_line,
+            "line_changed": self.line_changed,
         }
 
     @classmethod
@@ -111,6 +118,8 @@ class CiFinding:
             fingerprint=str(raw.get("fingerprint") or ""),
             # Entries stored before severity existed: only ``warning`` kinds ranked below an error.
             severity=severity if severity in ("error", "warning") else ("warning" if kind == "warning" else "error"),
+            patchset_line=_int("patchset_line"),
+            line_changed=raw.get("line_changed") is True,
         )
 
 
@@ -170,6 +179,12 @@ class CiContent:
     """Log text as the caller asked for it (see :data:`BodyMode`); ``None`` when not asked or not had."""
     body_omitted_lines: int = 0
     """Leading log lines left out of :attr:`body` (a ``tail`` view)."""
+    patch_set: int | None = None
+    """The last pushed patchset CI built, when the commit shown is ahead of it with other code: the
+    findings are from before the local changes. ``None``: they are about the commit shown."""
+    lines_on_patchset: bool = False
+    """With :attr:`patch_set`: the findings' lines are that patchset's, not mapped onto the commit shown
+    (the patchset's commit is not in this repository)."""
 
     @property
     def failed(self) -> bool:

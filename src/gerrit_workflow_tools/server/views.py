@@ -130,7 +130,9 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
     ]
     underway = rebase_underway(ctx.run.worktree.repository_dir)
     stopped_at = next((c for c, step in zip(view.commits, steps, strict=True) if step == "current"), None)
-    rebase = RebaseHeadline(progress.stop, stopped_at) if progress else None
+    # A fixup stopped while folding: the stop is about the commit it folds into.
+    folding = next((c for c in view.commits if progress and c.sha == progress.folding_into), None)
+    rebase = RebaseHeadline(progress.stop, folding or stopped_at, folding=folding is not None) if progress else None
     answer = {
         "branch": ctx.run.worktree.branch,
         "head": head,

@@ -180,7 +180,8 @@ def determine_attention(commit: LogCommit, *, chain_blocked: bool) -> list[str]:
         reasons.append(Attention.DIVERGED if commit.diverged else Attention.AHEAD_OF_GERRIT)
     if commit.patchset_status == PatchsetStatus.OUTDATED:
         reasons.append(Attention.OUTDATED_PATCHSET)
-    if ci_failed(commit.verified, commit.ci_failures):
+    # The last pushed patchset's builds are not about this code: no verdict on it yet.
+    if ci_failed(commit.verified, () if commit.ci_patchset else commit.ci_failures):
         reasons.append(Attention.CI_FAILED)
     # A WIP change is not asking for review yet, so missing reviewers and votes say nothing.
     if len(commit.reviewers) == 0 and not commit.wip:

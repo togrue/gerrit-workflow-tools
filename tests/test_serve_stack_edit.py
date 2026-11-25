@@ -47,6 +47,8 @@ def test_stack_says_where_a_stopped_rebase_stands(stack_repo: Path) -> None:
         "stop": "edit",
         "applied": True,
         "current": rows[2].sha,
+        "folding_into": None,
+        "reused": [],
         "unmerged": [],
         "as_before": False,
         "actions": ["continue", "abort"],
@@ -91,6 +93,7 @@ def test_a_rebase_stopped_on_a_conflict_has_its_commit_only_partly_applied(stack
         branch="feature",
         onto=head,
         settled=frozenset({"aaaa111", head}),
+        folding_into=head,
     )
     # Not applied, and nothing unmerged in the index: resolved, ready to continue.
     assert progress.stop is RebaseStop.RESOLVED
@@ -98,6 +101,7 @@ def test_a_rebase_stopped_on_a_conflict_has_its_commit_only_partly_applied(stack
     (merge / "amend").write_text("x\n", encoding="utf-8")
     folding = rebase_progress(stack_repo)
     assert folding is not None and folding.applied is False and folding.stop is RebaseStop.RESOLVED
+    assert folding.folding_into == "x", "the fold names the commit it folds into"
     # Stopped at an edit instead: git notes the commit to amend, and it is applied.
     (merge / "done").write_text("pick aaaa111 one\nexec make\nedit bbbb222 two\n", encoding="utf-8")
     again = rebase_progress(stack_repo)
@@ -126,6 +130,7 @@ def test_a_rebase_underway_is_the_headline_until_it_ends(stack_repo: Path, monke
         "subject": "test! temporary experiment",
         "sha": rows[2].sha,
         "url": overview["local"]["commits"][2]["gerrit_url"],
+        "folding": False,
         "text": "Rebase stopped at 102: test! temporary experiment",
     }
 
@@ -163,6 +168,7 @@ def test_a_rebase_between_commits_has_no_commit_in_its_headline() -> None:
         "subject": None,
         "sha": None,
         "url": None,
+        "folding": False,
         "text": "Rebase paused",
     }
     assert headline_json(RebaseHeadline(None, None))["text"] == "Rebase underway"  # type: ignore[index]

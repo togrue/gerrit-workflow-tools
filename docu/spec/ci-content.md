@@ -99,7 +99,7 @@ Each **CI finding** carries a tool/kind tag. Precise finders run before generic 
 | Scala | `scalac` | `error`, `warning` | sbt's `[error] /path/Foo.scala:12[:5]: msg`, Scala 3's `-- [E007] … Error: path:line:col`, and through Maven `Foo.scala:12: warning: msg` |
 | | `scalatest` | `failed` | `- name *** FAILED ***` and the `(File.scala:12)` line under it |
 | | `sbt` | `error` | `[error] (Compile / compileIncremental) Compilation failed` |
-| any | `generic` | `error` | `Error:` lines, `make: ***`, non-zero exit statuses, `marked build as failure`, `Finished: FAILURE` |
+| any | `generic` | `error`, `verdict` | `Error:` lines, `make: ***`, non-zero exit statuses; the job's own verdict (`Build step '…' marked build as failure`, `Finished: FAILURE`) is kind `verdict`, and only where nothing else is found: then one finding, the first of them |
 
 npm, Maven, Gradle, sbt, Ninja and Make mostly *wrap* another tool: the finding worth reading comes from what they ran, and their own line only says which step failed.
 
@@ -121,6 +121,16 @@ A log names files as the build agent saw them. Two steps make the same file read
 2. **Against the commit.** `CiContentService.fetch(..., commit=…)` resolves each path to a file of that commit (`git ls-tree`, once per commit): the longest tail of the logged path that is a tracked file. This covers `job@2`, container mounts, a checkout in a subdirectory, and paths logged relative to a subdirectory or by bare file name (when exactly one tracked file ends with it).
 
 A file outside the repository is left as logged. So that a system header or an installed package is not taken for a file of ours, the directory a path is stripped of must be one several findings agree on, or the match must be more than a bare file name. When the commit is not in the local repository, only step 1 applies.
+
+### While you fix it
+
+A commit whose code moved on from the patchset Gerrit has (amended, or rebased with a change, so its votes are no longer about it: `last_pushed_votes`) keeps that patchset's **CI links** (`LogCommit.ci_patchset`): the findings are what the fix starts from. They raise no `ci-failed` attention, because nothing is known about the new code yet, and every view says whose they are. `CiContentService.fetch_for_commits` resolves their paths against the patchset's commit and maps each finding's line onto the local commit, by the same line mapping that re-anchors local comments (`map_commit_lines`, one blob diff per file):
+
+- `ci_content[].patch_set`: the patchset CI built; `null` when the findings are about the commit shown.
+- `findings[].line` is where the logged line sits now; `patchset_line` is the line CI logged when that differs; `line_changed` is true when the line itself was edited since (perhaps the fix), and `line` is then next to where it was.
+- `lines_on_patchset` is true when the patchset's commit is not in this repository: the lines are the patchset's, unmapped, and paths are resolved against the local commit.
+
+Human output adds `from patchset 2 (the last pushed), before your local changes` under the link and `README.md:13 (line 11 on patchset 2)` at a moved finding; `ger log -v` dims the build and adds `(patchset 2, before your local changes)`.
 
 ---
 

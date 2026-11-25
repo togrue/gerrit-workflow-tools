@@ -78,7 +78,10 @@ class RebaseHeadline:
     stop: RebaseStop | None
     """Why it is stopped; ``None`` when core cannot tell."""
     commit: LogCommit | None
-    """The commit it stopped at, as the **rebasing stack** shows it; ``None`` between commits."""
+    """The commit it stopped at, as the **rebasing stack** shows it; ``None`` between commits. Stopped
+    folding a fixup into a commit, that commit (:attr:`folding`)."""
+    folding: bool = False
+    """Stopped on a fixup or squash that folds into :attr:`commit`."""
 
     section = LOCAL
     reason = REBASE

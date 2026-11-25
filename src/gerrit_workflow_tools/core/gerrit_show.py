@@ -361,7 +361,7 @@ def load_shown_commits(
         _mark_waiting_on_you(service, commits)
     per_commit: list[list[CiContent] | None] = [None] * len(commits)
     if ci is not None:
-        per_commit = list(ci.fetch_each([(commit.ci_links, commit.sha or None) for commit in commits]))
+        per_commit = list(ci.fetch_for_commits(commits))
     shown: list[ShownCommit] = []
     for target, commit, ci_contents in zip(targets, commits, per_commit, strict=True):
         rest_key = gerrit_rest_key(commit, target.resolution, service)

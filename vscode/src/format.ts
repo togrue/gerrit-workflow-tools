@@ -85,7 +85,9 @@ export function rebaseItem(headline: RebaseHeadline, rebase?: Rebase | null): { 
   const { stop, number, subject } = headline;
   // A subject is quoted, so "Conflict in" does not read as naming a file.
   const what = number ? String(number) : subject ? `"${shortSubject(subject)}"` : undefined;
-  const text = !stop ? "Rebase underway" : what ? REBASE_ITEM[stop](what) : stop === "paused" ? "Rebase paused" : "Rebase stopped";
+  const named = !stop ? "Rebase underway" : what ? REBASE_ITEM[stop](what) : stop === "paused" ? "Rebase paused" : "Rebase stopped";
+  // Folding a fixup, core names the commit it folds into: the fixup itself is not the change.
+  const text = headline.folding && what ? `${named}, folding a fixup into it` : named;
   const unmerged = rebase?.unmerged ?? [];
   const where = unmerged.length === 1 ? ` in ${unmerged[0]}` : unmerged.length ? ` in ${plural(unmerged.length, "file")}` : "";
   const refused = rebase && !unmerged.length && !rebase.actions.includes("continue") ? rebase.refused.continue : undefined;

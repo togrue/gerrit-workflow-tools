@@ -490,19 +490,19 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/editor_extension.py` | The VS Code extension that goes with ger: the one a release bundles (`bundled_extension`), a checkout's sources (`source_extension`) and packaging them (`build_extension`), the editor's CLI (`find_editor_cli`), and installing it |
 | `core/git_state.py` | Repository state: branch, HEAD, upstream, Gerrit push destination, and the branch a stopped rebase belongs to |
 | `core/tracked_changes.py` | What the index and work tree hold of yours, by what `git stash` saves of it (`tracked_changes`, `TrackedChanges`): changes to tracked files, submodules staged at another commit, submodules a file replaced. A submodule's own state is none of them |
-| `core/rebase_state.py` | A rebase underway: whether one is, how far it got and why it stopped (`rebase_progress`, `RebaseProgress`, `RebaseStop`) |
+| `core/rebase_state.py` | A rebase underway: whether one is, how far it got, why it stopped and, on a fixup, what it folds into (`rebase_progress`, `RebaseProgress`, `RebaseStop`) |
 | `core/rebase_next_step.py` | What to do at a rebase underway, in one set of words (`CONTINUE`, `SKIP`, `ABORT`, `FINISH`): the refusal a rebase underway causes (`rebase_refusal`), the one next step after a conflict (`conflict_next_step`) or at an edit stop (`edit_stop_next_step`), and why a way on is refused (`stop_refusal` from the stop alone, `go_on_refusal` before every ger "go on") |
 | `core/rewrite_refusal.py` | Why rewriting the local stack, or a switch, cannot start: the one wording each rewrite shares (`history_rewrite_refusal`), its parts over what the index and work tree hold (`uncommitted_changes_refusal`, `submodule_refusal`), and a target whose change Gerrit already closed (`closed_change_refusal`, for `ger edit` / `reword` / `fix`) |
 | `core/rebasing_stack.py` | The **rebasing stack**: the local stack while a rebase is underway, each commit with its **rebase step** (`load_rebasing_stack`, `RebasingStack`, `RebaseStep`), and where the rebase stopped as `GET /stack` serves it, the stop `ger rebase --continue|--skip` refuses by (`stopped_rebase`) |
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log`, as text (`format_call_trace_summary`); `cli_common.print_call_trace_summary` prints it |
 | `core/changeish.py` | The changeish grammar: what an input naming a commit or change looks like |
 | `core/change_id.py` | Change-Id footer: `parse_change_id_footer` (raw footer value), `validate_change_id_value`, `extract_valid_change_id`, `change_id_of_rev`, `classify_issues` and the errors its issues are worth (`change_id_issues_error`: `ChangeIdIssuesError`, `DuplicateChangeIdError`), generate and fix |
-| `core/stack.py` | Local stack: `Commit` (the one commit-row type), `get_stack_snapshot` (the one stack loader), `read_commit_rows`, `read_commit_meta`, `read_rewrite_rows`, ranges, merge-base |
+| `core/stack.py` | Local stack: `Commit` (the one commit-row type), `get_stack_snapshot` (the one stack loader), `read_commit_rows` (a fold's squash template read as the message will be: `squash_cleaned`), `read_commit_meta`, `read_rewrite_rows`, ranges, merge-base, fixup targets and their autosquash order (`fixup_target_sha`, `autosquash_order`) |
 | `core/ready_calc.py` | Ready boundary and push range |
 | `core/ready_strategy.py` | Loading ready-boundary strategies from `.ger/ready/` |
 | `core/annotated_stack.py` | Annotated stack: local stack + Gerrit overlay + attention; the stack overview `ger log` and `GET /stack` answer from (`load_stack_overview`), with what `ger push` would upload (`StackOverview.to_upload`) and the stack's next steps (`StackOverview.next_steps`: `NextStep`, `NextStepKind`) |
 | `core/gerrit_change_status.py` | `LogCommit`, patchset status, whether a `newer` commit has **diverged** (`is_diverged`) |
-| `core/code_facts.py` | What the repository knows about the code an overlay compares (`CodeFacts`, `read_code_facts`: one git batch) and merged equivalence (`merged_equivalent`) |
+| `core/code_facts.py` | What the repository knows about the code an overlay compares (`CodeFacts`, `read_code_facts`: one git batch) merged equivalence (`merged_equivalent`), and the files a commit ahead of Gerrit no longer changes (`files_dropped`) |
 | `core/patchset_history.py` | Whether Gerrit's patchset is in a local commit's history (`built_on`: branch, reflog, `lastPush/<branch>`), and ger's record of a patchset it took over (`refs/ger/taken/`, `record_taken`); ADR-0015 |
 | `core/annotated_targets.py` | Commits named on the command line (`ger show`, `ger ci`) judged as the local stack sees them: within the whole stack, and merged when the upstream contains them (`annotate_targets`, `local_stack_or_none`) |
 | `core/attention.py` | Attention: reason names, `determine_attention()`, `ci_failed()`, `comment_reason()` (unresolved comments or awaiting a reply, by whose turn), chain-blocking (the commit that blocks, `LogCommit.blocks_chain`, and why: `blocking_reason()`), edit attention |
@@ -520,7 +520,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/comment_chains.py` | Inline comment threads, resolved and unresolved; whose **turn** each is (`chain_turn`, `unresolved_chain_counts`); how a chain is named (`ChainRef`: id, id prefix, `PATH:LINE`, URL) |
 | `core/suggested_edits.py` | A comment's suggested edits: Gerrit fix suggestions and ```` ```suggestion ```` blocks of its text, in one shape |
 | `core/comment_anchor.py` | Where a new comment sits: the LOCATION grammar, its check against a commit, the anchored text |
-| `core/anchor_mapping.py` | Re-anchoring: where a local comment's anchor lands on another version of its file, moved or outdated (ADR-0011) |
+| `core/anchor_mapping.py` | Re-anchoring: where a local comment's anchor lands on another version of its file, moved or outdated (ADR-0011); the same line mapping between two commits (`map_commit_lines`) for CI findings of the last pushed patchset |
 | `core/comment_target.py` | Which change, commit and patchset a new comment is written on; a file only the change under review elsewhere has (`reviewed_elsewhere_target`) |
 | `core/comment_write.py` | Writing your own comments: starting a chain (a Gerrit draft, a local draft or a note), editing and discarding one not yet published |
 | `core/local_comments.py` | The local comment store: notes and local drafts under `refs/ger/comments` (ADR-0010) |
@@ -528,7 +528,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/ci_links.py` | CI failure names and transformed build links |
 | `core/ci_strategy.py` | Loading CI link strategies and **CI content providers** from `.ger/ci/` |
 | `core/ci_content.py` | **CI content** shapes (`CiContent`, `CiFinding` and its severity, provenance, cache verdict), which warnings are collapsed (`collapse_warnings`), the `CiContentProvider` seam, and **introduced findings** (`introduced_fingerprints`) |
-| `core/ci_content_service.py` | `CiContentService`: CI content for CI links — provider match, credentials, cache policy, body shape, finding paths resolved per commit |
+| `core/ci_content_service.py` | `CiContentService`: CI content for CI links — provider match, credentials, cache policy, body shape, finding paths resolved per commit; a moved-on commit's findings marked as the last pushed patchset's and mapped onto it (`fetch_for_commits`) |
 | `core/ci_content_store.py` | `CiContentStore`: size-bounded LRU store of immutable CI content, apart from the Gerrit cache |
 | `core/ci_findings.py` | Ordered finders that turn a CI log into **CI findings** (`find_ci_findings`): the finder order, build-driver verdicts and the generic fallback |
 | `core/ci_log.py` | A CI log as clean lines (`clean_log_lines`: CI-system line prefixes removed), the workspace directories it names (`workspace_roots`), and what finders share: the `Finder` type, the path and level fragments |
@@ -547,16 +547,16 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |
 | `core/commit_diff.py` | What one commit changed: `commit_diff` (files against the first parent), `diff_between` and `file_text` |
 | `core/review_delta.py` | The **review delta**: `last_reviewed_patch_set`, `load_review_delta` (the patchset you reviewed against the current one, another patchset, or the local commit) |
-| `core/reorder.py` | Rewriting the local stack, all or nothing: `rewrite_stack` (reorder, fold, drop; `autostash`), `undo_rewrite`, `ReorderRefusal`; also the sequence editor that run uses |
+| `core/reorder.py` | Rewriting the local stack, all or nothing: `rewrite_stack` (reorder, fold, drop; `autostash`), `fold_fixup` (`ger fix --autosquash`), `undo_rewrite`, `ReorderRefusal`; also the sequence editor that run uses |
 | `core/rewrite_outcome.py` | What a finished rewrite of the local stack did, as data (`rewrite_outcome`, `RewriteOutcome`): commits rewritten, how many of them now ahead of Gerrit (from the cache, no request), fixups squashed, commits already upstream, and the commits it dropped (`DroppedCommit`, `dropped_commit`), against the stack before it (`stack_before`) |
 | `core/reword.py` | Message-only rewrites, every tree kept: `rewrite_messages` (recreate commits with new messages), `move_head`, `reword_commit` (one stack commit, its **Change-Id** kept), `add_missing_change_ids` (`ger change-id --fix`) |
-| `core/reorder_preview.py` | Whether a rewrite would conflict (or a pick become empty), simulated with `git merge-tree`, worktree untouched: `first_conflict`, `swap_conflicts`, `replay_conflict`, `PickConflict`, `PickStop`, `PreviewUnavailable` |
+| `core/reorder_preview.py` | Whether a rewrite would conflict (or a pick become empty), simulated with `git merge-tree`, worktree untouched: `first_conflict`, `swap_conflicts`, `replay_conflict`, whether a fixup `ger fix` is about to make folds cleanly (`fixup_fold_conflict`, `FoldConflict`), `PickConflict`, `PickStop`, `PreviewUnavailable` |
 | `core/agent_runbook.py` | The **agent runbook**: `plan_runbook` (stops of the attention walk, what is the agent's and what is not) and **holds** (`load_holds`, `set_hold`) |
 | `core/push.py` | Push plan and push refusal: prepare, revise, execute |
 | `core/push_result.py` | What `git push` answered and what `ger push` did after it: `PushResult`, Gerrit's `no new changes` |
 | `core/push_options.py` | Push options (`PushOptions`) and their magic-ref form on the refspec (`push_refspec`) |
 | `core/push_unchanged.py` | Push options on changes Gerrit already has at that commit: `planned_updates` (only what differs), `apply_updates` over REST, `OutdatedChange` (Gerrit has a newer patch set: nothing is set), and the warning when options reached nothing |
-| `core/push_targets.py` | What each commit a push sends becomes on Gerrit: a new change, or the next patch set of one (`NextPatchset`: rebase only or code changed, owner, reviewers), read from what the push loads anyway; after it, `pushed_changes`: the patch set each became, for the closing lines |
+| `core/push_targets.py` | What each commit a push sends becomes on Gerrit: a new change, or the next patch set of one (`NextPatchset`: rebase only or code changed, owner, reviewers, files it no longer changes), read from what the push loads anyway; after it, `pushed_changes`: the patch set each became, for the closing lines |
 | `core/push_checks.py` | What a push looks at before it runs: the branch it pushes, its ready boundary and the commits below it, the remote rebase check, what Gerrit already holds |
 | `core/push_reviewers.py` | Post-push reviewer strategies and the reviewer marks a push preview reads |
 | `core/reviewer.py` | `ReviewerAccount`, reviewer-name parsing and resolution to account ids, and who a push asks for |

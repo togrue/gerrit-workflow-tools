@@ -1599,3 +1599,5 @@ def test_push_preview_says_rebase_only_or_code_changed(
     )
     assert code == 0
     assert f"# {rows[0].subject}  change 100, patchset 5 ({says})" in out
+    # Patch set 4 changes side.txt too, the local commit does not: said, not refused.
+    assert ("c100: no longer changes side.txt (patchset 4 did)" in out) is edited

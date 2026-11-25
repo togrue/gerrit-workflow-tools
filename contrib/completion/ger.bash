@@ -173,9 +173,19 @@ _ger_edit() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --first-attention-commit -n --next --cursor --cursor-history --set-cursor --reword --drop -m --message -F --file --debug-log --refresh
+        __gwt_flags "$cur" -h --help --first-attention-commit -n --next --cursor --cursor-history --set-cursor --reword --drop -m --message -F --file --debug-log --refresh --color --hyperlinks
         return
     fi
+    case "$prev" in
+        --color)
+            __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --hyperlinks)
+            __gwt_flags "$cur" always auto never
+            return
+            ;;
+    esac
     if declare -F __git_complete_refs >/dev/null 2>&1; then
         __git_complete_refs
     fi
@@ -194,7 +204,7 @@ _ger_fix() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help -a --all --no-verify --json --format --ai --debug-log --refresh
+        __gwt_flags "$cur" -h --help -a --all --no-verify --force --fold --json --format --ai --debug-log --refresh
         return
     fi
     case "$prev" in
@@ -374,9 +384,19 @@ _ger_reword() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --first-attention-commit -n --next --cursor --cursor-history --set-cursor --edit --drop -m --message -F --file --debug-log --refresh
+        __gwt_flags "$cur" -h --help --first-attention-commit -n --next --cursor --cursor-history --set-cursor --edit --drop -m --message -F --file --debug-log --refresh --color --hyperlinks
         return
     fi
+    case "$prev" in
+        --color)
+            __gwt_flags "$cur" always auto never
+            return
+            ;;
+        --hyperlinks)
+            __gwt_flags "$cur" always auto never
+            return
+            ;;
+    esac
     if declare -F __git_complete_refs >/dev/null 2>&1; then
         __git_complete_refs
     fi

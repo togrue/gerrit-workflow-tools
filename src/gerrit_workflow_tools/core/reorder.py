@@ -228,6 +228,22 @@ def rewrite_stack(
     return StackRewrite(commits, head, stash_kept=stash_kept)
 
 
+def fold_fixup(cwd: Path | str, target: Commit, *, settings: Settings) -> tuple[StackRewrite, Commit]:
+    """Fold the fixup at the stack's tip into *target* right away, as ``git rebase --autosquash`` would.
+
+    Uncommitted changes are stashed for it and put back. Returns the rewrite and the folded commit.
+    Raises :class:`ReorderRefusal`, the stack as it was, where :func:`rewrite_stack` would.
+    """
+    stack = get_stack_snapshot(cwd, settings=settings).commits
+    order = [StackStep(c.sha) for c in stack[:-1]]
+    at = next((i for i, c in enumerate(stack) if c.sha == target.sha), None)
+    if at is None:
+        raise ReorderRefusal(f"{target.short_sha} is no longer in the local stack")
+    steps = [*order[: at + 1], StackStep(stack[-1].sha, "fixup"), *order[at + 1 :]]
+    rewrite = rewrite_stack(cwd, steps, settings=settings, autostash=True)
+    return rewrite, rewrite.commits[at]
+
+
 def undo_rewrite(cwd: Path | str, rewrite_head: str, previous_head: str) -> None:
     """Put the branch back on *previous_head*, if it still is where the rewrite left it.
 

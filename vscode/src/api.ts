@@ -131,6 +131,8 @@ export interface RebaseHeadline {
   subject: string | null;
   sha: string | null;
   url: string | null;
+  /** Stopped on a fixup folding into that commit: the stop is about it (API 1.2). */
+  folding?: boolean;
   text: string;
 }
 
@@ -220,6 +222,10 @@ export interface Rebase {
   applied: boolean;
   /** The commit it stopped at, as the stack shows it. */
   current: string | null;
+  /** Stopped on a fixup or squash: the commit it folds into (API 1.2). */
+  folding_into?: string | null;
+  /** Paths git rerere resolved at this stop from a resolution recorded earlier: unchecked (API 1.2). */
+  reused?: string[];
   /** Paths the index still holds as unresolved conflicts. */
   unmerged: string[];
   /** The stack is the branch as it was before the rebase (git's `am` backend keeps no todo): no commit has a step. */
@@ -382,6 +388,10 @@ export interface CiFinding {
   fingerprint: string;
   /** A warning ranks below an error: it is rarely why the build failed. */
   severity: "error" | "warning";
+  /** The line CI logged on the last pushed patchset, when `line` is where it sits in the local commit now (API 1.2). */
+  patchset_line?: number | null;
+  /** That line was edited since CI ran: `line` is next to where it was (API 1.2). */
+  line_changed?: boolean;
 }
 
 export interface CiContent {
@@ -401,6 +411,8 @@ export interface CiContent {
   findings: CiFinding[];
   /** Some error explains the failure, so the warnings step back behind a count. */
   collapse_warnings: boolean;
+  /** The last pushed patchset CI built, when the local commit moved on with other code (API 1.2). */
+  patch_set?: number | null;
 }
 
 export interface ShownCommit extends CommitStatus {

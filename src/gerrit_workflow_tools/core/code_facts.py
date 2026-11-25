@@ -27,6 +27,9 @@ class CodeFacts:
     built_on: frozenset[str] = frozenset()
     """Gerrit's current patch sets that are in the history of the local commit compared to them
     (``core/patchset_history.py``): the ones a ``newer`` commit has not **diverged** from."""
+    files: dict[str, frozenset[str]] = field(default_factory=dict)
+    """The files each present single-parent commit with a non-empty diff changes, from the same diff
+    as its patch-id (a path git quotes is left out)."""
 
 
 def read_code_facts(cwd: Path | str | None, shas: Iterable[str | None]) -> CodeFacts:
@@ -44,7 +47,22 @@ def read_code_facts(cwd: Path | str | None, shas: Iterable[str | None]) -> CodeF
         return CodeFacts(present)
     ids = git("patch-id", cwd=cwd, input=diffs.stdout, check=False).stdout
     pairs = (line.split() for line in ids.splitlines())
-    return CodeFacts(present, {commit: pid for pid, commit, *_ in pairs})
+    return CodeFacts(present, {commit: pid for pid, commit, *_ in pairs}, files=_changed_files(diffs.stdout, present))
+
+
+def _changed_files(patches: str, commits: frozenset[str]) -> dict[str, frozenset[str]]:
+    """By commit, the paths of the ``diff --git a/P b/P`` headers ``git diff-tree --stdin -p`` printed for it."""
+    files: dict[str, set[str]] = {}
+    at: str | None = None
+    for line in patches.splitlines():
+        if line in commits:
+            at = line
+        elif at and line.startswith("diff --git a/"):
+            both = line[len("diff --git ") :]
+            path = both[2 : (len(both) - 1) // 2]  # no rename detection in diff-tree: a/P b/P, the same P
+            if both == f"a/{path} b/{path}":
+                files.setdefault(at, set()).add(path)
+    return {commit: frozenset(paths) for commit, paths in files.items()}
 
 
 def merged_equivalent(local_sha: str, change: ChangeView, facts: CodeFacts) -> bool | None:
@@ -83,6 +101,17 @@ def code_change(local_sha: str, change: ChangeView, facts: CodeFacts) -> CodeCha
     """Whether *local_sha*, ahead of *change*'s current patch set, changed its code or is only rebased."""
     same = merged_equivalent(local_sha, change, facts)
     return CodeChange.UNKNOWN if same is None else CodeChange.REBASED if same else CodeChange.CHANGED
+
+
+def files_dropped(local_sha: str, change: ChangeView, facts: CodeFacts) -> tuple[str, ...]:
+    """The files *change*'s current patch set changes that *local_sha*, ahead of it, no longer does.
+
+    Empty when that cannot be told: Gerrit's patch set is not here, or either side is a merge, a root
+    or an empty commit.
+    """
+    pushed = facts.files.get(norm_sha(change.current_revision or ""))
+    local = facts.files.get(norm_sha(local_sha))
+    return tuple(sorted(pushed - local)) if pushed is not None and local is not None else ()
 
 
 def norm_sha(sha: str) -> str:

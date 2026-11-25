@@ -105,6 +105,8 @@ test("the status bar says where a rebase stopped, by the change number or else t
   assert.equal(text(at("edit", 101)), "Rebase stopped at 101");
   assert.equal(text(at("split", 101)), "Rebase stopped to split 101");
   assert.equal(text(at("conflict", 103)), "Conflict in 103");
+  // A fixup stopped folding: core names the commit it folds into, and says so.
+  assert.equal(text({ ...at("conflict", 2168), folding: true }), "Conflict in 2168, folding a fixup into it");
   assert.equal(text(at("resolved", 103)), "Conflict resolved in 103");
   assert.equal(text(at("paused", null, null)), "Rebase paused");
   assert.equal(text(at(null, null, null)), "Rebase underway");

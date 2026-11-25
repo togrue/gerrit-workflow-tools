@@ -9,6 +9,7 @@ import sys
 from typing import Literal
 
 from gerrit_workflow_tools.cli_args import (
+    add_color_args,
     add_message_args,
     add_verbose_and_debug_log_args,
     changeish_help,
@@ -133,6 +134,7 @@ def _build_parser(*, prog: str, description: str, default_action: Literal["edit"
     add_verbose_and_debug_log_args(
         p,
     )
+    add_color_args(p)
     return p
 
 

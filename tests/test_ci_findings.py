@@ -55,11 +55,18 @@ def test_pytest_failure_is_located_at_the_raising_frame() -> None:
     assert failure.detail == "ZeroDivisionError: division by zero"
 
 
-def test_generic_lines_outside_pytest_still_count_but_inside_do_not() -> None:
+def test_the_jobs_own_verdict_is_no_finding_beside_the_ones_that_say_why() -> None:
+    """``Build step 'Execute shell' marked build as failure`` and ``Finished: FAILURE`` say only that it failed."""
     findings = _by_tool(find_ci_findings(PYTEST_LONG))
-    messages = [f.message for f in findings["generic"]]
-    assert messages == ["Build step 'Execute shell' marked build as failure", "FAILURE"]
-    assert set(findings) == {"pytest", "generic"}
+    assert set(findings) == {"pytest"}
+    # Alone, the verdict is all there is to say: one summary line, not two.
+    alone = find_ci_findings("+ ./build.sh\nBuild step 'Execute shell' marked build as failure\nFinished: FAILURE\n")
+    assert [(f.tool, f.kind, f.message) for f in alone] == [
+        ("generic", "verdict", "Build step 'Execute shell' marked build as failure")
+    ]
+    # Other generic lines are findings: they say what failed.
+    told = find_ci_findings("error: linker failed\nFinished: FAILURE\n")
+    assert [f.message for f in told] == ["linker failed"]
 
 
 def test_pytest_short_traceback_uses_the_test_frame() -> None:

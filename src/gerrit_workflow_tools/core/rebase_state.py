@@ -98,6 +98,12 @@ class RebaseProgress:
     clean: bool = False
     """The index and work tree hold nothing ``git rebase --skip`` would throw away; told only
     where the commit it stopped at was committed by hand (:attr:`committed_by_hand`)."""
+    folding_into: str | None = None
+    """Stopped on a ``fixup``/``squash`` not applied yet: the commit it folds into (``HEAD``, the
+    target as folded so far). The stop is about that commit's change, not the ``fixup!`` commit's."""
+    reused: tuple[str, ...] = ()
+    """Paths of this stop's conflict that git rerere resolved with a resolution recorded before:
+    staged already, or written into the file and still unmerged. Nobody has looked at them yet."""
 
     @property
     def committed_by_hand(self) -> bool:
@@ -216,6 +222,7 @@ def rebase_progress(cwd: Path | str | None, *, repo_dir: Path | None = None) -> 
     settled = frozenset(sha for sha in (*done[:-1], *_rewritten(state / "rewritten-list"), onto, amend) if sha)
     # Detached while it runs, so HEAD names a commit: one git did not leave there was made by hand.
     moved = not applied and _state_word(repo_dir / "HEAD") not in settled
+    unmerged = unmerged_paths(cwd)
     return RebaseProgress(
         done=tuple(sha for sha in done[:-1] if sha),
         current=current,
@@ -224,12 +231,53 @@ def rebase_progress(cwd: Path | str | None, *, repo_dir: Path | None = None) -> 
         branch=_rebased_branch(state),
         onto=onto,
         orig_head=_state_word(state / "orig-head"),
-        unmerged=tuple(unmerged_paths(cwd)),
+        unmerged=tuple(unmerged),
         amend=amend,
         settled=settled,
         moved=moved,
         clean=moved and _nothing_uncommitted(cwd),
+        folding_into=(amend or _state_word(repo_dir / "HEAD")) if folding and not applied and not moved else None,
+        reused=_reused_resolutions(cwd, repo_dir, current, unmerged) if current and not applied and not moved else (),
     )
+
+
+def _reused_resolutions(cwd: Path | str | None, repo_dir: Path, current: str, unmerged: list[str]) -> tuple[str, ...]:
+    """The paths git rerere resolved at the stop on *current* from a resolution it recorded before.
+
+    rerere lists each text conflict it tracks in ``MERGE_RR`` until the commit, and drops one the
+    moment it puts a recorded resolution in (staged with ``rerere.autoUpdate``, else left
+    unmerged, without conflict markers); one you resolve keeps its entry. The stop's text conflicts
+    are told again by one ``git merge-tree``; no git call without rerere.
+    """
+    from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, text_conflicts
+
+    entries = _merge_rr(repo_dir / "MERGE_RR")
+    if entries is None:
+        return ()
+    try:
+        conflicted = text_conflicts(cwd or ".", "HEAD", current)
+    except PreviewUnavailable:
+        return ()
+    top = Path(cwd or ".")
+    return tuple(p for p in conflicted if p not in entries and (p not in unmerged or not _has_markers(top / p)))
+
+
+def _has_markers(path: Path) -> bool:
+    try:
+        return any(
+            line.startswith("<<<<<<< ") for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
+        )
+    except OSError:
+        return True
+
+
+def _merge_rr(path: Path) -> set[str] | None:
+    """The paths rerere's ``MERGE_RR`` tracks; ``None`` without one (rerere is off)."""
+    try:
+        records = path.read_text(encoding="utf-8", errors="replace").split("\0")
+    except OSError:
+        return None
+    return {name for _entry, tab, name in (record.partition("\t") for record in records) if tab}
 
 
 def _apply_progress(cwd: Path | str | None, repo_dir: Path) -> RebaseProgress:

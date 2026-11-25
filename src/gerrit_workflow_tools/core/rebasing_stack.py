@@ -44,6 +44,12 @@ class RebasingStack:
         """The commit the rebase stopped at, as the stack shows it."""
         return next((c for c, step in zip(self.commits, self.steps, strict=True) if step is RebaseStep.CURRENT), None)
 
+    @property
+    def folding_into(self) -> Commit | None:
+        """The commit a stopped fixup or squash folds into (:attr:`RebaseProgress.folding_into`), as shown."""
+        target = self.rebase.folding_into
+        return next((c for c in self.commits if target and c.sha == target), None)
+
 
 def _same_change(a: Commit, b: Commit) -> bool:
     """Whether *a* and *b* are one change: the same Change-Id, else the same subject.

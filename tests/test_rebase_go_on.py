@@ -14,6 +14,7 @@ import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_edit import main as edit_main
+from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_rebase import main as rebase_main
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.rebase_next_step import go_on_refusal
@@ -570,3 +571,63 @@ def test_on_a_terminal_the_next_step_wraps_between_words(stack_repo: Path, monke
     said = " ".join(line.strip() for line in lines)
     assert "`ger rebase --continue` to finish" in said and "`ger rebase --abort` goes back" in said
     assert [line[:6] for line in lines[2:]] == ["      "] * len(lines[2:]), "the rest indented under next:'s text"
+
+
+# --- A resolution git rerere reused --------------------------------------------------
+
+
+def _conflict_at_continue(repo: Path) -> None:
+    """Edit the commit below the top so that the top no longer applies: the rebase stops on a conflict there."""
+    env = {"GIT_SEQUENCE_EDITOR": "sed -i -e 1s/^pick/edit/"}
+    git("rebase", "-q", "-i", "HEAD~2", cwd=repo, env=env)
+    (repo / "notes.txt").write_text("amended below\n", encoding="utf-8")
+    git("commit", "-q", "-a", "--amend", "--no-edit", cwd=repo)
+    assert git("rebase", "--continue", cwd=repo, env={"GIT_EDITOR": "true"}, check=False).returncode != 0
+
+
+@pytest.mark.parametrize("auto_update", [True, False], ids=["staged", "unstaged"])
+def test_a_resolution_rerere_reused_is_said_to_be_its_own(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch, auto_update: bool
+) -> None:
+    """git replayed a resolution recorded earlier: ger says so and names the file, instead of "resolved"."""
+    git("config", "rerere.enabled", "true", cwd=stack_repo)
+    git("config", "rerere.autoUpdate", str(auto_update).lower(), cwd=stack_repo)
+    (stack_repo / "notes.txt").write_text("first\n", encoding="utf-8")
+    git("add", "notes.txt", cwd=stack_repo)
+    git("commit", "-q", "-m", "notes: add", cwd=stack_repo)
+    (stack_repo / "notes.txt").write_text("second\n", encoding="utf-8")
+    git("commit", "-q", "-am", "notes: change", cwd=stack_repo)
+    before = git_out("rev-parse", "HEAD", cwd=stack_repo)
+
+    # The first time, resolved by hand: nothing is rerere's, and the resolution is recorded at the commit.
+    _conflict_at_continue(stack_repo)
+    (stack_repo / "notes.txt").write_text("resolved by hand\n", encoding="utf-8")
+    git("add", "notes.txt", cwd=stack_repo)
+    progress = rebase_progress(stack_repo)
+    assert progress is not None and progress.stop is RebaseStop.RESOLVED and progress.reused == ()
+    git("rebase", "--continue", cwd=stack_repo, env={"GIT_EDITOR": "true"})
+
+    # Again: git puts the recorded resolution back by itself.
+    git("reset", "-q", "--hard", before, cwd=stack_repo)
+    _conflict_at_continue(stack_repo)
+    assert (stack_repo / "notes.txt").read_text(encoding="utf-8") == "resolved by hand\n"
+    progress = rebase_progress(stack_repo)
+    assert progress is not None and progress.reused == ("notes.txt",)
+    assert progress.stop is (RebaseStop.RESOLVED if auto_update else RebaseStop.CONFLICT)
+
+    _code, _out, err = run_cli(stack_repo, log_main, ["--color=never"], monkeypatch, gerrit=_store(stack_repo))
+    assert "git reused a recorded resolution for notes.txt (rerere): check it" in err, err
+    served = _get(GerApi(stack_repo, gerrit=ChangeStore({})), "/stack")
+    assert served["rebase"]["reused"] == ["notes.txt"]
+    # The way on says to check it first; it does not go on by itself.
+    git("rebase", "--abort", cwd=stack_repo)
+    git("reset", "-q", "--hard", before, cwd=stack_repo)
+    monkeypatch.setenv("GIT_EDITOR", "true")
+    env = {"GIT_SEQUENCE_EDITOR": "sed -i -e 1s/^pick/edit/"}
+    git("rebase", "-q", "-i", "HEAD~2", cwd=stack_repo, env=env)
+    (stack_repo / "notes.txt").write_text("amended below\n", encoding="utf-8")
+    git("commit", "-q", "-a", "--amend", "--no-edit", cwd=stack_repo)
+    code, _out, err = run_cli(stack_repo, rebase_main, ["--continue"], monkeypatch, gerrit=ChangeStore({}))
+    assert code != 0 and rebase_in_progress(stack_repo), "stopped there, for you to look"
+    then = "`git add` it, then `ger rebase --continue` to finish" if not auto_update else "then `ger rebase --continue`"
+    assert f"next: git reused a recorded resolution for notes.txt (rerere): check it, {then}" in err, err

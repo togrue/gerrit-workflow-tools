@@ -1,5 +1,8 @@
 """Re-anchoring: where a local comment's anchor lands on another version of its file.
 
+The same line mapping places a **CI finding** of the last pushed patchset on the local
+commit (:func:`map_commit_lines`).
+
 A pure function of (anchor blob, range) and the shown commit (ADR-0011): always one diff
 from the anchored blob straight to the shown one, never chained through earlier
 mappings, and nothing written back. Lines outside the diff's hunks shift by the hunks
@@ -10,6 +13,7 @@ Spec: docu/spec/commands/comment.md § Re-anchoring.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -113,6 +117,47 @@ def _above(hunk: Hunk, line: int) -> bool:
 
 class _DiffFailed(Exception):
     """git could not diff the blobs (one is missing, say): not a fact about their content."""
+
+
+def tree_blobs(cwd: Path | str, commit: str, paths: Sequence[str]) -> dict[str, str] | None:
+    """The blob of each of *paths* in *commit*, one ``git ls-tree``; ``None`` when the commit is not here.
+
+    A path the commit has no file at is left out.
+    """
+    if not paths:
+        return {}
+    listed = git("ls-tree", "-z", "--full-tree", commit, "--", *paths, cwd=cwd, check=False)
+    if listed.returncode != 0:
+        return None
+    found: dict[str, str] = {}
+    for entry in listed.stdout.split("\0"):
+        meta, _, name = entry.partition("\t")
+        fields = meta.split(" ")
+        if name and len(fields) == 3 and fields[1] == "blob":
+            found[name] = fields[2]
+    return found
+
+
+def map_commit_lines(
+    cwd: Path | str, old_commit: str, new_commit: str, wanted: Iterable[tuple[str, int]]
+) -> dict[tuple[str, int], MappedLines] | None:
+    """Where each ``(path, line)`` of *old_commit* sits in *new_commit*, as :func:`map_lines` maps it.
+
+    One blob diff per file that differs. ``None`` when either commit is not here; a pair whose file
+    is missing from either commit, or diffs as binary, is left out.
+    """
+    pairs = set(wanted)
+    paths = sorted({path for path, _line in pairs})
+    old, new = tree_blobs(cwd, old_commit, paths), tree_blobs(cwd, new_commit, paths)
+    if old is None or new is None:
+        return None
+    mapped: dict[tuple[str, int], MappedLines] = {}
+    for path, line in pairs:
+        before, after = old.get(path), new.get(path)
+        hunks = blob_hunks(cwd, before, after) if before and after else None
+        if hunks is not None:
+            mapped[(path, line)] = map_lines(hunks, line, line)
+    return mapped
 
 
 def blob_hunks(cwd: Path | str, old: str, new: str) -> tuple[Hunk, ...] | None:

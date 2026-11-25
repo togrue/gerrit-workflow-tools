@@ -165,6 +165,11 @@ test("the rebase banner offers the ways on core allows from where it stopped, an
   assert.deepEqual(conflict.info.slice(1).map((info) => [info.text, info.conflict, info.tone]), [["src/e.txt", "src/e.txt", "bad"], ["f.txt", "f.txt", "bad"]]);
   assert.deepEqual(stackLines(conflict).slice(0, 3), ["A rebase stopped on a conflict  [Abort] [Skip]", "  ⚠ src/e.txt — conflicted", "  ⚠ f.txt — conflicted"]);
   assert.equal(stackLines(at({ stop: "resolved", applied: false, actions: RESOLVED }))[0], "A rebase stopped with its conflicts resolved — ready to continue  [**Continue**] [Abort] [Skip]");
+  // git rerere put a recorded resolution in: the banner says so, to check it before Continue.
+  assert.equal(
+    stackLines(at({ stop: "resolved", applied: false, actions: RESOLVED, reused: ["README.md"] }))[0],
+    "A rebase stopped with its conflicts resolved — git reused a recorded resolution for README.md: check it before you continue  [**Continue**] [Abort] [Skip]",
+  );
   // The buttons are core's verdict, not the extension's reading of `stop`.
   assert.deepEqual(buttons(at({ stop: "resolved", applied: false, actions: ["abort"] })), ["Abort ger.rebase.abort"]);
   assert.equal(stackVm(stack(commits), undefined, never).info.length, 0, "no rebase, no banner");
@@ -494,6 +499,16 @@ test("the CI group lists errors first and keeps the warnings behind a count", ()
   // With no error to explain the failure, the warnings are the lead and stay in view.
   const only = changeVm(state({ shown: failing, ci: { state: "loaded", contents: [content(false, [both[0]])], introduced: null } }));
   assert.deepEqual([only.ci?.links[0].findings.length, only.ci?.links[0].warnings.length], [1, 0]);
+});
+
+test("the last pushed patchset's CI findings stay while you fix them, said to be from before your changes", () => {
+  const moved = shown({ ci_links: [{ label: "jenkins", url: "u", source: "message" }], attention_reasons: ["ahead-of-gerrit"] });
+  const error = { ...finding("undeclared identifier", "error", "e1"), line: 5, patchset_line: 3 };
+  const vm = changeVm(state({ shown: moved, ci: { state: "loaded", contents: [{ ...content(true, [error]), patch_set: 2 }], introduced: null } }));
+  const [link] = vm.ci?.links ?? [];
+  assert.deepEqual([link.icon, link.tone, link.detail], ["history", "dim", "from patchset 2, before your local changes · 1 finding"]);
+  assert.equal(link.findings[0].line, 5, "a click opens the line where it is now");
+  assert.ok(link.findings[0].notes.includes("src/main.c:5 (line 3 on patchset 2)"));
 });
 
 test("an unstable build is named so, with a warning (not the error), and still counts as CI to look at", () => {

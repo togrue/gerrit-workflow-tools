@@ -13,15 +13,25 @@ from gerrit_workflow_tools.cli_args import add_output_format_args, add_verbose_a
 from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, may_prompt, run_cli_command
 from gerrit_workflow_tools.cli_notes import print_stack_commit_notes
 from gerrit_workflow_tools.cli_terminal import ask_choice
+from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.rebase_next_step import conflict_next_step
 from gerrit_workflow_tools.core.rebase_state import rebase_underway
+from gerrit_workflow_tools.core.reorder import ReorderRefusal, fold_fixup
+from gerrit_workflow_tools.core.reorder_preview import FoldConflict, PickStop, PreviewUnavailable, fixup_fold_conflict
 from gerrit_workflow_tools.core.review_checkout import staged_review_refusal
 from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal
-from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE, fixup_target_sha, get_stack_snapshot
+from gerrit_workflow_tools.core.stack import (
+    UNSQUASHED_FIXUP_ADVICE,
+    Commit,
+    StackSnapshot,
+    fixup_target_sha,
+    get_stack_snapshot,
+)
 from gerrit_workflow_tools.core.usage import UsageError
+from gerrit_workflow_tools.core.words import counted, listed
 from gerrit_workflow_tools.render.wrap import say
 
 
@@ -113,6 +123,16 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Bypass pre-commit and commit-msg hooks (passed through to git commit).",
     )
+    p.add_argument(
+        "--force",
+        action="store_true",
+        help="Create the fixup even when it would not fold cleanly into its target.",
+    )
+    p.add_argument(
+        "--fold",
+        action="store_true",
+        help="Fold the fixup into its target right away (what `ger rebase --autosquash` would do for it).",
+    )
     add_output_format_args(p)
     add_verbose_and_debug_log_args(p)
     return p
@@ -156,6 +176,11 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
             "or use `ger fix -a …` to commit all changes to tracked files."
         )
 
+    rebasing = rebase_underway(run.worktree.repository_dir)
+    if rebasing and args.fold:
+        raise UsageError("a rebase is underway: finish it (`ger rebase --continue`) before folding a fixup with --fold")
+    folds = None if rebasing else _folds_cleanly(cwd, snapshot, commit, args)
+
     cmd: list[str] = ["-c", "core.editor=true", "commit"]
     if args.no_verify:
         cmd.append("--no-verify")
@@ -168,18 +193,69 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         print(cp.stderr.strip() or cp.stdout.strip() or "git commit failed", file=sys.stderr)
         return cp.returncode  # git's own code, as for every child process (exit-codes.md)
 
+    made = git_out("log", "-1", "--format=%h %s", cwd=cwd)
+    folded = _fold_now(cwd, commit, made, settings=settings) if args.fold else None
     if args.json_:
-        payload: dict[str, object] = {"fixup_sha": fixup_sha}
+        payload: dict[str, object] = {"fixup_sha": fixup_sha, "folds_cleanly": folds, "folded": folded is not None}
         if target.resolution is not None:
             payload["resolution"] = target.resolution.to_json_dict()
         print(json.dumps(payload, indent=2))
+    elif folded is not None:
+        print(folded)
     else:
-        print(git_out("log", "-1", "--format=%h %s", cwd=cwd))
+        print(made)
+        clean = f"it folds cleanly into {commit.short_sha}; " if folds else ""
         # The same advice `ger push` and `ger log` give for this commit.
-        rebasing = rebase_underway(run.worktree.repository_dir)
         first = "finish the rebase (`ger rebase --continue`), then " if rebasing else ""
-        say(f"next: {first}{UNSQUASHED_FIXUP_ADVICE}")
+        say(f"{clean}next: {first}{UNSQUASHED_FIXUP_ADVICE}")
     return int(ExitCode.OK)
+
+
+def _folds_cleanly(cwd: Path, snapshot: StackSnapshot, target: Commit, args: argparse.Namespace) -> bool | None:
+    """Whether the fixup about to be made folds cleanly into *target*; refuses unless ``--force`` when not."""
+    try:
+        conflict = fixup_fold_conflict(cwd, snapshot, target, all_tracked=args.commit_all)
+    except PreviewUnavailable as exc:
+        logger.debug("fold check skipped: %s", exc)
+        return None
+    if conflict is None or args.force:
+        return conflict is None
+    raise UsageError(_fold_refusal(conflict, args))
+
+
+def _fold_refusal(conflict: FoldConflict, args: argparse.Namespace) -> str:
+    target, stop = conflict.target, conflict.stop
+    files = listed(list(stop.files)) or "its files"
+    if stop.commit not in conflict.in_the_way:
+        later = listed([c.short_sha for c in conflict.in_the_way])
+        why = (
+            f"its change to {files} conflicts with what {later} change there after it"
+            if later
+            else f"it conflicts in {files}"
+        )
+    elif stop.kind is PickStop.EMPTY:
+        why = f'once it is in, {stop.commit.short_sha} "{stop.commit.subject}" changes nothing any more'
+    else:
+        why = f'once it is in, {stop.commit.short_sha} "{stop.commit.subject}" no longer applies (conflict in {files})'
+    again = " ".join(["ger fix --force", *(["-a"] if args.commit_all else []), args.target])
+    return (
+        f'this fixup would not fold cleanly into {target.short_sha} "{target.subject}": {why}. '
+        f"Make the change in that commit itself (`ger edit {target.short_sha}`), "
+        f"or create the fixup anyway (`{again}`) and resolve the conflict at `ger rebase --autosquash`"
+    )
+
+
+def _fold_now(cwd: Path, target: Commit, made: str, *, settings: Settings) -> str:
+    """Fold the fixup just *made* (HEAD) into *target*, as the autosquash would: the outcome line."""
+    try:
+        rewrite, folded = fold_fixup(cwd, target, settings=settings)
+    except ReorderRefusal as exc:
+        raise UsageError(f"made {made}, but did not fold it: {exc}") from exc
+    above = counted(len(rewrite.commits) - rewrite.commits.index(folded) - 1, "commit")
+    stash = (
+        "; your uncommitted changes did not go back on cleanly: they are in `git stash`" if rewrite.stash_kept else ""
+    )
+    return f"folded into {folded.short_sha} {folded.subject} ({above} above it rewritten){stash}"
 
 
 if __name__ == "__main__":

@@ -124,6 +124,10 @@ def _commit_lines(plan: PushPlan, summary_highlighter: SummaryHighlighter) -> li
         if commit.sha in wip:
             line += color_text("  [WIP]", ANSI_YELLOW)
         lines.append(line)
+        # Seen, not refused: a file this change's last patch set changed, gone from it now.
+        if (becomes := (plan.next_patchsets or {}).get(commit.sha)) and (note := becomes.dropped_note()):
+            who = f"c{becomes.number}" if becomes.number else commit.short_sha
+            lines.append(color_text(f"      {who}: {note}", ANSI_YELLOW))
     return lines
 
 

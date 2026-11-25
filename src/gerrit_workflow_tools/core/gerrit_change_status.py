@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 from urllib.parse import quote
 
-from gerrit_workflow_tools.core.ci_links import CiLink, CiPipeline
+from gerrit_workflow_tools.core.ci_links import CiLink, CiPatchset, CiPipeline
 from gerrit_workflow_tools.core.code_facts import (
     CodeChange,
     CodeFacts,
@@ -191,6 +191,9 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     submittable: bool = False
     votes: tuple[LabelVote, ...] = ()
     """Who voted what on the current patch set; empty while this commit is ahead of it with other code."""
+    ci_patchset: CiPatchset | None = None
+    """While ahead of the pushed patchset with other code: the CI fields are that patchset's builds,
+    kept for their findings while you fix them. Not about this code, so they raise no attention."""
     attention_reasons: list[str] = field(default_factory=list)
     change_status: str | None = None  # raw Gerrit ``status`` (e.g. NEW, MERGED)
     merged_equivalent: bool | None = None  # MERGED only: proved same / different / unknown
@@ -354,8 +357,6 @@ def build_log_commit(
     code = code_change(sha, change, facts) if newer else None
     votes_moved_on = newer and code is not CodeChange.REBASED
     diverged = newer and is_diverged(sha, change, facts)
-    if votes_moved_on:
-        needed.discard("checks")
 
     return (
         LogCommit(
@@ -392,6 +393,7 @@ def build_log_commit(
             private=change.private,
             diverged=diverged,
             code_change=code,
+            ci_patchset=CiPatchset.current_of(change) if votes_moved_on else None,
         ),
         frozenset(needed),
     )

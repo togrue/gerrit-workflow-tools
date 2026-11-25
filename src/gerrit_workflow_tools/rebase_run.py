@@ -29,7 +29,7 @@ from gerrit_workflow_tools.core.rewrite_outcome import (
 )
 from gerrit_workflow_tools.core.rewrite_refusal import history_rewrite_refusal
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE
+from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE, read_commit_rows
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.wrap import say
@@ -163,7 +163,12 @@ def print_stop(cwd: Path, walk_on: str | None) -> bool:
         return False
     if progress.current:
         conflict = " (conflict)" if progress.stop is RebaseStop.CONFLICT else ""
-        say(f"stopped at {git_out('log', '-1', '--format=%h %s', progress.current, cwd=cwd)}{conflict}")
+        conflict = " (conflict, resolved by git rerere)" if progress.reused and not progress.unmerged else conflict
+        if progress.folding_into and (target := read_commit_rows(cwd, "--no-walk", progress.folding_into)):
+            fixup = git_out("log", "-1", "--format=%h", progress.current, cwd=cwd)
+            say(f"stopped while folding fixup {fixup} into {target[0].short_sha} {target[0].subject}{conflict}")
+        else:
+            say(f"stopped at {git_out('log', '-1', '--format=%h %s', progress.current, cwd=cwd)}{conflict}")
     say(f"next: {stop_next_step(progress, walk_on=walk_on)}")
     return True
 

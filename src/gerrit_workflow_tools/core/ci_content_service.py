@@ -17,21 +17,24 @@ from pathlib import Path
 from types import ModuleType
 from urllib.parse import urlparse
 
+from gerrit_workflow_tools.core.anchor_mapping import map_commit_lines
 from gerrit_workflow_tools.core.ci_content import (
     BodyMode,
     CiContent,
     CiContentProvider,
     CiFetchContext,
     CiFetched,
+    CiFinding,
     CiProvenance,
 )
 from gerrit_workflow_tools.core.ci_content_store import CiContentStore, StoredCiContent
 from gerrit_workflow_tools.core.ci_http import CiHttp, Progress, UrllibCiHttp
-from gerrit_workflow_tools.core.ci_links import CiLink
+from gerrit_workflow_tools.core.ci_links import CiLink, CiPatchset
 from gerrit_workflow_tools.core.ci_paths import resolve_finding_paths, tracked_paths
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.ger_registry import SOURCE_DIGEST
 from gerrit_workflow_tools.core.gerrit.rest import parallel_map
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_state import repo_toplevel
 from gerrit_workflow_tools.core.registry_trust import source_digest
 
@@ -132,6 +135,48 @@ class CiContentService:
         )
         flat = iter(self._resolved(by_link[link], commit) for link, commit in pairs)
         return [[next(flat) for _ in links] for links, _commit in groups]
+
+    def fetch_for_commits(self, commits: Sequence[LogCommit], *, body: BodyMode = "none") -> list[list[CiContent]]:
+        """:meth:`fetch_each` for overlay commits: each one's **CI links**, in order.
+
+        A commit ahead of the pushed patchset with other code (:attr:`LogCommit.ci_patchset`) gets
+        that patchset's findings, marked as such, their lines mapped onto the commit where it is here.
+        """
+        groups = [(c.ci_links, (c.ci_patchset.commit if c.ci_patchset else c.sha) or None) for c in commits]
+        fetched = self.fetch_each(groups, body=body)
+        return [
+            self._onto(contents, commit.ci_patchset, commit.sha) if commit.ci_patchset and commit.sha else contents
+            for commit, contents in zip(commits, fetched, strict=True)
+        ]
+
+    def _onto(self, contents: list[CiContent], patchset: CiPatchset, sha: str) -> list[CiContent]:
+        """*contents* of *patchset* shown on local commit *sha*: each finding's line where it is now."""
+        wanted = [(f.path, f.line) for c in contents for f in c.findings if f.path and f.line is not None]
+        mapped = map_commit_lines(self.cwd, patchset.commit, sha, wanted) if self.cwd and wanted else None
+        if mapped is None:
+            # The patchset's commit is not here: its paths are resolved against the local commit, its lines stay.
+            tracked = tracked_paths(self.cwd, sha) if self.cwd else None
+            return [
+                replace(
+                    c,
+                    patch_set=patchset.number,
+                    lines_on_patchset=bool(wanted),
+                    findings=resolve_finding_paths(c.findings, tracked),
+                )
+                for c in contents
+            ]
+
+        def placed(finding: CiFinding) -> CiFinding:
+            if not finding.path or finding.line is None:
+                return finding
+            to = mapped.get((finding.path, finding.line))
+            if to is None:  # the file is gone, or binary: the line is the patchset's
+                return replace(finding, patchset_line=finding.line, line_changed=True)
+            if to.outdated:
+                return replace(finding, line=to.end, patchset_line=finding.line, line_changed=True)
+            return replace(finding, line=to.end, patchset_line=finding.line) if to.end != finding.line else finding
+
+        return [replace(c, patch_set=patchset.number, findings=[placed(f) for f in c.findings]) for c in contents]
 
     def _resolved(self, content: CiContent, commit: str | None) -> CiContent:
         if commit is None or self.cwd is None or not content.findings:

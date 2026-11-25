@@ -118,6 +118,7 @@ def log_commit_json(commit: LogCommit) -> dict[str, object]:
             else None
         ),
         "code_change": commit.code_change,
+        "ci_patch_set": commit.ci_patchset.number if commit.ci_patchset else None,
         "submittable": commit.submittable,
         "votes": [{"label": vote.label, "value": vote.value, "by": vote.by} for vote in commit.votes],
         "reviewers": [{"name": r.slug, "cc": r.cc} for r in commit.reviewers],
@@ -204,6 +205,8 @@ def rebase_json(stack: AnnotatedStack, progress: RebaseProgress | None) -> dict[
         "stop": progress.stop.value if progress.stop else None,
         "applied": progress.applied,
         "current": current.sha if current else None,
+        "folding_into": progress.folding_into,
+        "reused": list(progress.reused),
         "unmerged": list(progress.unmerged),
         "as_before": not progress.keeps_todo,
         "actions": [action.value for action in progress.actions],
