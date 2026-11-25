@@ -5,8 +5,9 @@ import * as vscode from "vscode";
 
 import { handToAgent, runAgent } from "./agent";
 import { CommentChain, Diff, FileChange, Health } from "./api";
+import { sameChange } from "./changeLoad";
 import { ChangeView, Location, ThreadArg } from "./changeView";
-import { DiffTabs, FILE_SCHEME } from "./diffTabs";
+import { DiffTabs, FILE_SCHEME, filePath } from "./diffTabs";
 import { CommentThreads, ThreadComment, closeComment, leaveCommentBox } from "./comments";
 import { setting } from "./config";
 import { EventFollower } from "./events";
@@ -19,12 +20,12 @@ import { Poller } from "./poller";
 import { push, rebaseOntoUpstream, rebaseStep } from "./rebase";
 import { RepoWatcher } from "./repoWatcher";
 import { reportIssue } from "./reportIssue";
-import { checkout, editCommit, leaveReview, review } from "./review";
+import { ReviewWalk, checkout, editCommit, leaveReview, review, stepReview, updateReview } from "./review";
 import { GerProcess } from "./server";
 import { CommitArg, StackView, commitTarget } from "./stackView";
 import { waitsForYou } from "./state";
 import { statusBar } from "./statusBar";
-import { Ui, feedback, ui, useUi } from "./ui";
+import { Ui, feedback, saveReplyResolved, ui, useUi } from "./ui";
 import { setUpstream } from "./upstream";
 import { voteAndPublish } from "./vote";
 import { staticView } from "./webview";
@@ -203,6 +204,65 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     await model.refresh({ fromGerrit: true });
     await changeView.open();
   };
+  /** The change a staged review holds here, shown (the keyboard stays where it is); with `all`, all its files in one editor. */
+  const showReview = async (all: boolean) => {
+    const review = model.stack?.staged_review;
+    const commit = review && model.stack?.commits.find((c) => c.sha === review.commit);
+    if (!commit) {
+      return;
+    }
+    await openChange(commitTarget(commit), true);
+    await changeView.idle();
+    // Reviewed at an earlier patchset: what is new since is what to read, in the view and the combined diff.
+    await changeView.preferReviewDelta();
+    await changeView.idle();
+    if (all) {
+      await changeView.openAll();
+    }
+  };
+  const reviewWalk: ReviewWalk = {
+    show: () => showReview(true),
+    leave: () => changeView.closeCombined(),
+    voteChain: (number) => {
+      const shown = changeView.target?.number === number ? changeView.target : { rev: `change:${number}`, title: String(number), number, local: false };
+      return voteAndPublish(model, shown, { chain: true, after: afterVote });
+    },
+  };
+  /**
+   * A window opened on a staged review (Open Review Worktree, or a reload there) opens on it: the
+   * Gerrit view, the change under review shown, and, in a window with no editor open yet, all its
+   * files. Once, on the first stack ger serve sends.
+   */
+  const greet = model.onDidChange(() => {
+    if (model.state !== "ready" || !model.overview) {
+      return;
+    }
+    greet.dispose();
+    if (!model.stack?.staged_review || changeView.target) {
+      return;
+    }
+    const fresh = vscode.window.tabGroups.all.every((group) => group.tabs.length === 0);
+    void vscode.commands.executeCommand("workbench.view.extension.ger").then(() => showReview(fresh));
+  });
+  context.subscriptions.push(greet);
+  /**
+   * After a vote on the change a staged review holds: Next Change while the chain goes on above it,
+   * Leave Review at its top (`ger review`'s own `next:` line, the vote done). Nothing elsewhere.
+   */
+  const nextAfterVote = (target: ChangeTarget | undefined) => async () => {
+    const review = model.stack?.staged_review;
+    if (!review || review.number !== target?.number) {
+      return undefined;
+    }
+    const chain = (await (await model.client()).review(true))?.chain ?? [];
+    const index = chain.indexOf(review.number);
+    if (index < 0) {
+      return undefined;
+    }
+    return index < chain.length - 1
+      ? { label: "Next Change", run: () => stepReview(model, 1, reviewWalk) }
+      : { label: "Leave Review", run: () => leaveReview(model) };
+  };
   /** A chain row of Review chains votes on its whole chain. */
   const isChainRow = (arg: unknown) => (arg as { kind?: unknown } | undefined)?.kind === "chain";
 
@@ -265,12 +325,18 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       }
       return undefined;
     },
-    "ger.review": (arg: unknown) => review(model, targetOf(arg)),
+    "ger.review": (arg: unknown) => review(model, targetOf(arg), reviewWalk),
     "ger.checkout": (arg: unknown) => checkout(model, targetOf(arg)),
     "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg)),
     "ger.setUpstream": (upstream?: unknown) => setUpstream(model, typeof upstream === "string" ? upstream : undefined),
     "ger.reviewDone": () => leaveReview(model),
-    "ger.vote": (arg: unknown) => voteAndPublish(model, targetOf(arg), { chain: isChainRow(arg), after: afterVote }),
+    "ger.vote": (arg: unknown) => {
+      const target = targetOf(arg);
+      return voteAndPublish(model, target, { chain: isChainRow(arg), after: afterVote, next: isChainRow(arg) ? undefined : nextAfterVote(target) });
+    },
+    "ger.reviewUpdate": () => updateReview(model, reviewWalk),
+    "ger.reviewNext": () => stepReview(model, 1, reviewWalk),
+    "ger.reviewPrev": () => stepReview(model, -1, reviewWalk),
     "ger.publishDrafts": (arg: unknown) => voteAndPublish(model, targetOf(arg), { draftsOnly: true, after: afterVote }),
     "ger.push": () => push(model),
     "ger.rebase.continue": () => rebaseStep(model, "continue"),
@@ -289,6 +355,15 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.copySha": (arg: unknown) => copyIds(arg, "sha"),
     "ger.sortChains": () => overviewView.chooseSort(),
     "ger.openDiff": (file: FileChange, diff?: Diff) => changeView.openDiff(file, diff),
+    "ger.openAllChanges": async (arg: unknown) => {
+      // A row's change is shown first (the keyboard stays where it is), then all its files in one editor.
+      const target = arg === undefined ? changeView.target : targetOf(arg);
+      if (target && !(changeView.target && sameChange(changeView.target, target))) {
+        await openChange(target, true);
+      }
+      await changeView.idle();
+      await changeView.openAll();
+    },
     "ger.openLocation": (location: Location) => changeView.openLocation(location),
     "ger.nextComment": () => threads.step(1),
     "ger.prevComment": () => threads.step(-1),
@@ -296,6 +371,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       const chain = threadOf(arg);
       return chain ? threads.replyToChain(chain, false) : undefined;
     },
+    "ger.replySaveResolved": () => saveReplyResolved(),
     "ger.replyDone": (arg: unknown) => {
       const chain = threadOf(arg);
       return chain ? threads.replyToChain(chain, true) : undefined;
@@ -337,7 +413,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
 
   // Files as they are in a commit, for diffs and for changes that are not checked out.
   const files: vscode.TextDocumentContentProvider = {
-    provideTextDocumentContent: async (uri) => (await (await model.client()).file(uri.query, uri.path.slice(1))) ?? "",
+    provideTextDocumentContent: async (uri) => (await (await model.client()).file(uri.query, filePath(uri, repo))) ?? "",
   };
 
   // Gerrit's event stream, when ger serve has one: a refresh on news, and only a slow poll.

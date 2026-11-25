@@ -246,6 +246,11 @@ export interface Stack {
   rebase?: Rebase | null;
   /** Why `ger push` would refuse now, whatever the stack holds (core's verdict, and its words); null when it would not. */
   push_blocked?: PushBlocked | null;
+  /**
+   * The staged review in this checkout (core's fact, the one `ger push`, `ger edit` and `ger reword`
+   * refuse over): somebody else's change, its content in the working files. Null when there is none.
+   */
+  staged_review?: ReviewState | null;
   /** How far the upstream moved on past the stack, and the rebase onto it previewed; null without one, and during a rebase. */
   upstream?: UpstreamMoved | null;
   /** The branches are null without a working branch (a detached HEAD's rebase). */
@@ -463,10 +468,16 @@ export interface Patchsets {
 export interface ReviewState {
   number: number;
   patch_set: number;
+  /** The reviewed patchset's commit. */
+  commit: string;
   subject: string;
   staged: boolean;
+  /** In the review worktree, or in place on a branch (`ger.reviewCheckout`). */
+  mode: "worktree" | "branch";
   worktree: string;
   branch: string;
+  /** The review chain's open changes, base first; null unless asked for. */
+  chain?: number[] | null;
 }
 
 /** The attention walk as work for an agent: Markdown to follow, and what is in it. */
@@ -648,12 +659,19 @@ export class GerClient {
     return (await this.call<{ content: string | null }>("GET", "/file", { rev, path })).content;
   }
 
-  async review(): Promise<ReviewState | null> {
-    return (await this.call<{ review: ReviewState | null }>("GET", "/review")).review;
+  /** The review going on here or in the review worktree; with `chain`, its review chain too (one Gerrit request). */
+  async review(chain = false): Promise<ReviewState | null> {
+    return (await this.call<{ review: ReviewState | null }>("GET", "/review", chain ? { chain: "1" } : undefined)).review;
   }
 
-  async reviewOpen(change: number | string): Promise<ReviewState> {
-    return (await this.call<{ review: ReviewState }>("POST", "/review/open", undefined, { change })).review;
+  /** `ger review CHANGE`; `mode` as the review going on has it, else `ger.reviewCheckout` decides. */
+  async reviewOpen(change: number | string, mode?: ReviewState["mode"]): Promise<ReviewState> {
+    return (await this.call<{ review: ReviewState }>("POST", "/review/open", undefined, { change, mode })).review;
+  }
+
+  /** `ger review --next` (1) or `--prev` (-1): the review moves along its chain. At its end a `GerApiError` with reason `chain-end`. */
+  async reviewStep(step: 1 | -1): Promise<ReviewState> {
+    return (await this.call<{ review: ReviewState }>("POST", "/review/open", undefined, { step })).review;
   }
 
   reviewDone(): Promise<{ done: number; deleted: string[]; kept: string[] }> {

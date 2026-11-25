@@ -20,6 +20,29 @@ export interface TerminalOptions {
   env?: Record<string, string>;
 }
 
+/** A reply box: an input box with Gerrit's Resolved choice, as the Change view's reply box has it. */
+export interface ReplyOptions {
+  title: string;
+  placeHolder?: string;
+  value?: string;
+  /** Where Resolved starts: where the comment stands once your drafts are published. */
+  resolved: boolean;
+  /** The line under the box, saying what Enter saves with Resolved as it is. */
+  prompt(resolved: boolean): string;
+}
+
+/** What a reply box gave: the text, and whether the reply resolves the comment. */
+export interface Reply {
+  text: string;
+  resolved: boolean;
+}
+
+/** The Resolved toggle in a reply box's title bar, as the editor thread's header has it. */
+export const RESOLVED_TOGGLE = {
+  on: { icon: "pass-filled", tooltip: "Resolved: Yes (click to leave it unresolved; Ctrl+Shift+Enter saves and resolves)" },
+  off: { icon: "circle-large-outline", tooltip: "Resolved: No (click to resolve it with your reply; Ctrl+Shift+Enter saves and resolves)" },
+};
+
 /** A picker's options; `active` is the item it opens on (the first one otherwise). */
 export type PickOptions<T> = vscode.QuickPickOptions & { active?: T };
 
@@ -28,6 +51,8 @@ export interface Ui {
   message(level: Level, text: string, options: MessageOptions, buttons: string[]): Thenable<string | undefined>;
   pick<T extends vscode.QuickPickItem>(items: T[], options: PickOptions<T>): Thenable<T | undefined>;
   input(options: vscode.InputBoxOptions): Thenable<string | undefined>;
+  /** An input box for a reply, with a Resolved toggle in its title bar; Ctrl+Shift+Enter saves and resolves. */
+  reply(options: ReplyOptions): Thenable<Reply | undefined>;
   /** A transient status bar message. */
   status(text: string, milliseconds: number): void;
   progress<R>(location: vscode.ProgressLocation | { viewId: string }, title: string | undefined, task: () => Thenable<R>): Thenable<R>;
@@ -125,6 +150,43 @@ export const vscodeUi: Ui = {
     });
   },
   input: (options) => vscode.window.showInputBox(options),
+  reply(options) {
+    return new Promise((resolve) => {
+      const box = vscode.window.createInputBox();
+      let resolved = options.resolved;
+      let done = false;
+      const draw = () => {
+        const toggle = resolved ? RESOLVED_TOGGLE.on : RESOLVED_TOGGLE.off;
+        box.buttons = [{ iconPath: new vscode.ThemeIcon(toggle.icon), tooltip: toggle.tooltip }];
+        box.prompt = options.prompt(resolved);
+      };
+      [box.title, box.placeholder, box.value] = [options.title, options.placeHolder, options.value ?? ""];
+      // What you typed is not lost to a click elsewhere (the toggle, the code you answer about): Escape cancels.
+      box.ignoreFocusOut = true;
+      draw();
+      const accept = (resolving: boolean) => {
+        done = true;
+        resolve({ text: box.value, resolved: resolving });
+        box.hide();
+      };
+      box.onDidTriggerButton(() => {
+        resolved = !resolved;
+        draw();
+      });
+      box.onDidAccept(() => accept(resolved));
+      box.onDidHide(() => {
+        replyBox = undefined;
+        void vscode.commands.executeCommand("setContext", "ger.replyBox", false);
+        if (!done) {
+          resolve(undefined);
+        }
+        box.dispose();
+      });
+      replyBox = () => accept(true);
+      void vscode.commands.executeCommand("setContext", "ger.replyBox", true);
+      box.show();
+    });
+  },
   status(text, milliseconds) {
     vscode.window.setStatusBarMessage(text, milliseconds);
   },
@@ -169,6 +231,14 @@ export const vscodeUi: Ui = {
     return uri.fsPath;
   },
 };
+
+/** Saves the reply box open now, resolving the comment (Ctrl+Shift+Enter); undefined while none is open. */
+let replyBox: (() => void) | undefined;
+
+/** Ctrl+Shift+Enter in a reply box: save the reply, and resolve the comment with it. */
+export function saveReplyResolved(): void {
+  replyBox?.();
+}
 
 /** The one the extension uses; the end-to-end suite swaps in a scripted one. */
 let current: Ui = vscodeUi;

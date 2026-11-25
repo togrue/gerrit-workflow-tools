@@ -30,7 +30,7 @@ from gerrit_workflow_tools.core.push_checks import push_blocked
 from gerrit_workflow_tools.core.rebase_state import rebase_underway
 from gerrit_workflow_tools.core.reorder_preview import PreviewUnavailable, swap_conflicts
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
-from gerrit_workflow_tools.core.review_checkout import find_review
+from gerrit_workflow_tools.core.review_checkout import find_review, staged_review
 from gerrit_workflow_tools.core.review_target import drafts_published_by, related_chain_numbers
 from gerrit_workflow_tools.core.stack import (
     get_stack_snapshot,
@@ -62,7 +62,7 @@ from gerrit_workflow_tools.server.diff_views import commit_files
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
 
-API_VERSION = "1.1.0"
+API_VERSION = "1.2.0"
 """The serve contract's version, ``MAJOR.MINOR.PATCH`` (bump rules: ``docu/spec/commands/serve.md``)."""
 _T = TypeVar("_T")
 _NOT_ON_GERRIT = frozenset({Attention.NOT_PUSHED, Attention.AHEAD_OF_GERRIT, Attention.DIVERGED})
@@ -138,6 +138,7 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
         "rebase": rebase_json(view, progress),
         "upstream": upstream_json(overview.moved),
         "push_blocked": _push_blocked_json(ctx),
+        "staged_review": _staged_review_json(ctx),
         "stack": {
             "project": context.project,
             "target_branch": context.target_branch or None,
@@ -155,6 +156,13 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
         **({"gerrit_unavailable": error_json(view.gerrit_unavailable)} if view.gerrit_unavailable else {}),
     }
     return answer, rebase
+
+
+def _staged_review_json(ctx: Context) -> dict[str, object] | None:
+    """The **staged review** in this checkout, or ``None``: what ``ger push``, ``ger edit`` and the
+    other rewrites refuse over."""
+    state = staged_review(ctx.run.worktree.repository_dir, ctx.cwd)
+    return review_state_json(state, chain=None, url=None) if state else None
 
 
 def _push_blocked_json(ctx: Context) -> dict[str, str] | None:
@@ -366,7 +374,11 @@ def agent_runbook(ctx: Context, req: Request) -> dict[str, Any]:
     return runbook_json(stops, branch=ctx.run.worktree.branch)
 
 
-def review(ctx: Context, _req: Request) -> dict[str, Any]:
-    """The **review state** of this checkout or its review worktree; ``review`` is ``null`` when there is none."""
+def review(ctx: Context, req: Request) -> dict[str, Any]:
+    """The **review state** of this checkout or its review worktree; ``review`` is ``null`` when there is none.
+
+    With ``chain=1``, its ``chain`` is the review chain's open changes, base first (one Gerrit request).
+    """
     state = find_review(ctx.cwd, ctx.settings)
-    return {"review": review_state_json(state, chain=None, url=None) if state else None}
+    chain = related_chain_numbers(ctx.service, state.key, state.patch_set) if state and req.flag("chain") else None
+    return {"review": review_state_json(state, chain=chain, url=None) if state else None}

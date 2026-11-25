@@ -237,6 +237,21 @@ test("the header names the branch being rebased", () => {
   assert.equal(stackWhere({ ...detached, stack: { ...detached.stack, target_branch: null, push_branch: null } }), "detached (rebasing)");
 });
 
+test("a staged review is somebody else's chain: named as ger review prints it, the change under review marked, nothing moves", () => {
+  const [base, change] = [commit("Base", { number: 2155, is_head: true }), commit("Change", { number: 2156 })];
+  const review = { number: 2156, patch_set: 2, commit: change.sha, subject: "Change", staged: true, mode: "worktree" as const, worktree: "/r", branch: "change-2156" };
+  const staged = stack([base, change], { branch: null, head: base.sha, staged_review: review });
+  assert.equal(stackWhere(staged), "reviewing 2155 ← [2156]");
+  const vm = stackVm(staged, undefined, never);
+  // HEAD sits at the parent only to stage the change: not said; the change is.
+  assert.deepEqual(vm.rows.map((row) => row.notes[0]), ["under review", base.short_sha]);
+  assert.deepEqual([vm.review, vm.movable, vm.rows.some((row) => row.squash)], [true, 0, false]);
+  assert.equal(vm.frozen, frozen(staged));
+  assert.match(frozen(staged) ?? "", /somebody else's commits/);
+  const behind = { name: "origin/main", behind: 1, argv: ["rebase", "origin/main"], conflict: null, preview: true, reason: null, dropped: [] };
+  assert.deepEqual(stackVm({ ...staged, upstream: behind }, undefined, never).info, [], "no Rebase onto origin/main: core refuses it there");
+});
+
 test("a merge is one row; it and what is below it stay, as ger serve says, what is above it still moves", () => {
   const withMerge = stack([commit("One", { pinned: true }), commit("Merge side", { merge: true, pinned: true }), commit("Two"), commit("Three")]);
   assert.equal(frozen(withMerge), null, "a merge no longer freezes the whole stack");
@@ -382,6 +397,19 @@ test("a review delta names the two versions, and says when there is nothing to s
   const hint = changeVm(state({ local: false, version: "current", delta: diff({ since: { ...since, to_patch_set: 3 } }) })).hint;
   assert.deepEqual(hint, { text: "Since your review: patchset 2 → 3 · 2 files", show: true });
   assert.equal(changeVm(state({ delta: diff({ since }) })).hint, undefined, "your own commit has no review of yours to compare with");
+});
+
+test("a change checked out for review reads as theirs: behind Gerrit, Update to patchset N leads; else what is new since your review", () => {
+  const since = { patch_set: 2, current_patch_set: 3, to_patch_set: null, up_to_date: false, identical: false, rebased: false };
+  const behind = changeVm(state({ shown: shown({ patchset_status: "outdated" }), reviewing: { behind: true, newest: 3 }, delta: diff({ since }) }));
+  assert.deepEqual(behind.notes?.map((note) => [note.text, note.actions?.map((action) => [action.label, action.command.id, action.primary])]), [
+    ["Gerrit has a newer patchset than the one checked out", [["Update to patchset 3", "ger.reviewUpdate", true]]],
+  ]);
+  assert.equal(behind.hint, undefined, "the update says what there is to do; a delta to the old commit would not");
+  const unknown = changeVm(state({ shown: shown({ patchset_status: "outdated" }), reviewing: { behind: true, newest: null } }));
+  assert.equal(unknown.notes?.[0].actions?.[0].label, "Update to the newest patchset");
+  const current = changeVm(state({ reviewing: { behind: false, newest: 3 }, delta: diff({ since }) }));
+  assert.deepEqual(current.hint, { text: "Since your review: patchset 2 → 3 · 2 files", show: true });
 });
 
 test("the message box holds what core serves without the Change-Id footer; the Change-Id is said beside it", () => {

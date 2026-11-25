@@ -362,6 +362,48 @@ button.twist:hover {
   user-select: text;
 }
 
+/*
+ * Its parts (change.js messageParts): the subject; paragraphs and list items reflowed to the view's
+ * width, not wrapped twice; indented and fenced blocks as they are, scrolled sideways when wide;
+ * the trailers small and dim, as the Change-Id is.
+ */
+.message-text {
+  white-space: normal;
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+
+.message-pre,
+.message-trailers {
+  font-family: var(--vscode-editor-font-family);
+}
+
+.message-subject {
+  font-weight: 600;
+  white-space: pre-wrap;
+}
+
+.message-gap {
+  height: 0.6em;
+}
+
+.message-item {
+  padding-left: 0.9em;
+  text-indent: -0.9em;
+}
+
+.message-pre {
+  white-space: pre;
+  overflow-x: auto;
+  overflow-wrap: normal;
+}
+
+.message-trailers {
+  white-space: pre-wrap;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
 /* The Change-Id trailer, out of the message (change.js changeIdLine): quiet, selectable, not editable. */
 .change-id {
   margin: 2px 12px 0;

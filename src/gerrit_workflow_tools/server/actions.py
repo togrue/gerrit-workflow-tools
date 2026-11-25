@@ -33,7 +33,7 @@ from gerrit_workflow_tools.core.review_checkout import (
     find_review,
     open_review,
 )
-from gerrit_workflow_tools.core.review_target import related_chain_numbers
+from gerrit_workflow_tools.core.review_target import related_chain_numbers, review_neighbour
 from gerrit_workflow_tools.core.reword import reword_commit
 from gerrit_workflow_tools.core.upstream import set_branch_upstream
 from gerrit_workflow_tools.render.review_json import review_state_json
@@ -49,16 +49,28 @@ def review_open(ctx: Context, req: Request) -> dict[str, Any]:
     """Check a change out for review (``ger review CHANGEISH``); answers the new **review state**.
 
     Body: ``change`` (number or changeish), optional ``patchset``, ``mode`` (``worktree`` /
-    ``branch``; default ``ger.reviewCheckout``, else ``worktree``), ``stage``, ``force``.
+    ``branch``; default ``ger.reviewCheckout``, else ``worktree``), ``stage``, ``force``. Or
+    ``step`` (``1`` / ``-1``) instead of ``change``: the change above or below in the review chain
+    of the review going on (``ger review --next`` / ``--prev``), in its mode.
     """
-    change = req.body_field("change", (str, int), required=True)
-    mode = req.body_field("mode", str) or ctx.settings.review_checkout or "worktree"
-    if mode not in _REVIEW_MODES:
-        raise BadRequest(f"mode must be one of {', '.join(_REVIEW_MODES)}")
+    step = req.body_field("step", int)
     stage = req.body_field("stage", bool)
-    target, url = resolve_patchset(
-        ctx.service, ctx.cwd, safe_rev(str(change), "change"), req.body_field("patchset", int)
-    )
+    if step is not None:
+        if step not in (1, -1) or req.body_field("change", (str, int)) is not None:
+            raise BadRequest("step is 1 or -1, and names no change")
+        state = find_review(ctx.cwd, ctx.settings)
+        if state is None:
+            raise ReviewUsageError("no review going on here: name a change first")
+        target, url = review_neighbour(ctx.service, ctx.cwd, state, step)
+        mode: str = state.mode
+    else:
+        change = req.body_field("change", (str, int), required=True)
+        mode = req.body_field("mode", str) or ctx.settings.review_checkout or "worktree"
+        if mode not in _REVIEW_MODES:
+            raise BadRequest(f"mode must be one of {', '.join(_REVIEW_MODES)}")
+        target, url = resolve_patchset(
+            ctx.service, ctx.cwd, safe_rev(str(change), "change"), req.body_field("patchset", int)
+        )
     options = CheckoutOptions(
         mode="worktree" if mode == "worktree" else "branch",
         stage=ctx.settings.review_stage if stage is None else stage,

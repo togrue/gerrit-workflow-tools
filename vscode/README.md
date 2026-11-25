@@ -51,6 +51,14 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
 
 The commits above your upstream, newest first. One row per commit:
 
+- **In a staged review** (`ger review` checked somebody's change out here: the review worktree, or
+  this checkout with `ger.reviewCheckout` = `branch`), the rows are their chain, not your work: the
+  header says *reviewing 2155 ← [2156]*, as `ger review` prints the chain, and the change under
+  review is marked so (HEAD sits at its parent only to stage it). Nothing moves, and the rows offer
+  review actions only: Open All Changes, Vote and Publish…, Open in Gerrit, the copies. Push, Fix
+  Stack with Agent, Edit Commit Here, squash, drop and rewording are not offered, as core refuses
+  them there (`ger review --unstage` to work on the change, or *Leave Review Checkout*).
+
 - An **icon** in front says how the commit relates to Gerrit: a **full circle** when it is the
   same as on Gerrit; a **yellow arrow up** in a circle when it is only rebased since the last push
   (the same code by patch-id, whitespace and message aside: Gerrit usually keeps the votes); a **yellow diff** square when its code changed since (push it, and
@@ -127,7 +135,9 @@ The commits above your upstream, newest first. One row per commit:
   look, and closed on the next. Only the tabs of the branch checked out are judged: another branch
   checked out (`ger checkout`, a review checkout, `git switch`) leaves them as they are, and a
   stale tab whose commit is back (the branch switched back, the rebase aborted) loses its mark.
-  Gerrit's patchsets, compared with each other, never go stale.
+  Gerrit's patchsets, compared with each other, never go stale. In a staged review, the diffs
+  with your file on the right are of the change the review holds: once it moves on (to the next
+  change of the chain, or a newer patchset) they are stale too.
 - **The upstream moved on** (after a `git fetch`, `origin/main` has commits your branch has not):
   a row above the stack says so, *origin/main has 1 new commit*, with **Rebase onto
   origin/main**, which runs core's one command for it in the *ger* terminal (it shows the todo
@@ -185,7 +195,11 @@ The commits above your upstream, newest first. One row per commit:
   ignored. Other trailers (`Signed-off-by:`, …) stay in the box. Only the message is rewritten —
   uncommitted changes stay where they are, nothing can conflict. **Undo** is offered right after.
   What you typed survives a refresh and switching views until you apply or revert it. Someone
-  else's change, or a patchset on Gerrit, cannot be reworded here: its message is plain text.
+  else's change (also one checked out for review), or a patchset on Gerrit, cannot be reworded
+  here: its message is plain text, set to read in a narrow side bar: the subject in bold;
+  paragraphs and list items hard-wrapped at 72 joined again, so they wrap once, where the view
+  does; indented and fenced blocks kept line for line in the editor font (they scroll sideways when
+  wide); the trailers (`Bug:`, `Signed-off-by:`) small and dim, as the Change-Id is.
 - **Show**: which version of the change you look at. It always starts on your **local commit**
   when the change is in your stack; the list also has every patchset on Gerrit, the current one
   and the one you reviewed marked.
@@ -195,16 +209,34 @@ The commits above your upstream, newest first. One row per commit:
   says there is nothing to push). On someone else's change you reviewed
   before, a line says what is new since, with **Show** to switch to it.
 - **Files**: added and removed lines per file, in the colours git gives them. Click for the
-  diff of what is compared; an added or deleted file opens on its own. The commit you are
-  standing on diffs against the real file, so you can fix things in the diff editor.
+  diff of what is compared; an added or deleted file opens on its own. What your working files
+  hold diffs against the real file: the commit you are standing on, so you can fix things in the
+  diff editor; and in a **staged review** (`ger review`, in the review worktree or in place), the
+  change under review, at the patchset checked out, against its base or since your last review.
+  There the comment threads are drawn where you write them, VS Code's Comments panel lists them,
+  and go to definition and references work as in any file. The right side is your file, so it can
+  be edited: an edit shows as an unstaged change in Source Control, and `ger review` refuses to
+  move on (`--next`, `--done`) until it is put back, saying how. Another patchset, a commit below
+  HEAD, or a file the change deletes is shown as it is in the commit, read-only.
+- **Open All Changes** (the two-pages icon in the title bar, on a change row of *Review chains*,
+  in Local stack's context menu, the palette): every file of what is compared in one editor,
+  VS Code's multi-diff editor, in the Files list's order, top to bottom. Each file has the sides
+  its own diff has, so in a staged review comments and go to definition work there too. A
+  click on a change still only shows it here: walking the stack with the arrow keys, or reading a
+  message, opens no editor. A review that moves on (*Review Next Change*) closes the combined diff
+  of the change it left, as its right side is your file. VS Code before 1.86 has no multi-diff
+  editor: the first file's diff opens instead.
 - **Comments**: unresolved first. Click one to open its file at the line, its thread expanded there. The chevron shows a chain whole: every comment in full; one about the whole change (no line in a file) opens that way on a click and has a box to reply right there. *Next / Previous Unresolved Comment* (command palette) step
-  through the unresolved ones, across files. `Alt+F9` / `Shift+Alt+F9` do it too while the Change view or a
+  through the unresolved ones, across files; on a change you review (not yours), your own drafts,
+  local drafts and notes too, so you can read again what you are about to publish. `Alt+F9` / `Shift+Alt+F9` do it too while the Change view or a
   diff of the change has focus; anywhere else they stay VS Code's own next / previous comment thread, which only
   walks the open file. For a local commit they also appear as comment threads in the
   editor. Reply, or reply "Done" and resolve — saved as **drafts** on Gerrit, published later:
   on your own commit by your next `ger push`, anywhere else by *Vote and Publish…*. A reply box has **Save** and **Cancel**, and Gerrit's **Resolved**
   checkbox: by the box in the Change view; in an editor thread a toggle in the thread's header
-  (VS Code empties the reply box on any button beside it), its label saying what Save will do. It
+  (VS Code empties the reply box on any button beside it), its label saying what Save will do;
+  in the *Reply as Draft…* box (a row's reply button) a toggle in the box's title bar, the line
+  under the box saying what Enter saves, and `Ctrl+Shift+Enter` saves and resolves at once. It
   starts where the comment stands, and with your draft there already it changes that draft at once.
   With your draft reply there, the Change view's box also has **Discard**, and so has the box of a
   draft, local draft or note of yours you edit in an editor thread: it deletes it, asking first, as
@@ -213,7 +245,7 @@ The commits above your upstream, newest first. One row per commit:
   the comment: a ```` ```suggestion ```` block of its text as a code block, a Gerrit fix suggestion
   as **Suggested fix**, where it applies and the new text. It is shown, not applied.
 - **New comments**: hover a line (or select lines) in the change's diff — or in your file, when
-  the shown commit is HEAD — and click **+**. Save it as:
+  your working files hold the shown commit (see *Files*) — and click **+**. Save it as:
   - **Draft**, when Gerrit has this very commit: on Gerrit, visible only to you until published.
     The first draft on a change says what publishes it, with a button that does it now: on your own
     commit your next push (**Publish Drafts…**), on anyone else's **Vote and Publish…**;
@@ -234,14 +266,33 @@ The commits above your upstream, newest first. One row per commit:
   everything that goes out: the vote, each draft (`path:line` and its first words), the message,
   on which changes, and the changes of a chain that do not take the vote. Publish sends it; a
   notification says what went out and the views refresh, so the chain leaves *To review* when
-  Gerrit says so. Should the change get a new patchset meanwhile, nothing is sent and **Look
+  Gerrit says so. On the change a staged review holds, the notification offers the way on: **Next
+  Change** while the chain goes on above it, **Leave Review** at its top. Should the change get a new patchset meanwhile, nothing is sent and **Look
   Again** starts over on what is there now. **Publish Drafts…** (the Change view's `…` menu, the
   palette) sends your drafts without a vote: `ger reply --publish`.
 - **Review Change** (eye icon, changes that are not in your stack): `ger review`
   fetches the change into the review worktree and offers to open that worktree in a new window; your
-  own stack is not touched. When the git config key `ger.reviewCheckout` says `branch`, it switches
-  this checkout to a `change-<n>` branch instead, the message says so, and *Leave Review Checkout*
-  switches back. For reading someone's work.
+  own stack is not touched. The new window opens on the review: the Gerrit view, the change under
+  review shown, and all its files in one editor (the same whenever a window opens on a staged
+  review with no editor open yet; with editors open, only the change is shown). When the git config
+  key `ger.reviewCheckout` says `branch`, it switches this checkout to a `change-<n>` branch instead,
+  the message says so, the change is shown with all its files, and *Leave Review Checkout* switches
+  back. For reading someone's work.
+- **Review Next Change in Chain** (arrow in the Change view's title bar, `Ctrl+Alt+PageDown`) and
+  **Review Previous Change in Chain** (the `…` menu, `Ctrl+Alt+PageUp`), while a staged review sits
+  in this checkout: `ger review --next` / `--prev`. The review moves to the change above (below) in
+  the review chain, at its current patchset; the Change view shows it, its files open in one editor
+  (*Open All Changes*), and the combined diff of the change it left closes. At the top of the chain it
+  says so and offers what `ger review` suggests there: **Vote on the Chain…** and **Leave Review**.
+  With edits of yours in the way, nothing moves, and it says what to do in `ger review`'s words.
+- **Update to patchset N**: when the author has pushed since you checked their change out, the
+  Change view of the change under review says *Gerrit has a newer patchset than the one checked
+  out*, with this button (also *Update the Review to the Newest Patchset* in the palette). It runs
+  `ger review` again on the change, in the same place. Whenever a staged review shows a change you
+  reviewed at an earlier patchset (after the update, *Review Next Change*, the review window
+  opening), it starts on **Since my last review**, and so does the combined diff; *Show* and
+  *Compare* switch back as usual. The line *Since your review: patchset 1 → 2* is said for the
+  change under review as for anyone's change.
 - **Check Out to Work On** (download icon, changes that are not in your stack): `ger checkout` in
   the *ger* terminal puts the change on a `change-<n>` branch here that tracks its target branch, so
   the change is your local stack and *Push to Gerrit* uploads a new patchset. It may ask before it

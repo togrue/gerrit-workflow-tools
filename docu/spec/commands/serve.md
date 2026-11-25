@@ -161,7 +161,7 @@ a client words its own advice while `message` stays ger's.
 
 ## API version
 
-`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.1.0`); the URL
+`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.2.0`); the URL
 prefix carries only the major (`/api/v1`). It moves on its own, not with ger's package version:
 
 | Bump | When |
@@ -341,6 +341,14 @@ with it as a `next:` line.
 `git am` underway), and `message` is the refusal `ger push` prints. A client asks it before it
 starts `ger push`, so it can offer to finish the rebase instead.
 
+`staged_review` is the **staged review** in this checkout, or `null`: the **review state** as
+[`GET /review`](#get-review) has it (`chain` and `url` `null`), while HEAD still sits at the
+change's parent and its `change-<number>` branch on the change. The stack is then somebody
+else's change: `ger push`, `ger edit`, `ger reword`, `ger fix` and `ger rebase` refuse there, and
+the working files hold the change at `commit`. Only a review staged *here* counts: from the main
+worktree, a review in the review worktree is `GET /review`'s, not this. Cost: nothing while no
+review is recorded here, else one `git rev-parse`.
+
 ### `GET /stack/moves`
 
 The conflict preview for reordering: which neighbours of the local stack can swap places.
@@ -483,7 +491,9 @@ In `GET /show`, every comment chain carries `held`.
 
 ### `GET /review`
 
-The **review state**, as `ger review --status --json`, under `review`; `null` when none.
+The **review state**, as `ger review --status --json`, under `review`; `null` when none. With
+`chain=1` its `chain` is the review chain's open changes, base first, as `ger review` prints it
+(one Gerrit request); without, `null`.
 
 ### `GET /vote?change=<changeish>`
 
@@ -513,7 +523,7 @@ a vote no change takes is `USAGE`, as on the command line.
 
 | Endpoint | Body | Does |
 |----------|------|------|
-| `/review/open` | `change`, optional `patchset`, `mode`, `stage`, `force` | `ger review CHANGEISH`: the **review checkout**. Answers `review` and `moved_from`. |
+| `/review/open` | `change`, optional `patchset`, `mode`, `stage`, `force`; or `step` instead of `change` | `ger review CHANGEISH`: the **review checkout**. `step` (`1` or `-1`) is `ger review --next` / `--prev`: the change above or below in the review chain of the review going on, at its current patchset, in that review's mode; at the end of the chain it is `NOT_FOUND`, with `ger review`'s words. Answers `review` (with `chain`) and `moved_from`. |
 | `/review/done` | — | `ger review --done`. |
 | `/vote` | `change`, `patch_sets`, optional `chain`, `votes`, `message` | `ger review --vote`: publish your drafts on the change (with `chain`, on every open change of its chain), with `votes` (`{label: value}`; `{}` or none: the drafts go out without a vote, as `ger reply --publish CHANGEISH`) and `message` on each. `patch_sets` (`{change number: patchset}`) is what `GET /vote` showed: when the changes or a patchset are not that any more, nothing is sent and it is `REFUSED`. A change that rules a vote out is skipped; when none takes it, or there is nothing to send (no draft, no vote, no message), or `GER_NO_PUBLISH` is set, it is `USAGE`. Answers as `ger review --vote --json` for several changes: `changes` (each `change`, `number`, `drafts`, `labels`, `message`, `status`) and `skipped` (`change`, `number`, `ruled_out`). |
 | `/comments/reply` | `rev`, `comment_id`, `message`, optional `resolved` | `ger reply`: a **draft** reply in that chain. Publishing stays with `ger push` and `ger review --vote`. |

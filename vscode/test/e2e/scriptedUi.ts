@@ -4,10 +4,10 @@
 
 import type * as vscode from "vscode";
 
-import type { Level, MessageOptions, PickOptions, TerminalOptions, Ui } from "../../src/ui";
+import type { Level, MessageOptions, PickOptions, Reply, ReplyOptions, TerminalOptions, Ui } from "../../src/ui";
 
 /** How the scripted user answers the next prompt. Nothing queued: they dismiss it. */
-export type Answer = { button: string } | { pick: string } | { type: string } | { save: string } | { closeUnsaved: true } | { dismiss: true };
+export type Answer = { button: string } | { pick: string } | { type: string; resolved?: boolean } | { save: string } | { closeUnsaved: true } | { dismiss: true };
 
 function describe(answer: Answer): string {
   if ("save" in answer) {
@@ -104,6 +104,27 @@ export class ScriptedUi implements Ui {
     const typed = answer && "type" in answer ? answer.type : undefined;
     this.say(`    → ${typed === undefined ? "escaped" : `${options.value ? "changed it to" : "typed"} "${typed}" and pressed Enter`}`);
     return Promise.resolve(typed);
+  }
+
+  reply(options: ReplyOptions): Thenable<Reply | undefined> {
+    this.say(`reply box: ${options.title}`);
+    this.say(`    prompt: ${options.prompt(options.resolved)}`);
+    this.say(`    Resolved toggle: ${options.resolved ? "Yes" : "No"}`);
+    if (options.placeHolder) {
+      this.say(`    placeholder: ${options.placeHolder}`);
+    }
+    if (options.value) {
+      this.say(`    already filled in: "${options.value.replaceAll("\n", "⏎")}"`);
+    }
+    const answer = this.next("type");
+    if (!answer || !("type" in answer)) {
+      this.say("    → escaped");
+      return Promise.resolve(undefined);
+    }
+    const resolved = answer.resolved ?? options.resolved;
+    const flipped = resolved !== options.resolved ? `, set Resolved to ${resolved ? "Yes" : "No"}` : "";
+    this.say(`    → ${options.value ? "changed it to" : "typed"} "${answer.type}"${flipped} and pressed Enter`);
+    return Promise.resolve({ text: answer.type, resolved });
   }
 
   status(text: string): void {

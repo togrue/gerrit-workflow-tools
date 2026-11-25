@@ -618,8 +618,9 @@ status bar message: $(check) Left to the agent
 **Expect:** An input box asks for the reply; after Enter the draft shows under the thread and the status bar says it was saved.
 
 ```
-input box: Reply to Alice Reviewer — b.txt:1
-    prompt: Saved as a draft on Gerrit, visible only to you: your next push publishes it.
+reply box: Reply to Alice Reviewer — b.txt:1
+    prompt: Saved as a draft, the comment left unresolved; visible only to you: your next push publishes it.
+    Resolved toggle: No
     placeholder: Please rename this.
     → typed "Renamed it." and pressed Enter
 notification (info): Draft saved, visible only to you: your next push publishes it.  [Publish Drafts…]
@@ -635,8 +636,9 @@ notification (info): Draft saved, visible only to you: your next push publishes 
 **Expect:** The box opens with your draft in it, to edit; saving updates that draft, nothing you wrote is lost unseen.
 
 ```
-input box: Edit your draft reply — b.txt:1
-    prompt: Saved as a draft on Gerrit, visible only to you: your next push publishes it.
+reply box: Edit your draft reply — b.txt:1
+    prompt: Saved as a draft, the comment left unresolved; visible only to you: your next push publishes it.
+    Resolved toggle: No
     placeholder: Renamed it.
     already filled in: "Renamed it."
     → changed it to "Renamed it to route()." and pressed Enter
@@ -1212,12 +1214,12 @@ picker: Upstream for feature — "The local stack is the commits above it; ger p
 **Expect:** The report opens first, as an untitled JSON document to read: what the three views show, with names, paths, text and ids replaced. A notification says so, and that nothing has left the machine. Copy and Open GitHub Issue puts the report on the clipboard and opens a new issue that has only the versions in it and says to paste the report.
 
 ```
-untitled json document opens: 350 lines, starting
+untitled json document opens: 351 lines, starting
     {
       "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
 notification (info): This is the report, and all that would be shared: names, paths, text and ids in it are replaced. Nothing has left this machine.  [Copy and Open GitHub Issue] [Save to File…]
     → pressed "Copy and Open GitHub Issue"
-clipboard: 350 lines, starting "{"
+clipboard: 351 lines, starting "{"
 browser opens: https://github.com/togrue/gerrit-workflow-tools/issues/new?labels=vscode&body=<!-- What happened, and what did you expect%3F -->
 
 
@@ -1241,13 +1243,13 @@ status bar message: $(check) Report copied: paste it into the issue that opens i
 **Expect:** The report opens again to read; Save to File… asks where, suggesting ger-report.json, and the status bar says where it was saved. Nothing is copied and no browser opens.
 
 ```
-untitled json document opens: 350 lines, starting
+untitled json document opens: 351 lines, starting
     {
       "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
 notification (info): This is the report, and all that would be shared: names, paths, text and ids in it are replaced. Nothing has left this machine.  [Copy and Open GitHub Issue] [Save to File…]
     → pressed "Save to File…"
 save dialog: suggests ger-report.json
-    → saved 350 lines as ~/ger-report.json
+    → saved 351 lines as ~/ger-report.json
 status bar message: $(check) Report saved to ~/ger-report.json
 --- on screen:
 (no change)
@@ -1258,7 +1260,7 @@ status bar message: $(check) Report saved to ~/ger-report.json
 **Expect:** The user may have taken things out of the report before closing it, so nothing is copied, not the original either, and no browser opens; a notification says nothing was shared and to run Report Issue… again.
 
 ```
-untitled json document opens: 350 lines, starting
+untitled json document opens: 351 lines, starting
     {
       "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
     → closed without saving
@@ -1326,7 +1328,7 @@ notification (warning): Still out of date: fake ger: down for this test
 + status bar | $(warning) Gerrit
 + state  | incompatible
 + events | (not said)
-+ stack  | ger serve speaks API 2.0, the extension needs 1.1: update the extension, or install the ger release that matches it.
++ stack  | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
 - status bar | $(error) CI failed: 102
 - state  | ready
 - events | live
@@ -1343,7 +1345,7 @@ notification (warning): Still out of date: fake ger: down for this test
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
-+ change | ger serve speaks API 2.0, the extension needs 1.1: update the extension, or install the ger release that matches it.
++ change | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
 - change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 - change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | Commit message — test! temporary experiment  (editable)
@@ -1390,9 +1392,9 @@ status bar message: $(check) Refreshed from Gerrit
 - status bar | $(warning) Gerrit
 - state  | incompatible
 - events | (not said)
-- stack  | ger serve speaks API 2.0, the extension needs 1.1: update the extension, or install the ger release that matches it.
+- stack  | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
 - change | title: Change 102
-- change | ger serve speaks API 2.0, the extension needs 1.1: update the extension, or install the ger release that matches it.
+- change | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
 ```
 
 ## Meanwhile: a reviewer comments on change 900 on Gerrit, and its event stream says so
@@ -2800,6 +2802,136 @@ notification (info): You have no drafts on 900 to publish.
 (no change)
 ```
 
+## Meanwhile: in a terminal, git config ger.reviewCheckout branch
+
+```
+```
+
+## 106. Inline Review Change on change 900, ger.reviewCheckout being branch
+
+**Expect:** This checkout switches to change-900 with 900's changes staged, and the notification says so. Local stack lists 900's chain: its row is marked under review, not HEAD, with no Rebase onto origin/main (nothing there is yours to rewrite). The Change view shows 900, and all its files open in one editor (here one, added by the change).
+
+```
+progress (notification): Checking out 900: Add retry to the uploader
+notification (info): Change 900 (patchset 1) is checked out for review: this checkout was switched to change-900, with its changes staged. Leave Review Checkout switches back.
+--- on screen:
++ status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing
+- status bar | $(error) CI failed: 102
++ chains | 2 unresolved comments on 101: Extract command routing
+- chains | CI failed on 102: Refactor parser init
++ chains |   test! temporary experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url]
++ chains |     test! temporary experiment — 103 · V-1 CR+2  [ger.change.url]
++ chains |     Refactor parser init — 102 · V-1 CR+2  [ger.change.url]
++ chains |     Extract command routing — 101 · V+1 CR+2 💬2  [ger.change.url]
++ chains |     Cleanup after experiment — 100 · V+1 CR+2  [ger.change.url]
+- chains |   test! temporary experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
+- chains |     test! temporary experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
+- chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
+- chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
+- chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
++ chains |   Add retry to the uploader — alice · 1 change · V+1 CR+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.local.toreview]
++ stack  | Add retry to the uploader — under review · <sha> · the same as on Gerrit  [comments 2, review +1, ci good]
+- chains |   Add retry to the uploader — alice · 1 change · V+1 CR+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.toreview]
+- stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
+- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
+- stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
++ change | Showing — Local commit <sha> · Against its base commit
+- change | Showing — Patchset 1 (current) · Against its base commit
++ editor | Change 900 (<sha>) (1 file) (webview)
+- editor | e.txt (file, line 2)
+```
+
+## 107. Change › Files › uploader.txt
+
+**Expect:** Your file opens, not the commit's copy: the working files hold the change, so comments are drawn where they are written and language features work.
+
+```
+(nothing said or done outside the views)
+--- on screen:
++ editor | uploader.txt (file, line 1)
+- editor | Change 900 (<sha>) (1 file) (webview)
+```
+
+## 108. "+" on line 1 of uploader.txt, your file › Save Draft
+
+**Expect:** The draft is saved on Gerrit as on the commit's lines, and listed as yours in the Change view.
+
+```
+status bar message: $(check) Draft saved on Gerrit, visible only to you: Vote and Publish sends it.
+--- on screen:
++ change | Comments — 3 unresolved of 3 · 1 of yours, not published
+- change | Comments — 3 unresolved of 3
++ change |   Is 3 enough on a slow link? — your draft · uploader.txt:1  [yours]
+```
+
+## 109. Next Unresolved Comment (Alt+F9)
+
+**Expect:** 900 is not yours: the walk takes your draft too, so it counts four (the three open comments and yours), in the Change view's order.
+
+```
+status bar message: Comment 1 of 4
+--- on screen:
+(no change)
+```
+
+## 110. Change › Review Next Change in Chain
+
+**Expect:** 900 is the only change of its chain: it says so and offers Vote on the Chain… and Leave Review. Nothing moves.
+
+```
+progress (notification): Checking out the next change of 900's chain
+notification (info): Change 900 has no review chain to walk.  [Vote on the Chain…] [Leave Review]
+    → dismissed
+--- on screen:
+(no change)
+```
+
+## 111. Change › … › Leave Review Checkout
+
+**Expect:** Back on the branch it came from; the views are your stack again.
+
+```
+notification (info): Left the review of change 900.
+--- on screen:
++ status bar | $(error) CI failed: 102
+- status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing
++ chains | CI failed on 102: Refactor parser init
+- chains | 2 unresolved comments on 101: Extract command routing
++ chains |   test! temporary experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url.local]
++ chains |     test! temporary experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
++ chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
++ chains |     Extract command routing — 101 · V+1 CR+2 💬2 · in your stack  [ger.change.url.local]
++ chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
+- chains |   test! temporary experiment — 4 changes · V-1 CR+2 💬2 · active <age> ago  [ger.chain.url]
+- chains |     test! temporary experiment — 103 · V-1 CR+2  [ger.change.url]
+- chains |     Refactor parser init — 102 · V-1 CR+2  [ger.change.url]
+- chains |     Extract command routing — 101 · V+1 CR+2 💬2  [ger.change.url]
+- chains |     Cleanup after experiment — 100 · V+1 CR+2  [ger.change.url]
++ chains |   Add retry to the uploader — alice · 1 change · V+1 CR+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.toreview]
++ stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
++ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
++ stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
++ change | title: (nothing shown)
++ change | Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.
+- chains |   Add retry to the uploader — alice · 1 change · V+1 CR+1 💬2 · waiting <age> · active <age> ago  [ger.change.url.local.toreview]
+- stack  | Add retry to the uploader — under review · <sha> · the same as on Gerrit  [comments 2, review +1, ci good]
+- change | title: Change 900
+- change | Waiting for your review, unresolved comments — V+1 CR+1 💬2
+- change | Commit message — Add retry to the uploader  (read-only)
+- change | Showing — Local commit <sha> · Against its base commit
+- change | Files — 1 · +1 −0
+- change |   uploader.txt — added +1 −0
+- change | Comments — 3 unresolved of 3 · 1 of yours, not published
+- change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
+- change |   And cap the delay. — uploader.txt:1 · Bob Architect  [open]
+- change |   Cap the retries at 5? — uploader.txt:1  [open]
+- change |   Is 3 enough on a slow link? — your draft · uploader.txt:1  [yours]
+```
+
 ## At the end
 
 ```
@@ -2820,15 +2952,7 @@ stack  | test! temporary experiment — <sha> · code changed · held back · it
 stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
-change | title: Change 900
-change | Waiting for your review, unresolved comments — V+1 CR+1 💬2
-change | Commit message — Add retry to the uploader  (read-only)
-change | Showing — Patchset 1 (current) · Against its base commit
-change | Files — 1 · +1 −0
-change |   uploader.txt — added +1 −0
-change | Comments — 3 unresolved of 3
-change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
-change |   And cap the delay. — uploader.txt:1 · Bob Architect  [open]
-change |   Cap the retries at 5? — uploader.txt:1  [open]
-editor | e.txt (file, line 2)
+change | title: (nothing shown)
+change | Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.
+editor | uploader.txt (file, line 1)
 ```

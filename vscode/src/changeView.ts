@@ -9,7 +9,7 @@ import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
 import { ChangeDetail, ciRevs, sameChange, stoppedHere } from "./changeLoad";
-import { ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, changeHeading, changeLines, changeVm, isYours } from "./changeRows";
+import { ChangeState, ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, changeHeading, changeLines, changeVm, isYours } from "./changeRows";
 import { fileUri, openDiff } from "./diffTabs";
 import { ChangeTarget, Model, describeError } from "./model";
 import { openConflict } from "./rebase";
@@ -147,9 +147,61 @@ export class ChangeView extends WebView<ChangeVm> {
     return number ? `change:${number}` : target.local ? undefined : target.rev;
   }
 
+  /**
+   * Whether the change shown is the one a staged review holds here: then it is read as somebody
+   * else's (what is new since your review), and when Gerrit has moved on, updating it is offered.
+   */
+  private holdsReview(target: ChangeTarget | undefined = this.target): boolean {
+    const review = this.model.stack?.staged_review;
+    return Boolean(review && target?.local && target.number === review.number);
+  }
+
+  private reviewing(): ChangeState["reviewing"] {
+    if (!this.holdsReview()) {
+      return undefined;
+    }
+    const shown = this.detail.commit();
+    return { behind: shown?.patchset_status === "outdated", newest: this.patchsets?.current ?? null };
+  }
+
+  /**
+   * In a staged review, start on what is new since your review when you reviewed an earlier
+   * patchset than the one checked out: the re-review is about that. Asks for the patchsets.
+   */
+  async preferReviewDelta(): Promise<void> {
+    const target = this.target;
+    const change = target && this.change(target);
+    if (!target || !change || !this.holdsReview(target) || this.mode !== "base") {
+      return;
+    }
+    const patchsets = this.patchsets ?? (await (await this.model.client()).patchsets(change).catch(() => undefined));
+    const review = this.model.stack?.staged_review;
+    if (patchsets && this.target === target) {
+      this.patchsets = patchsets;
+      if (patchsets.reviewed !== null && review && patchsets.reviewed < review.patch_set) {
+        await this.choose("local", "reviewed");
+      }
+    }
+  }
+
   /** Your commit, not a patchset of it: its files are in this worktree. */
   private showsLocal(): boolean {
     return Boolean(this.target?.local) && this.version === "local";
+  }
+
+  /**
+   * Whether the working files are `commit`'s content, so a diff of it shows your file on the right
+   * and its comment threads sit there, where language features work: the change a staged review
+   * holds here (core's `staged_review`), seen at that very commit; or, looking at your local
+   * commit, the one you stand on. Any other commit (another patchset, a commit below HEAD) is read
+   * from git as it is in the commit.
+   */
+  worktreeHolds(commit: string | null | undefined): boolean {
+    const stack = this.model.stack;
+    if (!commit || !stack) {
+      return false;
+    }
+    return stack.staged_review?.commit === commit || (this.showsLocal() && stack.head === commit);
   }
 
   /** A new selection token (from `select`): the loads under the previous ones are dropped, and their requests called off. */
@@ -259,8 +311,8 @@ export class ChangeView extends WebView<ChangeVm> {
     if (this.mode === "gerrit") {
       return local ? client.diff(change, { since: "current", local }, signal) : undefined;
     }
-    // Someone's change: asked either way, as what is new since your review is offered up front.
-    if (this.mode === "reviewed" || !target.local) {
+    // Someone's change (also one checked out for review): asked either way, as what is new since your review is offered up front.
+    if (this.mode === "reviewed" || !target.local || this.holdsReview(target)) {
       return client.diff(change, { since: "reviewed", patchset: typeof this.version === "number" ? this.version : undefined, local }, signal);
     }
     return undefined;
@@ -334,6 +386,9 @@ export class ChangeView extends WebView<ChangeVm> {
     if (this.version !== "local") {
       return READ_ONLY.patchset;
     }
+    if (this.model.stack?.staged_review) {
+      return READ_ONLY.review; // core refuses ger reword there too
+    }
     return this.model.stack?.rebase_in_progress ? READ_ONLY.rebase : "";
   }
 
@@ -354,6 +409,7 @@ export class ChangeView extends WebView<ChangeVm> {
       ci: this.ci,
       // Which commit a rebase stopped at is in the stack ger serve sent: the Change view reads it there, as Local stack does.
       stopped: this.target && stoppedHere(this.target, this.model.stack),
+      reviewing: this.reviewing(),
     });
     if (!state) {
       return { empty: this.target && this.detail.loading() ? `Loading ${this.target.title}…` : NOTHING_SHOWN };
@@ -508,6 +564,25 @@ export class ChangeView extends WebView<ChangeVm> {
   }
 
   /**
+   * What a file's diff compares: the version compared with on the left (none for an added file),
+   * the version looked at on the right (none for a deleted one). What the working files hold is
+   * your file (`worktreeHolds`): comments are drawn where they are written, F12 works, edits go in
+   * place. `own`: the right side is your file.
+   */
+  private sides(file: FileChange, diff: Diff & { base: string }): { left?: vscode.Uri; right?: vscode.Uri; own: boolean } {
+    const own = this.worktreeHolds(diff.commit);
+    const left = file.status === "A" ? undefined : fileUri(diff.base, file.old_path ?? file.path, own ? this.model.repo : undefined);
+    const right = file.status === "D" ? undefined : own ? vscode.Uri.file(path.join(this.model.repo, file.path)) : fileUri(diff.commit, file.path);
+    return { left, right, own };
+  }
+
+  /** What a diff's title says it compares: "patchset 1 ↔ 2", or the commit. */
+  private static range(diff: Diff): string {
+    const to = diff.since?.to_patch_set ?? (diff.local_commit ? "local" : diff.since?.current_patch_set);
+    return diff.since ? `patchset ${diff.since.patch_set} ↔ ${to}` : diff.commit.slice(0, 8);
+  }
+
+  /**
    * The diff of one file: what it is compared with on the left, the version looked at on the right.
    * An added file opens alone, and so does a deleted one, as VS Code's own Git does: its diff editor
    * shows an empty side as one removed (or added) empty line.
@@ -516,28 +591,67 @@ export class ChangeView extends WebView<ChangeVm> {
     if (!diff || diff.base === null) {
       return;
     }
-    const left = fileUri(diff.base, file.old_path ?? file.path);
-    if (file.status === "D") {
-      await vscode.commands.executeCommand("vscode.open", left);
+    const { left, right, own } = this.sides(file, { ...diff, base: diff.base });
+    if (!left || !right) {
+      await vscode.commands.executeCommand("vscode.open", left ?? right);
       return;
     }
-    // The commit you are standing on diffs against the real file, so you can edit in place.
-    const editable = this.showsLocal() && this.model.stack?.head === diff.commit;
-    const right = editable ? vscode.Uri.file(path.join(this.model.repo, file.path)) : fileUri(diff.commit, file.path);
-    if (file.status === "A") {
-      await vscode.commands.executeCommand("vscode.open", right);
-      return;
-    }
-    const to = diff.since?.to_patch_set ?? (diff.local_commit ? "local" : diff.since?.current_patch_set);
-    const range = diff.since ? `patchset ${diff.since.patch_set} ↔ ${to}` : diff.commit.slice(0, 8);
-    const title = `${path.posix.basename(file.path)} (${range})`;
-    await openDiff(left, right, title, markOf(diff, this.model.stack, editable));
+    const title = `${path.posix.basename(file.path)} (${ChangeView.range(diff)})`;
+    await openDiff(left, right, title, markOf(diff, this.model.stack, own));
   }
 
-  /** The document a path of the shown change lives in: your file for your local commit, the commit's otherwise. */
+  /**
+   * Every file of what is compared in one editor, in the Files list's order: VS Code's multi-diff
+   * editor, each file with the sides its own diff has, so comments and language features work there
+   * as in the file's diff. Where VS Code has no multi-diff editor (before 1.86), the first file's diff.
+   */
+  async openAll(diff: Diff | undefined = this.shownDiff()): Promise<void> {
+    if (!diff || diff.base === null || !diff.files.length) {
+      const what = this.target ? `${this.target.title}: ` : "";
+      void ui().message("info", `${what}there are no files to show${this.mode === "base" ? "" : " for this comparison"}.`, {}, []);
+      return;
+    }
+    if (!(await vscode.commands.getCommands(true)).includes("vscode.changes")) {
+      await this.openDiff(diff.files[0], diff);
+      return;
+    }
+    const base = diff.base;
+    const resources = diff.files.map((file) => {
+      const { left, right } = this.sides(file, { ...diff, base });
+      // The row's name: the file in the repository, as Source Control names it.
+      return [vscode.Uri.file(path.join(this.model.repo, file.path)), left, right];
+    });
+    const number = this.shown?.number ?? this.target?.number;
+    const title = `${number ? `Change ${number}` : (this.shown?.summary ?? "Change")} (${ChangeView.range(diff)})`;
+    if (this.worktreeHolds(diff.commit)) {
+      this.combined.add(title);
+    }
+    await vscode.commands.executeCommand("vscode.changes", title, resources);
+  }
+
+  /** The titles of the combined diffs opened this session: a review that moves on closes them (`closeCombined`). */
+  private readonly combined = new Set<string>();
+
+  /**
+   * Close the combined diffs opened of the change a staged review held: their right sides are your
+   * files, which hold another change now. VS Code's 1.85 API does not say what a multi-diff tab shows,
+   * so they are known by title; single-file diffs go stale on their own (diffTabs.ts).
+   */
+  async closeCombined(): Promise<void> {
+    // VS Code titles the tab "<title> (4 files)"; its input (not in the 1.85 API) lists `textDiffs`.
+    const combined = (tab: vscode.Tab) => Boolean((tab.input as { textDiffs?: unknown } | undefined)?.textDiffs) && [...this.combined].some((title) => tab.label.startsWith(title));
+    const tabs = vscode.window.tabGroups.all.flatMap((group) => group.tabs).filter(combined);
+    this.combined.clear();
+    if (tabs.length) {
+      await vscode.window.tabGroups.close(tabs, true);
+    }
+  }
+
+  /** The document a path of the shown change lives in: your file for your local commit and for what the working files hold, the commit's otherwise. */
   locationUri(file: string): vscode.Uri {
     const commit = this.diff?.commit ?? this.shown?.sha;
-    return this.showsLocal() || !commit ? vscode.Uri.file(path.join(this.model.repo, file)) : fileUri(commit, file);
+    const yours = this.showsLocal() || this.worktreeHolds(commit) || !commit;
+    return yours ? vscode.Uri.file(path.join(this.model.repo, file)) : fileUri(commit, file);
   }
 
   /** Open where a comment or a CI finding points. */

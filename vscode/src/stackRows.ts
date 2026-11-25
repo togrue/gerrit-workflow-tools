@@ -213,6 +213,8 @@ export interface StackVm {
   frozen: string | null;
   /** How many rows, from the top, can move: a drop lands no lower than under the last of them. */
   movable: number;
+  /** A staged review: the rows are somebody else's commits, and offer review actions only. */
+  review?: boolean;
 }
 
 /** Where a rebase stopped, in the row's tooltip: why, by core's verdict. */
@@ -372,7 +374,8 @@ export function upstreamStop(stop: UpstreamStop): string {
  */
 export function upstreamRow(stack: Stack): StackInfo | undefined {
   const up = stack.upstream;
-  if (!up?.behind) {
+  // A staged review is somebody else's chain: rebasing it is not yours to do (core refuses it there).
+  if (!up?.behind || stack.staged_review) {
     return undefined;
   }
   const what = up.conflict ? upstreamStop(up.conflict) : undefined;
@@ -399,6 +402,12 @@ export function upstreamRow(stack: Stack): StackInfo | undefined {
 
 /** The view's header: the branch, or the one being rebased, and where its stack starts. */
 export function stackWhere(stack: Stack): string {
+  const review = stack.staged_review;
+  if (review) {
+    // Somebody else's chain, as `ger review` prints it: base first, the change under review in brackets.
+    const numbers = stack.commits.map((commit) => (commit.number === review.number ? `[${commit.number}]` : String(commit.number ?? commit.short_sha)));
+    return `reviewing ${numbers.length ? numbers.join(" ← ") : review.number}`;
+  }
   const branch = stack.rebase ? `${stack.rebase.branch ?? "detached"} (rebasing)` : (stack.branch ?? "detached");
   return stack.stack.target_branch ? `${branch} → ${stack.stack.target_branch}` : branch;
 }
@@ -424,7 +433,10 @@ function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: numb
   const marker = stopped ? (stopped === "conflict" ? "conflict" : "rebase") : null;
   const up = above && conflicts(commit.sha, above.sha);
   const down = below && conflicts(below.sha, commit.sha);
-  const notes = [commit.is_head ? "HEAD" : "", commit.short_sha, commit.merge ? "merge" : "", state === "code-changed" ? "code changed" : "", commit.held_back ? "held back" : "", commit.abandoned ? "abandoned" : ""];
+  // In a staged review HEAD sits at the change's parent only to stage it: the change is what is looked at.
+  const review = stack.staged_review;
+  const where = review ? (commit.sha === review.commit ? "under review" : "") : commit.is_head ? "HEAD" : "";
+  const notes = [where, commit.short_sha, commit.merge ? "merge" : "", state === "code-changed" ? "code changed" : "", commit.held_back ? "held back" : "", commit.abandoned ? "abandoned" : ""];
   const tooltip = [
     commit.summary,
     `${commit.number ? `Change ${commit.number}: ` : ""}${SYNC_WORDS[state]}`,
@@ -454,14 +466,20 @@ function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: numb
     notes: notes.filter(Boolean),
     badges: badges(commit),
     tooltip: tooltip.filter(Boolean).join("\n"),
-    squash: below !== undefined && index - 1 >= pinnedBelow,
+    squash: !review && below !== undefined && index - 1 >= pinnedBelow,
   };
 }
 
 type Conflicts = (lower: string, upper: string) => MoveConflict | undefined;
 
 /** Why the stack cannot be rewritten as it is; null when it can. */
+/** Why the commits of a staged review are not to be moved, as core refuses rewrites there. */
+export const REVIEW_FROZEN = "These are somebody else's commits, checked out for review: nothing moves here. ger review --unstage to work on them, or Leave Review Checkout.";
+
 export function frozen(stack: Stack): string | null {
+  if (stack.staged_review) {
+    return REVIEW_FROZEN;
+  }
   if (stack.rebase_in_progress) {
     return "A rebase is in progress: finish it (Continue) or abort it (Abort) before you move commits.";
   }
@@ -516,7 +534,8 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
   const commits = local.commits;
   const fixed = pinned(local);
   const rows = commits.map((commit, index) => row(commit, local, index, fixed, conflicts)).reverse();
-  return { info, rows, frozen: frozen(local), movable: commits.length - fixed };
+  const review = Boolean(local.staged_review);
+  return { info, rows, frozen: frozen(local), movable: review ? 0 : commits.length - fixed, review };
 }
 
 /** Buttons as the transcript shows them: `[Continue] [Abort]`, the one to press now in bold. */

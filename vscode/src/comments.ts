@@ -8,7 +8,7 @@ import * as vscode from "vscode";
 import { Comment, CommentChain, NewCommentState, ShownCommit } from "./api";
 import { ownComment } from "./changeRows";
 import { ChangeView } from "./changeView";
-import { FILE_SCHEME, repoPath } from "./diffTabs";
+import { FILE_SCHEME, filePath, repoPath } from "./diffTabs";
 import { commentLocation } from "./format";
 import { Model, describeError } from "./model";
 import { ui } from "./ui";
@@ -145,8 +145,9 @@ export class CommentThreads implements vscode.Disposable {
 
   /**
    * The repository path of `uri` when it shows the shown change's lines: the right side of its
-   * diffs, or your own file when the shown commit is HEAD. Elsewhere a line number would point
-   * at other text, so no new comment starts there.
+   * diffs, or your own file when the working files hold the shown commit (`worktreeHolds`: the
+   * commit you stand on, or a staged review's change). Elsewhere a line number would point at
+   * other text, so no new comment starts there.
    */
   private pathOf(uri: vscode.Uri): string | undefined {
     const [target, shown] = [this.view.target, this.view.shown];
@@ -155,9 +156,9 @@ export class CommentThreads implements vscode.Disposable {
       return undefined;
     }
     if (uri.scheme === FILE_SCHEME) {
-      return uri.query === commit ? uri.path.slice(1) : undefined;
+      return uri.query === commit ? filePath(uri, this.model.repo) : undefined;
     }
-    return target.local && this.model.stack?.head === commit ? repoPath(this.model.repo, uri) : undefined;
+    return this.view.worktreeHolds(commit) ? repoPath(this.model.repo, uri) : undefined;
   }
 
   /** With no change shown, your own file is commented on as the commit you stand on has it: whether `uri` is such a file. */
@@ -301,11 +302,16 @@ export class CommentThreads implements vscode.Disposable {
     }
   }
 
-  /** Step through the unresolved chains of the shown change, in the Change view's order. */
+  /**
+   * Step through the unresolved chains of the shown change, in the Change view's order. On a change
+   * you review (not yours), your own drafts, local drafts and notes too: what you are about to
+   * publish is read again the same way.
+   */
   async step(direction: 1 | -1): Promise<void> {
-    const chains = this.view.unresolved();
+    const reviewing = this.view.shown?.own === false;
+    const chains = reviewing ? this.view.openChains() : this.view.unresolved();
     if (!chains.length) {
-      ui().status("$(pass) No unresolved comments on this change", 4000);
+      ui().status(`$(pass) No unresolved comments${reviewing ? " or drafts of yours" : ""} on this change`, 4000);
       return;
     }
     this.cursor = (this.cursor + direction + chains.length) % chains.length;
@@ -392,19 +398,28 @@ export class CommentThreads implements vscode.Disposable {
    * box opens on its text to edit. `done` resolves the chain: with no draft yet it writes "Done",
    * else it keeps what you wrote.
    */
+  /**
+   * Reply as Draft… (or Done): the reply box has Gerrit's Resolved choice as the Change view's
+   * box does, starting where the comment stands; Enter saves with it, the toggle in the box's
+   * title bar flips it, Ctrl+Shift+Enter saves and resolves.
+   */
   async replyToChain(chain: CommentChain, done: boolean): Promise<void> {
     const draft = yourDraft(chain);
     const where = `${chain.path}${chain.line ? `:${chain.line}` : ""}`;
-    const text = done
-      ? (draft?.message ?? "Done")
-      : await ui().input({
-          title: draft ? `Edit your draft reply — ${where}` : `Reply to ${chain.comments.at(-1)?.author ?? "comment"} — ${where}`,
-          prompt: `Saved as a draft on Gerrit, visible only to you: ${publishing(this.view.shown).words}.`,
-          placeHolder: chain.comments.at(-1)?.message.split("\n")[0],
-          value: draft?.message,
-        });
-    if (text?.trim()) {
-      await this.save(chain, text, done ? true : undefined);
+    if (done) {
+      await this.save(chain, draft?.message ?? "Done", true);
+      return;
+    }
+    const words = publishing(this.view.shown).words;
+    const reply = await ui().reply({
+      title: draft ? `Edit your draft reply — ${where}` : `Reply to ${chain.comments.at(-1)?.author ?? "comment"} — ${where}`,
+      prompt: (resolved) => `Saved as a draft${resolved ? " that resolves the comment" : ", the comment left unresolved"}; visible only to you: ${words}.`,
+      placeHolder: chain.comments.at(-1)?.message.split("\n")[0],
+      value: draft?.message,
+      resolved: chain.resolved_after_publish,
+    });
+    if (reply?.text.trim()) {
+      await this.save(chain, reply.text, reply.resolved);
     }
   }
 

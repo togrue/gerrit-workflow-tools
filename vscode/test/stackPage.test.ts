@@ -121,7 +121,7 @@ test("a row's context menu gets that row, or every selected row when it is one o
   const [first, second, third] = page.commits;
   assert.deepEqual(
     page.context("Second"),
-    { webviewSection: "commit", preventDefaultContextMenuItems: true, sha: second.sha, shas: [third.sha, second.sha], gerUrl: true, gerSquash: true, gerChangeId: true, gerMulti: true },
+    { webviewSection: "commit", preventDefaultContextMenuItems: true, sha: second.sha, shas: [third.sha, second.sha], gerUrl: true, gerSquash: true, gerChangeId: true, gerMulti: true, gerReview: false },
   );
   assert.deepEqual(page.context("First").shas, [first.sha], "a row outside the selection: only itself");
   assert.equal(page.context("First").gerMulti, false);

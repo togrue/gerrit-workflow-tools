@@ -39,6 +39,9 @@ class ReviewUsageError(UsageError):
 class ReviewChainEndError(RuntimeError):
     """``--next`` / ``--prev`` at the end of the review chain (exit 10)."""
 
+    reason = "chain-end"
+    """What ``ger serve`` names it (``error.reason``), so a client can offer what comes after the chain."""
+
 
 @dataclass(frozen=True)
 class CheckoutOptions:
@@ -109,20 +112,29 @@ def load_state(worktree: Path | str) -> ReviewState | None:
     return _read_state(_state_path(worktree))
 
 
-def staged_review_branch(repo_dir: Path | None, cwd: Path | str | None) -> str | None:
-    """The reviewed change's ``change-<number>`` branch while its staged review sits at its parent.
+def staged_review(repo_dir: Path | None, cwd: Path | str | None) -> ReviewState | None:
+    """The review staged in the worktree of *repo_dir* (its git dir), while it sits at the change's parent.
 
-    Staged, HEAD is detached at the change's parent and the branch is on the change itself: the
-    branch is the one being worked on, and its tip is what HEAD stands for (``Repository.head``).
-    ``None`` when no review is staged in the worktree of *repo_dir* (its git dir), or HEAD or the
-    branch moved away. Costs no git call when nothing is being reviewed.
+    Staged, HEAD is detached at the change's parent and the ``change-<number>`` branch is on the
+    change itself, so the index and the working files hold the change. ``None`` when no review is
+    staged there, or HEAD or the branch moved away. Costs no git call when nothing is being reviewed.
     """
     state = _read_state(repo_dir.joinpath(*_STATE_FILE) if repo_dir is not None else None)
     if state is None or not state.staged:
         return None
     p = git("rev-parse", "HEAD", f"{state.commit}^", f"refs/heads/{state.branch}", cwd=cwd, check=False)
     shas = p.stdout.split() if p.returncode == 0 else []
-    return state.branch if len(shas) == 3 and shas[0] == shas[1] and shas[2] == state.commit else None
+    return state if len(shas) == 3 and shas[0] == shas[1] and shas[2] == state.commit else None
+
+
+def staged_review_branch(repo_dir: Path | None, cwd: Path | str | None) -> str | None:
+    """The reviewed change's ``change-<number>`` branch while its staged review sits at its parent.
+
+    The branch is the one being worked on, and its tip is what HEAD stands for (``Repository.head``).
+    ``None`` when no review is staged (:func:`staged_review`).
+    """
+    state = staged_review(repo_dir, cwd)
+    return state.branch if state else None
 
 
 def staged_review_refusal(repo_dir: Path | None, cwd: Path | str | None) -> str | None:
@@ -133,11 +145,13 @@ def staged_review_refusal(repo_dir: Path | None, cwd: Path | str | None) -> str 
     ``ger rebase`` and ``ger push`` refuse with this one wording. Costs no git call when nothing is
     being reviewed.
     """
-    if staged_review_branch(repo_dir, cwd) is None:
+    state = staged_review(repo_dir, cwd)
+    if state is None:
         return None
-    state = _read_state(repo_dir.joinpath(*_STATE_FILE) if repo_dir is not None else None)
-    number = change_label(state.number) if state else "a change"
-    return f"a staged review of {number} is underway here: `ger review --unstage` to work on it, or `ger review --done`"
+    return (
+        f"a staged review of {change_label(state.number)} is underway here: "
+        "`ger review --unstage` to work on it, or `ger review --done`"
+    )
 
 
 def save_state(state: ReviewState) -> None:

@@ -37,6 +37,7 @@ from gerrit_workflow_tools.core.inbox import DEFAULT_OUTGOING_QUERY, build_to_re
 from gerrit_workflow_tools.core.rebase_state import rebase_in_progress
 from gerrit_workflow_tools.core.reorder import ReorderRefusal, StackStep, rewrite_stack
 from gerrit_workflow_tools.core.reorder_preview import PickConflict, PreviewUnavailable, first_conflict, swap_conflicts
+from gerrit_workflow_tools.core.review_checkout import ReviewChainEndError
 from gerrit_workflow_tools.core.review_delta import patchset_delta_files
 from gerrit_workflow_tools.core.stack import Commit, read_commit_meta
 from gerrit_workflow_tools.server.api import GerApi
@@ -140,7 +141,8 @@ def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monk
     assert code == ExitCode.OK
     assert list(log) == ["stack", "rebase", "upstream", "commits", "next"]
     assert list(stack) == [
-        *("branch", "head", "rebase_in_progress", "rebase", "upstream", "push_blocked", "stack", "summary", "commits"),
+        *("branch", "head", "rebase_in_progress", "rebase", "upstream", "push_blocked", "staged_review", "stack"),
+        *("summary", "commits"),
         "next",
     ]
     assert list(stack["summary"]) == ["commits", "ready", "attention", "needs_edit", "not_on_gerrit"]
@@ -688,7 +690,24 @@ def test_review_open_checks_out_in_the_review_worktree_and_done_leaves_it(stack_
     assert git_out("diff", "--cached", "--name-only", cwd=worktree) == "c.txt"
     assert git_out("branch", "--show-current", cwd=stack_repo) == "feature", "your checkout is untouched"
     assert _get(api, "/review")["review"]["number"] == 102
-    assert _post(api, "/review/done", {}) == {"done": 102, "deleted": ["change-102"], "kept": []}
+    staged = _get(GerApi(worktree, gerrit=store), "/stack")["staged_review"]
+    assert (staged["number"], staged["commit"], staged["branch"]) == (102, rows[2].sha, "change-102")
+    assert _get(api, "/stack")["staged_review"] is None, "the review is staged in its worktree, not here"
+    assert _get(api, "/review", chain="1")["review"]["chain"] == [100, 101, 102, 103]
+    # ger review --next: the change above, in the review's own mode; at the top, the chain ends.
+    walked = _post(api, "/review/open", {"step": 1})["review"]
+    assert (walked["number"], walked["staged"], Path(walked["worktree"])) == (103, True, worktree)
+    assert _get(GerApi(worktree, gerrit=store), "/stack")["staged_review"]["number"] == 103
+    with pytest.raises(ReviewChainEndError, match="top of its review chain"):
+        _post(api, "/review/open", {"step": 1})
+    assert (
+        failure_response(ReviewChainEndError("change 103 is the top of its review chain"))[1]["error"]["reason"]
+        == "chain-end"
+    )
+    with pytest.raises(BadRequest):
+        _post(api, "/review/open", {"step": 2})
+    assert _post(api, "/review/open", {"step": -1})["review"]["number"] == 102
+    assert _post(api, "/review/done", {}) == {"done": 102, "deleted": ["change-102", "change-103"], "kept": []}
 
 
 def test_reorder_rewrites_the_stack_and_keeps_every_change_id(stack_repo: Path) -> None:
@@ -977,7 +996,7 @@ def _http(
 def test_http_answers_only_with_the_token_on_a_loopback_host(served: GerHttpServer) -> None:
     status, body = _http(served, f"{V1}/health")
     assert status == 200
-    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.1.0", "feature", "g.example")
+    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.2.0", "feature", "g.example")
     assert _http(served, f"{V1}/health", token=None)[0] == 401
     assert _http(served, f"{V1}/health", token="wrong")[0] == 401
     # A page that rebinds its own name to 127.0.0.1 still sends its name as Host.

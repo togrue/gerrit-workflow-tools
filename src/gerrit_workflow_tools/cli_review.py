@@ -36,12 +36,11 @@ from gerrit_workflow_tools.core.review_checkout import (
     ReviewUsageError,
     close_review,
     find_review,
-    neighbour,
     open_review,
     set_staged,
 )
 from gerrit_workflow_tools.core.review_delta import ReviewDelta, load_review_delta
-from gerrit_workflow_tools.core.review_target import related_chain_numbers
+from gerrit_workflow_tools.core.review_target import related_chain_numbers, review_neighbour
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.render.comments import drafts_elsewhere
 from gerrit_workflow_tools.render.review_json import review_state_json
@@ -229,10 +228,7 @@ def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: Re
     else:
         if state is None:
             raise ReviewUsageError("no review going on here: name a CHANGEISH first")
-        number = neighbour(
-            related_chain_numbers(service, state.key, state.patch_set), state.number, 1 if args.next else -1
-        )
-        target, url = resolve_patchset(service, cwd, f"change:{number}", None)
+        target, url = review_neighbour(service, cwd, state, 1 if args.next else -1)
         mode = state.mode
     stage = settings.review_stage if args.stage is None else args.stage
     options = CheckoutOptions(mode=mode, stage=stage, force=args.force)

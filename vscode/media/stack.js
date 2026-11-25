@@ -25,6 +25,7 @@
       gerSquash: row.squash,
       gerChangeId: rows.some((r) => r.changeId),
       gerMulti: rows.length > 1,
+      gerReview: Boolean(vm.review),
     }),
   });
 

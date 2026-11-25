@@ -79,11 +79,70 @@
     return element;
   }
 
-  /** A message that cannot be reworded here: plain wrapped text, no box, no note saying so. */
+  const LIST_ITEM = /^\s*(?:[-*+•]|\d+[.)])\s+/;
+  const TRAILER = /^[A-Za-z][\w-]*: \S/;
+  const PART_CLASS = { subject: "subject", text: "para", item: "item", pre: "pre", trailers: "trailers" };
+
+  /**
+   * A commit message as parts to draw in a narrow view: the subject line as it is; paragraphs
+   * hard-wrapped at 72 joined into one line each, for the view to wrap at its own width; list
+   * items the same, each its own; indented lines and fenced blocks kept as they are (`pre`); and the
+   * trailers at the end (`Signed-off-by:`, …) as they are. A `gap` stands for the blank lines.
+   */
+  function messageParts(text) {
+    const lines = text.replace(/\s+$/, "").split("\n");
+    const parts = [{ kind: "subject", text: lines[0] }];
+    const paragraphs = [];
+    let current = [];
+    for (const line of lines.slice(1)) {
+      if (line.trim() === "") {
+        if (current.length) paragraphs.push(current);
+        current = [];
+      } else {
+        current.push(line);
+      }
+    }
+    if (current.length) paragraphs.push(current);
+    const last = paragraphs[paragraphs.length - 1];
+    const trailers = last && last.every((line) => TRAILER.test(line)) ? paragraphs.pop() : null;
+    let fenced = false;
+    for (const paragraph of paragraphs) {
+      // A fence open across a blank line goes on in the same block; anything else starts anew.
+      let open = fenced ? parts[parts.length - 1] : null;
+      if (!fenced) parts.push({ kind: "gap" });
+      else open.text += "\n";
+      for (const line of paragraph) {
+        if (fenced || line.trimStart().startsWith("```")) {
+          const fence = line.trimStart().startsWith("```");
+          if (fenced) open.text += `\n${line}`;
+          else parts.push((open = { kind: "pre", text: line }));
+          fenced = fence ? !fenced : fenced;
+          if (!fenced) open = null;
+        } else if (LIST_ITEM.test(line)) {
+          parts.push((open = { kind: "item", text: line.trim(), depth: line.length - line.trimStart().length }));
+        } else if (/^(\t| {2,})/.test(line) && !(open && open.kind === "item")) {
+          // Indented (code, a quote, a table): as it is, scrolled sideways where it is wide.
+          if (open && open.kind === "pre") open.text += `\n${line}`;
+          else parts.push((open = { kind: "pre", text: line }));
+        } else if (open && open.kind !== "pre") {
+          open.text += ` ${line.trim()}`; // the same paragraph or item, wrapped at 72
+        } else {
+          parts.push((open = { kind: "text", text: line.trim() }));
+        }
+      }
+    }
+    if (trailers) parts.push({ kind: "gap" }, { kind: "trailers", text: trailers.join("\n") });
+    return parts;
+  }
+
+  /** A message that cannot be reworded here: plain text reflowed to the view's width, no box, no note saying so. */
   function plainBlock(message) {
     editor = null;
     const heading = h("div", { class: "heading" }, h("span", { class: "label" }, "Commit message"), h("span", { class: "detail" }, message.author));
-    const text = h("div", { class: "message-text", "aria-label": "Commit message" }, message.text);
+    const parts = messageParts(message.text).map((part) =>
+      part.kind === "gap" ? h("div", { class: "message-gap" }) : h("div", { class: `message-${PART_CLASS[part.kind]}`, style: part.depth ? `margin-left: ${Math.min(part.depth, 8) / 2}em` : undefined }, part.text),
+    );
+    const text = h("div", { class: "message-text", "aria-label": "Commit message" }, parts);
     return h("div", { class: "message-block" }, heading, text, changeIdLine(h("div", { class: "change-id" }), message.changeId));
   }
 
@@ -395,6 +454,9 @@
     }
     for (const note of vm.notes || []) {
       parts.push(h("div", { class: "head note", title: `${note.text} — ${note.detail}` }, icon(note.icon, note.tone), h("span", { class: "label" }, note.text), h("span", { class: "detail" }, note.detail)));
+      if (note.actions && note.actions.length) {
+        parts.push(actions(note.actions));
+      }
     }
     if (vm.message) {
       parts.push(messageBlock(vm.message));
