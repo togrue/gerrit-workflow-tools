@@ -13,7 +13,7 @@ from gerrit_workflow_tools.core.gerrit.change_queries import (
     change_freshness_key,
     probe_changes_updated,
 )
-from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView, missing_parent_shas
 from gerrit_workflow_tools.core.gerrit.rest import (
     LIGHT_QUERY_OPTIONS,
     LOG_QUERY_OPTIONS,
@@ -199,6 +199,17 @@ class ChangeApi:
         service.cache.settle_commits((sha for sha in ask if sha in merged), merged=True)
         service.cache.settle_commits((sha for sha in ask if sha not in merged | pending), merged=False)
         return found
+
+    def parents(self, changes: list[ChangeView]) -> tuple[list[ChangeView], set[str]]:
+        """The changes *changes* sit on that are not among them (:meth:`by_commit`, one batch), and
+        the parent commits found only as an older patch set: a chain with such a hole is partial."""
+        shas = missing_parent_shas(changes)
+        if not shas:
+            return [], set()
+        found = [ChangeView.from_payload(payload) for payload in self.by_commit(shas)]
+        current = {change.current_revision for change in found if change.current_revision}
+        older = {sha for sha in shas if sha not in current and any(sha in change.revisions for change in found)}
+        return found, older
 
     def _with_details(
         self, light: list[dict[str, Any]], ask_in_full: Callable[[], list[dict[str, Any]]]

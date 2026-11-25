@@ -23,7 +23,7 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     self_account_id as account_id_of_self,
 )
 from gerrit_workflow_tools.core.gerrit.stack_context import StackContext, build_triplet
-from gerrit_workflow_tools.core.review_chain import ReviewChain, assemble_review_chains, missing_parent_shas
+from gerrit_workflow_tools.core.review_chain import ReviewChain, assemble_review_chains
 
 
 if TYPE_CHECKING:
@@ -257,16 +257,7 @@ class GerritService:
         moment = now if now is not None else datetime.now(timezone.utc)
         rows = [ChangeView.from_payload(row) for row in self.changes.query(query)]
         account_id = self_account_id if self_account_id is not None else self.self_account_id()
-        parent_shas = missing_parent_shas(rows)
-        follow_up_rows: list[ChangeView] = []
-        unmatched: set[str] = set()
-        if parent_shas:
-            follow_up_rows = [ChangeView.from_payload(payload) for payload in self.changes.by_commit(parent_shas)]
-            current_shas = {change.current_revision for change in follow_up_rows if change.current_revision}
-            for sha in parent_shas:
-                # A parent found only as an older patch set: the chain is partial.
-                if sha not in current_shas and any(sha in change.revisions for change in follow_up_rows):
-                    unmatched.add(sha)
+        follow_up_rows, unmatched = self.changes.parents(rows)
         return assemble_review_chains(
             rows,
             follow_up_rows,

@@ -109,13 +109,6 @@ def host_from_web_base(web_base: str) -> str:
     return host.split("@", 1)[-1].split(":", 1)[0] or "unknown"
 
 
-def missing_parent_shas(changes: list[ChangeView]) -> list[str]:
-    """First-parent SHAs that are not another change's current revision."""
-    known = {change.current_revision for change in changes if change.current_revision}
-    parents = (change.first_parent for change in changes if change.first_parent)
-    return list(dict.fromkeys(parent for parent in parents if parent not in known))
-
-
 def _self_vote_date(change: ChangeView, self_account_id: int) -> datetime | None:
     dates = [vote.date for vote in change.code_review_votes if vote.account_id == self_account_id and vote.date]
     return max(dates, default=None)

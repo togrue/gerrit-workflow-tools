@@ -384,3 +384,10 @@ class ChangeView:  # pylint: disable=too-many-instance-attributes
         if not self.project or self.number is None:
             return None
         return f"{web_base}/c/{quote(self.project, safe='')}/+/{self.number}"
+
+
+def missing_parent_shas(changes: list[ChangeView]) -> list[str]:
+    """First-parent SHAs that are not another change's current revision."""
+    known = {change.current_revision for change in changes if change.current_revision}
+    parents = (change.first_parent for change in changes if change.first_parent)
+    return list(dict.fromkeys(parent for parent in parents if parent not in known))

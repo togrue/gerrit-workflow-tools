@@ -5,12 +5,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView, missing_parent_shas
 from gerrit_workflow_tools.core.review_chain import (
     ReviewChain,
     assemble_review_chains,
     format_age,
-    missing_parent_shas,
     your_turn_since,
 )
 
