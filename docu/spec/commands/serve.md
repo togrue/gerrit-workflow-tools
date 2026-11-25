@@ -161,7 +161,7 @@ a client words its own advice while `message` stays ger's.
 
 ## API version
 
-`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.1.0`); the URL
+`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.2.0`); the URL
 prefix carries only the major (`/api/v1`). It moves on its own, not with ger's package version:
 
 | Bump | When |
@@ -340,6 +340,14 @@ with it as a `next:` line.
 `null`: `reason` is `rebase` (the branch still points at the commits from before it) or `am` (a
 `git am` underway), and `message` is the refusal `ger push` prints. A client asks it before it
 starts `ger push`, so it can offer to finish the rebase instead.
+
+`staged_review` is the **staged review** in this checkout, or `null`: the **review state** as
+[`GET /review`](#get-review) has it (`chain` and `url` `null`), while HEAD still sits at the
+change's parent and its `change-<number>` branch on the change. The stack is then somebody
+else's change: `ger push`, `ger edit`, `ger reword`, `ger fix` and `ger rebase` refuse there, and
+the working files hold the change at `commit`. Only a review staged *here* counts: from the main
+worktree, a review in the review worktree is `GET /review`'s, not this. Cost: nothing while no
+review is recorded here, else one `git rev-parse`.
 
 ### `GET /stack/moves`
 

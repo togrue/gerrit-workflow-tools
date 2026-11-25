@@ -140,7 +140,8 @@ def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monk
     assert code == ExitCode.OK
     assert list(log) == ["stack", "rebase", "upstream", "commits", "next"]
     assert list(stack) == [
-        *("branch", "head", "rebase_in_progress", "rebase", "upstream", "push_blocked", "stack", "summary", "commits"),
+        *("branch", "head", "rebase_in_progress", "rebase", "upstream", "push_blocked", "staged_review", "stack"),
+        *("summary", "commits"),
         "next",
     ]
     assert list(stack["summary"]) == ["commits", "ready", "attention", "needs_edit", "not_on_gerrit"]
@@ -688,6 +689,9 @@ def test_review_open_checks_out_in_the_review_worktree_and_done_leaves_it(stack_
     assert git_out("diff", "--cached", "--name-only", cwd=worktree) == "c.txt"
     assert git_out("branch", "--show-current", cwd=stack_repo) == "feature", "your checkout is untouched"
     assert _get(api, "/review")["review"]["number"] == 102
+    staged = _get(GerApi(worktree, gerrit=store), "/stack")["staged_review"]
+    assert (staged["number"], staged["commit"], staged["branch"]) == (102, rows[2].sha, "change-102")
+    assert _get(api, "/stack")["staged_review"] is None, "the review is staged in its worktree, not here"
     assert _post(api, "/review/done", {}) == {"done": 102, "deleted": ["change-102"], "kept": []}
 
 
@@ -977,7 +981,7 @@ def _http(
 def test_http_answers_only_with_the_token_on_a_loopback_host(served: GerHttpServer) -> None:
     status, body = _http(served, f"{V1}/health")
     assert status == 200
-    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.1.0", "feature", "g.example")
+    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.2.0", "feature", "g.example")
     assert _http(served, f"{V1}/health", token=None)[0] == 401
     assert _http(served, f"{V1}/health", token="wrong")[0] == 401
     # A page that rebinds its own name to 127.0.0.1 still sends its name as Host.

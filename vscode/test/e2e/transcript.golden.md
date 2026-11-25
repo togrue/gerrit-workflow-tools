@@ -1326,7 +1326,7 @@ notification (warning): Still out of date: fake ger: down for this test
 + status bar | $(warning) Gerrit
 + state  | incompatible
 + events | (not said)
-+ stack  | ger serve speaks API 2.0, the extension needs 1.1: update the extension, or install the ger release that matches it.
++ stack  | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
 - status bar | $(error) CI failed: 102
 - state  | ready
 - events | live
@@ -1343,7 +1343,7 @@ notification (warning): Still out of date: fake ger: down for this test
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
-+ change | ger serve speaks API 2.0, the extension needs 1.1: update the extension, or install the ger release that matches it.
++ change | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
 - change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 - change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | Commit message — test! temporary experiment  (editable)
@@ -1390,9 +1390,9 @@ status bar message: $(check) Refreshed from Gerrit
 - status bar | $(warning) Gerrit
 - state  | incompatible
 - events | (not said)
-- stack  | ger serve speaks API 2.0, the extension needs 1.1: update the extension, or install the ger release that matches it.
+- stack  | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
 - change | title: Change 102
-- change | ger serve speaks API 2.0, the extension needs 1.1: update the extension, or install the ger release that matches it.
+- change | ger serve speaks API 2.0, the extension needs 1.2: update the extension, or install the ger release that matches it.
 ```
 
 ## Meanwhile: a reviewer comments on change 900 on Gerrit, and its event stream says so

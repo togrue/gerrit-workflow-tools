@@ -246,6 +246,11 @@ export interface Stack {
   rebase?: Rebase | null;
   /** Why `ger push` would refuse now, whatever the stack holds (core's verdict, and its words); null when it would not. */
   push_blocked?: PushBlocked | null;
+  /**
+   * The staged review in this checkout (core's fact, the one `ger push`, `ger edit` and `ger reword`
+   * refuse over): somebody else's change, its content in the working files. Null when there is none.
+   */
+  staged_review?: ReviewState | null;
   /** How far the upstream moved on past the stack, and the rebase onto it previewed; null without one, and during a rebase. */
   upstream?: UpstreamMoved | null;
   /** The branches are null without a working branch (a detached HEAD's rebase). */
@@ -463,6 +468,8 @@ export interface Patchsets {
 export interface ReviewState {
   number: number;
   patch_set: number;
+  /** The reviewed patchset's commit. */
+  commit: string;
   subject: string;
   staged: boolean;
   worktree: string;
