@@ -22,13 +22,20 @@ from tests.conftest import run_cli
 CONSOLE = f"{JENKINS}/console"
 
 
-def _store(repo: Path, *, failed: bool = True) -> ChangeStore:
-    """Every stack change on Gerrit; HEAD's Verified -1 with a Jenkins ``Build Failed`` message."""
+def _store(repo: Path, *, failed: bool = True, head_pushed_as: str | None = None) -> ChangeStore:
+    """Every stack change on Gerrit; HEAD's Verified -1 with a Jenkins ``Build Failed`` message.
+
+    *head_pushed_as*: the commit Gerrit has as HEAD's patchset, when not HEAD itself.
+    """
     git("config", "ger.webUrl", "https://g.example", cwd=repo)
     rows = stack_rows_mb_to_head(repo)
     head = git_out("rev-parse", "HEAD", cwd=repo)
     overrides = [{"verified": -1 if failed and r.sha == head else 1} for r in rows]
     details = build_details_by_change_id(rows, per_index_overrides=overrides)
+    for detail in details.values():
+        if head_pushed_as and detail.get("current_revision") == head:
+            detail["revisions"] = {head_pushed_as: detail["revisions"][head]}
+            detail["current_revision"] = head_pushed_as
     head_cid = next(r.change_id for r in rows if r.sha == head)
     triplet = f"testproj~main~{head_cid}"
     message = {
@@ -214,3 +221,84 @@ def test_ci_on_head_points_at_the_commit_below_whose_ci_failed(
     lines = out.splitlines()
     assert lines[1] == "    Above the failure"
     assert lines[-1] == f"{failed_sha} below has failed CI: `ger ci {failed_sha}`, or `ger ci --stack`"
+
+
+# --- While you fix it: the last pushed patchset's findings -------------------------
+
+
+def _calc(repo: Path, lines: list[str]) -> None:
+    """Amend HEAD so ``demo/calc.py`` holds *lines*; the Change-Id stays."""
+    (repo / "demo").mkdir(exist_ok=True)
+    (repo / "demo" / "calc.py").write_text("".join(f"{line}\n" for line in lines))
+    git("add", "demo/calc.py", cwd=repo)
+    git("commit", "-q", "--amend", "--no-edit", cwd=repo)
+
+
+_CALC = [f"line {n}" for n in range(1, 11)]
+
+
+def test_findings_stay_while_you_fix_them_at_their_lines_now(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Amended after CI failed: the findings are patchset 1's, labelled so, and their line is where it went."""
+    _calc(stack_repo, _CALC)
+    store = _store(stack_repo)  # HEAD as it is now is patchset 1, which CI failed
+    _calc(stack_repo, ["import os", "import sys", *_CALC])
+    http = FakeCiHttp(jenkins_build())
+    code, out, err = run_cli(stack_repo, ci_main, ["--json"], monkeypatch, gerrit=store, ci_http=http)
+    assert code == int(ExitCode.OK), err
+    [content] = _json(out)["commits"][0]["ci_content"]
+    assert (content["patch_set"], content["lines_on_patchset"]) == (1, False)
+    finding = content["findings"][0]
+    assert (finding["path"], finding["line"], finding["patchset_line"], finding["line_changed"]) == (
+        "demo/calc.py",
+        8,
+        6,
+        False,
+    )
+    code, out, _err = run_cli(stack_repo, ci_main, ["--color=never"], monkeypatch, gerrit=store, ci_http=http)
+    assert "from patchset 1 (the last pushed), before your local changes" in out
+    assert "pytest  demo/calc.py:8 (line 6 on patchset 1)  tests/test_calc.py::test_divide" in out
+    _code, out, _err = run_cli(
+        stack_repo, show_main, ["--color=never", "--ci"], monkeypatch, gerrit=store, ci_http=http
+    )
+    assert "demo/calc.py:8 (line 6 on patchset 1)" in out, "ger show --ci says the same"
+
+
+def test_a_finding_whose_line_you_changed_says_so(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _calc(stack_repo, _CALC)
+    store = _store(stack_repo)
+    _calc(stack_repo, [*_CALC[:5], "fixed", *_CALC[6:]])
+    code, out, err = run_cli(
+        stack_repo, ci_main, ["--color=never"], monkeypatch, gerrit=store, ci_http=FakeCiHttp(jenkins_build())
+    )
+    assert code == int(ExitCode.OK), err
+    assert "demo/calc.py:5 (line 6 on patchset 1, changed since)" in out
+
+
+def test_the_last_pushed_builds_raise_no_attention_on_new_code(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The verdict is not about the local code: no ci-failed, but ger log -v still lists the build, labelled."""
+    from gerrit_workflow_tools.cli_log import main as log_main
+
+    _calc(stack_repo, _CALC)
+    store = _store(stack_repo)
+    _calc(stack_repo, ["import os", *_CALC])
+    _code, out, _err = run_cli(stack_repo, log_main, ["--json"], monkeypatch, gerrit=store)
+    head = _json(out)["commits"][-1]
+    assert head["ci_patch_set"] == 1 and head["ci_links"], "the links are kept"
+    assert "ci-failed" not in head["attention_reasons"]
+    _code, out, _err = run_cli(stack_repo, log_main, ["-v", "--color=never"], monkeypatch, gerrit=store)
+    assert "(patchset 1, before your local changes)" in out
+
+
+def test_findings_of_a_patchset_not_here_keep_its_lines(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Gerrit's patchset commit is not in this repository: its lines are shown as its own."""
+    _calc(stack_repo, _CALC)
+    store = _store(stack_repo, head_pushed_as="f" * 40)
+    code, out, err = run_cli(
+        stack_repo, ci_main, ["--json"], monkeypatch, gerrit=store, ci_http=FakeCiHttp(jenkins_build())
+    )
+    assert code == int(ExitCode.OK), err
+    [content] = _json(out)["commits"][0]["ci_content"]
+    assert (content["patch_set"], content["lines_on_patchset"]) == (1, True)
+    assert content["findings"][0]["path"] == "demo/calc.py", "the path is still resolved, against the local commit"

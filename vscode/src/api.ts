@@ -377,6 +377,10 @@ export interface CiFinding {
   fingerprint: string;
   /** A warning ranks below an error: it is rarely why the build failed. */
   severity: "error" | "warning";
+  /** The line CI logged on the last pushed patchset, when `line` is where it sits in the local commit now (API 1.2). */
+  patchset_line?: number | null;
+  /** That line was edited since CI ran: `line` is next to where it was (API 1.2). */
+  line_changed?: boolean;
 }
 
 export interface CiContent {
@@ -396,6 +400,8 @@ export interface CiContent {
   findings: CiFinding[];
   /** Some error explains the failure, so the warnings step back behind a count. */
   collapse_warnings: boolean;
+  /** The last pushed patchset CI built, when the local commit moved on with other code (API 1.2). */
+  patch_set?: number | null;
 }
 
 export interface ShownCommit extends CommitStatus {

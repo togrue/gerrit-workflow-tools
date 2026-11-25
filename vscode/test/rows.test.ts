@@ -468,6 +468,16 @@ test("the CI group lists errors first and keeps the warnings behind a count", ()
   assert.deepEqual([only.ci?.links[0].findings.length, only.ci?.links[0].warnings.length], [1, 0]);
 });
 
+test("the last pushed patchset's CI findings stay while you fix them, said to be from before your changes", () => {
+  const moved = shown({ ci_links: [{ label: "jenkins", url: "u", source: "message" }], attention_reasons: ["ahead-of-gerrit"] });
+  const error = { ...finding("undeclared identifier", "error", "e1"), line: 5, patchset_line: 3 };
+  const vm = changeVm(state({ shown: moved, ci: { state: "loaded", contents: [{ ...content(true, [error]), patch_set: 2 }], introduced: null } }));
+  const [link] = vm.ci?.links ?? [];
+  assert.deepEqual([link.icon, link.tone, link.detail], ["history", "dim", "from patchset 2, before your local changes · 1 finding"]);
+  assert.equal(link.findings[0].line, 5, "a click opens the line where it is now");
+  assert.ok(link.findings[0].notes.includes("src/main.c:5 (line 3 on patchset 2)"));
+});
+
 test("an unstable build is named so, with a warning (not the error), and still counts as CI to look at", () => {
   const link = { label: "jenkins", url: "https://ci.example.org/job/Widget/55/", source: "message" };
   const unstable = commit("c", { ci_failures: ["jenkins"], verified: -1, attention_reasons: ["ci-failed"], ci_links: [{ ...link, verdict: "unstable" }] });

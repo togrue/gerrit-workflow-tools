@@ -520,7 +520,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/comment_chains.py` | Inline comment threads, resolved and unresolved; whose **turn** each is (`chain_turn`, `unresolved_chain_counts`); how a chain is named (`ChainRef`: id, id prefix, `PATH:LINE`, URL) |
 | `core/suggested_edits.py` | A comment's suggested edits: Gerrit fix suggestions and ```` ```suggestion ```` blocks of its text, in one shape |
 | `core/comment_anchor.py` | Where a new comment sits: the LOCATION grammar, its check against a commit, the anchored text |
-| `core/anchor_mapping.py` | Re-anchoring: where a local comment's anchor lands on another version of its file, moved or outdated (ADR-0011) |
+| `core/anchor_mapping.py` | Re-anchoring: where a local comment's anchor lands on another version of its file, moved or outdated (ADR-0011); the same line mapping between two commits (`map_commit_lines`) for CI findings of the last pushed patchset |
 | `core/comment_target.py` | Which change, commit and patchset a new comment is written on; a file only the change under review elsewhere has (`reviewed_elsewhere_target`) |
 | `core/comment_write.py` | Writing your own comments: starting a chain (a Gerrit draft, a local draft or a note), editing and discarding one not yet published |
 | `core/local_comments.py` | The local comment store: notes and local drafts under `refs/ger/comments` (ADR-0010) |
@@ -528,7 +528,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/ci_links.py` | CI failure names and transformed build links |
 | `core/ci_strategy.py` | Loading CI link strategies and **CI content providers** from `.ger/ci/` |
 | `core/ci_content.py` | **CI content** shapes (`CiContent`, `CiFinding` and its severity, provenance, cache verdict), which warnings are collapsed (`collapse_warnings`), the `CiContentProvider` seam, and **introduced findings** (`introduced_fingerprints`) |
-| `core/ci_content_service.py` | `CiContentService`: CI content for CI links — provider match, credentials, cache policy, body shape, finding paths resolved per commit |
+| `core/ci_content_service.py` | `CiContentService`: CI content for CI links — provider match, credentials, cache policy, body shape, finding paths resolved per commit; a moved-on commit's findings marked as the last pushed patchset's and mapped onto it (`fetch_for_commits`) |
 | `core/ci_content_store.py` | `CiContentStore`: size-bounded LRU store of immutable CI content, apart from the Gerrit cache |
 | `core/ci_findings.py` | Ordered finders that turn a CI log into **CI findings** (`find_ci_findings`): the finder order, build-driver verdicts and the generic fallback |
 | `core/ci_log.py` | A CI log as clean lines (`clean_log_lines`: CI-system line prefixes removed), the workspace directories it names (`workspace_roots`), and what finders share: the `Finder` type, the path and level fragments |

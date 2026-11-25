@@ -180,7 +180,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None, ci_http: CiHttp |
     )
     body = _body_mode(args)
     try:
-        fetched = ci.fetch_each([(c.ci_links, c.sha or None) for c in commits], body=body)
+        fetched = ci.fetch_for_commits(commits, body=body)
     finally:
         meter.close()
     per_commit = list(zip(commits, fetched, strict=True))

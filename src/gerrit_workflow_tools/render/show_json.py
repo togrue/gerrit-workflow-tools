@@ -118,6 +118,7 @@ def log_commit_json(commit: LogCommit) -> dict[str, object]:
             else None
         ),
         "code_change": commit.code_change,
+        "ci_patch_set": commit.ci_patchset.number if commit.ci_patchset else None,
         "submittable": commit.submittable,
         "votes": [{"label": vote.label, "value": vote.value, "by": vote.by} for vote in commit.votes],
         "reviewers": [{"name": r.slug, "cc": r.cc} for r in commit.reviewers],

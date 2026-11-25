@@ -122,6 +122,16 @@ A log names files as the build agent saw them. Two steps make the same file read
 
 A file outside the repository is left as logged. So that a system header or an installed package is not taken for a file of ours, the directory a path is stripped of must be one several findings agree on, or the match must be more than a bare file name. When the commit is not in the local repository, only step 1 applies.
 
+### While you fix it
+
+A commit whose code moved on from the patchset Gerrit has (amended, or rebased with a change, so its votes are no longer about it: `last_pushed_votes`) keeps that patchset's **CI links** (`LogCommit.ci_patchset`): the findings are what the fix starts from. They raise no `ci-failed` attention, because nothing is known about the new code yet, and every view says whose they are. `CiContentService.fetch_for_commits` resolves their paths against the patchset's commit and maps each finding's line onto the local commit, by the same line mapping that re-anchors local comments (`map_commit_lines`, one blob diff per file):
+
+- `ci_content[].patch_set`: the patchset CI built; `null` when the findings are about the commit shown.
+- `findings[].line` is where the logged line sits now; `patchset_line` is the line CI logged when that differs; `line_changed` is true when the line itself was edited since (perhaps the fix), and `line` is then next to where it was.
+- `lines_on_patchset` is true when the patchset's commit is not in this repository: the lines are the patchset's, unmapped, and paths are resolved against the local commit.
+
+Human output adds `from patchset 2 (the last pushed), before your local changes` under the link and `README.md:13 (line 11 on patchset 2)` at a moved finding; `ger log -v` dims the build and adds `(patchset 2, before your local changes)`.
+
 ---
 
 ## Caching

@@ -366,8 +366,10 @@ function thread(chain: CommentChain): ThreadRow {
   };
 }
 
-function finding(item: CiFinding, introduced: boolean | null): FindingRow {
-  const where = item.path ? `${item.path}${item.line ? `:${item.line}` : ""}` : "";
+function finding(item: CiFinding, introduced: boolean | null, patchSet: number | null = null): FindingRow {
+  // A last pushed patchset's finding sits where its line is now; core says where CI saw it.
+  const moved = patchSet && item.patchset_line ? ` (line ${item.patchset_line} on patchset ${patchSet}${item.line_changed ? ", changed since" : ""})` : "";
+  const where = item.path ? `${item.path}${item.line ? `:${item.line}` : ""}${moved}` : "";
   const origin = introduced === null ? "" : introduced ? "introduced here" : "also fails on the parent";
   const icon: Icon = introduced === null ? { icon: "question" } : introduced ? { icon: "flame", tone: "bad" } : { icon: "circle-outline", tone: "dim" };
   return {
@@ -397,14 +399,20 @@ function ciLinks(ci: CiView): CiLinkRow[] {
     const warnings = rows.filter(collapsed);
     const counted = [plural(leading.length, "finding"), warnings.length ? plural(warnings.length, "warning") : ""];
     return {
-      icon: failed || unstable ? "warning" : "beaker",
-      tone: failed || unstable ? "warn" : undefined,
+      // The last pushed patchset's build is dim: not about the local code.
+      icon: failed || unstable ? "warning" : content.patch_set ? "history" : "beaker",
+      tone: failed || unstable ? "warn" : content.patch_set ? "dim" : undefined,
       text: content.provenance.build ?? content.label,
-      detail: failed ? `could not be read: ${content.provenance.error}` : [unstable ? "unstable" : "", ...counted].filter(Boolean).join(" · "),
+      detail: [
+        content.patch_set ? `from patchset ${content.patch_set}, before your local changes` : "",
+        ...(failed ? [`could not be read: ${content.provenance.error}`] : [unstable ? "unstable" : "", ...counted]),
+      ]
+        .filter(Boolean)
+        .join(" · "),
       url: content.provenance.url,
       tooltip: `${content.provenance.url}${content.provenance.truncated ? "\nThe log was cut: findings may be incomplete." : ""}`,
-      findings: leading.map(({ item, introduced }) => finding(item, introduced)),
-      warnings: warnings.map(({ item, introduced }) => finding(item, introduced)),
+      findings: leading.map(({ item, introduced }) => finding(item, introduced, content.patch_set ?? null)),
+      warnings: warnings.map(({ item, introduced }) => finding(item, introduced, content.patch_set ?? null)),
     };
   });
 }

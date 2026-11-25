@@ -161,7 +161,7 @@ a client words its own advice while `message` stays ger's.
 
 ## API version
 
-`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.1.0`); the URL
+`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.2.0`); the URL
 prefix carries only the major (`/api/v1`). It moves on its own, not with ger's package version:
 
 | Bump | When |
@@ -379,7 +379,9 @@ The **review chain** an open change sits in, base to top, in the `ger inbox --js
 `ger show --json` for one or more targets: overlay state, `comment_chains`, and with `ci=1` the
 `ci_content` of each failed **CI link**. A `rev` naming a **sibling** on another branch than the
 local commit with its Change-Id pushes to is that change, `local_commit: false`, with the commit in
-`resolution.local_sibling` ([show](show.md)).
+`resolution.local_sibling` ([show](show.md)). A commit ahead of the patchset CI built, with
+other code, keeps that patchset's `ci_content`, marked with its `patch_set` and its findings' lines
+mapped onto the local commit ([while you fix it](../ci-content.md#while-you-fix-it)).
 
 Each comment also carries its whole text with the Gerrit fix suggestions written out below it
 (`render/suggested_fixes.py`), so a viewer shows them without rendering them itself: `text`

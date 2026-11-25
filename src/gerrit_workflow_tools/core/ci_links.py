@@ -12,8 +12,11 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
+
+if TYPE_CHECKING:
+    from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 
 CiLinkSource = Literal["checks", "message"]
 
@@ -27,6 +30,21 @@ class CiVerdict(str, Enum):
     """The build failed (Jenkins ``Build Failed``, a ``FAILED`` Checks row)."""
     UNSTABLE = "unstable"
     """The build ran but marked itself unstable (Jenkins ``Build Unstable``: failed tests, quality gates)."""
+
+
+@dataclass(frozen=True)
+class CiPatchset:
+    """The patchset a commit's **CI links** are about when it is not the commit's own code: the last pushed one."""
+
+    number: int
+    commit: str
+    """What CI built, and where its findings' lines are."""
+
+    @classmethod
+    def current_of(cls, change: ChangeView) -> CiPatchset | None:
+        """*change*'s current patchset, when Gerrit sent it."""
+        number, commit = change.current_revision_number, change.current_revision
+        return cls(number, commit) if number and commit else None
 
 
 @dataclass(frozen=True)

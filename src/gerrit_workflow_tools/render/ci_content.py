@@ -25,6 +25,8 @@ def ci_content_json(content: CiContent, *, include_body: bool = False) -> dict[s
         "provenance": content.provenance.to_dict(),
         "findings": [f.to_dict() for f in content.findings],
         "collapse_warnings": content.collapse_warnings,
+        "patch_set": content.patch_set,
+        "lines_on_patchset": content.lines_on_patchset,
     }
     if include_body:
         payload["body"] = content.body
@@ -47,9 +49,28 @@ def provenance_note(content: CiContent) -> str:
     return ", ".join(p for p in parts if p)
 
 
-def _finding_human(finding: CiFinding) -> list[str]:
-    where = f"  {finding.location}" if finding.location else ""
-    lines = [f"{finding.tool}{where}  {finding.message}"]
+def patchset_note(content: CiContent) -> str | None:
+    """``from patchset 2, before your local changes``: findings that are not about the commit shown."""
+    if content.patch_set is None:
+        return None
+    lines = f"; lines are patchset {content.patch_set}'s" if content.lines_on_patchset else ""
+    return f"from patchset {content.patch_set} (the last pushed), before your local changes{lines}"
+
+
+def where(finding: CiFinding, patch_set: int | None = None) -> str:
+    """``path:line``, and where CI saw that line when the finding was mapped onto the local commit."""
+    if not finding.location or patch_set is None:
+        return finding.location
+    if finding.line_changed:
+        return f"{finding.location} (line {finding.patchset_line} on patchset {patch_set}, changed since)"
+    if finding.patchset_line is not None:
+        return f"{finding.location} (line {finding.patchset_line} on patchset {patch_set})"
+    return finding.location
+
+
+def _finding_human(finding: CiFinding, patch_set: int | None = None) -> list[str]:
+    location = where(finding, patch_set)
+    lines = [f"{finding.tool}{f'  {location}' if location else ''}  {finding.message}"]
     if finding.detail:
         lines += [f"    {d}" for d in finding.detail.splitlines()]
     return lines
@@ -80,18 +101,20 @@ def format_ci_section_human(
             # A link that could not be read names its log once, on the error line, to open by hand.
             shown = content.link.build_url if content.failed else _build_and_log(content)
             lines.append(f"{indent}{label}  {shown}" + (f"  ({note})" if note else ""))
+            if old := patchset_note(content):
+                lines.append(f"{indent}  {old}")
             if content.failed:
                 lines.append(f"{indent}  error: {content.provenance.error}; open {content.link.url}")
                 continue
             if not content.findings:
                 lines.append(f"{indent}  (no findings)")
             for finding in content.leading_findings:
-                lines += [f"{indent}  {line}" for line in _finding_human(finding)]
+                lines += [f"{indent}  {line}" for line in _finding_human(finding, content.patch_set)]
             collapsed = content.collapsed_warnings
             if collapsed and warnings:
                 lines.append(f"{indent}  warnings:")
                 for finding in collapsed:
-                    lines += [f"{indent}    {line}" for line in _finding_human(finding)]
+                    lines += [f"{indent}    {line}" for line in _finding_human(finding, content.patch_set)]
             elif collapsed:
                 lines.append(f"{indent}  {warnings_note(len(collapsed))}")
             lines += _body_lines(content)
@@ -107,9 +130,11 @@ def _body_lines(content: CiContent) -> list[str]:
     return ["", f"--- {head} ---", *content.body.splitlines(), f"--- end of {content.link.label} log ---"]
 
 
-def _finding_markdown(finding: CiFinding) -> list[str]:
-    where = f" `{finding.location}`" if finding.location else ""
-    lines = [f"- **{finding.tool}** ({finding.kind}){where} — {finding.message}"]
+def _finding_markdown(finding: CiFinding, patch_set: int | None = None) -> list[str]:
+    location = f" `{finding.location}`" if finding.location else ""
+    if location and (shown := where(finding, patch_set)) != finding.location:
+        location += shown[len(finding.location) :]
+    lines = [f"- **{finding.tool}** ({finding.kind}){location} — {finding.message}"]
     if finding.detail:
         lines += ["  ```", *(f"  {d}" for d in finding.detail.splitlines()), "  ```"]
     return lines
@@ -128,18 +153,20 @@ def format_ci_section_markdown(
         for content in group:
             note = provenance_note(content)
             lines.append(f"- CI: {_build_and_log(content)}" + (f" ({note})" if note else ""))
+            if old := patchset_note(content):
+                lines.append(f"- {old[0].upper()}{old[1:]}")
             if content.failed:
                 lines.append(f"- error: {content.provenance.error}")
                 continue
             if not content.findings:
                 lines.append("- (no findings)")
             for finding in content.leading_findings:
-                lines += _finding_markdown(finding)
+                lines += _finding_markdown(finding, content.patch_set)
             collapsed = content.collapsed_warnings
             if collapsed and warnings:
                 lines.append(f"- Warnings ({len(collapsed)}):")
                 for finding in collapsed:
-                    lines += [f"  {line}" for line in _finding_markdown(finding)]
+                    lines += [f"  {line}" for line in _finding_markdown(finding, content.patch_set)]
             elif collapsed:
                 lines.append(f"- {warnings_note(len(collapsed))}")
             if content.body is not None:

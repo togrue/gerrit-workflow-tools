@@ -183,6 +183,8 @@ def _pipelines_for_display(commit: LogCommit, *, verbose_level: int = 1) -> list
     else:
         pipelines = [CiPipeline(label=name, state="FAILED", url=None) for name in commit.ci_failures]
 
+    if commit.ci_patchset:  # the last pushed patchset's builds: dim, not about this code
+        pipelines = [replace(p, outdated=True) for p in pipelines]
     if verbose_level >= 2:
         return pipelines
     return [p for p in pipelines if p.state == "FAILED" or p.outdated]
@@ -195,15 +197,13 @@ def format_ci_lines(commit: LogCommit, *, verbose_level: int = 1) -> list[str]:
         return []
 
     label = _detail_label("CI:")
+    items = [_format_ci_pipeline_item(p) for p in pipelines]
+    if commit.ci_patchset:
+        items.append(color_text(f"(patchset {commit.ci_patchset.number}, before your local changes)", ANSI_DIM))
     if is_hyperlink_enabled():
-        items = " ".join(_format_ci_pipeline_item(p) for p in pipelines)
-        return [f"{label} {items}"]
-
-    lines = [f"{label} {_format_ci_pipeline_item(pipelines[0])}"]
+        return [f"{label} {' '.join(items)}"]
     pad = _detail_value_pad()
-    for pipeline in pipelines[1:]:
-        lines.append(f"{pad}{_format_ci_pipeline_item(pipeline)}")
-    return lines
+    return [f"{label} {items[0]}", *(f"{pad}{item}" for item in items[1:])]
 
 
 def format_change_id_line(change_id: str | None) -> str | None:

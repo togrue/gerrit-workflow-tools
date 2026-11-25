@@ -60,15 +60,16 @@ Targets resolve exactly as in [`ger show`](show.md): each `CHANGEISH` is a chang
       "findings": [
         {"tool": "pytest", "kind": "failed", "path": "demo/calc.py", "line": 6, "column": null,
          "message": "tests/test_calc.py::test_divide: ZeroDivisionError: division by zero",
-         "detail": "ZeroDivisionError: division by zero", "fingerprint": "…", "severity": "error"}
+         "detail": "ZeroDivisionError: division by zero", "fingerprint": "…", "severity": "error",
+         "patchset_line": null, "line_changed": false}
       ],
-      "collapse_warnings": true
+      "collapse_warnings": true, "patch_set": null, "lines_on_patchset": false
     }
   ]
 }
 ```
 
-With `-v` / `--full`, each `ci_content` entry adds `body` and `body_omitted_lines`. `fingerprint` ignores line numbers, so the same finding keeps its id when code moves. `findings` always holds every finding, warnings included; `collapse_warnings` says whether a reader should fold them. `path` is the file of the commit where the logged path names one ([finding paths](../ci-content.md#finding-paths)).
+With `-v` / `--full`, each `ci_content` entry adds `body` and `body_omitted_lines`. `fingerprint` ignores line numbers, so the same finding keeps its id when code moves. `findings` always holds every finding, warnings included; `collapse_warnings` says whether a reader should fold them. `path` is the file of the commit where the logged path names one ([finding paths](../ci-content.md#finding-paths)). A commit ahead of the patchset CI built, with other code, still gets that patchset's findings, each entry saying so in `patch_set` and the findings' lines mapped onto the local commit (`patchset_line`, `line_changed`, `lines_on_patchset`: [while you fix it](../ci-content.md#while-you-fix-it)).
 
 ---
 
