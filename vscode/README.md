@@ -114,8 +114,10 @@ The commits above your upstream, newest first. One row per commit:
   stop (you amend, resolve, or click another row) the view is yours.
 - **Stopped on a conflict**, the commit it stopped at has a red conflict icon and is not dimmed:
   it is what wants you. The files still conflicted are listed under the banner; click one to
-  resolve it in VS Code's merge editor (the file itself, with its conflict markers, where the
-  built-in Git extension cannot open one). Once they are resolved and added, the banner says it is
+  open it with its conflict markers in the text editor, where VS Code offers *Accept Current*,
+  *Accept Incoming*, *Accept Both* on each conflict and *Resolve in Merge Editor*. It does not open
+  the merge editor at once: that starts with its result dirty (*No Changes Accepted*), and saving it
+  would write its own result over a resolution made meanwhile somewhere else. Once they are resolved and added, the banner says it is
   ready to continue: Continue appears, and is the one to press. The index is watched while a rebase
   is stopped, so a `git add` in the terminal shows within a second; Continue from the palette looks
   again before it says no. Nothing can be moved until the rebase is finished or aborted.
@@ -196,7 +198,7 @@ The commits above your upstream, newest first. One row per commit:
 - **The commit a rebase stopped at on a conflict** says so instead: *Conflict in d.txt — resolve it,
   then Continue* (several files: how many), with the buttons of Local stack's banner: the same ways
   on, Abort and Skip while files are still conflicted. **Conflicts**, above Files, lists the files
-  still conflicted; a click opens one in the merge editor, as under the banner. Files is the commit
+  still conflicted; a click opens one with its conflict markers, as under the banner. Files is the commit
   as it was before the rebase, and says so: the rebase has not applied it yet. What a push of it
   would do (*ahead of Gerrit*, whether the votes stay) is not said until it has: that is not known
   yet. What Gerrit has still is: that it has a newer patchset, and under CI the failed builds of the
@@ -263,7 +265,9 @@ The commits above your upstream, newest first. One row per commit:
   sits on its line there, not on the line number it had). A comment whose lines have changed since
   is drawn where they were, its thread saying *outdated: line 11 has changed since*, and its row in
   the Change view *outdated: changed since*; one that moved says *line 13 in your file*. Reply, or reply "Done" and resolve — saved as **drafts** on Gerrit, published later:
-  on your own commit by your next `ger push`, anywhere else by *Vote and Publish…*. A reply box has **Save** and **Cancel**, and Gerrit's **Resolved**
+  on your own commit by your next `ger push`, anywhere else by *Vote and Publish…*. A reply box says whom it answers (*Reply to Bob…*: the last who
+  spoke in the chain; in an editor thread once it is opened from the Change view or the walk, as VS Code has
+  one prompt for all of an extension's threads). It has **Save** and **Cancel**, and Gerrit's **Resolved**
   checkbox: by the box in the Change view; in an editor thread a toggle in the thread's header
   (VS Code empties the reply box on any button beside it), its label saying what Save will do;
   in the *Reply as Draft…* box (a row's reply button) a toggle in the box's title bar, the line

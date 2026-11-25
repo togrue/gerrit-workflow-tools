@@ -236,7 +236,7 @@ export const REBASE_WORDS = {
   asBefore: "this is the branch as it was before",
   tooltip: "The marker shows where the rebase stands; dimmed commits are not replayed yet and are shown as they were. Continue goes on, Abort goes back to the branch as it was before.",
   conflicted: "conflicted",
-  resolve: "Open it in the merge editor to resolve it, then stage it (git add).",
+  resolve: "Open it, with its conflict markers, to resolve it (Accept Current / Incoming, or Resolve in Merge Editor), then stage it (git add).",
   /** Why the palette's Continue, Abort or Skip does not run: there is no rebase. Where there is one, core says why (`rebase.refused`). */
   noRebase: "There is no rebase in progress.",
   /** Why Rebase onto the upstream does not run: nothing new on it, or a rebase to finish first. */

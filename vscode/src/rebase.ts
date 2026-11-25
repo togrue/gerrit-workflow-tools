@@ -88,25 +88,13 @@ async function confirmSkip(model: Model): Promise<boolean> {
 }
 
 /**
- * A conflicted file, to resolve: VS Code's merge editor, through the built-in git extension (it
- * reads the three versions from the index). Without it, or when it opened nothing (git disabled, the
- * repository not open in it), the file itself, with its conflict markers.
+ * A conflicted file, to resolve: the file itself, with its conflict markers, in the text editor,
+ * where VS Code offers its inline Accept Current / Incoming / Both and *Resolve in Merge Editor*.
+ * Not the merge editor at once: its result starts out dirty ("No Changes Accepted"), and saving it
+ * would write what it computed over a resolution made meanwhile in a terminal or another editor.
  */
 export async function openConflict(model: Model, file: string): Promise<void> {
-  const uri = vscode.Uri.file(path.join(model.repo, file));
-  if ((await vscode.commands.getCommands(true)).includes("git.openMergeEditor")) {
-    await Promise.resolve(vscode.commands.executeCommand("git.openMergeEditor", uri)).catch(() => undefined);
-    if (mergeEditorOn(uri)) {
-      return;
-    }
-  }
-  await vscode.commands.executeCommand("vscode.open", uri);
-}
-
-/** The merge editor's tab input (`TabInputTextMerge`, not in the 1.85 API) has the file it writes as `result`. */
-function mergeEditorOn(uri: vscode.Uri): boolean {
-  const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input as { result?: unknown } | undefined;
-  return input?.result instanceof vscode.Uri && input.result.toString() === uri.toString();
+  await vscode.window.showTextDocument(vscode.Uri.file(path.join(model.repo, file)), { preview: false });
 }
 
 /**

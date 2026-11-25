@@ -38,6 +38,18 @@ function publishing(shown: ShownCommit | undefined): { words: string; button: st
     : { words: "Vote and Publish sends it", button: "Vote and Publish…", command: "ger.vote" };
 }
 
+/**
+ * What the comment boxes say: VS Code has one prompt and placeholder per controller, so they are set
+ * for the box about to be used. A reply names who it answers; a new comment says where it goes.
+ */
+const BOX = {
+  reply: (to: string | undefined): vscode.CommentOptions => ({
+    prompt: to ? `Reply to ${to}…` : "Reply…",
+    placeHolder: `${to ? `Reply to ${to}` : "Reply"}… saved as your draft, visible only to you until it is published`,
+  }),
+  new: { prompt: "Comment on the shown change", placeHolder: "A draft on Gerrit, a local draft where Gerrit does not have this commit, or a private note" } as vscode.CommentOptions,
+};
+
 /** What an unpublished comment of yours is called. */
 const YOURS: Record<string, string> = { draft: "draft", "local-draft": "local draft", note: "private note" };
 
@@ -178,10 +190,7 @@ export class CommentThreads implements vscode.Disposable {
       provideCommentingRanges: (document) =>
         this.pathOf(document.uri) === undefined ? [] : [new vscode.Range(0, 0, Math.max(0, document.lineCount - 1), 0)],
     };
-    this.controller.options = {
-      prompt: "Comment on the shown change",
-      placeHolder: "A draft on Gerrit, a local draft where Gerrit does not have this commit, or a private note",
-    };
+    this.controller.options = BOX.reply(undefined);
   }
 
   /**
@@ -244,6 +253,7 @@ export class CommentThreads implements vscode.Disposable {
     // A selection that ends at the start of a line does not take that line in.
     const last = end.line > start.line && end.character === 0 ? end.line - 1 : end.line;
     const lines = line === undefined ? new vscode.Range(start.line, 0, last, 0) : new vscode.Range(line, 0, line, 0);
+    this.controller.options = BOX.new;
     const box = this.controller.createCommentThread(uri, lines, []);
     box.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
     this.boxes.add(box);
@@ -384,6 +394,8 @@ export class CommentThreads implements vscode.Disposable {
    * A chain the editor shows no thread for (a resolved one) just opens its line.
    */
   async show(chain: CommentChain): Promise<void> {
+    // The reply box of the thread it opens answers the last of them who spoke.
+    this.controller.options = BOX.reply(chain.comments.filter((comment) => comment.state === "published").at(-1)?.author);
     await this.view.openLocation({ path: chain.path, line: this.view.placeOf(chain).line });
     for (const [thread, anchor] of this.anchors) {
       const here = anchor.chain.root_id === chain.root_id;

@@ -310,7 +310,8 @@
   function replyBox(thread) {
     let box = replyBoxes.get(thread.id);
     if (!box) {
-      const text = h("textarea", { class: "message", rows: "3", spellcheck: "true", "aria-label": "Reply", placeholder: "Reply… (Ctrl+Enter saves it as a draft)" });
+      const to = thread.replies.filter((reply) => !reply.state).map((reply) => reply.author).pop() || thread.author;
+      const text = h("textarea", { class: "message", rows: "3", spellcheck: "true", "aria-label": "Reply", placeholder: `Reply to ${to}… (Ctrl+Enter saves it as a draft)` });
       const resolved = h("input", { type: "checkbox" });
       const tick = h("label", { class: "resolved", title: "The reply resolves the comment; untick it to leave the comment open" }, resolved, "Resolved");
       const save = h("button", { class: "button", title: "Save as your draft reply on Gerrit (Ctrl+Enter)" }, "Save");

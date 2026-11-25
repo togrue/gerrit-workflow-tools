@@ -1765,10 +1765,10 @@ change | (the commit shown is only on the branch as it was before)
 
 ## 89. Local stack › click e.txt under the banner
 
-**Expect:** e.txt opens in VS Code's merge editor (its file in the worktree is what it writes); nothing else changes.
+**Expect:** e.txt opens with its conflict markers in the text editor (VS Code offers Accept Current / Incoming / Both there, and Resolve in Merge Editor), not in the merge editor; nothing else changes.
 
 ```
-+ editor | Merging: e.txt (merge editor, file)
++ editor | e.txt (file, line 1)
 - editor | Preview ger-runbook-<id>.md (webview)
 --- shown now:
 status bar | $(error) Conflict in "Add e.txt"  $(bell-dot) 1
@@ -1816,7 +1816,7 @@ change | (the commit shown is only on the branch as it was before)
 - change | Conflicts — 1 file
 - change |   ⚠ e.txt — conflicted
 + editor | Preview ger-runbook-<id>.md (webview)
-- editor | Merging: e.txt (merge editor, file)
+- editor | e.txt (file, line 1)
 --- shown now:
 status bar | $(warning) Conflict resolved in "Add e.txt"  $(bell-dot) 1
 stack header | feature (rebasing) → origin/main

@@ -1065,7 +1065,7 @@ export async function run(): Promise<void> {
       );
       await inTerminal(
         "Local stack › click e.txt under the banner",
-        "e.txt opens in VS Code's merge editor (its file in the worktree is what it writes); nothing else changes.",
+        "e.txt opens with its conflict markers in the text editor (VS Code offers Accept Current / Incoming / Both there, and Resolve in Merge Editor), not in the merge editor; nothing else changes.",
         undefined,
         () => stackPage.receive({ type: "conflict", path: "e.txt" }),
         [],
@@ -1076,7 +1076,7 @@ export async function run(): Promise<void> {
         "Nothing is conflicted any more: e.txt leaves the list and the conflict icon goes; the rebase is still stopped at \"Add e.txt\", ready to Continue, which now appears as the prominent button.",
         undefined,
         async () => {
-          // Resolved by hand here, not in the merge editor: close it without keeping what it put in e.txt.
+          // Resolved by hand here: close the editor of e.txt without keeping anything typed in it.
           await vscode.commands.executeCommand("workbench.action.revertAndCloseActiveEditor");
           write("e.txt", "from the amend\nfrom the terminal\n");
           gitRun(["add", "e.txt"]);
