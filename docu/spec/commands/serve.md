@@ -215,7 +215,7 @@ Everything the first screen needs, in one call.
   waiting on your review), `chain`, `number`, `subject`, `url` and a sentence in `text`. `null` when nothing wants you. Failed CI is the headline only on a chain
   with a commit of the **local stack**; another chain's failure leaves the headline to the next
   reason. A chain to review is a candidate only while its turn is yours (`your_turn`); it ranks
-  beside unresolved comments on an outgoing chain, the one that waited longer first. While a rebase is underway in the checkout, it is the headline, before anything in the
+  beside unresolved comments on an outgoing chain, the one that waited longer first. Those reasons rank the chains; on the outgoing chain that wins, `number` is the change the attention walk stops at first (`ger edit`, Work on Next: the oldest change with comments to answer, failed CI or a negative vote) and `reason` that change's most urgent one, so failed CI two changes up does not hide the comments below it (`walk_stop` in `core/inbox.py`). While a rebase is underway in the checkout, it is the headline, before anything in the
   inbox and also when the inbox could not be read: `section` `local`, `reason` `rebase`, `stop`
   as in [`GET /stack`](#get-stack)'s `rebase`, `severity` `error` for a conflict (else
   `warning`), `chain` `null`, and the commit it stopped at, as the stack shows it: `number`

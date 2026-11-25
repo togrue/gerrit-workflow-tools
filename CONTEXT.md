@@ -119,7 +119,7 @@ One Gerrit query plus the **review chains** assembled from it. Two exist: **to r
 _Avoid_: inbox tab, queue (unqualified), incoming (for *to review*)
 
 **Headline**:
-The one change across all **inbox sections** that most wants you: failed CI on an outgoing chain; then unresolved comments on an outgoing chain or the *to review* chain whose **turn** is yours with the largest **unreviewed age**, whichever has waited longer; then a negative vote. While a rebase is underway in the checkout, the rebase leads instead: where it stopped, on the **rebasing stack**. What an editor's status bar shows.
+The one change across all **inbox sections** that most wants you: failed CI on an outgoing chain; then unresolved comments on an outgoing chain or the *to review* chain whose **turn** is yours with the largest **unreviewed age**, whichever has waited longer; then a negative vote. That ranks the chains; on the outgoing chain it picks, the headline is the change the attention walk stops at first (the oldest needing an edit, the chain's blocker in `ger log`), for its own most urgent reason. While a rebase is underway in the checkout, the rebase leads instead: where it stopped, on the **rebasing stack**. What an editor's status bar shows.
 _Avoid_: top issue, main alert, status (unqualified)
 
 **Reviewer strategy**:
