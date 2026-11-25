@@ -14,7 +14,7 @@
 
 import { randomInt } from "node:crypto";
 
-import { DISCARD, LOADING, MODES, NOTHING_SHOWN, NOT_FILES, NO_CI_LINK, READ_ONLY, STOPPED_WORDS, YOURS } from "./changeRows";
+import { AHEAD_WORDS, DISCARD, LOADING, MODES, NOTHING_SHOWN, NOT_FILES, NO_CI_LINK, OUTDATED_WORDS, READ_ONLY, STOPPED_WORDS, YOURS } from "./changeRows";
 import { Names, Random } from "./fakes";
 import { ATTENTION_ICONS, FILE_STATES, REASON_WORDS } from "./format";
 import { SECTION_TITLES, TREE_WORDS, allRowContexts } from "./rows";
@@ -275,18 +275,11 @@ const CHANGE: Shape = {
       around(/Conflict in (.+) — resolve it, then Continue/, (names, file) => STOPPED_WORDS.conflict(names.path(file))),
     ),
     detail: ours([VOTES, "not on Gerrit"]),
+    why: ours([OUTDATED_WORDS, ...Object.values(SYNC_WORDS).map((words) => `${AHEAD_WORDS}: ${words}`)]),
     badges: [BADGE],
     actions: ACTIONS,
   },
   conflicts: { summary: ours([new RegExp(`${COUNT} files?`)]), rows: [CONFLICT_ROW] },
-  notes: [
-    {
-      icon: ICON,
-      tone: TONE,
-      text: ours(["This commit is ahead of Gerrit", "Gerrit has a newer patchset than this commit"]),
-      detail: ours([...Object.values(SYNC_WORDS), "comments and CI below are about Gerrit's version"]),
-    },
-  ],
   message: { key: KEY, text: TEXT, changeId: FOOTER_CHANGE_ID, author: PERSON, readOnly: READ_ONLY_WORDS, plain: KEEP },
   versions: { options: [{ value: VERSION, label: VERSION_LABEL, disabled: KEEP }], selected: VERSION },
   modes: { options: [{ value: MODE, label: ours([...Object.values(MODES), `${MODES.reviewed} (you have not reviewed it)`]), disabled: KEEP }], selected: MODE },

@@ -886,7 +886,6 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci good]
 + change | Local changes not pushed, CI failed — V-1 CR+2
-+ change | This commit is ahead of Gerrit — only rebased since the last push: the same code, by patch-id (whitespace and the message aside), so Gerrit usually keeps the votes when you push
 - change | CI failed — V-1 CR+2
 + change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6
 + change |     FAILURE — generic
@@ -1094,9 +1093,7 @@ notification (info): Dropped "Rework d.txt".  [Undo]
 + stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | test! temporary experiment — HEAD · <sha> · held back · only rebased since the last push  [review +2, ci bad]
 + change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-+ change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | Local changes not pushed, CI failed — V-1 CR+2
-- change | This commit is ahead of Gerrit — only rebased since the last push: the same code, by patch-id (whitespace and the message aside), so Gerrit usually keeps the votes when you push
 - change | CI
 - change |   Widget #55 — 2 findings
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6
@@ -1121,12 +1118,12 @@ picker: Upstream for feature — "The local stack is the commits above it; ger p
 **Expect:** The report opens first, as an untitled JSON document to read: what the three views show, with names, paths, text and ids replaced. A notification says so, and that nothing has left the machine. Copy and Open GitHub Issue puts the report on the clipboard and opens a new issue that has only the versions in it and says to paste the report.
 
 ```
-untitled json document opens: 350 lines, starting
+untitled json document opens: 343 lines, starting
     {
       "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
 notification (info): This is the report, and all that would be shared: names, paths, text and ids in it are replaced. Nothing has left this machine.  [Copy and Open GitHub Issue] [Save to File…]
     → pressed "Copy and Open GitHub Issue"
-clipboard: 350 lines, starting "{"
+clipboard: 343 lines, starting "{"
 browser opens: https://github.com/togrue/gerrit-workflow-tools/issues/new?labels=vscode&body=<!-- What happened, and what did you expect%3F -->
 
 
@@ -1150,13 +1147,13 @@ status bar message: $(check) Report copied: paste it into the issue that opens i
 **Expect:** The report opens again to read; Save to File… asks where, suggesting ger-report.json, and the status bar says where it was saved. Nothing is copied and no browser opens.
 
 ```
-untitled json document opens: 350 lines, starting
+untitled json document opens: 343 lines, starting
     {
       "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
 notification (info): This is the report, and all that would be shared: names, paths, text and ids in it are replaced. Nothing has left this machine.  [Copy and Open GitHub Issue] [Save to File…]
     → pressed "Save to File…"
 save dialog: suggests ger-report.json
-    → saved 350 lines as ~/ger-report.json
+    → saved 343 lines as ~/ger-report.json
 status bar message: $(check) Report saved to ~/ger-report.json
 --- on screen:
 (no change)
@@ -1167,7 +1164,7 @@ status bar message: $(check) Report saved to ~/ger-report.json
 **Expect:** The user may have taken things out of the report before closing it, so nothing is copied, not the original either, and no browser opens; a notification says nothing was shared and to run Report Issue… again.
 
 ```
-untitled json document opens: 350 lines, starting
+untitled json document opens: 343 lines, starting
     {
       "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
     → closed without saving
@@ -1254,7 +1251,6 @@ notification (warning): Still out of date: fake ger: down for this test
 - stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 + change | ger serve speaks API 2.0, the extension needs 1.0: update the extension, or install the ger release that matches it.
 - change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-- change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | Commit message — test! temporary experiment  (editable)
 - change | Showing — Local commit <sha> · Against its base commit
 - change | Files — 1 · +1 −0
@@ -1389,7 +1385,6 @@ change | (the commit shown is HEAD)
 + stack  | ▶ test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-+ change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | CI failed — V-1 CR+2
 + change | Files — 1 · +2 −0
 + change |   c.txt — added +2 −0
@@ -1415,7 +1410,6 @@ stack  | (test! temporary experiment is HEAD)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
@@ -1457,7 +1451,6 @@ stack  | (test! temporary experiment is below HEAD)
 stack  | (Add e.txt is HEAD)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (editable)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
@@ -1500,7 +1493,6 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
@@ -1544,7 +1536,6 @@ stack  | (test! temporary experiment is HEAD)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
@@ -1577,7 +1568,6 @@ stack  | (test! temporary experiment is HEAD)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
@@ -1618,7 +1608,6 @@ stack  | (test! temporary experiment is HEAD)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
@@ -1660,7 +1649,6 @@ stack  | (test! temporary experiment is below HEAD)
 stack  | (Add e.txt is HEAD)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (editable)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
@@ -1691,7 +1679,6 @@ stack  | (test! temporary experiment is below HEAD)
 stack  | (Add e.txt is HEAD)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (editable)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
@@ -1727,7 +1714,6 @@ status bar message: $(terminal) ger rebase origin/main runs in the ger terminal:
 + change | Conflict in c.txt — resolve it, then Continue — last pushed V-1 CR+2  [Abort] [Skip]
 + change | Commit message — test! temporary experiment  (read-only)
 - change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-- change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | Commit message — test! temporary experiment  (editable)
 + change | Conflicts — 1 file
 + change |   ⚠ c.txt — conflicted
@@ -1824,7 +1810,6 @@ status bar message: $(terminal) ger rebase --abort runs in the ger terminal: the
 - stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 + change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-+ change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 + change | Commit message — test! temporary experiment  (editable)
 - change | Conflict in c.txt — resolve it, then Continue — last pushed V-1 CR+2  [Abort] [Skip]
 - change | Commit message — test! temporary experiment  (read-only)
@@ -1848,7 +1833,6 @@ stack  | (test! temporary experiment is below HEAD)
 stack  | (Add e.txt is HEAD)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (editable)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
@@ -1892,7 +1876,6 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — test! temporary experiment  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 1 · +2 −0
@@ -1911,7 +1894,6 @@ change | (the commit shown is only on the branch as it was before)
 + change | Commit message — Add e.txt  (read-only)
 - change | title: Change 103
 - change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-- change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | Commit message — test! temporary experiment  (read-only)
 + change | Files — 1 · +1 −0
 + change |   e.txt — modified +1 −0
@@ -1980,7 +1962,6 @@ diff tab | e.txt (<sha>) (ger-file on the right, active)
 ```
 + change | title: Change 102
 + change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-+ change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 + change | Commit message — Refactor parser init  (read-only)
 - change | title: Change
 - change | No Change-Id — not on Gerrit
@@ -2006,7 +1987,6 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 102
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — Refactor parser init  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 2 · +2 −0
@@ -2040,7 +2020,6 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 102
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — Refactor parser init  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 2 · +2 −0
@@ -2074,7 +2053,6 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 102
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — Refactor parser init  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 2 · +2 −0
@@ -2114,7 +2092,6 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 102
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — Refactor parser init  (read-only)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 2 · +2 −0
@@ -2164,7 +2141,6 @@ stack  | (test! temporary experiment is below HEAD)
 stack  | (Add e.txt is HEAD)
 change | title: Change 102
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — Refactor parser init  (editable)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 2 · +3 −0
@@ -2197,7 +2173,6 @@ stack  | (test! temporary experiment is below HEAD)
 stack  | (Add e.txt is HEAD)
 change | title: Change 102
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 change | Commit message — Refactor parser init  (editable)
 change | Showing — Local commit <sha> · Against its base commit
 change | Files — 2 · +3 −0
@@ -2217,7 +2192,6 @@ change | (the commit shown is below HEAD)
 + change | Commit message — Add e.txt  (editable)
 - change | title: Change 102
 - change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-- change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 - change | Commit message — Refactor parser init  (editable)
 + change | Files — 1 · +1 −0
 + change |   e.txt — modified +1 −0

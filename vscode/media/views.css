@@ -283,17 +283,12 @@ button.twist:hover {
 
 /* --- Change ---------------------------------------------------------------------- */
 
-.head.note .label,
 .heading .label {
   flex: none;
 }
 
 .head .label {
   font-weight: 600;
-}
-
-.head.note .label {
-  font-weight: normal;
 }
 
 .message-block {

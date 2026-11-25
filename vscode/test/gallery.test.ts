@@ -134,7 +134,7 @@ test("the scenarios show the states of Change that matter for layout", () => {
   assert.ok(changes.some((vm) => vm.message?.readOnly && vm.hint?.show), "someone's change, with what is new since your review");
   assert.ok(changes.some((vm) => vm.loading?.message && vm.head?.icon === "loading" && vm.comments?.summary === "loading…"), "partly arrived");
   assert.ok(changes.some((vm) => vm.waiting) && changes.some((vm) => vm.empty) && changes.some((vm) => vm.problem));
-  assert.ok(changes.some((vm) => (vm.notes ?? []).length) && changes.some((vm) => vm.head?.badges.some((badge) => badge.stale)));
+  assert.ok(changes.some((vm) => vm.head?.why) && changes.some((vm) => vm.head?.badges.some((badge) => badge.stale)));
   assert.ok(changes.some((vm) => vm.versions?.options.length === 1) && changes.some((vm) => (vm.versions?.options.length ?? 0) > 4), "one version to show, and many");
   assert.ok(files.some((row) => row.path.length > 80) && files.some((row) => (row.added ?? 0) > 999) && files.some((row) => (row.deleted ?? 0) > 999));
   assert.ok(files.some((row) => row.added === null) && files.some((row) => row.tooltip.includes(" → ")), "a binary file and a renamed one");

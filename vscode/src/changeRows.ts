@@ -158,9 +158,13 @@ export interface ChangeVm {
   key?: string;
   /** What is on its way: the page holds the commit message's place, its read-only note and plainness (as `message` will say) included. */
   loading?: { message: boolean; readOnly: string; plain: boolean };
-  /** `badges` as the Local stack draws them; `detail` says them in words (or that the change is not on Gerrit). `actions`: the way on from a rebase stopped here, as Local stack's banner offers it. */
-  head?: Icon & { text: string; detail: string; badges: Badge[]; actions?: StackAction[] };
-  notes?: (Icon & { text: string; detail: string })[];
+  /**
+   * `badges` as the Local stack draws them; `detail` says them in words (or that the change is not on
+   * Gerrit, where `text` does not say so already). `why`: how the commit stands against Gerrit's
+   * patchset, for the tooltip only: the head and the dimmed votes already show it. `actions`: the way
+   * on from a rebase stopped here, as Local stack's banner offers it.
+   */
+  head?: Icon & { text: string; detail: string; why?: string; badges: Badge[]; actions?: StackAction[] };
   /**
    * `text` without the Change-Id footer, which `changeId` names (empty when there is none): the page
    * shows it read-only under the message, and core puts it back on Apply (`keep_change_id`). `plain`: a message
@@ -178,6 +182,10 @@ export interface ChangeVm {
   /** `noLinks`: what to say when no build log was found; empty when that is not to be said. */
   ci?: { summary: string; state: CiView["state"]; error: string; noLinks: string; links: CiLinkRow[] };
 }
+
+/** How a commit of your stack stands against Gerrit's patchset, in the head's tooltip. */
+export const AHEAD_WORDS = "This commit is ahead of Gerrit";
+export const OUTDATED_WORDS = "Gerrit has a newer patchset than this commit: comments and CI are about Gerrit's version.";
 
 /** A failed CI vote without a log to read. */
 export const NO_CI_LINK = "No CI link was found for the failed build";
@@ -402,22 +410,16 @@ function ciLinks(ci: CiView): CiLinkRow[] {
 
 export function changeVm(state: ChangeState): ChangeVm {
   const { shown: commit, chains } = state;
-  const notes: NonNullable<ChangeVm["notes"]> = [];
   // Stopped before this commit is applied, what a push of it would do is not known yet: "ahead of
   // Gerrit" and what its votes would do are not said. That Gerrit has a newer patchset still holds.
   const stopped = state.stopped;
   const status = commit.patchset_status;
-  if (status === "newer" && !stopped) {
-    notes.push({
-      icon: "history",
-      tone: "warn",
-      text: "This commit is ahead of Gerrit",
-      // Only rebased, Gerrit keeps the votes on the push; with new code it may not. The row says the same.
-      detail: SYNC_WORDS[sync({ ...commit, diverged: false })],
-    });
-  } else if (status === "outdated") {
-    notes.push({ icon: "history", tone: "warn", text: "Gerrit has a newer patchset than this commit", detail: "comments and CI below are about Gerrit's version" });
-  }
+  const why =
+    status === "newer" && !stopped
+      ? `${AHEAD_WORDS}: ${SYNC_WORDS[sync({ ...commit, diverged: false })]}`
+      : status === "outdated"
+        ? OUTDATED_WORDS
+        : undefined;
   const since = state.delta?.since;
   const reviewed = !state.local && state.mode === "base" && since && since.patch_set !== null;
   const open = chains.filter((chain) => !chain.resolved && !isYours(chain)).length;
@@ -435,12 +437,13 @@ export function changeVm(state: ChangeState): ChangeVm {
     head: {
       ...(unsure ? { icon: "loading" } : headIcon(commit)),
       text: words || (commit.submittable ? "Ready to submit" : unsure ? "Loading…" : "Nothing to do"),
-      detail: commit.pushed ? commitVotes(commit) : "not on Gerrit",
+      // "Not pushed" says it already.
+      detail: commit.pushed ? commitVotes(commit) : commit.attention_reasons.includes("not-pushed") ? "" : "not on Gerrit",
+      why,
       badges: commit.pushed ? badges(commit).filter((badge): badge is Badge => badge !== null) : [],
       ...(stopped ? stoppedHead(stopped) : {}),
     },
     conflicts: stopped?.unmerged.length ? { summary: plural(stopped.unmerged.length, "file"), rows: stopped.unmerged.map(conflictRow) } : undefined,
-    notes,
     message: state.base?.message
       ? {
           key: commit.change_id ?? commit.sha ?? "",
@@ -497,7 +500,6 @@ export function changeLines(vm: ChangeVm): string[] {
     const buttons = actionsText(vm.head.actions);
     add(0, vm.head.text, `${vm.head.detail}${buttons ? `  ${buttons}` : ""}`);
   }
-  vm.notes?.forEach((note) => add(0, note.text, note.detail));
   if (vm.message) {
     add(0, "Commit message", `${vm.message.text.split("\n")[0]}${vm.message.readOnly ? "  (read-only)" : "  (editable)"}`);
   } else if (vm.loading?.message) {

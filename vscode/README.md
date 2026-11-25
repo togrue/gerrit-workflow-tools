@@ -164,13 +164,15 @@ The commits above your upstream, newest first. One row per commit:
 
 - The title bar names the change number. The subject is not repeated there: the commit message
   says it.
-- What it needs, in words, with its votes.
+- What it needs, in words, with its votes. Hover it for how the commit stands against Gerrit's
+  patchset: ahead of it, only rebased or with new code (and so whether Gerrit keeps the votes), or
+  outdated (comments and CI are about Gerrit's version). Local stack's icon says the same.
 - **The commit a rebase stopped at on a conflict** says so instead: *Conflict in d.txt — resolve it,
   then Continue* (several files: how many), with the buttons of Local stack's banner: the same ways
   on, Abort and Skip while files are still conflicted. **Conflicts**, above Files, lists the files
   still conflicted; a click opens one in the merge editor, as under the banner. Files is the commit
   as it was before the rebase, and says so: the rebase has not applied it yet. What a push of it
-  would do (*ahead of Gerrit*, whether the votes stay) is not said until it has: that is not known
+  would do (*ahead of Gerrit*, whether the votes stay) is not in its tooltip until it has: that is not known
   yet. What Gerrit has still is: that it has a newer patchset, and under CI the failed builds of the
   last pushed patchset and their logs; only why there is no log to read is left out. Once the
   conflicts are resolved and added, it says *Conflicts resolved — Continue*, and Continue is the one

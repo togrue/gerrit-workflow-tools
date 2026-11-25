@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { CommentChain, Rebase, RebaseAction, StackCommit } from "../src/api";
-import { ChangeState, READ_ONLY, changeHeading, changeLines, changeVm } from "../src/changeRows";
+import { AHEAD_WORDS, ChangeState, OUTDATED_WORDS, READ_ONLY, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { attentionIcon } from "../src/format";
 import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, rebaseNotNowFresh, reviewerWords, skipQuestion, stackLines, stoppedAt, sync, stackVm, stackWhere } from "../src/stackRows";
 import { waitingFor } from "../src/state";
@@ -87,10 +87,10 @@ test("ahead of Gerrit, a row tells new code from only rebased, by core's verdict
   assert.match(changed.tooltip, /^Change 7: its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push$/m);
   assert.match(rebased.tooltip, /^Change 1: only rebased since the last push: the same code, by patch-id \(whitespace and the message aside\), so Gerrit usually keeps the votes when you push$/m);
   assert.equal(rebased.syncTitle, SYNC_WORDS.rebased);
-  // The Change view says the same, from the same verdict.
-  const detail = (extra: Partial<StackCommit>) => changeVm(state({ shown: shown(commit("c", { patchset_status: "newer", ...extra })) })).notes?.[0]?.detail;
-  assert.equal(detail({ code_change: "changed" }), SYNC_WORDS["code-changed"]);
-  assert.equal(detail({ code_change: "rebased" }), SYNC_WORDS.rebased);
+  // The Change view says the same, from the same verdict, in the head's tooltip.
+  const why = (extra: Partial<StackCommit>) => changeVm(state({ shown: shown(commit("c", { patchset_status: "newer", ...extra })) })).head?.why;
+  assert.equal(why({ code_change: "changed" }), `${AHEAD_WORDS}: ${SYNC_WORDS["code-changed"]}`);
+  assert.equal(why({ code_change: "rebased" }), `${AHEAD_WORDS}: ${SYNC_WORDS.rebased}`);
 });
 
 /** What core says of Skip at an edit stop (`RebaseProgress.refusal`). */
@@ -283,16 +283,28 @@ test("the change view shows the message, the files with their line counts, and w
   ]);
 });
 
+test("the Change view says once how a commit stands against Gerrit: the head says it, the explanation is in its tooltip", () => {
+  const lines = (extra: Parameters<typeof shown>[0]) => changeLines(changeVm(state({ shown: shown(extra) }))).filter((line) => !line.startsWith("  "));
+  const ahead = lines({ patchset_status: "newer", code_change: "rebased", attention_reasons: ["ahead-of-gerrit"] });
+  assert.equal(ahead[0], "Local changes not pushed — no votes");
+  assert.ok(!ahead.some((line) => line.includes(AHEAD_WORDS) || line.includes("patch-id")), ahead.join("\n"));
+  const outdated = lines({ patchset_status: "outdated", attention_reasons: ["outdated-patchset"] });
+  assert.ok(!outdated.some((line) => line.includes(OUTDATED_WORDS.split(":")[0])), outdated.join("\n"));
+  const unpushed = changeVm(state({ shown: shown({ pushed: false, patchset_status: "absent", attention_reasons: ["not-pushed"] }) })).head;
+  assert.deepEqual([unpushed?.text, unpushed?.detail], ["Not pushed", ""], "not \"Not pushed — not on Gerrit\"");
+  assert.equal(changeVm(state({ shown: shown({ pushed: false, patchset_status: "absent" }) })).head?.detail, "not on Gerrit", "said where the head does not");
+});
+
 test("stopped by a rebase on a conflict, the change view says what is left and how to go on, not what its votes will do", () => {
   const ahead = shown({ patchset_status: "newer", attention_reasons: ["ahead-of-gerrit", "ci-failed"], ci_failures: ["Verified"], verified: -1 });
   const conflict = changeVm(state({ shown: ahead, stopped: { stop: "conflict", unmerged: ["src/d.txt"], actions: ON_CONFLICT } }));
   assert.equal(conflict.head?.text, "Conflict in src/d.txt — resolve it, then Continue");
   assert.deepEqual([conflict.head?.icon, conflict.head?.tone], ["warning", "bad"]);
   assert.deepEqual(conflict.head?.actions?.map((action) => action.command.id), ["ger.rebase.abort", "ger.rebase.skip"], "the ways on core serves: no Continue over open conflicts");
-  assert.deepEqual(conflict.notes, [], "\"ahead of Gerrit… only rebased: the votes stay\" is not true yet");
+  assert.equal(conflict.head?.why, undefined, "\"ahead of Gerrit… only rebased: the votes stay\" is not true yet");
   // What Gerrit has stays true: a newer patchset there, and the last pushed patchset's failed builds and their logs.
   const outdated = changeVm(state({ shown: shown({ patchset_status: "outdated" }), stopped: { stop: "conflict", unmerged: ["src/d.txt"], actions: ON_CONFLICT } }));
-  assert.deepEqual(outdated.notes?.map((note) => note.text), ["Gerrit has a newer patchset than this commit"]);
+  assert.equal(outdated.head?.why, OUTDATED_WORDS);
   assert.deepEqual([conflict.ci?.summary, conflict.ci?.state], ["Verified", "closed"], "the failed builds are named");
   const logs = (stopped: ChangeState["stopped"], contents: ReturnType<typeof content>[]) =>
     changeVm(state({ shown: ahead, stopped, ci: { state: "loaded", contents, introduced: null } }));
@@ -319,7 +331,7 @@ test("stopped by a rebase on a conflict, the change view says what is left and h
   const resolved = changeVm(state({ shown: ahead, stopped: { stop: "resolved", unmerged: [], actions: RESOLVED } }));
   assert.equal(resolved.head?.text, "Conflicts resolved — Continue");
   assert.deepEqual(resolved.head?.actions?.map((action) => `${action.label}${action.primary ? "!" : ""}`), ["Continue!", "Abort", "Skip"]);
-  assert.deepEqual([resolved.conflicts, resolved.notes, resolved.ci?.summary], [undefined, [], "Verified"]);
+  assert.deepEqual([resolved.conflicts, resolved.head?.why, resolved.ci?.summary], [undefined, undefined, "Verified"]);
   // A patchset of the change is no commit the rebase holds: its files are not labelled as it.
   assert.equal(changeVm(state({ stopped: { stop: "conflict", unmerged: ["a"], actions: ON_CONFLICT }, version: 3 })).files?.title, "Files");
 });

@@ -387,14 +387,11 @@
       const head = vm.head;
       // Votes and comments as badges, drawn as the Local stack draws them; words only when there are none.
       const right = head.badges.length ? h("span", { class: "badges" }, head.badges.map((item) => badge(item))) : h("span", { class: "detail" }, head.detail);
-      parts.push(h("div", { class: "head", title: `${head.text} — ${head.detail}` }, icon(head.icon, head.tone), h("span", { class: "label" }, head.text), right));
+      parts.push(h("div", { class: "head", title: [[head.text, head.detail].filter(Boolean).join(" — "), head.why].filter(Boolean).join("\n") }, icon(head.icon, head.tone), h("span", { class: "label" }, head.text), right));
       // A rebase stopped here: the way on, as Local stack's banner offers it.
       if (head.actions && head.actions.length) {
         parts.push(actions(head.actions));
       }
-    }
-    for (const note of vm.notes || []) {
-      parts.push(h("div", { class: "head note", title: `${note.text} — ${note.detail}` }, icon(note.icon, note.tone), h("span", { class: "label" }, note.text), h("span", { class: "detail" }, note.detail)));
     }
     if (vm.message) {
       parts.push(messageBlock(vm.message));
