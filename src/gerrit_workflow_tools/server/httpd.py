@@ -19,7 +19,12 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from gerrit_workflow_tools.cli_common import ExitCode, failure_exit
-from gerrit_workflow_tools.core.call_trace import format_call_trace_summary, reset_call_trace
+from gerrit_workflow_tools.core.call_trace import (
+    CallTally,
+    call_totals,
+    format_call_trace_summary,
+    reset_call_trace,
+)
 from gerrit_workflow_tools.core.reorder import ReorderRefusal
 from gerrit_workflow_tools.core.review_checkout import ReviewChainEndError, ReviewRefusal, ReviewUsageError
 from gerrit_workflow_tools.server.api import GerApi
@@ -68,11 +73,15 @@ def failure_response(error: BaseException) -> tuple[int, dict[str, Any]]:
     return _STATUS_BY_EXIT.get(failure[0], 500), {"error": error_json(error)}
 
 
-def _log_timing(method: str, path: str, *, queued: float, took: float) -> None:
-    """With ``--debug-log``: how long one request queued and ran, and its git and Gerrit calls."""
+def _log_timing(tally: CallTally, method: str, path: str, *, queued: float, took: float) -> None:
+    """With ``--debug-log``: how long one request queued and ran, and its git and Gerrit calls.
+
+    The calls are also added to *tally*, which says about once a minute how many there were.
+    """
     if not logger.isEnabledFor(logging.DEBUG):
         return
     trace = format_call_trace_summary()
+    summary = tally.add(call_totals())
     reset_call_trace()
     logger.debug(
         "%s %s: %.0f ms, after %.0f ms queued%s",
@@ -82,6 +91,8 @@ def _log_timing(method: str, path: str, *, queued: float, took: float) -> None:
         queued * 1000,
         f"\n{trace}" if trace else "",
     )
+    if summary:
+        logger.debug("%s", summary)
 
 
 class GerHttpServer(ThreadingHTTPServer):
@@ -94,6 +105,7 @@ class GerHttpServer(ThreadingHTTPServer):
         self.api = api
         self.token = token
         self.api_lock = threading.Lock()
+        self.tally = CallTally()
 
     @property
     def url(self) -> str:
@@ -164,7 +176,13 @@ class _Handler(BaseHTTPRequestHandler):
                     try:
                         payload = self.server.api.handle(method, unquote(url.path), parse_qs(url.query), body)
                     finally:
-                        _log_timing(method, url.path, queued=started - asked, took=time.perf_counter() - started)
+                        _log_timing(
+                            self.server.tally,
+                            method,
+                            url.path,
+                            queued=started - asked,
+                            took=time.perf_counter() - started,
+                        )
             status = 200
         except Exception as error:  # pylint: disable=broad-exception-caught
             status, payload = failure_response(error)

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from gerrit_workflow_tools.core.call_trace import (
+    CallTally,
+    call_totals,
     format_call_trace_summary,
     gerrit_request_label,
     gerrit_request_label_from_url,
@@ -77,3 +79,39 @@ def test_format_call_trace_summary_normalizes_change_paths() -> None:
         reset_call_trace()
 
     assert "35ms x2  GET changes/{change}/reviewers/" in summary
+
+
+def test_call_totals_sum_the_traced_calls_by_kind() -> None:
+    set_call_trace_enabled(True)
+    try:
+        record_call("git", "git log", 0.010)
+        record_call("git", "git rev-parse", 0.002)
+        record_call("gerrit", "GET changes/", 0.300)
+        assert call_totals() == {"git": (2, 0.012), "gerrit": (1, 0.300)}
+    finally:
+        set_call_trace_enabled(False)
+    assert call_totals() == {}
+
+
+def test_call_tally_says_once_a_period_what_its_requests_cost() -> None:
+    """The line closes the period on the request that ends it; a quiet stretch says nothing."""
+    clock = {"t": 0.0}
+    tally = CallTally(period=60, clock=lambda: clock["t"])
+    poll = {"git": (6, 0.030), "gerrit": (2, 0.200)}
+
+    assert tally.add(poll) is None
+    clock["t"] = 30
+    assert tally.add({"git": (6, 0.030)}) is None
+    clock["t"] = 61
+    assert tally.add(poll) == (
+        "calls in the last 61s: 3 request(s), git 18 call(s), 90ms, gerrit 4 call(s), 400ms"
+        " (since start 1 min: 3 request(s), git 18, gerrit 4)"
+    )
+
+    clock["t"] = 600  # nothing asked for nine minutes: the next request closes one long period
+    assert tally.add({}) == (
+        "calls in the last 539s: 1 request(s), git 0 call(s), 0ms, gerrit 0 call(s), 0ms"
+        " (since start 10 min: 4 request(s), git 18, gerrit 4)"
+    )
+    clock["t"] = 610
+    assert tally.add(poll) is None

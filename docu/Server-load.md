@@ -79,7 +79,8 @@ ger log --debug-log
 ```
 
 For the editor, turn on `ger.debugLog`: `ger serve` then logs each request of the views with
-its git and Gerrit calls to **ger: Show Log**.
+its git and Gerrit calls to **ger: Show Log**, and about once a minute a line with how many
+requests, git calls and Gerrit calls that minute had, and how many since `ger serve` started.
 
 What the server received. Gerrit writes every request to `logs/httpd_log` in its site
 directory: client, time, request line, status, bytes, milliseconds. To see the lines one

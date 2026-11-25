@@ -939,6 +939,29 @@ def test_debug_log_times_each_request_with_its_git_and_gerrit_calls(
     assert call_trace.format_call_trace_summary() == "", "each request's calls are its own"
 
 
+def test_debug_log_says_about_once_a_minute_how_many_calls_the_requests_made(
+    served: GerHttpServer, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The running tally: what the editor's poll costs over time, not only per request."""
+    clock = {"t": 0.0}
+    monkeypatch.setattr(served, "tally", call_trace.CallTally(period=60, clock=lambda: clock["t"]))
+    log = logging.getLogger("gerrit_workflow_tools.server.httpd")
+    log.addHandler(caplog.handler)
+    level = log.level
+    log.setLevel(logging.DEBUG)
+    call_trace.set_call_trace_enabled(True)
+    try:
+        assert _http(served, f"{V1}/stack")[0] == 200
+        clock["t"] = 60
+        assert _http(served, f"{V1}/stack")[0] == 200
+    finally:
+        call_trace.set_call_trace_enabled(False)
+        log.setLevel(level)
+        log.removeHandler(caplog.handler)
+    [tally] = {record.getMessage() for record in caplog.records if record.getMessage().startswith("calls in the last")}
+    assert re.match(r"calls in the last 60s: 2 request\(s\), git [1-9]\d* call\(s\), \d+ms, gerrit ", tally), tally
+
+
 def test_http_maps_failures_to_statuses_and_shared_codes(served: GerHttpServer) -> None:
     assert _http(served, f"{V1}/nope") == (
         404,
