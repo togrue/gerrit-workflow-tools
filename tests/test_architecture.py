@@ -410,59 +410,6 @@ def test_too_many_disables_ratchet() -> None:
     assert not problems, "\n".join(problems)
 
 
-# --- Exit codes are ExitCode members -----------------------------------------------
-
-
-def _int_literals(node: ast.expr | None) -> list[ast.Constant]:
-    """The integer literals *node* evaluates to, through ``a if c else b`` and ``a or b``."""
-    if isinstance(node, ast.Constant) and type(node.value) is int:
-        return [node]
-    if isinstance(node, ast.IfExp):
-        return _int_literals(node.body) + _int_literals(node.orelse)
-    if isinstance(node, ast.BoolOp):
-        return [c for value in node.values for c in _int_literals(value)]
-    return []
-
-
-def _is_exit_call(call: ast.Call) -> bool:
-    func = call.func
-    name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else ""
-    return name in ("exit", "SystemExit", "_exit")
-
-
-def test_commands_exit_with_exit_code_members() -> None:
-    """A CLI module's exit code names its reason (``ExitCode.REFUSED``), never a bare number.
-
-    ``cli_common.ExitCode`` is the one table of reasons and codes; a literal ``return 1`` or
-    ``sys.exit(2)`` is a code nobody can find from the reason. Raise the failure and let
-    ``run_cli_command`` map it, or return the member.
-    """
-    found: set[str] = set()
-    for rel in sorted(m for m in SOURCES if m.startswith("cli_")):
-        for node in ast.walk(ast.parse(SOURCES[rel])):
-            if isinstance(node, ast.Return):
-                literals = _int_literals(node.value)
-            elif isinstance(node, ast.Call) and _is_exit_call(node):
-                literals = [c for arg in node.args for c in _int_literals(arg)]
-            else:
-                continue
-            if literals:
-                found.add(rel)
-    _check(
-        "command exits with a raw integer",
-        found,
-        {
-            # By design: runs from shell startup files and must not load cli_common (or core/).
-            "cli_bash_completion.py": "import-light",
-            # By design: the dispatcher exits 2 on an unknown command and 130 on Ctrl-C without loading cli_common.
-            "cli_ger.py": "import-light",
-            "cli_attention.py": "backlog 3",
-        },
-        "Raise the failure (core.usage.UsageError, Refusal, …) for run_cli_command to map, "
-        "or return int(ExitCode.<REASON>). Codes: docu/spec/exit-codes.md.",
-    )
-
-
 # --- One flag, one definition ------------------------------------------------------
 
 

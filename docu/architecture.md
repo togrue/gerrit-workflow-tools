@@ -651,8 +651,7 @@ Concepts that still exist more than once, ranked by how far the copies have **dr
 
 1. **One reviewer normalizer.** Reviewer logic is spread over `core/reviewer.py`, `core/reviewer_completion.py`, `core/push_reviewers.py`, `core/reviewers_strategy.py` and `reviewer_catalog.py`.
 2. **Show resolution vs generic resolution.** `core/gerrit_show.py` wraps `resolve_changeish` and builds a row for a remote-only change itself (through the service's `ChangeApi`, so the cache: every caller passes `changes`, which is now required), next to what `ger resolve` already exposes. `gerrit_show.resolve_range_endpoint_sha` re-implements `change_resolution.resolve_to_stack_sha`.
-3. **Exit codes outside the mapper.** Some CLI modules still return a bare number, or print `error:` and return a code themselves, beside `run_cli_command` and `ExitCode`. Tracked by `test_commands_exit_with_exit_code_members`.
-4. **Flags defined per command.** A flag several commands take (`--branch`, `-y`, `--dry-run`, `--debug-log`, …) was written out in each, with its own help text, so the same flag drifted apart. Tracked by `test_a_flag_means_one_thing` and `test_help_text_style`.
+3. **Flags defined per command.** A flag several commands take (`--branch`, `-y`, `--dry-run`, `--debug-log`, …) was written out in each, with its own help text, so the same flag drifted apart. Tracked by `test_a_flag_means_one_thing` and `test_help_text_style`.
 
 ---
 
