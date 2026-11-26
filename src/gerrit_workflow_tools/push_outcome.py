@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -157,7 +158,16 @@ def finish_and_record(cwd: Path, result: PushResult, plan: PushPlan) -> int:
     """:func:`finish_push`, and the push's **step outcome** in one line: sent, Gerrit's refusal, nothing."""
     code = finish_push(result, plan)
     if result.error_message:
-        record_outcome(cwd, "push", result.error_message.removeprefix("error: "), ok=False)
+        missing = re.search(r"branch (\S+) not found", result.error_message)
+        more = (
+            [
+                f"next: Gerrit has no branch {missing[1]}: "
+                "make one it has the upstream (`git branch --set-upstream-to=…`)"
+            ]
+            if missing
+            else []
+        )
+        record_outcome(cwd, "push", result.error_message.removeprefix("error: "), ok=False, more=more)
     elif result.pushed:
         changes = ", ".join(str(change.number) for change in result.pushed)
         sent = f"pushed {counted(len(result.pushed), 'commit')} to refs/for/{plan.push_branch}: change {changes}"
