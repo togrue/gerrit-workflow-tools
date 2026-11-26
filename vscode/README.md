@@ -158,7 +158,8 @@ The commits above your upstream, newest first. One row per commit:
   what no stash keeps** — the commits made in this rebase that the branch before it does not have
   (an amend, a resolved conflict, a split: by patch id and message, so a commit only replayed is
   not one), named with their ids, and a resolved conflict (`GET /rebase/refusal?action=abort`'s
-  `discards`). A fix saved and not amended is no reason to ask: `ger rebase --abort` puts it in a
+  `discards`). Beside Abort, **Show What Would Go** opens those commits' files in one editor each
+  and aborts nothing; Abort asks again. A fix saved and not amended is no reason to ask: `ger rebase --abort` puts it in a
   stash before git resets the tree, and says so (*kept: your changes to calc/ops.py, not amended,
   in stash@{0}; `git stash apply` brings them back*). Where nothing is lost it does not ask. At an edit stop, or once you split a
   commit there, there is nothing to skip: the commit is already in, and `git rebase --skip` would

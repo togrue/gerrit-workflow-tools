@@ -366,16 +366,23 @@ export function skipQuestion(stack: Stack | undefined): { message: string; detai
  * Abort's question (core's `discards`, asked only when `asks`): the commits made in this rebase that
  * go with it, named, and a resolution; what a stash keeps is said too, so nothing is a surprise after.
  */
-export function abortQuestion(discards: AbortDiscards): { message: string; detail: string } {
+export function abortQuestion(discards: AbortDiscards): { message: string; detail: string; show?: { label: string; shas: string[] } } {
   const gone = discards.rewritten.map((commit) => `${commit.short_sha} "${commit.summary}"`);
   const lines = [
     "The branch goes back to where it was before the rebase.",
-    gone.length ? `Gone from the branch with it, made in this rebase: ${gone.join(", ")}. git show <id> still shows ${gone.length === 1 ? "it" : "them"} while git keeps its reflog.` : "",
+    gone.length ? `Gone from the branch with it, made in this rebase: ${gone.join(", ")}. ${ABORT_SHOW} opens ${gone.length === 1 ? "its changes" : "their changes"} first; nothing is aborted then.` : "",
     discards.resolution ? "The conflict resolution of the commit it stopped at goes too." : "",
     discards.uncommitted.length ? `${discards.uncommitted.join(", ")}, not committed, ${discards.uncommitted.length === 1 ? "is" : "are"} kept in a stash: git stash apply brings ${discards.uncommitted.length === 1 ? "it" : "them"} back.` : "",
   ];
-  return { message: gone.length ? `Abort the rebase, and with it ${plural(gone.length, "rewritten commit")}?` : "Abort the rebase, and the resolution?", detail: lines.filter(Boolean).join("\n\n") };
+  return {
+    message: gone.length ? `Abort the rebase, and with it ${plural(gone.length, "rewritten commit")}?` : "Abort the rebase, and the resolution?",
+    detail: lines.filter(Boolean).join("\n\n"),
+    ...(gone.length ? { show: { label: ABORT_SHOW, shas: discards.rewritten.map((commit) => commit.sha) } } : {}),
+  };
 }
+
+/** The button beside Abort in its question: the commits that would go, opened before anything goes. */
+export const ABORT_SHOW = "Show What Would Go";
 
 /** What Push offers instead while a rebase blocks it: the ways on core allows, but Skip (finishing is the point). */
 export function pushWaysOn(stack: Stack | undefined): RebaseAction[] {
