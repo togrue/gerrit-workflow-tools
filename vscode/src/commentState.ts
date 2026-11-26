@@ -1,6 +1,8 @@
 // A change's comments at a glance, for every row that stands for a change (Review chains, Local
-// stack, the Change view's head): one state and its colour, and the share of open chains in all of
-// them (`2/5`). Pure: no `vscode`, no I/O. The comments themselves, as a hover lists them: commentEntries.ts.
+// stack, the Change view's head, the task header): one state with a colour and a shape, the number
+// of open chains, and their share of all chains, which a webview draws as a ring (`share`) and a
+// tree row writes in words (`3 open`). Never `3/5`: it reads as "3 of 5 done". Pure: no `vscode`,
+// no I/O. The comments themselves, as a hover lists them: commentEntries.ts.
 
 
 /**
@@ -17,11 +19,21 @@ export interface CommentState {
   total: number | null;
   toAnswer: number;
   drafted: number;
-  /** The share as the row shows it: `2/5` (open of all), `2` when all is not known, `0/5` once all are resolved. */
+  /** The open count as a webview's badge shows it beside the ring: `2`; empty once all are resolved. */
   text: string;
-  /** The same in words, for a tooltip. */
+  /** What a text-only row says: `2 open`, `all resolved`, or empty when there is nothing to say. */
+  label: string;
+  /** The ring: open of all (0..1), 1 when all is not known but some are open, 0 once all are resolved. */
+  share: number;
+  /** The second cue besides the colour: a solid ring (to answer), a dashed one (your drafts), a thin one (waiting), a tick (resolved). */
+  shape: CommentShape;
+  /** The same in words, for a tooltip: `3 of 5 open · 2 answered by your drafts`. */
   words: string;
 }
+
+export type CommentShape = "solid" | "dashed" | "thin" | "tick";
+
+const SHAPES: Record<CommentTone, CommentShape> = { open: "solid", draft: "dashed", waiting: "thin", resolved: "tick" };
 
 /** What `commentState` reads: core's counts of a change. */
 export interface Commented {
@@ -59,24 +71,39 @@ export function commentState(item: Commented, drafts = 0): CommentState | undefi
   const tone: CommentTone = left > 0 ? "open" : yours ? "draft" : count > 0 ? "waiting" : "resolved";
   // Gerrit's own count wins over a total that is behind it; a total of none says nothing of its own.
   const all = total !== null && total > 0 && total >= count ? total : null;
-  const text = all !== null ? `${count}/${all}` : count ? String(count) : "";
+  const resolved = all === 1 ? "the comment chain resolved" : all !== null ? `all ${chains(all)} resolved` : total === null ? "every comment chain resolved" : "";
+  const open = all !== null ? `${count} of ${chains(all)} open` : `${chains(count)} open`;
   const parts = [
-    all !== null ? `${count} of ${chains(all)} unresolved` : count ? `${chains(count)} unresolved` : total === null ? "every comment chain resolved" : "",
+    count ? open : resolved,
     left ? `${left} to answer` : "",
     drafted ? `${drafted} answered by your drafts` : "",
     yours > drafted ? `${yours - drafted === 1 ? "a draft" : `${yours - drafted} drafts`} of yours not published` : "",
     awaiting ? `${awaiting} waiting on a reply` : "",
   ];
-  return { tone, unresolved: count, total: all, toAnswer: left, drafted: yours, text, words: parts.filter(Boolean).join(" · ") };
+  const resolvedAll = count === 0 && (all !== null || total === null);
+  return {
+    tone,
+    unresolved: count,
+    total: all,
+    toAnswer: left,
+    drafted: yours,
+    text: count ? String(count) : "",
+    label: count ? `${count} open` : resolvedAll ? "all resolved" : "",
+    share: all !== null ? count / all : count ? 1 : 0,
+    shape: SHAPES[tone],
+    words: parts.filter(Boolean).join(" · "),
+  };
 }
 
 /** The phrases `words` is made of, as patterns around a count pattern `n`: what a tooltip of ours may say (anonymize.ts keeps them). */
 export function commentPhrases(n: string): string[] {
   const chains = `comment chains?`;
   return [
-    `${n} of ${n} ${chains} unresolved`,
-    `${n} ${chains} unresolved`,
+    `${n} of ${n} ${chains} open`,
+    `${n} ${chains} open`,
     "[Ee]very comment chain resolved",
+    "[Tt]he comment chain resolved",
+    `[Aa]ll ${n} comment chains resolved`,
     "[Aa] draft of yours not published",
     `${n} drafts of yours not published`,
     `${n} to answer`,

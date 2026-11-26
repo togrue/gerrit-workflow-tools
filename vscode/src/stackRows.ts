@@ -3,7 +3,7 @@
 // it, the end-to-end suite prints it. Pure: no `vscode`, no I/O.
 
 import { CodeChange, CommitStatus, MoveConflict, Overview, Rebase, RebaseAction, Reviewer, Stack, StackCommit, UpstreamChoice, UpstreamStop } from "./api";
-import { CommentTone, commentState } from "./commentState";
+import { CommentShape, CommentTone, commentState } from "./commentState";
 import { blockedMove, reasonWords, sentence, wouldConflict } from "./format";
 import { Waiting } from "./state";
 
@@ -70,6 +70,8 @@ export interface Badge {
   text: string;
   title: string;
   stale: boolean;
+  /** Comments only: the open share and the state's shape, which a webview draws as a ring instead of the icon (commentState.ts). */
+  ring?: { share: number; shape: CommentShape };
 }
 
 function signed(value: number): string {
@@ -116,6 +118,7 @@ export function badges(commit: CommitStatus, drafts = 0): (Badge | null)[] {
           text: comments.text,
           title: sentence(comments.words),
           stale: false,
+          ring: { share: comments.share, shape: comments.shape },
         }
       : null,
     review

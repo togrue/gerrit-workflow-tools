@@ -44,7 +44,7 @@ function tree(word: string, number: (n: number) => number): TreeRow[] {
   return [
     row(`CI failed on ${number(2)}: ${word} temporary experiment`, "", "target"),
     row("Outgoing", "1 chain · 1 with failed CI · 1 with comments · oldest first", null, null, [
-      row(`${word} cleanup after experiment`, "● new activity · 2 changes · V-1 CR+2 💬2 · active 3d ago", "error", "ger.chain.url.local", [
+      row(`${word} cleanup after experiment`, "● new activity · 2 changes · V-1 CR+2 💬2 open · active 3d ago", "error", "ger.chain.url.local", [
         row(`${word} cleanup after experiment`, `${number(3)} · V-1 CR+2 · in your stack`, "error", "ger.change.url.local"),
         row(`${word} temporary experiment`, `${number(2)} · no votes`, "clock", "ger.change.url"),
       ]),
@@ -357,7 +357,7 @@ test("within one report the same commit, change, person, file and line are the s
   // Review chains: the same change number under its chain as in the headline's row, our words around it kept.
   const [, outgoing, toReview, nothing] = out.chains;
   assert.equal(outgoing.description, "1 chain · 1 with failed CI · 1 with comments · oldest first");
-  assert.match(outgoing.children[0].description, /^● new activity · 2 changes · V-1 CR\+2 💬2 · active 3d ago$/);
+  assert.match(outgoing.children[0].description, /^● new activity · 2 changes · V-1 CR\+2 💬2 open · active 3d ago$/);
   assert.match(outgoing.children[0].children[0].description, /^\d{5} · V-1 CR\+2 · in your stack$/);
   assert.equal(outgoing.children[0].children[0].label, outgoing.children[0].label, "a chain is named after its top change");
   assert.match(toReview.children[0].description, /^[A-Za-z ]{9} · 1 change · V\+1 · waiting 12m · active 4h ago$/);
@@ -372,7 +372,7 @@ test("a sentence with their words in it goes whole; a tooltip keeps the lines th
   assert.ok(lines.includes("the same as on Gerrit") === false, "\"Change 74212: the same as on Gerrit\" has the change number in it");
   assert.match(second.tooltip, /^[a-z \n]+$/, "the subject, the number, an unknown reason, the reviewers and the files of a conflict: all filler");
   assert.deepEqual(second.badges.map((badge) => badge?.title.split("\n")[0]), [second.badges[0]?.title.split("\n")[0], "Code-Review -1", second.badges[2]?.title]);
-  assert.match(second.badges[0]?.title ?? "", /^3 comment chains unresolved/, "the comment words are ours");
+  assert.match(second.badges[0]?.title ?? "", /^3 comment chains open/, "the comment words are ours");
   assert.match(second.badges[2]?.title ?? "", /^[a-z ]+$/, "CI failed: <the builds' names>");
   assert.match(second.badges[1]?.title.split("\n")[1] ?? "", /^[a-z ]+$/, "Reviewers: <names>");
   assert.equal(out.rows[0].tooltip.split("\n")[1], "not on Gerrit");

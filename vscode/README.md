@@ -38,7 +38,7 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
   when it is your turn again. The activity bar's badge counts the chains whose turn is yours.
   *Outgoing*: your open chains.
 - One row per chain, showing its top change, the worst vote cast of each label and what is missing
-  (*V+1 CR+1 💬5 · V missing on 2, CR on 1*; *no votes* only when no change of it has any),
+  (*V+1 CR+1 💬5 open · V missing on 2, CR on 1*; *no votes* only when no change of it has any),
   unresolved comments and age. Expand
   it for the chain's changes: all of them, also those not ready for review yet (greyed out, with
   why: *not verified yet*, *WIP*). A `●` marks new activity.
@@ -49,9 +49,9 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
   check when nothing does. A *To review* chain with nothing wrong shows an eye while it is your turn, a clock while it waits on its author. The status bar
   uses the same icons for the headline.
 - Changes that are commits of your local stack are marked *in your stack* and open as local commits.
-- **Comments at a glance**: a change's row shows its unresolved comment chains as a share of all
-  of them, *💬2/5* (*💬2* when ger has not counted the resolved ones), and is coloured by where
-  they stand: **yellow** while one waits for your answer, **blue** while drafts of yours wait to be
+- **Comments at a glance**: a change's row says how many comment chains are open, *💬2 open*
+  (never *2/5*, which reads as "2 of 5 done"; the tooltip says *2 of 5 comment chains open*), and
+  is coloured by where they stand: **yellow** while one waits for your answer, **blue** while drafts of yours wait to be
   published (once nothing is left to answer), plain when they wait on the other side or are all
   resolved. The badge at the right says how many are left to answer, or ✎ for drafts. **Hover** the
   row for the comments themselves: who wrote what where and in which state, each with **Go there**
@@ -81,8 +81,13 @@ The commits above your upstream, newest first. One row per commit:
   Stack with Agent, Edit Commit Here, squash, drop and rewording are not offered, as core refuses
   them there (`ger review --unstage` to work on the change, or *Leave Review Checkout*).
 
-- The **comment badge** on the right is the same as in *Review chains*: its share (*2/5*) and
-  colour (yellow: something to answer, blue: drafts of yours to publish, plain otherwise). Hover it
+- The **comment badge** on the right (here, in the Change view and in the task header) draws the
+  state so it cannot be misread: the number is how many chains are **open**, a **ring** around it
+  is filled by their share of all chains, and the ring's shape says the state besides its colour:
+  **thick** and yellow while something waits for your answer, **dashed** and blue while drafts of
+  yours wait to be published, **thin** while they wait on the other side, a full ring with a
+  **tick** once all are resolved. The tooltip says it in words (*3 of 5 comment chains open · 1 to
+  answer · 2 answered by your drafts*). Hover it
   a moment for the comments, with *Go there*, *Reply Done* and *Apply*.
 - An **icon** in front says how the commit relates to Gerrit: a **full circle** when it is the
   same as on Gerrit; a **yellow arrow up** in a circle when it is only rebased since the last push

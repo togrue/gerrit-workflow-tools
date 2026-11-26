@@ -147,12 +147,12 @@ test("votes and ages read like ger's own output", () => {
   assert.equal(vote("V", -1), "V-1");
   assert.equal(vote("V", null), "V·");
   assert.deepEqual([age(59), age(12 * 60), age(47 * 3600), age(3 * 86400)], ["0m", "12m", "47h", "3d"]);
-  assert.equal(chainDescription(chain("k", ""), "to-review"), "alice · 2 changes · V+1 💬2 · waiting 3d · active 4h ago");
-  assert.equal(chainDescription(chain("k", ""), "outgoing"), "2 changes · V+1 💬2 · active 4h ago");
+  assert.equal(chainDescription(chain("k", ""), "to-review"), "alice · 2 changes · V+1 💬2 open · waiting 3d · active 4h ago");
+  assert.equal(chainDescription(chain("k", ""), "outgoing"), "2 changes · V+1 💬2 open · active 4h ago");
   assert.equal(votes({ verified: null, code_review: null, comments_unresolved: 0 }), "no votes");
   // A chain says the worst vote cast and what is missing: never "no votes" while a member has one.
   const partly = { ...chain("k", ""), depth: 4, verified: null, code_review: null, comments_unresolved: 5 };
-  assert.equal(chainVotes({ ...partly, votes_cast: { verified: 1, code_review: 1 }, votes_missing: { verified: 2, code_review: 1 } }), "V+1 CR+1 💬5 · V missing on 2, CR on 1");
+  assert.equal(chainVotes({ ...partly, votes_cast: { verified: 1, code_review: 1 }, votes_missing: { verified: 2, code_review: 1 } }), "V+1 CR+1 💬5 open · V missing on 2, CR on 1");
   assert.equal(chainVotes({ ...partly, comments_unresolved: 0, votes_cast: { verified: 1, code_review: null }, votes_missing: { verified: 1, code_review: 4 } }), "V+1 · V missing on 1");
   assert.equal(chainVotes({ ...partly, comments_unresolved: 0, votes_cast: { verified: null, code_review: null }, votes_missing: { verified: 4, code_review: 4 } }), "no votes");
   assert.deepEqual([fileState("A"), fileState("R"), sentence("unresolved comments")], ["added", "renamed", "Unresolved comments"]);
@@ -245,11 +245,11 @@ test("the conflict preview blocks only the swaps that would conflict", () => {
 
 test("a commit whose code moved on shows the pushed votes as last pushed; a rebased one its own", () => {
   const base = { verified: null, code_review: null, comments_unresolved: 2, last_pushed_votes: { verified: -1, code_review: 2 } };
-  assert.equal(commitVotes(base as unknown as CommitStatus), "last pushed V-1 CR+2 💬2");
+  assert.equal(commitVotes(base as unknown as CommitStatus), "last pushed V-1 CR+2 💬2 open");
   const rebased = { ...base, verified: -1, code_review: 2, last_pushed_votes: null };
-  assert.equal(commitVotes(rebased as unknown as CommitStatus), "V-1 CR+2 💬2");
+  assert.equal(commitVotes(rebased as unknown as CommitStatus), "V-1 CR+2 💬2 open");
   const never = { ...base, last_pushed_votes: { verified: null, code_review: null } };
-  assert.equal(commitVotes(never as unknown as CommitStatus), "💬2");
+  assert.equal(commitVotes(never as unknown as CommitStatus), "💬2 open");
 });
 
 test("the tooltip says whether events or the poll keep the views current, and why", () => {

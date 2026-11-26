@@ -42,7 +42,42 @@
     if (!item) {
       return h("span", { class: cls });
     }
-    return h("span", { class: `${cls} tone-${item.tone}${item.stale ? " stale" : ""}`, title: item.title }, icon(item.icon), item.text);
+    const mark = item.ring ? ring(item.ring.share, item.ring.shape) : icon(item.icon);
+    return h("span", { class: `${cls} tone-${item.tone}${item.stale ? " stale" : ""}`, title: item.title }, mark, item.text);
+  }
+
+  const SVG = "http://www.w3.org/2000/svg";
+  let masks = 0;
+
+  function svg(tag, attrs, ...children) {
+    const element = document.createElementNS(SVG, tag);
+    for (const [name, value] of Object.entries(attrs)) {
+      element.setAttribute(name, String(value));
+    }
+    element.append(...children);
+    return element;
+  }
+
+  /**
+   * The comment ring of src/commentState.ts: the arc is the open share, its shape the state besides
+   * the colour: solid and thick (to answer), dashed (your drafts), thin (waiting on a reply), a full
+   * ring with a tick (all resolved).
+   */
+  function ring(share, shape) {
+    const circle = (attrs) => svg("circle", { cx: 8, cy: 8, r: 6, fill: "none", pathLength: 100, transform: "rotate(-90 8 8)", ...attrs });
+    const arc = Math.max(0, Math.min(1, share)) * 100;
+    const parts = [circle({ class: "ring-track", "stroke-width": shape === "solid" ? 3 : 2 })];
+    if (shape === "tick") {
+      parts.push(svg("path", { class: "ring-tick", d: "M5 8.2l2 2 4-4.2", fill: "none", "stroke-width": 1.6 }));
+    } else if (shape === "dashed") {
+      // Dashes along the open share: the share is a mask over a dashed circle.
+      const id = `ring-mask-${++masks}`;
+      parts.push(svg("mask", { id }, circle({ stroke: "white", "stroke-width": 4, "stroke-dasharray": `${arc} 100` })));
+      parts.push(circle({ class: "ring-arc", "stroke-width": 2, "stroke-dasharray": "7 5", mask: `url(#${id})` }));
+    } else {
+      parts.push(circle({ class: "ring-arc", "stroke-width": shape === "solid" ? 3 : 1.2, "stroke-dasharray": `${arc} 100` }));
+    }
+    return svg("svg", { class: `ring ring-${shape}`, viewBox: "0 0 16 16", width: 14, height: 14, "aria-hidden": "true" }, ...parts);
   }
 
   function post(type, fields) {
@@ -261,6 +296,7 @@
     h,
     icon,
     badge,
+    ring,
     actions,
     info,
     post,

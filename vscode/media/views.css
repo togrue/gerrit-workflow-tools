@@ -276,6 +276,23 @@ button.twist:hover {
   font-size: 14px;
 }
 
+/* The comment ring (common.js): the arc in the badge's colour, the rest a faint track. */
+.ring {
+  flex: none;
+  margin-right: 2px;
+}
+.ring .ring-track {
+  stroke: currentColor;
+  opacity: 0.25;
+}
+.ring-tick .ring-track {
+  opacity: 0.6;
+}
+.ring .ring-arc,
+.ring .ring-tick {
+  stroke: currentColor;
+}
+
 .badge.stale {
   opacity: 0.5;
 }

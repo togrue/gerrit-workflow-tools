@@ -133,8 +133,9 @@ const COUNT = "\\d{1,6}";
 const AGE = "\\d{1,5}[mhd]";
 const PATCHSET = "\\d{1,4}";
 const NOTE = "( on the last pushed patchset; Gerrit may not keep it for this code)?";
-/** `V+1 CR-2 💬3`, `last pushed V+1`, `no votes` (format.ts, votes and commitVotes). */
-const VOTES = new RegExp(`(last pushed )?(no votes|(V|CR)[+-]?\\d|💬${COUNT})( ((V|CR)[+-]?\\d|💬${COUNT}))*`, "u");
+/** `V+1 CR-2 💬3 open ✎1`, `last pushed V+1`, `no votes` (format.ts, votes and commitVotes). */
+const MARK = `(V|CR)[+-]?\\d|💬(${COUNT} open|all resolved)|✎${COUNT}`;
+const VOTES = new RegExp(`(last pushed )?(no votes|${MARK})( (${MARK}))*`, "u");
 
 /** `CI failed, unresolved comments`: attention reasons in our words (format.ts, reasonWords), as a sentence or not. */
 const reasons = (text: string) => text.split(", ").every((word) => REASON_WORDS.some((known) => known.toLowerCase() === word.toLowerCase()));
@@ -175,9 +176,11 @@ const BADGE: Shape = {
   icon: ICON,
   tone: TONE,
   /** A count of comments, or a vote. */
-  text: ours([new RegExp(`([+-]?${COUNT})?`), new RegExp(`${COUNT}/${COUNT}`)]),
+  text: ours([new RegExp(`([+-]?${COUNT})?`)]),
   title: TOOLTIP,
   stale: KEEP,
+  /** The comment ring: a share and a shape, no words of anybody's. */
+  ring: { share: KEEP, shape: ours(["solid", "dashed", "thin", "tick"]) },
 };
 
 /** A row's key is its Change-Id or its commit: it becomes what that field becomes. */
