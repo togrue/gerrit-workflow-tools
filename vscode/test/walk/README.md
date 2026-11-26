@@ -77,7 +77,9 @@ the run are deleted (a draft that existed and was only changed stays). The publi
 stays: only an administrator can delete one. `GER_WALK_RESET=0` leaves everything as the walk
 left it. Compare scorecards of runs against the same playground state.
 
-The window is set up, not measured: the side bar widened, the Explorer in front, dialogs drawn
-in the window (`window.dialogStyle: custom`: a native dialog is neither clickable nor in the
-pictures without a display), and `ger.reviewCheckout` set to `branch` in the copy (a review
-worktree opens in a window of its own, which the walk cannot follow).
+The window is set up, not measured: the side bar widened, the Explorer in front, and
+`ger.reviewCheckout` set to `branch` in the copy (a review worktree opens in a window of its
+own, which the walk cannot follow). VS Code answers every modal dialog as cancelled while it
+runs extension tests, and the walk is one: a modal question (Publish?, Finish the rebase first)
+is asked as a notification with the same text and buttons instead, and its button clicked there:
+the same one click.

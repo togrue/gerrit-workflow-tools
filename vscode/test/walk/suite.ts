@@ -10,6 +10,7 @@ import * as vscode from "vscode";
 
 import type { ExtensionApi } from "../../src/extension";
 import { activeTracer, now } from "../../src/trace";
+import { vscodeUi } from "../../src/ui";
 import { Camera, pictureName } from "../e2e/picture";
 import { Box, Window, middle } from "./cdp";
 import { Budget, Loop, StepRecord } from "./scorecard";
@@ -24,8 +25,14 @@ class Input {
   readonly given: string[] = [];
   real = true;
   readonly fallbacks: string[] = [];
-  /** When the last input was given. */
+  /** When the first and the last input were given. */
+  first: number | undefined;
   last = now();
+
+  private mark(): void {
+    this.last = now();
+    this.first ??= this.last;
+  }
 
   constructor(private readonly window: Window) {}
 
@@ -34,7 +41,7 @@ class Input {
       return false;
     }
     await this.window.click(middle(box), count);
-    this.last = now();
+    this.mark();
     this.clicks += count;
     this.given.push(`${count > 1 ? "double-" : ""}click ${what}`);
     return true;
@@ -42,14 +49,14 @@ class Input {
 
   async key(spec: string): Promise<void> {
     await this.window.key(spec);
-    this.last = now();
+    this.mark();
     this.keys += 1;
     this.given.push(`key ${spec}`);
   }
 
   async type(text: string): Promise<void> {
     await this.window.type(text);
-    this.last = now();
+    this.mark();
     this.typed += 1;
     this.given.push(`type "${text.length > 30 ? `${text.slice(0, 30)}…` : text}"`);
   }
@@ -60,7 +67,7 @@ class Input {
     this.fallbacks.push(`${id} (${why})`);
     this[as === "click" ? "clicks" : "keys"] += 1;
     this.given.push(`command ${id}`);
-    this.last = now();
+    this.mark();
     await vscode.commands.executeCommand(id, ...args);
   }
 }
@@ -95,12 +102,28 @@ export async function run(): Promise<void> {
   for (let i = 0; i < 1200 && (api.model.state !== "ready" || !api.model.overview); i++) {
     await wait(100);
   }
+  // VS Code answers every modal dialog as cancelled while it runs extension tests, which the walk
+  // is: a modal question is asked as a notification with the same buttons instead, clicked there.
+  api.useUi({
+    ...vscodeUi,
+    message: (level, text, options, buttons) =>
+      options.modal ? vscodeUi.message(level, options.detail ? `${text} ${options.detail}` : text, {}, buttons) : vscodeUi.message(level, text, options, buttons),
+  });
+  note("modal dialogs are shown as notifications with the same buttons: VS Code skips dialogs while it runs extension tests");
   const window = await Window.open(process.env.GER_WALK_DEVTOOLS ?? "");
   const camera = await Camera.open(process.env.GER_WALK_DEVTOOLS ?? "");
   // Set the scene, not measured: the Explorer in front, the side bar wide enough to read.
   await vscode.commands.executeCommand("workbench.action.closeAuxiliaryBar").then(undefined, () => undefined);
   await vscode.commands.executeCommand("workbench.view.extension.ger");
   await camera.widenSideBar(460);
+  // The panel tall enough for `ger push` to draw its preview (it says "Window too small" below ~15 rows).
+  await vscode.commands.executeCommand("workbench.action.terminal.focus");
+  await wait(1000);
+  const sash = await window.boxOf(`const p = document.querySelector(".part.panel"); return p ? { getBoundingClientRect: () => { const r = p.getBoundingClientRect(); return { left: r.left + r.width / 2, top: r.top, width: 1, height: 1 }; } } : null;`);
+  if (sash) {
+    await window.drag({ x: sash.x, y: sash.y - 1 }, { x: sash.x, y: Math.max(200, sash.y - 320) });
+  }
+  await vscode.commands.executeCommand("workbench.action.closePanel");
   await vscode.commands.executeCommand("workbench.view.explorer");
   await wait(1500);
   await tracer.idle();
@@ -146,6 +169,7 @@ export async function run(): Promise<void> {
       t: t0,
       reached_ms: reached === null ? null : Math.round(reached),
       idle_ms: Math.round(idle),
+      lead_ms: Math.round((input.first ?? t0) - t0),
       input_ms: Math.round(input.last - t0),
       clicks: input.clicks,
       keys: input.keys,
@@ -202,6 +226,27 @@ export async function run(): Promise<void> {
   };
   const dialogButton = (label: string) =>
     window.boxOf(`return [...document.querySelectorAll(".monaco-dialog-box .monaco-button, .notification-toast .monaco-button, .notifications-toasts .monaco-button")].find((b) => b.textContent.trim() === ${JSON.stringify(label)});`);
+  /**
+   * Click `label` on a question (a notification's button) once it has come and stopped moving: a
+   * toast slides in, and a click on where it was misses. Tried again while the button is still there.
+   */
+  const answer = async (input: Input, label: string, what: string, waitMs = 10_000): Promise<boolean> => {
+    let box: Box | null = null;
+    for (const until = Date.now() + waitMs; !box && Date.now() < until; ) {
+      box = await dialogButton(label);
+      if (!box) await wait(100);
+    }
+    for (let attempt = 0; box && attempt < 3; attempt++) {
+      await wait(400);
+      box = await dialogButton(label);
+      if (!(await input.click(box, what))) {
+        return attempt > 0;
+      }
+      await wait(1500);
+      box = await dialogButton(label);
+    }
+    return Boolean(box) === false;
+  };
   const quickInputOpen = () => window.evaluate<boolean>(`const w = document.querySelector(".quick-input-widget"); return !!w && getComputedStyle(w).display !== "none" && w.getBoundingClientRect().height > 0;`);
   const editorLine = (text: string) =>
     window.boxOf(`return [...document.querySelectorAll(".editor-instance .view-line, .monaco-editor .view-line")].find((l) => l.textContent.replace(/\\u00a0/g, " ").includes(${JSON.stringify(text)}) && l.getBoundingClientRect().width > 0);`);
@@ -283,7 +328,7 @@ export async function run(): Promise<void> {
       await input.key("ctrl+enter");
     });
     let voted = false;
-    await step({ loop: "review", title: "Vote and Publish", budget: "slow", where: ["Change view", "quick input", "dialog", "notification"], until: () => voted, timeoutMs: 45_000 }, async (input) => {
+    await step({ loop: "review", title: "Vote and Publish", budget: "slow", where: ["Change view", "quick input", "notification"], until: async () => voted && Boolean(await dialogButton("Next Change")), timeoutMs: 45_000 }, async (input) => {
       if (!(await input.click(await titleAction("Change", "Vote and Publish"), "Vote and Publish… in the Change view"))) {
         void vscode.commands.executeCommand("ger.vote");
         input.real = false;
@@ -302,18 +347,10 @@ export async function run(): Promise<void> {
       for (let i = 0; i < 40 && !(await quickInputOpen()); i++) await wait(50);
       await input.key("enter");
       await closed();
-      for (let i = 0; i < 100 && !voted; i++) {
-        voted = await input.click(await dialogButton("Publish"), "Publish in the dialog");
-        await wait(100);
-      }
+      voted = await answer(input, "Publish", "Publish in the question");
     });
     await step({ loop: "review", title: "Next change", budget: "change", where: ["notification", "Change view", "editor"], until: () => (api.model.stack?.staged_review?.number ?? 0) !== bottom.number, timeoutMs: 60_000 }, async (input) => {
-      let button: Box | null = null;
-      for (let i = 0; i < 60 && !button; i++) {
-        button = await dialogButton("Next Change");
-        if (!button) await wait(100);
-      }
-      if (!(await input.click(button, "Next Change in the notification"))) {
+      if (!(await answer(input, "Next Change", "Next Change in the notification", 3000))) {
         await input.key("ctrl+alt+pagedown");
       }
     });
@@ -366,7 +403,7 @@ export async function run(): Promise<void> {
       const asked = await dialogButton("Reply Done");
       const done = () => api.changeView.chains().some((c) => c.root_id === suggestion.root_id && c.comments.some((m) => m.state === "draft"));
       await step({ loop: "rework", title: "Reply Done", budget: "change", where: asked ? ["notification"] : ["Change view"], until: done }, async (input) => {
-        if (!(await input.click(asked, "Reply Done in the notification"))) {
+        if (!asked || !(await answer(input, "Reply Done", "Reply Done in the notification", 1000))) {
           if (!(await input.click(await threadButton(text, "Reply Done"), "Reply Done on the comment row"))) {
             await input.command("ger.replyDone", "no Reply Done button found", "click", { kind: "thread", chain: suggestion });
           }
@@ -410,7 +447,7 @@ export async function run(): Promise<void> {
     let shownBefore = "";
     let pushed = false;
     await step(
-      { loop: "rework", title: "Push preview", budget: "slow", where: ["Local stack", "dialog", "terminal", "Local stack", "terminal"], until: async () => pushed && (await terminalText()) !== shownBefore && /push/i.test(await terminalText()), timeoutMs: 60_000 },
+      { loop: "rework", title: "Push preview", budget: "slow", where: ["Local stack", "notification", "terminal", "Local stack", "terminal"], until: async () => pushed && (await terminalText()) !== shownBefore && /push/i.test(await terminalText()), timeoutMs: 60_000 },
       async (input) => {
         const push = async (what: string) => {
           if (!(await input.click(await titleAction("Local stack", "Push to Gerrit"), what))) {
@@ -419,12 +456,7 @@ export async function run(): Promise<void> {
         };
         await push("Push to Gerrit… in Local stack");
         // During the rebase Push says to finish it first, and offers Continue: take it, then push.
-        let finish: Box | null = null;
-        for (let i = 0; i < 20 && !finish; i++) {
-          finish = await dialogButton("Continue");
-          if (!finish) await wait(100);
-        }
-        if (await input.click(finish, "Continue in the dialog")) {
+        if (await answer(input, "Continue", "Continue in the question", 2000)) {
           for (let i = 0; i < 600 && api.model.stack?.rebase_in_progress; i++) await wait(100);
           note(`push: the rebase ${api.model.stack?.rebase_in_progress ? "is still underway" : "is finished"}`);
           await wait(500);

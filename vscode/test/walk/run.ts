@@ -84,8 +84,6 @@ async function main(): Promise<void> {
       "python.analysis.typeCheckingMode": "off",
       "terminal.integrated.enablePersistentSessions": false,
       "git.enabled": false,
-      // Dialogs drawn in the window: a native one is not there to click, nor in the pictures, without a display.
-      "window.dialogStyle": "custom",
     }),
   );
   const started = new Date(Date.now() - 5000);

@@ -18,7 +18,9 @@ function gerrit(repo: string): ((method: string, path: string, body?: unknown) =
   const auth = `Basic ${Buffer.from(`${user}:${token}`).toString("base64")}`;
   const call = async (method: string, path: string, body?: unknown): Promise<unknown> => {
     const headers: Record<string, string> = body === undefined ? { Authorization: auth } : { Authorization: auth, "Content-Type": "application/json" };
-    const response = await fetch(`${base}/a/${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const send = () => fetch(`${base}/a/${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    // Once more on a dropped connection: the first request after the window closed has failed so.
+    const response = await send().catch(() => new Promise((resolve) => setTimeout(resolve, 1000)).then(send));
     const text = await response.text();
     if (!response.ok) {
       throw new Error(`${method} ${path}: HTTP ${response.status} ${text.slice(0, 200)}`);

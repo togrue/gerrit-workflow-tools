@@ -24,6 +24,8 @@ export interface StepRecord {
   reached_ms: number | null;
   /** When the extension was idle again after it. */
   idle_ms: number;
+  /** When its first input was given (the walk may look for a button first): the first response counts from there. */
+  lead_ms?: number;
   /** When its last input was given (several clicks and keys, typing): settled counts from there. */
   input_ms?: number;
   clicks: number;
@@ -162,7 +164,7 @@ export function scorecard(records: Rec[], options: { processMs: number }): Score
     const subprocesses = served.reduce((sum, s) => sum + s.git.count, 0) + ran.reduce((sum, c) => sum + c.git.count, 0);
     const gerrit = served.reduce((sum, s) => sum + s.gerrit.count, 0) + ran.reduce((sum, c) => sum + c.gerrit.count, 0);
     const first = firsts[0];
-    const firstMs = first ? ms(first.at) : null;
+    const firstMs = first ? ms(Math.max(0, first.at - (step.lead_ms ?? 0))) : null;
     const windowsMs = settled === null ? null : ms(settled + subprocesses * options.processMs);
     const over: string[] = [];
     if (step.error) {

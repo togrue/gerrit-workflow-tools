@@ -150,6 +150,18 @@ export class Window {
     }
   }
 
+  /** Press at `from`, move to `to` in steps, release: a sash dragged. */
+  async drag(from: { x: number; y: number }, to: { x: number; y: number }): Promise<void> {
+    const mouse = (type: string, at: { x: number; y: number }, buttons: number) =>
+      this.workbench.call("Input.dispatchMouseEvent", { type, x: at.x, y: at.y, button: "left", buttons, clickCount: 1 });
+    await mouse("mouseMoved", from, 0);
+    await mouse("mousePressed", from, 1);
+    for (let step = 1; step <= 10; step++) {
+      await mouse("mouseMoved", { x: from.x + ((to.x - from.x) * step) / 10, y: from.y + ((to.y - from.y) * step) / 10 }, 1);
+    }
+    await mouse("mouseReleased", to, 0);
+  }
+
   hover(at: { x: number; y: number }): Promise<unknown> {
     return this.workbench.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: at.x, y: at.y });
   }
