@@ -97,7 +97,8 @@ export class ChangeView extends WebView<ChangeVm> {
 
   /** Next on the change shown: what its button names and `ger.next` does. Asks nothing of ger serve. */
   next(): NextAction | undefined {
-    if (this.busyText) {
+    // A step under way, here or in the terminal (the task header says it): Alt+Enter must not start another.
+    if (this.busyText || this.task()?.busy) {
       return undefined;
     }
     const stack = this.model.stack;

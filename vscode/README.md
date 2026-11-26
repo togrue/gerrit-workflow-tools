@@ -416,8 +416,8 @@ The commits above your upstream, newest first. One row per commit:
   It answers at once: while you read a change, the one above it is asked for ahead (one request,
   while ger serve is idle), so *Review Next Change* draws it straight away, its message, files and
   comments in the Change view and its diff in one editor read from git, titled *checking out…*.
-  The Change view and the header say *Checking out 2156…* in place of Next until the checkout is
-  done; then the diff opens again on your files, where Go to Definition and edits work, and the
+  The Change view says *Checking out 2156…* in place of Next until the checkout is
+  done (once: the header does not say it again); then the diff opens again on your files, where Go to Definition and edits work, and the
   *checking out…* tab closes. In between, comments and the diff are there to read; language
   features are not. Without an answer asked ahead (*Previous*, a jump), it waits for the checkout,
   as before. Only the local stack is read again afterwards: nothing moved on Gerrit.
@@ -492,7 +492,8 @@ aside (their `when` clauses read `ger.task` and `ger.taskAll`) so the Change vie
   message box says only why it cannot be edited now, and *Local stack*,
   when *All chains* shows it, leaves out its rebase banner (the conflicted files stay there). They
   run in the ger terminal; from the click until the stack moves on (another stop, or the rebase
-  over) the header says *Continuing the rebase in the ger terminal…* and its buttons wait.
+  over) the header says *Continuing the rebase in the ger terminal…*, its buttons wait, and Next is
+  not offered (nor `Alt+Enter`), so nothing starts over the step that runs.
 - **All chains** (top right of the header) brings the lists back for the rest of the task; there
   it reads **Only this task**. Something else that needs you stays on the status bar item, which
   opens it, the lists coming back when it is in one of them.

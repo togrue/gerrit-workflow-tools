@@ -35,13 +35,16 @@ const plain = <T extends { primary?: boolean }>(action: T): T => {
  */
 export function changeScreen(vm: ChangeVm, parts: ScreenParts): ChangeVm {
   const { task, busy } = parts;
-  const next = busy ? undefined : parts.next;
+  // While a step runs (here, or in the terminal as the header says), nothing is offered as next.
+  const next = busy || task?.busy ? undefined : parts.next;
   const command = next && ON_SCREEN[next.kind];
   // With no Next, the buttons keep what the change's own view model made primary.
   const primaryIf = <T extends { primary?: boolean }>(action: T, runs: string) => (!next ? action : command === runs ? { ...action, primary: true } : plain(action));
   const head = vm.head && { ...vm.head, actions: task?.mode === "rework" ? undefined : vm.head.actions?.map((action) => primaryIf(action, action.command.id)) };
   const notes = vm.notes?.map((note) => ({ ...note, actions: note.actions?.map((action) => primaryIf(action, action.command.id)) }));
-  const header = task && { ...task, actions: task.actions.map((action) => primaryIf(action, action.command)) };
+  // The step under way is said once: in Next's place, when it says what the header would and more.
+  const said = busy !== undefined && task?.busy !== undefined && busy.startsWith(task.busy);
+  const header = task && { ...task, busy: said ? undefined : task.busy, actions: task.actions.map((action) => primaryIf(action, action.command)) };
   // Next is drawn unless a button on screen already does it.
   const onScreen = command !== undefined && [...(head?.actions ?? []), ...(notes ?? []).flatMap((note) => note.actions ?? [])].some((action) => action.command.id === command);
   const inHeader = command !== undefined && (header?.actions.some((action) => action.command === command && !action.notNow) ?? false);

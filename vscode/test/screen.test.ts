@@ -100,4 +100,10 @@ test("with Next drawn, every other button is plain; reworking, the head holds no
   assert.deepEqual(reworking.task?.actions.map((action) => Boolean(action.primary)), [false, false], "Continue refused now is never the primary");
   const busy = changeScreen(stopped, { next: { kind: "comment", label: "Next comment", title: "" }, busy: "Checking out 2156…" });
   assert.equal(busy.next, undefined, "while a step runs, it is said in Next's place");
+  const header = { ...reworkTask(), busy: "Continuing the rebase in the ger terminal…" };
+  const running = changeScreen(stopped, { task: header, next: { kind: "workOnNext", label: "Work on next", title: "" } });
+  assert.equal(running.next, undefined, "Continue runs in the terminal: no Next over it");
+  assert.equal(running.task?.busy, "Continuing the rebase in the ger terminal…");
+  const checkout = changeScreen(stopped, { task: { ...reworkTask(), busy: "Checking out 2156…" }, busy: "Checking out 2156… Go to Definition once it is checked out" });
+  assert.equal(checkout.task?.busy, undefined, "said once, in Next's place");
 });

@@ -511,7 +511,8 @@ function reworking(stop: RebaseStop, options: { busy?: string; nothingLeft?: boo
   const chainsShown = options.chains ?? [];
   const vm = change({ shown: shownCommit, chains: chainsShown, readOnly: READ_ONLY.rebase, stopped, task: "rework" });
   const next = nextAction({ stack, shown: shownCommit, chains: chainsShown, local: true, reviewing: false, visited: new Set(), files: FILES.map((file) => file.path), seenFiles: new Set() });
-  return { stack: stackVm(stack, undefined, never, () => 0, true), change: changeScreen(vm, { task, next, busy: options.busy }) };
+  // Continue running in the terminal is the header's to say (task.ts busyUntilMoved), as in the window.
+  return { stack: stackVm(stack, undefined, never, () => 0, true), change: changeScreen(vm, { task, next }) };
 }
 
 function taskScenarios(): Scenario[] {
