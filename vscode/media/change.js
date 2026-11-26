@@ -506,6 +506,13 @@
 
   // Rows act on Enter and Space, and the arrow keys walk them, as in a tree.
   document.addEventListener("keydown", (event) => {
+    // Alt+F9 walks the comments from here too: VS Code's key binding does not reach a webview view
+    // (its `focusedView` is not this view while the page has the keyboard), and Work on Next puts it here.
+    if (event.key === "F9" && event.altKey && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault();
+      post("command", { command: event.shiftKey ? "ger.prevComment" : "ger.nextComment" });
+      return;
+    }
     const row = event.target.closest && event.target.closest(".item");
     if (!row || event.target.tagName === "BUTTON" || event.target.tagName === "SELECT") {
       return;

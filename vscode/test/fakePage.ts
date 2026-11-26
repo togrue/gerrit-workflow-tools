@@ -20,12 +20,13 @@ export interface FakeEvent {
   shiftKey?: boolean;
   ctrlKey?: boolean;
   metaKey?: boolean;
+  altKey?: boolean;
   stopPropagation(): void;
   preventDefault(): void;
 }
 
 /** What a dispatched event carries besides its type: the keys held, the key pressed. */
-export type EventInit = Pick<FakeEvent, "key" | "shiftKey" | "ctrlKey" | "metaKey">;
+export type EventInit = Pick<FakeEvent, "key" | "shiftKey" | "ctrlKey" | "metaKey" | "altKey">;
 
 /** `.class`, `tag`, or `.class[data-name="value"]`: the selectors the pages use. */
 function matches(element: FakeElement, selector: string): boolean {
