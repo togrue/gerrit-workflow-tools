@@ -117,8 +117,12 @@ The commits above your upstream, newest first. One row per commit:
   a moment for the comments, with *Go there*, *Reply Done* and *Apply*. From the keyboard: the
   list walks its rows with the arrow keys (each row read out with its notes, Gerrit's state and its
   badges' words); **Tab** then reaches the focused row's badges, one stop named by their words, and
-  **Enter** there shows the comments. The Change view's head badges are one stop too, and every
-  button, row and step of both views shows the focus ring.
+  **Enter** there shows the comments; the next **Tab** reaches the row's *Edit Commit Here* and
+  *Open in Gerrit*. A redraw (a refresh, the Change view following the row) keeps the keyboard on the
+  button it was on, so **Enter** there does the same every time; *Edit Commit Here* asks nothing
+  (Abort puts the branch back) and says at once on Local stack that `ger edit` is starting. The
+  Change view's head badges are one stop too, and every button, row and step of both views shows
+  the focus ring.
 - An **icon** in front says how the commit relates to Gerrit: a **full circle** when it is the
   same as on Gerrit; a **yellow arrow up** in a circle when it is only rebased since the last push
   (the same code by patch-id, whitespace and message aside: Gerrit usually keeps the votes); a **yellow diff** square when its code changed since (push it, and

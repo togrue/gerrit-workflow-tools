@@ -102,6 +102,8 @@ export class FakeElement {
   }
 
   replaceChildren(...nodes: (FakeElement | string)[]): void {
+    // Taken out of the page: no longer inside it (the focus on one of them is lost, as in the browser).
+    this.children.forEach((child) => (child instanceof FakeElement ? (child.parent = null) : undefined));
     this.children.length = 0;
     this.append(...nodes);
   }
@@ -202,8 +204,9 @@ export function fakePage(view: string, model: unknown) {
   const document = {
     body,
     scrollingElement: undefined,
+    // An element taken out of the page loses the focus to the body, as in the browser.
     get activeElement() {
-      return state.activeElement;
+      return state.activeElement && body.contains(state.activeElement) ? state.activeElement : body;
     },
     querySelectorAll: (selector: string) => body.querySelectorAll(selector),
     querySelector: (selector: string) => body.querySelector(selector),
@@ -237,5 +240,5 @@ export function fakePage(view: string, model: unknown) {
   }
   const send = (data: unknown) => windowListeners.forEach((listener) => listener({ data } as unknown as FakeEvent));
   send({ type: "render", vm: model });
-  return { root, posted, send, flush };
+  return { root, posted, send, flush, active: () => document.activeElement };
 }

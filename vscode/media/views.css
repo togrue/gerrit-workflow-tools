@@ -166,6 +166,14 @@ a:focus-visible {
   gap: 2px;
 }
 
+/* A Local stack row has its badges before its icon buttons for the keyboard, after them on screen. */
+.row > .actions {
+  order: 1;
+}
+.row > .badges {
+  order: 2;
+}
+
 .row:hover .actions,
 .row.focused .actions,
 .item:hover .actions,

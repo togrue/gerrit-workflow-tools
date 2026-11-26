@@ -80,18 +80,19 @@
       row.merge ? icon("git-merge", undefined, "A merge commit: what it brings in is not listed") : null,
       h("span", { class: "label" }, row.summary),
       h("span", { class: "detail" }, row.notes.join(" · ")),
+      // The badges come first to the keyboard (what the commit says, then what to do with it); views.css keeps them at the end.
+      badgeGroup(
+        row.badges,
+        slots.map((slot) => (slot === 0 && row.badges[0] ? commentBadge(row) : badge(row.badges[slot], slot))),
+        // Enter on them: the comments, as hovering the ring shows them.
+        { focusable: row.key === badgeStop(), open: row.badges[0] ? () => post("comments", { sha: row.sha }) : undefined },
+      ),
       h(
         "span",
         { class: "actions" },
         // Not while the stack is frozen (a rebase underway, a staged review): ger edit would refuse.
         vm.frozen ? null : h("button", { class: "codicon codicon-edit", title: "Edit Commit Here", "data-command": "ger.stack.edit" }),
         row.url ? h("button", { class: "codicon codicon-link-external", title: "Open in Gerrit", "data-command": "ger.openInGerrit" }) : null,
-      ),
-      badgeGroup(
-        row.badges,
-        slots.map((slot) => (slot === 0 && row.badges[0] ? commentBadge(row) : badge(row.badges[slot], slot))),
-        // Enter on them: the comments, as hovering the ring shows them.
-        { focusable: row.key === badgeStop(), open: row.badges[0] ? () => post("comments", { sha: row.sha }) : undefined },
       ),
     );
   }

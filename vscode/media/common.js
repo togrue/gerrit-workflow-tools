@@ -181,12 +181,54 @@
   }
 
   /** Call `draw(vm)` for every view model the extension sends, and tell it the page is listening. */
+  /** The row or item an element sits in, by the key that survives a redraw (`data-key`, `data-id`). */
+  function scopeOf(element) {
+    for (let node = element; node && node.getAttribute; node = node.parentElement || node.parent) {
+      const key = node.getAttribute("data-key") || node.getAttribute("data-id");
+      if (key) {
+        return key;
+      }
+    }
+    return null;
+  }
+
+  /** A focusable element's name: what it does, else what it says. */
+  const focusName = (node) => node.getAttribute("data-command") || node.getAttribute("aria-label") || node.getAttribute("title") || node.textContent.trim().slice(0, 60);
+
+  /**
+   * What the keyboard is on, so a redraw can put it back (state 24: Enter on a row's Edit Commit Here
+   * did nothing once a redraw had replaced the button, the focus fallen to the page): the element's
+   * kind and name, and the row or item it sits in.
+   */
+  function focusKey(element) {
+    if (!element || element === document.body || !element.getAttribute) {
+      return null;
+    }
+    return { tag: element.tagName.toLowerCase(), cls: element.className, name: focusName(element), scope: scopeOf(element) };
+  }
+
+  /** After a redraw that dropped the focus: the same element again, else the list it was in. */
+  function refocus(key) {
+    const lost = !document.activeElement || document.activeElement === document.body;
+    if (!key || !lost) {
+      return;
+    }
+    const same = [...document.querySelectorAll(key.tag)].find((node) => node.className === key.cls && focusName(node) === key.name && scopeOf(node) === key.scope);
+    const fallback = key.scope !== null ? document.querySelector(".list") : null;
+    const target = same || fallback;
+    if (target) {
+      target.focus();
+    }
+  }
+
   function listen(draw, other) {
     window.addEventListener("message", (event) => {
       const message = event.data;
       if (message && message.type === "render") {
         tracing = message.trace !== undefined;
+        const focus = focusKey(document.activeElement);
         draw(message.vm);
+        refocus(focus);
         if (message.trace) {
           painted(message.trace);
         }
