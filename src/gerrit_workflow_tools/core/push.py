@@ -29,6 +29,7 @@ from gerrit_workflow_tools.core.push_checks import (
     push_boundary,
     push_ready,
     rebase_check,
+    side_commits_warning,
 )
 from gerrit_workflow_tools.core.push_options import PushOptions, push_refspec
 from gerrit_workflow_tools.core.push_result import PushResult, gerrit_rejection, push_rejected_no_new_changes, result_of
@@ -287,6 +288,8 @@ def prepare(
         if not all_commits:
             raise UsageError(f"--wip-from {wip_from[:8]} is not among the commits this push sends")
         wip_from = None
+    if first_parent and (side := side_commits_warning(cwd, ready.push_range, remote=settings.gerrit_remote)):
+        warnings = (*warnings, side)
     if not force and (refusal := existing.refusal()):
         return PushRefusal(refusal, boundary=boundary, warnings=warnings)
     plan = PushPlan(

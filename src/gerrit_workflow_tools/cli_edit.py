@@ -42,9 +42,9 @@ from gerrit_workflow_tools.core.rebase_state import (
     rebase_in_progress,
     unmerged_paths,
 )
-from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal
+from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal, pinned_target_refusal
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.core.stack import get_stack_snapshot, merge_base_with_target
+from gerrit_workflow_tools.core.stack import get_stack_snapshot, pinned_count, rewrite_base
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.rebase_run import go_on_with_rebase, require_history_rewrite, run_interactive_rebase
@@ -283,12 +283,17 @@ def _run_interactive_stack_rebase(
     require_history_rewrite(cwd)
     full, cursor_change_id, cursor_action, walked_status = _resolve_target(run, args, branch=branch, action=action)
     short = git_out("rev-parse", "--short", full, cwd=cwd)
+    # Rewritten where it sits; a merge pins everything up to it, so the rebase starts from the newest one.
+    snapshot = get_stack_snapshot(cwd, branch, settings=settings)
+    pinned = pinned_count(cwd, snapshot.commits)
+    if refusal := pinned_target_refusal(cwd, snapshot, pinned, full, action=action):
+        raise UsageError(refusal)
     # Dropping a change Gerrit closed is just what to do with it; editing or rewording it is not.
     if action != "drop" and (
         refusal := closed_change_refusal(run.gerrit, cursor_change_id, commit=short, statuses=walked_status)
     ):
         raise UsageError(refusal)
-    rebase_fork, _, _ = merge_base_with_target(cwd, branch)
+    rebase_fork = rewrite_base(cwd, snapshot, pinned)
 
     change_ids_before = _stack_change_ids(cwd, branch) if action == "reword" else set()
     env = {"GEDIT_FULL_SHA": full, "GEDIT_SHORT_SHA": short, "GEDIT_ACTION": action}

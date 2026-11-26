@@ -327,12 +327,13 @@ def rewrite_base(cwd: Path | str | None, snapshot: StackSnapshot, pinned: int) -
 
     The newest merge when the lowest *pinned* commits (:func:`pinned_count`) stay put, else the
     commit the stack sits on. That is not the upstream tip once the upstream has moved on:
-    replaying onto the tip would rebase the stack as well, which only ``ger rebase`` is asked to do.
+    replaying onto the tip would rebase the stack as well, which only ``ger rebase <upstream>`` is
+    asked to do. An empty stack sits on ``HEAD``, which is behind the upstream tip or at it.
     """
     if pinned:
         return snapshot.commits[pinned - 1].sha
     if not snapshot.commits:
-        return snapshot.upstream_tip
+        return commit_sha_or_none(cwd, "HEAD") or snapshot.upstream_tip
     return commit_sha_or_none(cwd, f"{snapshot.commits[0].sha}^") or snapshot.upstream_tip
 
 

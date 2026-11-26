@@ -1,9 +1,11 @@
 """Why rewriting the local stack, or a switch, cannot start: over what the index and work tree hold,
-or because Gerrit already closed the change a rewrite targets.
+because Gerrit already closed the change a rewrite targets, or because the rewrite would have to
+replay a merge commit.
 
 Every history rewrite asks :func:`history_rewrite_refusal` before it starts; ``ger review`` and
 the reorder ask the parts they need. A rebase underway is :mod:`gerrit_workflow_tools.core.rebase_state`.
-``ger edit``, ``ger reword`` and ``ger fix`` also ask :func:`closed_change_refusal` of their target.
+``ger edit``, ``ger reword`` and ``ger fix`` also ask :func:`closed_change_refusal` and
+:func:`pinned_target_refusal` of their target; every rebase ger starts asks :func:`merge_replay_refusal`.
 """
 
 from __future__ import annotations
@@ -18,7 +20,9 @@ from gerrit_workflow_tools.core.config import ConfigError
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
+from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.rebase_state import rebase_refusal
+from gerrit_workflow_tools.core.stack import StackSnapshot, rewrite_base
 from gerrit_workflow_tools.core.tracked_changes import TrackedChanges, tracked_changes
 
 
@@ -101,6 +105,64 @@ def history_rewrite_refusal(cwd: Path | str | None) -> str | None:
         return refusal
     changes = tracked_changes(cwd)
     return uncommitted_changes_refusal(cwd, changes) or submodule_refusal(cwd, changes=changes)
+
+
+_COMMAND = {"drop": "edit --drop"}
+_RERERE = "with `git config rerere.enabled true` first, or a redone merge asks for its conflicts again"
+
+
+def merge_replay_refusal(cwd: Path | str | None, base: str) -> str | None:
+    """Why ``git rebase -i <base>`` must not start: a merge commit in ``base..HEAD``, or ``None``.
+
+    Without ``--rebase-merges`` git leaves every merge out and replays the commits each one
+    brought in onto the first-parent line: the history comes out flattened, a merge's Change-Id
+    and whatever only the merge records are gone, and the rebase still succeeds. ger does not
+    replay merges, so it refuses and names the git command that does. The newest merge is named.
+    """
+    listed = git("log", "-1", "--min-parents=2", "--format=%h %s", f"{base}..HEAD", cwd=cwd)
+    if not (newest := listed.stdout.strip()):
+        return None
+    short, _, subject = newest.partition(" ")
+    return (
+        f'"{subject}" ({short}) is a merge commit, which git rebase would leave out, flattening the history; '
+        f"nothing was changed. Rebase it yourself with `git rebase -i --rebase-merges {base[:12]}` ({_RERERE})"
+    )
+
+
+def pinned_target_refusal(
+    cwd: Path | str | None, snapshot: StackSnapshot, pinned: int, target: str, *, action: str
+) -> str | None:
+    """Why stack commit *target* may not be rewritten by *action*, because a merge pins it, or ``None``.
+
+    The lowest *pinned* commits of the local stack *snapshot*
+    (:func:`~gerrit_workflow_tools.core.stack.pinned_count`) end at its newest merge. Rewriting one of
+    those means replaying that merge, which :func:`merge_replay_refusal` refuses; the commits above
+    it rebase from the merge and stay rewritable. *action* is ``edit``, ``reword``, ``drop`` or
+    ``fix``. Asks git nothing unless it refuses.
+    """
+    commits = snapshot.commits
+    index = next((i for i, commit in enumerate(commits) if commit.sha == target), None)
+    if not pinned or index is None or index >= pinned:
+        return None
+    merge, fork = commits[pinned - 1], rewrite_base(cwd, snapshot, 0)
+    by_hand = f"`git rebase -i --rebase-merges{' --autosquash' if action == 'fix' else ''} {fork[:12]}`"
+    where = (
+        "is a merge commit"
+        if index == pinned - 1
+        else f'is below the merge commit "{merge.subject}" ({merge.short_sha})'
+    )
+    short = commits[index].short_sha
+    if action == "fix":
+        return (
+            f"{short} {where}, so `ger rebase --autosquash` could never fold a fixup into it: "
+            f"that rebase would have to replay the merge. Commit it with `git commit --fixup={short}` "
+            f"and fold it with {by_hand} ({_RERERE})"
+        )
+    return (
+        f"{short} {where}, and ger does not replay merges: a rebase from below it would "
+        f"flatten the history; nothing was changed. Use {by_hand} ({_RERERE}); the commits above "
+        f"{merge.short_sha} can still be rewritten with `ger {_COMMAND.get(action, action)}`"
+    )
 
 
 def _status_refusal(statuses: Iterable[str | None], *, commit: str) -> str | None:

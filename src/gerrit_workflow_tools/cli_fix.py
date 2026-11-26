@@ -23,8 +23,13 @@ from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_ch
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.rebase_state import conflict_next_step, rebase_underway
-from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal
-from gerrit_workflow_tools.core.stack import UNSQUASHED_FIXUP_ADVICE, fixup_target_sha, get_stack_snapshot
+from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal, pinned_target_refusal
+from gerrit_workflow_tools.core.stack import (
+    UNSQUASHED_FIXUP_ADVICE,
+    fixup_target_sha,
+    get_stack_snapshot,
+    pinned_count,
+)
 from gerrit_workflow_tools.core.usage import UsageError
 
 
@@ -144,6 +149,9 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     print_stack_commit_notes(target)
     # The commit the fixup will name: past a fixup of a fixup, the original's change is the one to ask about.
     commit = next(c for c in snapshot.commits if c.sha == fixup_sha)
+    pinned = pinned_count(cwd, snapshot.commits)
+    if refusal := pinned_target_refusal(cwd, snapshot, pinned, fixup_sha, action="fix"):
+        raise UsageError(refusal)
     if refusal := closed_change_refusal(run.gerrit, commit.valid_change_id, commit=commit.short_sha):
         raise UsageError(refusal)
 

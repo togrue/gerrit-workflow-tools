@@ -19,16 +19,31 @@ ger rebase [options] [REV]
 ger rebase --continue | --abort | --skip
 ```
 
-`REV` — base commit, Change-Id, or ref (default: merge-base with target). Not used with `--onto-remote`.
+`REV` — base commit, Change-Id, or ref (default: where the local stack sits, `stack.rewrite_base`). Not used with `--onto-remote`.
 
-Without `REV` the todo is replayed where it is, onto the fork point: nothing moves onto the
-upstream's new commits. To rebase onto the upstream as fetched, name it: `ger rebase origin/main`.
+Without `REV` the todo is replayed where it is, onto the commit the local stack sits on: a
+clean-up does not move the stack, so the upstream's conflicts come only when you ask for them.
+That is not the merge-base with the upstream once a merge brought the upstream in. When the
+upstream has moved on, a rebase that finished says so after it, as `ger log` does: `note: origin/main
+has 1 new commit; rebase onto it with `ger rebase origin/main``. To rebase onto the upstream as fetched, name it: `ger rebase origin/main`.
 That is the rebase `ger log` advises once the upstream moved on (`next: origin/main has 1 new
 commit; …`), the one `GET /stack`'s `upstream` previews, and what the VS Code extension's
 *Rebase onto origin/main* runs. Unlike `--onto-remote` it takes the upstream of the branch
 whatever its remote, the same commits the local stack is counted from. With a commit of the stack merged on Gerrit,
 that advice is `ger rebase origin/main --drop-merged-equivalent`: the flag applies to a `REV` as
 it does to `--onto-remote`.
+
+### Merge commits
+
+A merge in the commits to replay (`<base>..HEAD`, every parent) refuses, exit `2` (`USAGE`), with
+nothing changed: without `--rebase-merges` git would leave it out and replay what it brought in
+onto the first-parent line, flattening the history, and still succeed. The message names the
+newest merge and the git command that replays merges, `git rebase -i --rebase-merges <base>`, with
+`rerere` on, or a redone merge asks for its conflicts again. ger does not replay merges itself
+(#93). Without `REV`, the rebase starts from the stack's newest merge instead, with a note that
+it and the commits below it stay as they are: the commits above it can still be cleaned up. The check,
+`rewrite_refusal.merge_replay_refusal`, is in `rebase_run.run_interactive_rebase`, so every rebase
+ger starts makes it.
 
 ### Change resolution
 
@@ -48,7 +63,7 @@ stack. `REV` is the commit to rebase *from*, which normally sits below the stack
 | Option | Description |
 |--------|-------------|
 | `--onto-remote` | Rebase onto fetched `refs/remotes/<ger.remote>/<target>` tip |
-| `--no-onto-remote` | Force merge-base behavior (overrides `ger.rebaseOntoRemote`) |
+| `--no-onto-remote` | Rebase where the stack sits, the default (overrides `ger.rebaseOntoRemote`) |
 | `--drop-merged-equivalent` | Mark provably merged-equivalent commits as `drop` in todo |
 | `--autosquash` | Fold `fixup!` / `squash!` commits (what [`ger fix`](fix.md) makes) into their targets: `git rebase -i --autosquash`. The way `ger fix`, `ger log` and `ger push` tell you to squash one. Without it, git's `rebase.autosquash` decides, as for a plain `git rebase -i`: you see the todo either way |
 | `--continue` | Go on with the rebase underway: `git rebase --continue`. Refused while paths are still unmerged, with the shared next step, over unstaged changes to tracked files, and where nothing is left to apply |

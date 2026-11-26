@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 
 from gerrit_workflow_tools.cli_common import (
     ExitCode,
@@ -16,9 +17,11 @@ from gerrit_workflow_tools.cli_notes import print_resolution_note
 from gerrit_workflow_tools.core.gerrit.change_resolution import resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.git_state import resolve_rebase_onto_remote_ref
-from gerrit_workflow_tools.core.rebase_state import RebaseAction
-from gerrit_workflow_tools.core.stack import merge_base_with_target
+from gerrit_workflow_tools.core.rebase_state import RebaseAction, rebase_in_progress
+from gerrit_workflow_tools.core.run_context import RunContext
+from gerrit_workflow_tools.core.stack import get_stack_snapshot, pinned_count, rewrite_base
 from gerrit_workflow_tools.core.upstream_interactive import require_branch_upstream, stdin_is_terminal
+from gerrit_workflow_tools.core.upstream_moved import upstream_moved
 from gerrit_workflow_tools.rebase_run import go_on_with_rebase, require_history_rewrite, run_interactive_rebase
 
 
@@ -45,7 +48,7 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="?",
         default=None,
         help=changeish_help(
-            "The base to rebase from (default: the merge base with the target; not with --onto-remote)"
+            "The base to rebase onto (default: where the stack sits, so it does not move; not with --onto-remote)"
         ),
     )
     p.add_argument(
@@ -59,7 +62,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--no-onto-remote",
         action="store_true",
-        help="Override ger.rebaseOntoRemote: use merge-base with the target (default behavior).",
+        help="Override ger.rebaseOntoRemote: rebase the stack where it sits (default behavior).",
     )
     p.add_argument(
         "--drop-merged-equivalent",
@@ -149,6 +152,7 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     drop_merged = bool(args.drop_merged_equivalent or rdef["drop_merged_equivalent"])
 
     branch = run.repo.working_branch
+    in_place = not use_onto_remote and not args.rev
     if use_onto_remote:
         base = resolve_rebase_onto_remote_ref(cwd, branch, settings=settings)
     elif args.rev:
@@ -160,7 +164,17 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     else:
         if branch is not None and not require_branch_upstream(cwd, branch, settings=settings):
             return int(ExitCode.REFUSED)
-        base, _, _ = merge_base_with_target(cwd, branch)
+        # Where the stack sits: a clean-up does not move it. Moving it is asked for by naming the base.
+        snapshot = get_stack_snapshot(cwd, branch, settings=settings)
+        pinned = pinned_count(cwd, snapshot.commits)
+        base = rewrite_base(cwd, snapshot, pinned)
+        if pinned:
+            merge = snapshot.commits[pinned - 1]
+            print(
+                f'note: "{merge.subject}" ({merge.short_sha}) is a merge commit; it and the commits below it '
+                "stay as they are, since ger does not replay merges",
+                file=sys.stderr,
+            )
 
     # The enricher reads GREBASE_EDITOR / GIT_EDITOR / core.editor / EDITOR to find the editor to open.
     env: dict[str, str] = {}
@@ -173,7 +187,17 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
 
     logger.debug("ger rebase: base=%s onto_remote=%s", base[:8], use_onto_remote)
     autosquash = True if args.autosquash else None
-    return run_interactive_rebase(cwd, base, sequence_editor="rebase_enricher", env=env, autosquash=autosquash)
+    code = run_interactive_rebase(cwd, base, sequence_editor="rebase_enricher", env=env, autosquash=autosquash)
+    if in_place and code == 0 and not rebase_in_progress(cwd):
+        _advise_upstream_moved(run, branch)
+    return code
+
+
+def _advise_upstream_moved(run: RunContext, branch: str | None) -> None:
+    """Say so when the upstream moved on: the rebase in place left the stack behind it."""
+    moved = upstream_moved(run.cwd, branch, (), settings=run.settings)
+    if moved is not None and moved.behind:
+        print(f"note: {moved.advice()}", file=sys.stderr)
 
 
 if __name__ == "__main__":

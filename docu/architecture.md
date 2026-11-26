@@ -345,7 +345,7 @@ sequenceDiagram
 | Command | Flow |
 |---------|------|
 | **`ger edit` / `ger reword`** | Resolve REV via `resolve_stack_changeish` → set `GIT_SEQUENCE_EDITOR=rebase_sequence_editor` → `git rebase -i` |
-| **`ger rebase`** | Compute onto ref via `stack.merge_base_with_target` → set `GIT_SEQUENCE_EDITOR=rebase_enricher` → `git rebase -i` (enricher fetches Gerrit data, then opens real editor) |
+| **`ger rebase`** | Compute onto ref: `REV`, `--onto-remote`, else where the stack sits (`stack.rewrite_base`) → set `GIT_SEQUENCE_EDITOR=rebase_enricher` → `git rebase -i` (enricher fetches Gerrit data, then opens real editor) |
 | **`ger fix`** | `resolve_stack_changeish` → `git commit --fixup` |
 | **`ger change-id --fix`** | `commit-tree` message rewrite using `change_id` helpers |
 | **`ger push`** | See push pipeline above |
@@ -489,7 +489,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/git_state.py` | Repository state: branch, HEAD, upstream, Gerrit push destination, and the branch a stopped rebase belongs to |
 | `core/tracked_changes.py` | What the index and work tree hold of yours, by what `git stash` saves of it (`tracked_changes`, `TrackedChanges`): changes to tracked files, submodules staged at another commit, submodules a file replaced. A submodule's own state is none of them |
 | `core/rebase_state.py` | A rebase underway: whether one is, how far it got and why it stopped (`rebase_progress`, `RebaseProgress`, `RebaseStop`), the refusal it causes (`rebase_refusal`) and the one next step after a conflict (`conflict_next_step`) |
-| `core/rewrite_refusal.py` | Why rewriting the local stack, or a switch, cannot start: the one wording each rewrite shares (`history_rewrite_refusal`), its parts over what the index and work tree hold (`uncommitted_changes_refusal`, `submodule_refusal`), and a target whose change Gerrit already closed (`closed_change_refusal`, for `ger edit` / `reword` / `fix`) |
+| `core/rewrite_refusal.py` | Why rewriting the local stack, or a switch, cannot start: the one wording each rewrite shares (`history_rewrite_refusal`), its parts over what the index and work tree hold (`uncommitted_changes_refusal`, `submodule_refusal`), a target whose change Gerrit already closed (`closed_change_refusal`, for `ger edit` / `reword` / `fix`), a target a merge pins (`pinned_target_refusal`, same three), and a merge a rebase would leave out (`merge_replay_refusal`, every ger-started rebase) |
 | `core/rebasing_stack.py` | The **rebasing stack**: the local stack while a rebase is underway, each commit with its **rebase step** (`load_rebasing_stack`, `RebasingStack`, `RebaseStep`), and where the rebase stopped as `GET /stack` serves it, the stop `ger rebase --continue|--skip` refuses by (`stopped_rebase`) |
 | `core/call_trace.py` | git/Gerrit call timing for `--debug-log` |
 | `core/changeish.py` | The changeish grammar: what an input naming a commit or change looks like |
@@ -548,7 +548,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/push_result.py` | What `git push` answered and what `ger push` did after it: `PushResult`, Gerrit's `no new changes` |
 | `core/push_options.py` | Push options (`PushOptions`) and their magic-ref form on the refspec (`push_refspec`) |
 | `core/push_unchanged.py` | Push options on changes Gerrit already has at that commit: `planned_updates` (only what differs), `apply_updates` over REST, `OutdatedChange` (Gerrit has a newer patch set: nothing is set), and the warning when options reached nothing |
-| `core/push_checks.py` | What a push looks at before it runs: the branch it pushes, its ready prefix and boundary, the remote rebase check, what Gerrit already holds |
+| `core/push_checks.py` | What a push looks at before it runs: the branch it pushes, its ready prefix and boundary, the remote rebase check, what Gerrit already holds, the commits a merge brings in that `git push` uploads unlisted (`side_commits_warning`) |
 | `core/push_reviewers.py` | Post-push reviewer strategies and the reviewer marks a push preview reads |
 | `core/reviewer.py` | `ReviewerAccount`, reviewer-name parsing and resolution to account ids, and who a push asks for |
 | `core/reviewer_completion.py` | Account search for completion UIs |

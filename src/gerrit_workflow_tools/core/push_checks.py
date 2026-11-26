@@ -28,7 +28,7 @@ from gerrit_workflow_tools.core.push_unchanged import OutdatedChange, UnchangedC
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
 from gerrit_workflow_tools.core.rebase_state import AM_UNDERWAY, am_underway, rebase_underway
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.core.stack import Commit
+from gerrit_workflow_tools.core.stack import Commit, read_commit_rows
 
 
 class PushBlocker(Enum):
@@ -120,6 +120,29 @@ def rebase_check(
     if policy == "error-not-rebased":
         return f"error: {message}", ()
     return None, (f"warning: {message}",)
+
+
+_SIDE_COMMITS_NAMED = 5
+
+
+def side_commits_warning(cwd: Path, push_range: str, *, remote: str) -> str | None:
+    """What ``git push`` uploads beyond the first-parent commits a push lists, or ``None``.
+
+    A merge in *push_range* brings in commits of its other parents. ``git push`` sends them
+    too, and Gerrit opens a change for each one it does not have yet. Only the ones on no
+    remote-tracking branch of *remote* are counted: what a fetch from Gerrit brought is there.
+    """
+    first_parent = set(git_out("rev-list", "--first-parent", push_range, cwd=cwd).split())
+    side = [c for c in read_commit_rows(cwd, push_range, "--not", f"--remotes={remote}") if c.sha not in first_parent]
+    if not side:
+        return None
+    named = ", ".join(f'{c.short_sha} "{c.subject}"' for c in side[:_SIDE_COMMITS_NAMED])
+    more = f" and {len(side) - _SIDE_COMMITS_NAMED} more" if len(side) > _SIDE_COMMITS_NAMED else ""
+    count = f"{len(side)} commit{'s' if len(side) != 1 else ''}"
+    return (
+        f"warning: a merge brings in {count} this preview leaves out ({named}{more}); git push uploads them too, "
+        f"and Gerrit opens a change for each one it does not have yet. `--follow-merges` lists them"
+    )
 
 
 def _rebase_detail(cwd: Path, head: str, onto: str) -> str:
