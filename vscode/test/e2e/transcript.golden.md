@@ -15,8 +15,10 @@ chains |     Cleanup after experiment — 103 · V-1 CR+2 · in your stack  [ger
 chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 chains |     Extract command routing — 101 · V+1 CR+2 💬2 open · in your stack  [ger.change.url.local]
 chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
+stack  | summary: 4 on Gerrit · 2 held back · 2 failed CI · 1 commit with comments
 stack  | Cleanup after experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
+stack  | ---- ready boundary ----
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci good]
 change | title: (nothing shown)
@@ -290,8 +292,10 @@ notification (info): No review checkout is open here.
 - chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 - chains |     Extract command routing — 101 · V+1 CR+2 💬2 open · in your stack  [ger.change.url.local]
 - chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
+- stack  | summary: 4 on Gerrit · 2 held back · 2 failed CI · 1 commit with comments
 - stack  | Cleanup after experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 - stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
+- stack  | ---- ready boundary ----
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci good]
 + change | A change shows here once ger runs. Review chains says what is missing and what to do next.
@@ -347,8 +351,10 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 + chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 + chains |     Extract command routing — 101 · V+1 CR+2 💬2 open · in your stack  [ger.change.url.local]
 + chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
++ stack  | summary: 4 on Gerrit · 2 held back · 2 failed CI · 1 commit with comments
 + stack  | Cleanup after experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
++ stack  | ---- ready boundary ----
 + stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 + stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci good]
 - status bar | $(warning) Gerrit
@@ -391,8 +397,10 @@ notification (warning): Refresh failed: ger.webUrl must use https:// (got 'http:
 - chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 - chains |     Extract command routing — 101 · V+1 CR+2 💬2 open · in your stack  [ger.change.url.local]
 - chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
+- stack  | summary: 4 on Gerrit · 2 held back · 2 failed CI · 1 commit with comments
 - stack  | Cleanup after experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 - stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
+- stack  | ---- ready boundary ----
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci good]
 + change | A change shows here once ger can ask Gerrit. ger says: ger.webUrl must use https:// (got 'http://gerrit.example'): credentials go with every request. For a local test Gerrit on plain http, opt in with `git config ger.allowInsecureHttp true`
@@ -439,8 +447,10 @@ status bar message: $(check) Refreshed from Gerrit
 + chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 + chains |     Extract command routing — 101 · V+1 CR+2 💬2 open · in your stack  [ger.change.url.local]
 + chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
++ stack  | summary: 4 on Gerrit · 2 held back · 2 failed CI · 1 commit with comments
 + stack  | Cleanup after experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
++ stack  | ---- ready boundary ----
 + stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 + stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci good]
 - status bar | $(warning) Gerrit
@@ -713,6 +723,8 @@ notification (info): Draft saved, visible only to you: your next push publishes 
 - chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 open · active <age> ago  [ger.chain.url.local]
 + chains |     Extract command routing — 101 · V+1 CR+2 💬2 open ✎1 · in your stack  [ger.change.url.local]
 - chains |     Extract command routing — 101 · V+1 CR+2 💬2 open · in your stack  [ger.change.url.local]
++ stack  | summary: 4 on Gerrit · 2 held back · 2 failed CI · 1 commit with comments · 1 commit with drafts to publish
+- stack  | summary: 4 on Gerrit · 2 held back · 2 failed CI · 1 commit with comments
 + change | Unresolved comments, drafts to publish with the push — V+1 CR+2 💬2 open ✎1
 + change | [Next comment] — 1 comment left to answer here, gone to, not answered yet (Alt+Enter)
 - change | Unresolved comments — V+1 CR+2 💬2 open
@@ -769,6 +781,8 @@ status bar message: $(check) Draft saved, resolving the comment, visible only to
 - chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 open ✎1 · active <age> ago  [ger.chain.url.local]
 + chains |     Extract command routing — 101 · V+1 CR+2 💬2 open ✎2 · in your stack  [ger.change.url.local]
 - chains |     Extract command routing — 101 · V+1 CR+2 💬2 open ✎1 · in your stack  [ger.change.url.local]
++ stack  | summary: 4 on Gerrit · 2 held back · 2 failed CI · 1 commit with drafts to publish
+- stack  | summary: 4 on Gerrit · 2 held back · 2 failed CI · 1 commit with comments · 1 commit with drafts to publish
 + change | Drafts to publish with the push — V+1 CR+2 💬2 open ✎2
 + change | [Work on next] — Work on Next (Alt+Enter)
 - change | Unresolved comments, drafts to publish with the push — V+1 CR+2 💬2 open ✎1
@@ -1045,9 +1059,21 @@ browser opens: https://g.example/c/testproj/+/101
 - change |   Added from the keyboard. — your draft · b.txt:1  [yours]
 - change |   Looks good overall. — whole change · Alice Reviewer · 1 reply  [resolved]
 - change |     you — [draft] Added a test for the parser.
++ problem | demo/calc.py:6 Error [Widget #55] tests/test_calc.py::test_divide: ZeroDivisionError: division by zero
 ```
 
-## 67. Right-click it › Hand to Agent › Cancel
+## 67. Change › click the CI finding (here at c.txt:1, a file of this commit)
+
+**Expect:** The file opens at the finding's line. The file is not ticked seen: opening it at a line is not reading the change. The findings are editor problems (source ger CI, the build as the code, the whole message), and stay while the change is shown.
+
+```
+(nothing said or done outside the views)
+--- on screen:
++ editor | c.txt (file, line 1)
+- editor | b.txt (ger-file, line 1)
+```
+
+## 68. Right-click it › Hand to Agent › Cancel
 
 **Expect:** A runbook for this one commit and a dialog to start or copy it; Cancel does nothing more.
 
@@ -1058,10 +1084,10 @@ dialog (info): 1 commit: 0 comments and 1 CI finding for the agent.  [Copy to Cl
     → cancelled
 --- on screen:
 + editor | Preview ger-runbook-<id>.md (webview)
-- editor | b.txt (ger-file, line 1)
+- editor | c.txt (file, line 1)
 ```
 
-## 68. Local stack › Push to Gerrit…
+## 69. Local stack › Push to Gerrit…
 
 **Expect:** ger push runs in the ger terminal (a new one when a command still runs there), which shows what it will push and asks first.
 
@@ -1072,7 +1098,7 @@ status bar message: $(terminal) ger push runs in the ger terminal: it shows what
 (no change)
 ```
 
-## 69. Right-click "Refactor parser init" › Copy SHA
+## 70. Right-click "Refactor parser init" › Copy SHA
 
 **Expect:** The commit's full id is on the clipboard; the status bar says so.
 
@@ -1083,7 +1109,7 @@ status bar message: $(check) Copied SHA <sha>…
 (no change)
 ```
 
-## 70. Select two rows, right-click › Copy Change-Id
+## 71. Select two rows, right-click › Copy Change-Id
 
 **Expect:** Both Change-Ids are on the clipboard, one per line, newest first as shown.
 
@@ -1094,7 +1120,7 @@ status bar message: $(check) Copied 2 Change-Ids
 (no change)
 ```
 
-## 71. Drag "Refactor parser init" to the line above "Extract command routing"
+## 72. Drag "Refactor parser init" to the line above "Extract command routing"
 
 **Expect:** It swaps places with the commit above it; a notification offers Undo. Every commit keeps its votes: none changed its code, so Gerrit keeps them on the push.
 
@@ -1103,12 +1129,14 @@ progress (in view ger.stack): Rewriting the stack
 notification (info): Stack reordered. Push to update Gerrit.  [Undo]
     → dismissed
 --- on screen:
++ stack  | summary: 4 on Gerrit · 2 to upload · 2 held back · 2 failed CI · 1 commit with drafts to publish
 + stack  | Cleanup after experiment — HEAD · <sha> · held back · only rebased since the last push  [review +2, ci bad]
 + stack  | test! temporary experiment — <sha> · held back · only rebased since the last push  [review +2, ci bad]
-+ stack  | Refactor parser init — <sha> · only rebased since the last push  [review +2, ci good]
-+ stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
+- stack  | summary: 4 on Gerrit · 2 held back · 2 failed CI · 1 commit with drafts to publish
 - stack  | Cleanup after experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 - stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
++ stack  | Refactor parser init — <sha> · only rebased since the last push  [review +2, ci good]
++ stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci good]
 + change | Local changes not pushed, CI failed — V-1 CR+2
@@ -1118,7 +1146,7 @@ notification (info): Stack reordered. Push to update Gerrit.  [Undo]
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · introduced here
 ```
 
-## 72. Drag "Refactor parser init" to the bottom, then Undo
+## 73. Drag "Refactor parser init" to the bottom, then Undo
 
 **Expect:** It swaps back with the commit below; Undo puts the stack back as it was before this move.
 
@@ -1131,7 +1159,7 @@ status bar message: $(check) Undone: the stack is as it was
 (no change)
 ```
 
-## 73. Select "Cleanup after experiment" and "Extract command routing", drag them to the bottom, then Undo
+## 74. Select "Cleanup after experiment" and "Extract command routing", drag them to the bottom, then Undo
 
 **Expect:** Both land under the last row, together and in the order they had; Undo puts the stack back.
 
@@ -1149,7 +1177,7 @@ status bar message: $(check) Undone: the stack is as it was
 ```
 ```
 
-## 74. Drag "Extract command routing" up one row, with uncommitted changes › Cancel
+## 75. Drag "Extract command routing" up one row, with uncommitted changes › Cancel
 
 **Expect:** A dialog asks whether to stash the uncommitted changes and continue; Cancel leaves the stack and the edit as they were.
 
@@ -1162,7 +1190,7 @@ dialog (warning): You have uncommitted changes. Stash them and continue?  [Stash
 (no change)
 ```
 
-## 75. The same drag › Stash and Continue, then Undo
+## 76. The same drag › Stash and Continue, then Undo
 
 **Expect:** The commits swap, and the edit to a.txt is back in the worktree afterwards; Undo puts the stack back and keeps the edit.
 
@@ -1184,7 +1212,7 @@ status bar message: $(check) Undone: the stack is as it was
 ```
 ```
 
-## 76. Change › edit the commit message of "test! temporary experiment" › Apply, then Undo
+## 77. Change › edit the commit message of "test! temporary experiment" › Apply, then Undo
 
 **Expect:** The box holds the message without its Change-Id. The commit gets the new message and keeps its Change-Id, though the text typed named another; the commits above get new ids, nothing else changes. Undo puts the old message back.
 
@@ -1200,12 +1228,14 @@ status bar message: $(check) Undone: the stack is as it was
 ## Meanwhile: you commit a rework of d.txt in the terminal
 
 ```
++ stack  | summary: 4 on Gerrit · 2 to upload · 3 held back · 2 failed CI · 1 commit with drafts to publish
 + stack  | Rework d.txt — HEAD · <sha> · held back · not on Gerrit
 + stack  | Cleanup after experiment — <sha> · held back · only rebased since the last push  [review +2, ci bad]
+- stack  | summary: 4 on Gerrit · 2 to upload · 2 held back · 2 failed CI · 1 commit with drafts to publish
 - stack  | Cleanup after experiment — HEAD · <sha> · held back · only rebased since the last push  [review +2, ci bad]
 ```
 
-## 77. Drag "Rework d.txt" to the line under "Cleanup after experiment"
+## 78. Drag "Rework d.txt" to the line under "Cleanup after experiment"
 
 **Expect:** One place down: the conflict preview already knows the two cannot swap, so it says at once which commit would conflict, and that nothing changed.
 
@@ -1215,7 +1245,7 @@ notification (info): "Rework d.txt" cannot change places with "Cleanup after exp
 (no change)
 ```
 
-## 78. Drag "Rework d.txt" to the bottom
+## 79. Drag "Rework d.txt" to the bottom
 
 **Expect:** Refused before anything is touched, saying which commit does not apply in its new place; the stack stays as it was.
 
@@ -1226,7 +1256,7 @@ notification (warning): "Rework d.txt" (<sha>) does not apply in its new place (
 (no change)
 ```
 
-## 79. Drag "Cleanup after experiment" to the line under "Extract command routing"
+## 80. Drag "Cleanup after experiment" to the line under "Extract command routing"
 
 **Expect:** It lands there, and the commits between move up one; Undo is offered.
 
@@ -1235,11 +1265,13 @@ progress (in view ger.stack): Rewriting the stack
 notification (info): Stack reordered. Push to update Gerrit.  [Undo]
     → dismissed
 --- on screen:
++ stack  | summary: 4 on Gerrit · 3 to upload · 2 held back · 2 failed CI · 1 commit with drafts to publish
+- stack  | summary: 4 on Gerrit · 2 to upload · 3 held back · 2 failed CI · 1 commit with drafts to publish
 - stack  | Cleanup after experiment — <sha> · held back · only rebased since the last push  [review +2, ci bad]
 + stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci bad]
 ```
 
-## 80. Right-click "Rework d.txt" › Squash into Commit Below, then Undo
+## 81. Right-click "Rework d.txt" › Squash into Commit Below, then Undo
 
 **Expect:** It folds into the commit below, keeping that commit's message; Undo brings it back.
 
@@ -1252,7 +1284,7 @@ status bar message: $(check) Undone: the stack is as it was
 (no change)
 ```
 
-## 81. Right-click "Rework d.txt" › Squash into Commit Below, Keeping This Message, then Undo
+## 82. Right-click "Rework d.txt" › Squash into Commit Below, Keeping This Message, then Undo
 
 **Expect:** Folds, keeping this commit's message, with a note that the Gerrit change of the one below stays open; Undo brings both back, and the Change view shows again what it showed.
 
@@ -1265,7 +1297,7 @@ status bar message: $(check) Undone: the stack is as it was
 (no change)
 ```
 
-## 82. Right-click "Rework d.txt" › Drop Commit… › Cancel
+## 83. Right-click "Rework d.txt" › Drop Commit… › Cancel
 
 **Expect:** A dialog asks to confirm; Cancel leaves everything as it was.
 
@@ -1277,7 +1309,7 @@ dialog (warning): Drop "Rework d.txt" from the stack?  [Drop] [Cancel]
 (no change)
 ```
 
-## 83. Right-click "Rework d.txt" › Drop Commit… › Drop, then Undo
+## 84. Right-click "Rework d.txt" › Drop Commit… › Drop, then Undo
 
 **Expect:** The commit goes; Undo brings it back. It was never pushed, so there is nothing to push.
 
@@ -1293,7 +1325,7 @@ status bar message: $(check) Undone: the stack is as it was
 (no change)
 ```
 
-## 84. Right-click "Rework d.txt" › Drop Commit… › Drop
+## 85. Right-click "Rework d.txt" › Drop Commit… › Drop
 
 **Expect:** The commit is gone from the stack and from the checkout; nothing to push, as Gerrit never had it.
 
@@ -1305,7 +1337,9 @@ progress (in view ger.stack): Rewriting the stack
 notification (info): Dropped "Rework d.txt".  [Undo]
     → dismissed
 --- on screen:
++ stack  | summary: 4 on Gerrit · 3 to upload · 1 held back · 2 failed CI · 1 commit with drafts to publish
 + stack  | test! temporary experiment — HEAD · <sha> · held back · only rebased since the last push  [review +2, ci bad]
+- stack  | summary: 4 on Gerrit · 3 to upload · 2 held back · 2 failed CI · 1 commit with drafts to publish
 - stack  | Rework d.txt — HEAD · <sha> · held back · not on Gerrit
 - stack  | test! temporary experiment — <sha> · held back · only rebased since the last push  [review +2, ci bad]
 ```
@@ -1315,7 +1349,9 @@ notification (info): Dropped "Rework d.txt".  [Undo]
 **Expect:** Its votes now show as the last pushed patchset's (Gerrit may not keep them for this code); the Change view follows the commit and says so.
 
 ```
-+ stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | summary: 4 on Gerrit · 3 to upload · 1 held back · 1 failed CI · 1 commit with drafts to publish
++ stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+- stack  | summary: 4 on Gerrit · 3 to upload · 1 held back · 2 failed CI · 1 commit with drafts to publish
 - stack  | test! temporary experiment — HEAD · <sha> · held back · only rebased since the last push  [review +2, ci bad]
 + change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 - change | Local changes not pushed, CI failed — V-1 CR+2
@@ -1325,9 +1361,11 @@ notification (info): Dropped "Rework d.txt".  [Undo]
 + change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
 - change |   Widget #55 — 1 finding
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6
++ problem | demo/calc.py:6 Error [Widget #55] tests/test_calc.py::test_divide: ZeroDivisionError: division by zero / CI saw it at line 6 of patchset 1, a line changed since.
+- problem | demo/calc.py:6 Error [Widget #55] tests/test_calc.py::test_divide: ZeroDivisionError: division by zero
 ```
 
-## 85. Local stack › … › Set Upstream Branch… › Escape
+## 86. Local stack › … › Set Upstream Branch… › Escape
 
 **Expect:** A picker lists the branches it could track, the current one marked; Escape changes nothing.
 
@@ -1340,17 +1378,17 @@ picker: Upstream for feature — "The local stack is the commits above it; ger p
 (no change)
 ```
 
-## 86. Review chains › … › Report Issue… › Copy and Open GitHub Issue
+## 87. Review chains › … › Report Issue… › Copy and Open GitHub Issue
 
 **Expect:** The report opens first, as an untitled JSON document to read: what the three views show, with names, paths, text and ids replaced. A notification says so, and that nothing has left the machine. Copy and Open GitHub Issue puts the report on the clipboard and opens a new issue that has only the versions in it and says to paste the report.
 
 ```
-untitled json document opens: 394 lines, starting
+untitled json document opens: 400 lines, starting
     {
       "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
 notification (info): This is the report, and all that would be shared: names, paths, text and ids in it are replaced. Nothing has left this machine.  [Copy and Open GitHub Issue] [Save to File…]
     → pressed "Copy and Open GitHub Issue"
-clipboard: 394 lines, starting "{"
+clipboard: 400 lines, starting "{"
 browser opens: https://github.com/togrue/gerrit-workflow-tools/issues/new?labels=vscode&body=<!-- What happened, and what did you expect%3F -->
 
 
@@ -1369,29 +1407,29 @@ status bar message: $(check) Report copied: paste it into the issue that opens i
 (no change)
 ```
 
-## 87. Command palette › ger: Report Issue… › Save to File…
+## 88. Command palette › ger: Report Issue… › Save to File…
 
 **Expect:** The report opens again to read; Save to File… asks where, suggesting ger-report.json, and the status bar says where it was saved. Nothing is copied and no browser opens.
 
 ```
-untitled json document opens: 394 lines, starting
+untitled json document opens: 400 lines, starting
     {
       "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
 notification (info): This is the report, and all that would be shared: names, paths, text and ids in it are replaced. Nothing has left this machine.  [Copy and Open GitHub Issue] [Save to File…]
     → pressed "Save to File…"
 save dialog: suggests ger-report.json
-    → saved 394 lines as ~/ger-report.json
+    → saved 400 lines as ~/ger-report.json
 status bar message: $(check) Report saved to ~/ger-report.json
 --- on screen:
 (no change)
 ```
 
-## 88. Command palette › ger: Report Issue… › close the report without saving › Copy and Open GitHub Issue
+## 89. Command palette › ger: Report Issue… › close the report without saving › Copy and Open GitHub Issue
 
 **Expect:** The user may have taken things out of the report before closing it, so nothing is copied, not the original either, and no browser opens; a notification says nothing was shared and to run Report Issue… again.
 
 ```
-untitled json document opens: 394 lines, starting
+untitled json document opens: 400 lines, starting
     {
       "about": "What the ger views showed, for a bug report. Names, paths, text and ids are replaced by made-up ones of the same shape; states, counts and the extension's own words are kept. No log, no settings, no folder names.",
     → closed without saving
@@ -1448,17 +1486,19 @@ notification (info): 2 unresolved comments on 101: Extract command routing  [Ope
 + chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 + chains |     Extract command routing — 101 · V+1 CR+2 💬2 open · in your stack  [ger.change.url.local]
 + chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
++ stack  | summary: 4 on Gerrit · 1 held back · 2 failed CI · 1 commit with comments
 + stack  | test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
-+ stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
-+ stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
-+ stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 - chains | Outgoing — 1 chain · 1 with failed CI
 - chains |   Cleanup after experiment — 4 changes · V-1 CR+2 💬2 open ✎2 · active <age> ago  [ger.chain.url.local]
 - chains |     Cleanup after experiment — 103 · V-1 CR+2 · in your stack  [ger.change.url.local]
 - chains |     test! temporary experiment — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 - chains |     Extract command routing — 101 · V+1 CR+2 💬2 open ✎2 · in your stack  [ger.change.url.local]
 - chains |     Refactor parser init — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
-- stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | summary: 4 on Gerrit · 3 to upload · 1 held back · 1 failed CI · 1 commit with drafts to publish
+- stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
++ stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
++ stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
++ stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 - stack  | Refactor parser init — <sha> · only rebased since the last push  [review +2, ci good]
 - stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci bad]
@@ -1485,7 +1525,9 @@ notification (info): 2 unresolved comments on 101: Extract command routing  [Ope
 - chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 - chains |     Extract command routing — 101 · V+1 CR+2 💬2 open · in your stack  [ger.change.url.local]
 - chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
+- stack  | summary: 4 on Gerrit · 1 held back · 2 failed CI · 1 commit with comments
 - stack  | test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
+- stack  | ---- ready boundary ----
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
@@ -1522,7 +1564,9 @@ status bar message: $(check) Refreshed from Gerrit
 + chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 + chains |     Extract command routing — 101 · V+1 CR+2 💬2 open · in your stack  [ger.change.url.local]
 + chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
++ stack  | summary: 4 on Gerrit · 1 held back · 2 failed CI · 1 commit with comments
 + stack  | test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
++ stack  | ---- ready boundary ----
 + stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 + stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 + stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
@@ -1543,6 +1587,8 @@ status bar message: $(check) Refreshed from Gerrit
 - stack  | ger serve speaks API 2.0, the extension needs 1.4: update the extension, or install the ger release that matches it.
 - change | title: Change 102
 - change | ger serve speaks API 2.0, the extension needs 1.4: update the extension, or install the ger release that matches it.
++ problem | demo/calc.py:6 Error [Widget #55] tests/test_calc.py::test_divide: ZeroDivisionError: division by zero / It also fails on the parent: this change did not bring it in.
+- problem | demo/calc.py:6 Error [Widget #55] tests/test_calc.py::test_divide: ZeroDivisionError: division by zero / CI saw it at line 6 of patchset 1, a line changed since.
 ```
 
 ## Meanwhile: a reviewer comments on change 900 on Gerrit, and its event stream says so
@@ -1563,12 +1609,14 @@ status bar message: $(check) Refreshed from Gerrit
 **Expect:** Within a second or two Local stack shows the new commit on top (not yet on Gerrit); nothing is said, as you did it yourself.
 
 ```
++ stack  | summary: 4 on Gerrit · 2 held back · 2 failed CI · 1 commit with comments
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 + stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
+- stack  | summary: 4 on Gerrit · 1 held back · 2 failed CI · 1 commit with comments
 - stack  | test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 ```
 
-## 89. Click "test! temporary experiment" in Local stack
+## 90. Click "test! temporary experiment" in Local stack
 
 **Expect:** The Change view shows change 103 as it is now: the commit is the same as on Gerrit. It should have shown that already after ger serve restarted (it kept Change 102's heading and "ahead of Gerrit", no issue yet); this click makes the rebase steps start from a fresh view.
 
@@ -1606,8 +1654,10 @@ status bar message: $(check) Refreshed from Gerrit
 --- shown now:
 status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 2 held back · 2 failed CI · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
+stack  | ---- ready boundary ----
 stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
@@ -1638,7 +1688,7 @@ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zer
 change | (the commit shown is HEAD)
 ```
 
-## 90. you add a line to c.txt, do not amend it, and press Local stack › Work on Next
+## 91. you add a line to c.txt, do not amend it, and press Local stack › Work on Next
 
 **Expect:** Nothing runs in the terminal: a warning says Work on Next did not continue the rebase, in ger's words: c.txt has unstaged changes, amend them in or stash them. The views stay as they were.
 
@@ -1654,8 +1704,10 @@ notification (warning): Work on Next did not continue the rebase: You have unsta
 --- shown now:
 status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 2 held back · 2 failed CI · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
+stack  | ---- ready boundary ----
 stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
@@ -1689,7 +1741,7 @@ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zer
 change | (the commit shown is HEAD)
 ```
 
-## 91. Local stack › Continue, c.txt still not amended
+## 92. Local stack › Continue, c.txt still not amended
 
 **Expect:** The same: nothing runs, and a warning says why ger rebase --continue did not run.
 
@@ -1700,8 +1752,10 @@ notification (warning): ger rebase --continue did not run: You have unstaged cha
 --- shown now:
 status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 2 held back · 2 failed CI · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
+stack  | ---- ready boundary ----
 stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
@@ -1740,7 +1794,9 @@ change | (the commit shown is HEAD)
 **Expect:** The stopped commit shows what it is now: a new SHA, HEAD, its code changed since the last push. The Change view follows it to the amended commit: c.txt with +2 lines.
 
 ```
-+ stack  | ▶ test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | summary: 4 on Gerrit · 2 held back · 1 failed CI · 1 commit with comments
+- stack  | summary: 4 on Gerrit · 2 held back · 2 failed CI · 1 commit with comments
++ stack  | ▶ test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 - stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + change | ▌ Left: 2 comments to answer · CI failed on 1 commit · 2 commits need edits · 1 commit to replay
 - change | ▌ Left: c.txt not amended · 2 comments to answer · CI failed on 2 commits · 3 commits need edits · 1 commit to replay
@@ -1761,11 +1817,15 @@ change | (the commit shown is HEAD)
 + change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
 - change |   Widget #55 — 1 finding
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · also fails on the parent
++ problem | demo/calc.py:6 Error [Widget #55] tests/test_calc.py::test_divide: ZeroDivisionError: division by zero / CI saw it at line 6 of patchset 1, a line changed since.
+- problem | demo/calc.py:6 Error [Widget #55] tests/test_calc.py::test_divide: ZeroDivisionError: division by zero / It also fails on the parent: this change did not bring it in.
 --- shown now:
 status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 2 held back · 1 failed CI · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | ▶ test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | ▶ test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
 stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
@@ -1796,7 +1856,7 @@ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zer
 change | (the commit shown is HEAD)
 ```
 
-## 92. Local stack › Continue (the rebase stopped at the amended commit)
+## 93. Local stack › Continue (the rebase stopped at the amended commit)
 
 **Expect:** ger rebase --continue runs in the ger terminal, and the status bar says so; once it has run, the task header and the marks go: the branch is back, the amended commit with its code changed since the last push and "Add e.txt" on top of it; the header names the branch; the Change view shows the amended commit, its message editable again.
 
@@ -1810,9 +1870,9 @@ notification (info): The rebase is finished. 2 commits of your stack still need 
 + chains | 2 unresolved comments on 101: Extract command routing
 - chains | Rebase stopped at 103: test! temporary experiment
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-+ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 - stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-- stack  | ▶ test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | ▶ test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 - change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
 - change | ▌ Left: 2 comments to answer · CI failed on 1 commit · 2 commits need edits · 1 commit to replay
 - change | ▌   1. Cleanup after experiment — replayed
@@ -1829,8 +1889,10 @@ notification (info): The rebase is finished. 2 commits of your stack still need 
 --- shown now:
 status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
+stack  | summary: 4 on Gerrit · 2 held back · 1 failed CI · 1 commit with comments
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
 stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
@@ -1863,11 +1925,13 @@ change | (the commit shown is below HEAD)
 - status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 + chains | Rebase stopped at 102: Refactor parser init
 - chains | 2 unresolved comments on 101: Extract command routing
++ stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-+ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
-+ stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]  (dim)
+- stack  | summary: 4 on Gerrit · 2 held back · 1 failed CI · 1 commit with comments
 - stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
++ stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 + change | title: Change 102
 + change | ▌ Reworking your chain: Add e.txt — change 3 of 5  [All chains]
@@ -1892,9 +1956,11 @@ change | (the commit shown is below HEAD)
 --- shown now:
 status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
-stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]  (dim)
+stack  | ---- ready boundary ----
+stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -1936,11 +2002,11 @@ change | (the commit shown is HEAD)
 - chains | Rebase stopped at 102: Refactor parser init
 + stack  |   ⚠ e.txt — conflicted
 + stack  | ⚠ Add e.txt — <sha> · held back · not on Gerrit
-+ stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-+ stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 - stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
-- stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]  (dim)
++ stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+- stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 + change | title: Change
 + change | ▌ Reworking your chain: Add e.txt — change 5 of 5  [All chains]
 + change | ▌ Left: 1 conflict to resolve · 2 comments to answer · 1 commit needs edits
@@ -1969,13 +2035,16 @@ change | (the commit shown is HEAD)
 - change | CI
 - change |   Widget #55 — from patchset 1, before your local changes · 1 finding
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
+- problem | demo/calc.py:6 Error [Widget #55] tests/test_calc.py::test_divide: ZeroDivisionError: division by zero / CI saw it at line 6 of patchset 1, a line changed since.
 --- shown now:
 status bar | $(error) Conflict in "Add e.txt"  $(bell-dot) 1
 stack header | (view not drawn)
 stack  |   ⚠ e.txt — conflicted
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | ⚠ Add e.txt — <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2006,7 +2075,7 @@ change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 93. Local stack › click e.txt under the task header
+## 94. Local stack › click e.txt under the task header
 
 **Expect:** e.txt opens with its conflict markers in the text editor (VS Code offers Accept Current / Incoming / Both there, and Resolve in Merge Editor), not in the merge editor; nothing else changes.
 
@@ -2017,9 +2086,11 @@ change | (the commit shown is only on the branch as it was before)
 status bar | $(error) Conflict in "Add e.txt"  $(bell-dot) 1
 stack header | (view not drawn)
 stack  |   ⚠ e.txt — conflicted
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | ⚠ Add e.txt — <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2059,8 +2130,8 @@ change | (the commit shown is only on the branch as it was before)
 - status bar | $(error) Conflict in "Add e.txt"  $(bell-dot) 1
 + chains | Conflict resolved in "Add e.txt"
 - chains | Conflict in "Add e.txt"
-+ stack  | ▶ Add e.txt — <sha> · held back · not on Gerrit
 - stack  |   ⚠ e.txt — conflicted
++ stack  | ▶ Add e.txt — <sha> · held back · not on Gerrit
 - stack  | ⚠ Add e.txt — <sha> · held back · not on Gerrit
 + change | ▌ Left: 2 comments to answer · 1 commit needs edits
 - change | ▌ Left: 1 conflict to resolve · 2 comments to answer · 1 commit needs edits
@@ -2074,9 +2145,11 @@ change | (the commit shown is only on the branch as it was before)
 --- shown now:
 status bar | $(warning) Conflict resolved in "Add e.txt"  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | ▶ Add e.txt — <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2104,7 +2177,7 @@ change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 94. Local stack › Continue (the conflict resolved)
+## 95. Local stack › Continue (the conflict resolved)
 
 **Expect:** ger rebase --continue runs in the ger terminal; once it has run, the task header and the marks go; Local stack shows the branch with "Refactor parser init" changed here since the last push and "Add e.txt" on top.
 
@@ -2118,9 +2191,9 @@ notification (info): The rebase is finished. 1 commit of your stack still needs 
 + chains | 2 unresolved comments on 101: Extract command routing
 - chains | Conflict resolved in "Add e.txt"
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-+ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 - stack  | ▶ Add e.txt — <sha> · held back · not on Gerrit
-- stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 - change | ▌ Reworking your chain: Add e.txt — change 5 of 5  [All chains]
 - change | ▌ Left: 2 comments to answer · 1 commit needs edits
 - change | ▌   1. Cleanup after experiment — replayed
@@ -2141,9 +2214,11 @@ notification (info): The rebase is finished. 1 commit of your stack still needs 
 --- shown now:
 status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2172,9 +2247,11 @@ change | (the commit shown is HEAD)
 status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2193,7 +2270,7 @@ change | Comments — none
 change | (the commit shown is HEAD)
 ```
 
-## 95. Local stack › Rebase onto origin/main ("test! temporary experiment" conflicts in c.txt, as the row said)
+## 96. Local stack › Rebase onto origin/main ("test! temporary experiment" conflicts in c.txt, as the row said)
 
 **Expect:** ger rebase origin/main runs in the ger terminal, and the status bar says so; once it has run, the upstream row goes and Local stack says the rebase stopped on a conflict in c.txt, with Abort and Skip; "test! temporary experiment" has a red conflict icon, not dimmed; the three below are replayed onto the new origin/main and show their new SHAs; "Add e.txt" is dimmed. The Change view of 103 says "Conflict in c.txt" and lists it under Conflicts, without the vote explanation. The status bar says Conflict in 103.
 
@@ -2205,9 +2282,14 @@ status bar message: $(terminal) ger rebase origin/main runs in the ger terminal:
 + chains | Conflict in 103: test! temporary experiment
 - chains | 2 unresolved comments on 101: Extract command routing
 + stack  |   ⚠ c.txt — conflicted
++ stack  | summary: 4 on Gerrit · 3 to upload · 2 held back · 1 commit with comments
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-+ stack  | ⚠ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-+ stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | ⚠ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+- stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
+- stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
+- stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
+- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
++ stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 + stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 + stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 + change | title: Change 103
@@ -2224,10 +2306,7 @@ status bar message: $(terminal) ger rebase origin/main runs in the ger terminal:
 + change | Awaiting review — last pushed V-1 CR+2
 + change | [Resolve c.txt] — it is still conflicted: open c.txt with its conflict markers, resolve them, then stage it (git add) so the rebase can go on (Alt+Enter)
 + change | Commit message — test! temporary experiment  (read-only)
-- stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
-- stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-- stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 - change | title: Change
@@ -2243,13 +2322,16 @@ status bar message: $(terminal) ger rebase origin/main runs in the ger terminal:
 + change | CI
 + change |   Widget #55 — from patchset 1, before your local changes · 1 finding
 + change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
++ problem | demo/calc.py:6 Error [Widget #55] tests/test_calc.py::test_divide: ZeroDivisionError: division by zero / CI saw it at line 6 of patchset 1, a line changed since.
 --- shown now:
 status bar | $(error) Conflict in 103  $(bell-dot) 1
 stack header | (view not drawn)
 stack  |   ⚠ c.txt — conflicted
+stack  | summary: 4 on Gerrit · 3 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | ⚠ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | ⚠ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2283,7 +2365,7 @@ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zer
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 96. Local stack › Skip › Cancel
+## 97. Local stack › Skip › Cancel
 
 **Expect:** A dialog asks before "test! temporary experiment" is left out: the commit and the conflict resolution so far would be thrown away, Abort brings back the branch as before the rebase but not the resolution, and its change stays open on Gerrit. Cancelled, nothing runs and nothing changes.
 
@@ -2296,9 +2378,11 @@ dialog (warning): Skip "test! temporary experiment"?  [Skip] [Cancel]
 status bar | $(error) Conflict in 103  $(bell-dot) 1
 stack header | (view not drawn)
 stack  |   ⚠ c.txt — conflicted
+stack  | summary: 4 on Gerrit · 3 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | ⚠ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | ⚠ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2332,7 +2416,7 @@ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zer
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 97. Local stack › Push to Gerrit… (during the rebase) › Abort
+## 98. Local stack › Push to Gerrit… (during the rebase) › Abort
 
 **Expect:** No ger push: a dialog says to finish the rebase first, why (in ger push's own words), and offers only Abort: Continue is not a way on while c.txt is conflicted. Abort runs ger rebase --abort in the ger terminal; once it has run, everything is as before the rebase: the branch, its commits, the header; Local stack still says origin/main has 1 new commit.
 
@@ -2347,15 +2431,17 @@ status bar message: $(terminal) ger rebase --abort runs in the ger terminal: the
 + chains | 2 unresolved comments on 101: Extract command routing
 - chains | Conflict in 103: test! temporary experiment
 + stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
++ stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-+ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-+ stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+- stack  |   ⚠ c.txt — conflicted
+- stack  | summary: 4 on Gerrit · 3 to upload · 2 held back · 1 commit with comments
+- stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
+- stack  | ⚠ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
++ stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 + stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 + stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
-- stack  |   ⚠ c.txt — conflicted
-- stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-- stack  | ⚠ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-- stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 - stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 + change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
@@ -2383,9 +2469,11 @@ status bar message: $(terminal) ger rebase --abort runs in the ger terminal: the
 status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2417,13 +2505,13 @@ change | (the commit shown is below HEAD)
 - status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 + chains | Rebase stopped at 102: Refactor parser init
 - chains | 2 unresolved comments on 101: Extract command routing
-+ stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-+ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
-+ stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
++ stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
++ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]  (dim)
 - stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-- stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
++ stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+- stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 + change | title: Change 102
 + change | ▌ Reworking your chain: Add e.txt — change 3 of 5  [All chains]
 + change | ▌ Left: 2 comments to answer · 1 commit needs edits · 2 commits to replay
@@ -2447,9 +2535,11 @@ change | (the commit shown is below HEAD)
 --- shown now:
 status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
-stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]  (dim)
+stack  | ---- ready boundary ----
+stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2480,7 +2570,7 @@ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zer
 change | (the commit shown is HEAD)
 ```
 
-## 98. Local stack › click "Add e.txt" (still to be replayed)
+## 99. Local stack › click "Add e.txt" (still to be replayed)
 
 **Expect:** The Change view shows "Add e.txt" as it was: it changes e.txt.
 
@@ -2499,12 +2589,15 @@ change | (the commit shown is HEAD)
 - change | CI
 - change |   Widget #55 — from patchset 1, before your local changes · 1 finding
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
+- problem | demo/calc.py:6 Error [Widget #55] tests/test_calc.py::test_divide: ZeroDivisionError: division by zero / CI saw it at line 6 of patchset 1, a line changed since.
 --- shown now:
 status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
-stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]  (dim)
+stack  | ---- ready boundary ----
+stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2531,7 +2624,7 @@ change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 99. Change › click e.txt under Files
+## 100. Change › click e.txt under Files
 
 **Expect:** The diff of e.txt in "Add e.txt" opens, its title naming the commit; both sides are that commit's, as it is not the one you stand on. You keep it open (double-click its tab), so the next file opened does not take its place.
 
@@ -2541,9 +2634,11 @@ change | (the commit shown is only on the branch as it was before)
 --- shown now:
 status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
-stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]  (dim)
+stack  | ---- ready boundary ----
+stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2571,7 +2666,7 @@ change | (the commit shown is only on the branch as it was before)
 diff tab | e.txt (<sha>) (ger-file on the right, active)
 ```
 
-## 100. Local stack › click "Refactor parser init" (where it stopped)
+## 101. Local stack › click "Refactor parser init" (where it stopped)
 
 **Expect:** The Change view shows the commit you stand on; the diff tab of "Add e.txt" stays as it is.
 
@@ -2590,12 +2685,15 @@ diff tab | e.txt (<sha>) (ger-file on the right, active)
 + change | CI
 + change |   Widget #55 — from patchset 1, before your local changes · 1 finding
 + change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
++ problem | demo/calc.py:6 Error [Widget #55] tests/test_calc.py::test_divide: ZeroDivisionError: division by zero / CI saw it at line 6 of patchset 1, a line changed since.
 --- shown now:
 status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
-stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]  (dim)
+stack  | ---- ready boundary ----
+stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2627,7 +2725,7 @@ change | (the commit shown is HEAD)
 diff tab | e.txt (<sha>) (ger-file on the right, active)
 ```
 
-## 101. Change › click e.txt under Files
+## 102. Change › click e.txt under Files
 
 **Expect:** e.txt opens on its own (the commit adds it), as your file: you stand on this commit.
 
@@ -2637,9 +2735,11 @@ diff tab | e.txt (<sha>) (ger-file on the right, active)
 --- shown now:
 status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
-stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]  (dim)
+stack  | ---- ready boundary ----
+stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2681,9 +2781,11 @@ diff tab | e.txt (<sha>) (ger-file on the right)
 --- shown now:
 status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
-stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]  (dim)
+stack  | ---- ready boundary ----
+stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2715,7 +2817,7 @@ change | (the commit shown is HEAD)
 diff tab | e.txt (<sha>) (ger-file on the right)
 ```
 
-## 102. Local stack › Continue (e.txt not saved) › Save All
+## 103. Local stack › Continue (e.txt not saved) › Save All
 
 **Expect:** Before anything runs, a dialog names e.txt, says ger rebase --continue sees only the files on disk and then says what saved edits still need, and offers Save All, Continue without saving (git would rewrite e.txt under the edits) and Cancel. Save All pressed, e.txt is saved; then ger's own check refuses before anything runs, and a warning says so in its words: e.txt is changed and not committed, amend it in or stash it. Nothing runs in the terminal; the rebase stays where it stopped.
 
@@ -2737,9 +2839,11 @@ ger terminal | (exit 2)
 --- shown now:
 status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
-stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]  (dim)
+stack  | ---- ready boundary ----
+stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2785,11 +2889,11 @@ diff tab | e.txt (<sha>) (ger-file on the right)
 - chains | Rebase stopped at 102: Refactor parser init
 + stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-+ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-+ stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 - stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
-- stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]  (dim)
++ stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+- stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 - change | ▌ Reworking your chain: Add e.txt — change 3 of 5  [All chains]
 - change | ▌ Left: e.txt not amended · 2 comments to answer · 1 commit needs edits · 2 commits to replay
 - change | ▌ ⚠ refused: you have unstaged changes to e.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`
@@ -2814,9 +2918,11 @@ diff tab | e.txt (<sha>) (ger-file on the right)
 status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2841,7 +2947,7 @@ change | (the commit shown is below HEAD)
 diff tab | e.txt (<sha>) — stale (ger-file on the right)
 ```
 
-## 103. Settings › ger.closeDiffsOnRebase: on
+## 104. Settings › ger.closeDiffsOnRebase: on
 
 **Expect:** The stale diff tab of "Add e.txt" closes.
 
@@ -2851,9 +2957,11 @@ diff tab | e.txt (<sha>) — stale (ger-file on the right)
 status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2877,7 +2985,7 @@ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zer
 change | (the commit shown is below HEAD)
 ```
 
-## 104. Local stack › click "Add e.txt"
+## 105. Local stack › click "Add e.txt"
 
 **Expect:** The Change view shows "Add e.txt", now HEAD.
 
@@ -2897,13 +3005,16 @@ change | (the commit shown is below HEAD)
 - change | CI
 - change |   Widget #55 — from patchset 1, before your local changes · 1 finding
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
+- problem | demo/calc.py:6 Error [Widget #55] tests/test_calc.py::test_divide: ZeroDivisionError: division by zero / CI saw it at line 6 of patchset 1, a line changed since.
 --- shown now:
 status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2922,7 +3033,7 @@ change | Comments — none
 change | (the commit shown is HEAD)
 ```
 
-## 105. Change › click e.txt under Files
+## 106. Change › click e.txt under Files
 
 **Expect:** The diff of e.txt in "Add e.txt" opens with your file on its right: you stand on this commit.
 
@@ -2933,9 +3044,11 @@ change | (the commit shown is HEAD)
 status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2965,9 +3078,11 @@ diff tab | e.txt (<sha>) (file on the right, active)
 status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
 stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
+stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -2999,9 +3114,14 @@ diff tab | e.txt (<sha>) (file on the right, unsaved, active)
 + chains | Conflict in 103: test! temporary experiment
 - chains | 2 unresolved comments on 101: Extract command routing
 + stack  |   ⚠ c.txt — conflicted
++ stack  | summary: 4 on Gerrit · 3 to upload · 2 held back · 1 commit with comments
 + stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-+ stack  | ⚠ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-+ stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | ⚠ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+- stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
+- stack  | summary: 4 on Gerrit · 1 to upload · 2 held back · 1 commit with comments
+- stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
+- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
++ stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 + stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 + stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 + change | title: Change 103
@@ -3018,10 +3138,7 @@ diff tab | e.txt (<sha>) (file on the right, unsaved, active)
 + change | Awaiting review — last pushed V-1 CR+2
 + change | [Resolve c.txt] — it is still conflicted: open c.txt with its conflict markers, resolve them, then stage it (git add) so the rebase can go on (Alt+Enter)
 + change | Commit message — test! temporary experiment  (read-only)
-- stack  | origin/main has 1 new commit — "test! temporary experiment" would conflict in c.txt  [Rebase onto origin/main]
-- stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-- stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 - stack  | Extract command routing — <sha> · the same as on Gerrit  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · the same as on Gerrit  [review +2, ci good]
 - change | title: Change
@@ -3038,14 +3155,17 @@ diff tab | e.txt (<sha>) (file on the right, unsaved, active)
 + change |   Widget #55 — from patchset 1, before your local changes · 1 finding
 + change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
 + editor | e.txt (<sha>) — stale (diff, ger-file ↔ file)
++ problem | demo/calc.py:6 Error [Widget #55] tests/test_calc.py::test_divide: ZeroDivisionError: division by zero / CI saw it at line 6 of patchset 1, a line changed since.
 - editor | e.txt (<sha>) (diff, ger-file ↔ file)
 --- shown now:
 status bar | $(error) Conflict in 103  $(bell-dot) 1
 stack header | (view not drawn)
 stack  |   ⚠ c.txt — conflicted
+stack  | summary: 4 on Gerrit · 3 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | ⚠ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | ⚠ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -3090,8 +3210,8 @@ diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 + chains | Conflict resolved in 103: test! temporary experiment
 - chains | Conflict in 103: test! temporary experiment
 - stack  |   ⚠ c.txt — conflicted
-+ stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-- stack  | ⚠ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+- stack  | ⚠ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 + change | ▌ Left: 2 comments to answer · 1 commit needs edits · 1 commit to replay
 - change | ▌ Left: 1 conflict to resolve · 2 comments to answer · 1 commit needs edits · 1 commit to replay
 + change | ▌ [**Continue**] commit this stop as it is, then replay the 1 commit above
@@ -3102,9 +3222,11 @@ diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 --- shown now:
 status bar | $(warning) Conflict resolved in 103  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 3 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -3145,9 +3267,11 @@ diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 --- shown now:
 status bar | $(warning) Conflict resolved in 103  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 3 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -3179,7 +3303,7 @@ change | (the commit shown is only on the branch as it was before)
 diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 ```
 
-## 106. Local stack › Continue (e.txt and notes.txt not saved) › Cancel
+## 107. Local stack › Continue (e.txt and notes.txt not saved) › Cancel
 
 **Expect:** A dialog names e.txt, whose edits are only in the stale diff tab, and notes.txt, though git does not track it (asking once too often loses nothing), and offers Save All, Continue without saving and Cancel. Cancelled, nothing is saved and nothing runs: the rebase stays stopped, the tab stale and unsaved.
 
@@ -3191,9 +3315,11 @@ dialog (warning): Save 2 files first? ger rebase --continue then says what they 
 --- shown now:
 status bar | $(warning) Conflict resolved in 103  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 3 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -3234,9 +3360,11 @@ diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 --- shown now:
 status bar | $(warning) Conflict resolved in 103  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 3 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -3278,9 +3406,11 @@ diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 --- shown now:
 status bar | $(warning) Conflict resolved in 103  $(bell-dot) 1
 stack header | (view not drawn)
+stack  | summary: 4 on Gerrit · 3 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -3311,7 +3441,7 @@ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zer
 change | (the commit shown is only on the branch as it was before)
 ```
 
-## 107. Local stack › Continue (ger.closeDiffsOnRebase on)
+## 108. Local stack › Continue (ger.closeDiffsOnRebase on)
 
 **Expect:** Nothing is unsaved, so nothing is asked: ger rebase --continue runs in the ger terminal; once it has run, the rebase is finished, "Add e.txt" is replayed onto origin/main with a new SHA. The Change view follows "Add e.txt" to its new commit.
 
@@ -3327,11 +3457,11 @@ notification (info): The rebase is finished. 1 commit of your stack still needs 
 + chains | 2 unresolved comments on 101: Extract command routing
 - chains | Conflict resolved in 103: test! temporary experiment
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-+ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-+ stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 - stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
-- stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-- stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
++ stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+- stack  | Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 + change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 + change | [Work on next] — Work on Next (Alt+Enter)
 + change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
@@ -3355,9 +3485,11 @@ notification (info): The rebase is finished. 1 commit of your stack still needs 
 --- shown now:
 status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
+stack  | summary: 4 on Gerrit · 3 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 stack  | (Cleanup after experiment is below HEAD)
@@ -3380,7 +3512,7 @@ change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zer
 change | (the commit shown is below HEAD)
 ```
 
-## 108. Click "Add retry to the uploader" under To review
+## 109. Click "Add retry to the uploader" under To review
 
 **Expect:** The Change view shows change 900, Alice's; its title bar offers Vote and Publish.
 
@@ -3411,9 +3543,10 @@ change | (the commit shown is below HEAD)
 - change | CI
 - change |   Widget #55 — from patchset 1, before your local changes · 1 finding
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
+- problem | demo/calc.py:6 Error [Widget #55] tests/test_calc.py::test_divide: ZeroDivisionError: division by zero / CI saw it at line 6 of patchset 1, a line changed since.
 ```
 
-## 109. "+" on line 1 of uploader.txt in the diff › Save Draft
+## 110. "+" on line 1 of uploader.txt in the diff › Save Draft
 
 **Expect:** The draft is saved on Gerrit and shows as yours in the Change view. Only you see it until it is published, and as it is not your change, ger push would not publish it: the notification offers Vote and Publish.
 
@@ -3426,7 +3559,7 @@ notification (info): Draft saved on Gerrit, visible only to you: Vote and Publis
 + change |   Cap the retries at 5? — your draft · uploader.txt:1  [yours]
 ```
 
-## 110. Change › Vote and Publish… › Escape
+## 111. Change › Vote and Publish… › Escape
 
 **Expect:** A picker offers the votes Gerrit lets you give on 900, each with what the project says it means, opening on Code-Review +1, and your draft without a vote. Escape sends nothing.
 
@@ -3444,7 +3577,7 @@ picker: Vote on 900 "Add retry to the uploader" — "1 draft of yours goes out w
 (no change)
 ```
 
-## 111. Change › Vote and Publish… › Code-Review +1 › type "Thanks!" › Publish
+## 112. Change › Vote and Publish… › Code-Review +1 › type "Thanks!" › Publish
 
 **Expect:** After the vote, an optional message; then one dialog lists what goes out (Code-Review +1, the draft at uploader.txt:1, the message, on change 900) and says it cannot be taken back. Publish sends it; a notification says what was published, the draft shows as published in the Change view and the vote on 900's row.
 
@@ -3483,7 +3616,7 @@ notification (info): Published Code-Review +1 and 1 draft on change 900.
 - change |   Cap the retries at 5? — your draft · uploader.txt:1  [yours]
 ```
 
-## 112. Inline Vote and Publish… on the To review row of 900 › Code-Review +2 › no message › Cancel
+## 113. Inline Vote and Publish… on the To review row of 900 › Code-Review +2 › no message › Cancel
 
 **Expect:** The row's button votes on its chain (here only 900): the same picker and message, and the dialog. Cancelled, nothing is sent.
 
@@ -3509,7 +3642,7 @@ Everyone on the change sees it at once; it cannot be taken back.
 (no change)
 ```
 
-## 113. Command palette › ger: Publish Drafts…, with no drafts left on 900
+## 114. Command palette › ger: Publish Drafts…, with no drafts left on 900
 
 **Expect:** It says there are no drafts of yours on 900 to publish, and asks nothing.
 
@@ -3525,7 +3658,7 @@ notification (info): You have no drafts on 900 to publish.
 ```
 ```
 
-## 114. Inline Review Change on change 900, ger.reviewCheckout being branch
+## 115. Inline Review Change on change 900, ger.reviewCheckout being branch
 
 **Expect:** This checkout switches to change-900 with 900's changes staged, and the notification says so. The task header at the top of the Change view says Reviewing alice's chain, change 1 of 1, what is left, 900 marked reviewing, and Leave review; Review chains and Local stack step aside (Local stack, were it shown, lists 900's chain: its row is marked under review, not HEAD, with no Rebase onto origin/main). The Change view shows 900, and all its files open in one editor (here one, added by the change).
 
@@ -3550,9 +3683,11 @@ notification (info): Change 900 (patchset 1) is checked out for review: this che
 - chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 - chains |     Extract command routing — 101 · V+1 CR+2 💬2 open · in your stack  [ger.change.url.local]
 - chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
+- stack  | summary: 4 on Gerrit · 3 to upload · 2 held back · 1 commit with comments
 - stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-- stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+- stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+- stack  | ---- ready boundary ----
+- stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 - stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 + change | ▌ Reviewing alice's chain: Add retry to the uploader — change 1 of 1  [All chains]
@@ -3567,7 +3702,7 @@ notification (info): Change 900 (patchset 1) is checked out for review: this che
 - editor | e.txt (file, line 2)
 ```
 
-## 115. Change › Files › uploader.txt
+## 116. Change › Files › uploader.txt
 
 **Expect:** Your file opens, not the commit's copy: the working files hold the change, so comments are drawn where they are written and language features work.
 
@@ -3578,7 +3713,7 @@ notification (info): Change 900 (patchset 1) is checked out for review: this che
 - editor | Change 900 (<sha>) (1 file) (webview)
 ```
 
-## 116. "+" on line 1 of uploader.txt, your file › Save Draft
+## 117. "+" on line 1 of uploader.txt, your file › Save Draft
 
 **Expect:** The draft is saved on Gerrit as on the commit's lines, and listed as yours in the Change view.
 
@@ -3590,7 +3725,7 @@ status bar message: $(check) Draft saved on Gerrit, visible only to you: Vote an
 + change |   Is 3 enough on a slow link? — your draft · uploader.txt:1  [yours]
 ```
 
-## 117. Next Unresolved Comment (Alt+F9)
+## 118. Next Unresolved Comment (Alt+F9)
 
 **Expect:** 900 is not yours: the walk takes your draft too, so it counts four (the three open comments and yours), in the Change view's order.
 
@@ -3603,7 +3738,7 @@ status bar message: Comment 1 of 4
 - change | Comments — 3 to answer · 1 of yours, not published
 ```
 
-## 118. Change › Review Next Change in Chain
+## 119. Change › Review Next Change in Chain
 
 **Expect:** 900 is the only change of its chain: it says so and offers Vote on the Chain… and Leave Review. Nothing moves.
 
@@ -3615,7 +3750,7 @@ notification (info): Change 900 has no review chain to walk.  [Vote on the Chain
 (no change)
 ```
 
-## 119. Task header › All chains
+## 120. Task header › All chains
 
 **Expect:** The header now offers Only this task; Review chains and Local stack are back for the rest of this review.
 
@@ -3626,7 +3761,7 @@ notification (info): Change 900 has no review chain to walk.  [Vote on the Chain
 - change | ▌ Reviewing alice's chain: Add retry to the uploader — change 1 of 1  [All chains]
 ```
 
-## 120. Change › … › Leave Review Checkout
+## 121. Change › … › Leave Review Checkout
 
 **Expect:** Back on the branch it came from; the views are your stack again, and the task header is gone.
 
@@ -3646,9 +3781,11 @@ notification (info): Left the review of change 900: this checkout is back on fea
 + chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 + chains |     Extract command routing — 101 · V+1 CR+2 💬2 open · in your stack  [ger.change.url.local]
 + chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
++ stack  | summary: 4 on Gerrit · 3 to upload · 2 held back · 1 commit with comments
 + stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-+ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-+ stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
++ stack  | ---- ready boundary ----
++ stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 + stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 + stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 + change | title: (nothing shown)
@@ -3692,9 +3829,11 @@ chains |     test! temporary experiment — 103 · V-1 CR+2 · in your stack  [g
 chains |     Refactor parser init — 102 · V-1 CR+2 · in your stack  [ger.change.url.local]
 chains |     Extract command routing — 101 · V+1 CR+2 💬2 open · in your stack  [ger.change.url.local]
 chains |     Cleanup after experiment — 100 · V+1 CR+2 · in your stack  [ger.change.url.local]
+stack  | summary: 4 on Gerrit · 3 to upload · 2 held back · 1 commit with comments
 stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
-stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
-stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
+stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
+stack  | ---- ready boundary ----
+stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 change | title: (nothing shown)
