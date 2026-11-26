@@ -6,7 +6,8 @@ import * as vscode from "vscode";
 import { handToAgent, runAgent } from "./agent";
 import { CommentChain, Diff, FileChange, Health } from "./api";
 import { sameChange } from "./changeLoad";
-import { NextKind } from "./nextAction";
+import { NextKind, pushable } from "./nextAction";
+import { titleOffers } from "./stackRows";
 import { ChangeView, Location, ThreadArg } from "./changeView";
 import { draftsIn } from "./changeRows";
 import { CommentLink, commentDecorations } from "./commentHover";
@@ -16,7 +17,7 @@ import { setting } from "./config";
 import { EventFollower } from "./events";
 import { ShownCommitFollower } from "./follow";
 import { plural } from "./format";
-import { configWarner, gerProgram, installGer, runInTerminal, versionSkewWarner } from "./launch";
+import { GER_TERMINAL, configWarner, gerProgram, installGer, runInTerminal, versionSkewWarner } from "./launch";
 import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
 import { Poller } from "./poller";
@@ -33,7 +34,7 @@ import { statusBar } from "./statusBar";
 import { Task } from "./task";
 import { activeTracer } from "./trace";
 import { startTracing, tracedCommand, tracedTree, tracedUi } from "./tracing";
-import { Ui, feedback, saveReplyResolved, ui, useUi, vscodeUi } from "./ui";
+import { Ui, feedback, onTerminalCommandEnd, saveReplyResolved, ui, useUi, vscodeUi } from "./ui";
 import { setUpstream } from "./upstream";
 import { voteAndPublish } from "./vote";
 import { AttentionWalk } from "./walk";
@@ -132,6 +133,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   // while shown beside it (All chains), leaves out its rebase banner: Continue and Abort are said once.
   changeView.task = () => task.vm();
   stackView.task = () => (task.mode === "rework" ? task.vm() : undefined);
+  // Out of a task (the rebase over, a push), Local stack says how the last step ended.
+  stackView.outcome = () => task.outcome();
   changeView.taskStep = (key) => (task.mode ? task.go(task.mode, key) : undefined);
   task.shown = () => changeView.shownCounts(task.mode);
   task.onDidChange(() => {
@@ -154,6 +157,10 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     // buttons, so setup wanting says its cause there by `ger.setupReason`, and ger's own words in the other views.)
     overviewTree.message = model.incompatible?.message;
     overviewTree.badge = waiting ? { value: waiting, tooltip: `${plural(waiting, "chain")} to review` } : undefined;
+    // Local stack's title offers Work on Next and Push only where they would do something (P6).
+    const offers = titleOffers(model.overview?.local, pushable);
+    void vscode.commands.executeCommand("setContext", "ger.canWorkOnNext", offers.workOnNext);
+    void vscode.commands.executeCommand("setContext", "ger.canPush", offers.push);
   });
   let pausedLogged = false;
   // A rebase that stops somewhere new is shown there (the keyboard stays where it is): openChange is defined below.
@@ -211,6 +218,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       await changeView.openFirstFinding();
     }
   });
+  walk.hooks = { pressed: () => task.pressed(), refused: (why) => task.refused(why) };
   changeView.reword = (sha, message, applied) => stackView.reword(sha, message, applied);
   changeView.showThread = (chain) => threads.show(chain);
   changeView.visited = () => threads.visitedHere();
@@ -323,12 +331,14 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       ? { label: "Next Change", run: () => stepReview(model, 1, reviewSteps) }
       : { label: "Leave Review", run: () => leaveReview(model) };
   };
-  /** Abort or Skip in the ger terminal, the header saying so until the stack moves on. */
-  const stepInTerminal = async (step: "abort" | "skip", text: string) => {
-    task.busyUntilMoved(text);
-    if (!(await rebaseStep(model, step))) {
-      task.busy(undefined);
-    }
+  /**
+   * Continue, Abort or Skip in the ger terminal. What the last step said is history from the press;
+   * the header says the step runs only once it was sent (its question answered), until it ends; a
+   * refusal is said in the header at once.
+   */
+  const stepInTerminal = async (step: "continue" | "abort" | "skip", text: string) => {
+    task.pressed();
+    return rebaseStep(model, step, { started: () => task.busyUntilMoved(text), refused: (why) => task.refused(why) });
   };
   /** A chain row of Review chains votes on its whole chain. */
   const isChainRow = (arg: unknown) => (arg as { kind?: unknown } | undefined)?.kind === "chain";
@@ -357,7 +367,10 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     },
     continue: () => vscode.commands.executeCommand("ger.rebase.continue"),
     workOnNext: () => walk.next(),
-    push: () => push(model),
+    push: () => {
+      task.pressed();
+      return push(model);
+    },
     review: () => review(model, changeView.target, reviewSteps),
   };
 
@@ -431,14 +444,13 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.reviewNext": () => stepReview(model, 1, reviewSteps),
     "ger.reviewPrev": () => stepReview(model, -1, reviewSteps),
     "ger.publishDrafts": (arg: unknown) => voteAndPublish(model, targetOf(arg), { draftsOnly: true, after: afterVote }),
-    "ger.push": () => push(model),
+    "ger.push": () => {
+      task.pressed(); // what the last step said is history: the push says its own outcome
+      return push(model);
+    },
     "ger.rebase.continue": async () => {
-      // It runs in the terminal: the header says so from the click until the stack moves on.
-      task.busyUntilMoved("Continuing the rebase in the ger terminal…");
-      if (await rebaseStep(model, "continue")) {
+      if (await stepInTerminal("continue", "Continuing the rebase in the ger terminal…")) {
         walk.continued();
-      } else {
-        task.busy(undefined);
       }
     },
     "ger.workOnNext": () => walk.next(),
@@ -556,7 +568,14 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
         }
       }, () => Boolean(model.stack?.rebase))
     : undefined;
+  // A command of ours ended in the ger terminal: look at once (the step outcome, a refusal that moved nothing).
+  const terminalEnded = onTerminalCommandEnd((name) => {
+    if (name === GER_TERMINAL && model.state === "ready") {
+      void model.refreshLocal();
+    }
+  });
   context.subscriptions.push(
+    terminalEnded,
     model,
     overviewTree,
     stackPane,

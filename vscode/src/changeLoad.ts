@@ -123,6 +123,12 @@ export function stoppedHere(target: ChangeTarget, stack: Stack | undefined): Sto
   return stop === "conflict" || stop === "resolved" ? { stop, unmerged: stack?.rebase?.unmerged ?? [], actions: stack?.rebase?.actions ?? [] } : undefined;
 }
 
+/** The files changed and not amended at the stop on the commit `target` names (core's `uncommitted`); none elsewhere. */
+export function notAmendedHere(target: ChangeTarget, stack: Stack | undefined): string[] {
+  const commit = target.local ? stack?.commits.find((c) => c.sha === target.rev) : undefined;
+  return commit?.rebase === "current" && stack?.rebase?.applied ? (stack.rebase.uncommitted ?? []) : [];
+}
+
 export class ChangeDetail {
   target: ChangeTarget | undefined;
   /** `/show`'s answer; undefined until it has come. */

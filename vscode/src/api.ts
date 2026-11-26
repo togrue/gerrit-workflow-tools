@@ -223,6 +223,8 @@ export interface StackCommit extends CommitStatus {
   reviewers: Reviewer[];
   is_head: boolean;
   held_back: boolean;
+  /** Below the ready boundary without a valid Change-Id: `ger push` gives it one and sends it as a new change; the local commit changes (API 1.8). */
+  adds_change_id?: boolean;
   needs_edit: boolean;
   /** `newer`, and Gerrit's current patchset is a commit this repository never had: it came from elsewhere. */
   diverged?: boolean;
@@ -260,12 +262,42 @@ export interface Rebase {
   reused?: string[];
   /** Paths the index still holds as unresolved conflicts. */
   unmerged: string[];
+  /** At a stop with the commit applied: tracked files changed and not staged (a fix saved, not amended). Continue waits for them (API 1.8). */
+  uncommitted?: string[];
   /** The stack is the branch as it was before the rebase (git's `am` backend keeps no todo): no commit has a step. */
   as_before: boolean;
   /** The ways on core allows from this stop, in order: the only ones to offer. */
   actions: RebaseAction[];
   /** For each way on `actions` leaves out, the refusal `ger rebase --<action>` prints: what to say when it is asked for anyway. */
   refused: Partial<Record<RebaseAction, string>>;
+}
+
+/** The step outcome: how the last `ger rebase --continue|--skip|--abort`, `ger edit -n` or `ger push` ended, in ger's words. */
+export interface StepOutcome {
+  /** `rebase --abort`, `push`: the command after `ger`. */
+  command: string;
+  /** False for a refusal, a failure or a cancel. */
+  ok: boolean;
+  /** The one line of what happened. */
+  text: string;
+  /** The lines after it: what was kept and where, what is gone, the `next:` step. */
+  more: string[];
+  /** When it ended, in seconds since the epoch. */
+  at: number;
+  /** HEAD then: once it moved on, the outcome is history. */
+  head: string | null;
+}
+
+/** What `ger rebase --abort` would throw away from the stop (`GET /rebase/refusal?action=abort`, API 1.8). */
+export interface AbortDiscards {
+  /** Files not committed: ger keeps them in a stash. */
+  uncommitted: string[];
+  /** Commits made in this rebase the branch before it lacks: gone from the branch. */
+  rewritten: { sha: string; short_sha: string; summary: string }[];
+  /** A conflict resolved and added: its resolution goes. */
+  resolution: boolean;
+  /** Something no stash keeps: ask before aborting. */
+  asks: boolean;
 }
 
 /** What is underway that no Gerrit push may run over: `GET /stack`'s `push_blocked`. */
@@ -291,6 +323,8 @@ export interface Stack {
   staged_review?: ReviewState | null;
   /** How far the upstream moved on past the stack, and the rebase onto it previewed; null without one, and during a rebase. */
   upstream?: UpstreamMoved | null;
+  /** What the last rebase step or push run in a terminal said at its end (core's step outcome, API 1.8); null when none left one. */
+  last_outcome?: StepOutcome | null;
   /** The branches are null without a working branch (a detached HEAD's rebase). */
   stack: { project: string; target_branch: string | null; push_branch: string | null };
   summary: { commits: number; ready: number; attention: number; needs_edit: number; not_on_gerrit: number };
@@ -351,6 +385,8 @@ export interface Overview {
 export interface UpstreamChoice {
   branch: string | null;
   upstream: string | null;
+  /** The upstream it is configured with, when that remote-tracking branch is gone (API 1.8). */
+  gone?: string | null;
   suggested: string | null;
   why: string | null;
   candidates: string[];
@@ -739,6 +775,11 @@ export class GerClient {
   /** Why `ger rebase --<action>` (and `ger edit -n`) would refuse now, in its words, the work tree's unstaged changes too; null when it would run. */
   async rebaseRefusal(action: RebaseAction): Promise<string | null> {
     return (await this.call<{ refused: string | null }>("GET", "/rebase/refusal", { action })).refused;
+  }
+
+  /** What Abort would throw away now, and whether it refuses; `discards` undefined from a ger before API 1.8. */
+  async abortCheck(): Promise<{ refused: string | null; discards?: AbortDiscards }> {
+    return this.call<{ refused: string | null; discards?: AbortDiscards }>("GET", "/rebase/refusal", { action: "abort" });
   }
 
   /** The review going on here or in the review worktree; with `chain`, its review chain too (one Gerrit request). */

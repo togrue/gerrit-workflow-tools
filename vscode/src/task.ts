@@ -11,7 +11,15 @@
 import * as vscode from "vscode";
 
 import { Model } from "./model";
-import { TaskMode, TaskOptions, TaskVm, taskKey, taskLines, taskMode, taskVm } from "./taskRows";
+import { Outcome, TaskMode, TaskOptions, TaskVm, taskKey, taskLines, taskMode, taskVm } from "./taskRows";
+import { feedback } from "./ui";
+
+/** A step's outcome said here (a refusal before anything ran), with when. */
+interface Said extends Outcome {
+  at: number;
+  /** HEAD then: once it moved on, the refusal is history, as a served outcome is. */
+  head: string | null | undefined;
+}
 
 export class Task implements vscode.Disposable {
   /** The task whose other lists you asked to see: they stay for the rest of it, moving along it too. */
@@ -20,6 +28,14 @@ export class Task implements vscode.Disposable {
   /** Where the checkout stood when a step that runs in the terminal was started (`busyUntilMoved`). */
   private movedFrom: string | undefined;
   private busyTimer: ReturnType<typeof setTimeout> | undefined;
+  /** When a step was last started from the views: an outcome older than that is history. */
+  private pressedAt = 0;
+  /** When the step under way was started: a served outcome at or after it ends it. */
+  private busySince = 0;
+  /** A refusal said here, before anything ran in the terminal. */
+  private said: Said | undefined;
+  /** The served outcome last told in the status bar, by its time: each is told once. */
+  private told = 0;
   /** The change the Change view shows, with its comments counted as it counts them. Set by the extension. */
   shown: () => TaskOptions["shown"] = () => undefined;
   private keys: string | undefined;
@@ -69,15 +85,51 @@ export class Task implements vscode.Disposable {
     this.changed.fire();
   }
 
+  /** A step is asked for from the views: what the last one said is history from now. */
+  pressed(): void {
+    this.pressedAt = Date.now();
+    this.said = undefined;
+    this.changed.fire();
+  }
+
+  /** A step was refused before anything ran: said in the header until the next action, nothing under way. */
+  refused(text: string): void {
+    this.busy(undefined);
+    this.said = { text, ok: false, more: [], at: Date.now(), head: this.model.stack?.head };
+    this.changed.fire();
+  }
+
   /**
-   * Say `text` from now until the served state moves on (another stop, the rebase over): a step run
-   * in the terminal (Continue, Abort, Skip), which does not say when it ends. Given up after
+   * Say `text` from now until the step run in the terminal (Continue, Abort, Skip) has ended: its
+   * step outcome is served, or the served state moved on (another stop, the rebase over). Called
+   * only once the step was sent, never while a question about it is open. Given up after
    * `timeoutMs`: the terminal may be waiting on a question, and the header must not claim it runs.
    */
   busyUntilMoved(text: string, timeoutMs = 120_000): void {
     this.busy(text);
     this.movedFrom = this.position();
+    this.busySince = Date.now();
     this.busyTimer = setTimeout(() => this.busy(undefined), timeoutMs);
+  }
+
+  /**
+   * How the last step ended, until the next action: a refusal said here, else the step outcome ger
+   * left, while it is newer than the last press and `HEAD` is where it left it.
+   */
+  outcome(): Outcome | undefined {
+    const served = this.served();
+    const said = this.said && this.said.head === this.model.stack?.head ? this.said : undefined;
+    if (said && (!served || served.at * 1000 < said.at)) {
+      return { text: said.text, ok: said.ok, more: said.more };
+    }
+    return served ? { text: served.text, ok: served.ok, more: served.more } : undefined;
+  }
+
+  private served() {
+    const stack = this.model.stack;
+    const last = stack?.last_outcome;
+    // ger's clock and this one are the same machine's, and the press comes before the step ends.
+    return last && last.at * 1000 >= this.pressedAt && last.head === stack?.head ? last : undefined;
   }
 
   private position(): string {
@@ -87,8 +139,17 @@ export class Task implements vscode.Disposable {
 
   /** Follow the served state: which mode, and the context keys the other views' `when` clauses read. */
   private update(): void {
-    if (this.movedFrom !== undefined && this.position() !== this.movedFrom) {
-      this.busy(undefined); // the step in the terminal moved the checkout on: the header says where it is now
+    const last = this.model.stack?.last_outcome;
+    const ended = Boolean(last && this.busySince && last.at * 1000 >= this.busySince);
+    if (this.movedFrom !== undefined && (ended || this.position() !== this.movedFrom)) {
+      this.busySince = 0;
+      this.busy(undefined); // the step in the terminal ended, or moved the checkout on: the header says where it is now
+    }
+    const served = this.served();
+    if (served && served.at > this.told && this.pressedAt) {
+      // Each outcome of a step started here is told once, in the past tense, where the "runs in the terminal" note was.
+      this.told = served.at;
+      feedback(served.text, { icon: served.ok ? "check" : "warning", milliseconds: 8000 });
     }
     const mode = this.mode ?? "";
     if (!mode) {
@@ -105,7 +166,8 @@ export class Task implements vscode.Disposable {
 
   /** The header for the mode the checkout is in. */
   vm(): TaskVm | undefined {
-    return this.mode ? taskVm(this.model.overview, this.model.stack, { all: this.all, busy: this.busyText, shown: this.shown() }) : undefined;
+    const outcome = this.busyText ? undefined : this.outcome();
+    return this.mode ? taskVm(this.model.overview, this.model.stack, { all: this.all, busy: this.busyText, shown: this.shown(), ...(outcome ? { outcome } : {}) }) : undefined;
   }
 
   /** The header as text: for the end-to-end transcript. */

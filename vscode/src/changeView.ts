@@ -8,7 +8,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
-import { ChangeDetail, ciRevs, sameChange, stoppedHere } from "./changeLoad";
+import { ChangeDetail, ciRevs, notAmendedHere, sameChange, stoppedHere } from "./changeLoad";
 import { ChainCounts, ChangeState, ChangeVm, SeenWhere, chainCounts, seenWhere, CiView, NOTHING_SHOWN, NOT_FILES, READ_ONLY, changeHeading, changeLines, changeVm, isYours, toAnswer } from "./changeRows";
 import { From, MODES, Mode, Sides, Version, fitSides, modeSides } from "./compareRows";
 import { FILE_SCHEME, filePath, fileUri, openDiff } from "./diffTabs";
@@ -234,6 +234,7 @@ export class ChangeView extends WebView<ChangeVm> {
 
   /** From and To as the default mode has them for `target`. */
   private startOn(target: ChangeTarget): void {
+    this.closedWhy = undefined;
     ({ from: this.from, to: this.version } = modeSides(this.mode, this.sides(target)));
   }
 
@@ -525,7 +526,12 @@ export class ChangeView extends WebView<ChangeVm> {
   }
 
   /** Show nothing: the change that was shown is gone. */
-  close(): void {
+  /** Why the view was emptied, said in place of the hint to select a change, until another is shown. */
+  private closedWhy: string | undefined;
+
+  /** Show nothing; `why`, when the view did not empty on your click, says what happened to the change it showed. */
+  close(why?: string): void {
+    this.closedWhy = why;
     this.supersede(() => this.detail.clear());
     this.patchsets = undefined;
     this.ci = { state: "closed" };
@@ -591,11 +597,13 @@ export class ChangeView extends WebView<ChangeVm> {
       ci: this.ci,
       // Which commit a rebase stopped at is in the stack ger serve sent: the Change view reads it there, as Local stack does.
       stopped: this.target && stoppedHere(this.target, this.model.stack),
+      notAmended: this.target ? notAmendedHere(this.target, this.model.stack) : [],
       reviewing: this.reviewing(),
       seen: this.seenHere(),
     });
     if (!state) {
-      return { empty: this.target && this.detail.loading() ? `Loading ${this.target.title}…` : NOTHING_SHOWN, task: this.task() };
+      const nothing = this.closedWhy ? `${this.closedWhy} ${NOTHING_SHOWN}` : NOTHING_SHOWN;
+      return { empty: this.target && this.detail.loading() ? `Loading ${this.target.title}…` : nothing, task: this.task() };
     }
     const task = this.task();
     return changeScreen(changeVm({ ...state, task: task?.mode }), { task, next: this.busyText ? undefined : this.next(), busy: this.busyText });

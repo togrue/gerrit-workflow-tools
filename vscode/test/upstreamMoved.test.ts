@@ -73,7 +73,8 @@ test("with no local commits the row still offers the rebase, and the branch is b
   const vm = stackVm(stack([], { upstream: moved() }), undefined, never);
   assert.deepEqual(stackLines(vm), ["origin/main has 1 new commit  [Rebase onto origin/main]", "No local commits — feature is behind origin/main"]);
   const level = stackVm(stack([], { upstream: moved({ behind: 0 }) }), undefined, never);
-  assert.deepEqual(stackLines(level), ["No local commits — feature is at origin/main"]);
+  // The title says "feature → origin/main" already: the row does not say it again.
+  assert.deepEqual(stackLines(level), ["No local commits"]);
 });
 
 test("during a rebase core serves no upstream: the banner leads alone", () => {

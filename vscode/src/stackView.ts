@@ -12,7 +12,7 @@ import { openConflict } from "./rebase";
 import { StackVm, frozen, pinned, pinnedWhy, stackLines, stackVm, stackWhere } from "./stackRows";
 import { waitingFor } from "./state";
 import { feedback, ui } from "./ui";
-import { TaskVm } from "./taskRows";
+import { Outcome, TaskVm } from "./taskRows";
 import { Message, WebView } from "./webview";
 
 const STASH = "Stash and Continue";
@@ -31,6 +31,8 @@ export class StackView extends WebView<StackVm> {
   comments: ChangeComments | undefined;
   /** Unpublished comments of yours on a commit beyond core's counts: known for the change the Change view shows. Set by the extension. */
   drafts: (sha: string) => number = () => 0;
+  /** How the last step ended (task.ts): Local stack's first row while no task header says it. Set by the extension. */
+  outcome: () => Outcome | undefined = () => undefined;
 
   constructor(
     extensionUri: vscode.Uri,
@@ -47,7 +49,7 @@ export class StackView extends WebView<StackVm> {
 
   vm(): StackVm {
     const waiting = this.model.overview ? undefined : waitingFor(this.model.state, "Your local stack", this.model.incompatible, this.model.failure);
-    const vm = stackVm(this.model.overview?.local, this.model.upstreamChoice, (lower, upper) => this.model.swapConflict(lower, upper), this.drafts, Boolean(this.task()));
+    const vm = stackVm(this.model.overview?.local, this.model.upstreamChoice, (lower, upper) => this.model.swapConflict(lower, upper), this.drafts, Boolean(this.task()), this.outcome());
     return waiting ? { ...vm, waiting } : vm;
   }
 

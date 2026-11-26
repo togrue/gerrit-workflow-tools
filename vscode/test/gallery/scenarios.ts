@@ -13,7 +13,7 @@ import { changeProblem } from "../../src/problemRows";
 import { SNAPSHOT_FORMAT, Snapshot } from "../../src/snapshot";
 import { StackVm, stackVm } from "../../src/stackRows";
 import { waitingFor } from "../../src/state";
-import { TaskVm, taskVm } from "../../src/taskRows";
+import { Outcome, TaskVm, taskVm } from "../../src/taskRows";
 import { chain, comment, commit, content, diff, finding, never, patchsets, shown, stack, state } from "../fixtures";
 
 /** A snapshot, and what to press once it is drawn: sections and comments the page only shows opened. */
@@ -183,6 +183,31 @@ function stackScenarios(): Scenario[] {
     scenario("Stack: no upstream, none to suggest", { stack: stackVm(NO_UPSTREAM, { branch: "change-48211", upstream: null, suggested: null, why: null, candidates: [] }, never) }),
     scenario("Stack: it could not be read", { stack: stackVm({ error: { code: "GIT", message: "fatal: bad revision 'origin/main..HEAD'\nthe upstream branch is gone" } }, undefined, never) }),
     scenario("Stack: no local commits", { stack: stackOf([]) }),
+    scenario("Stack: a rebase aborted, what it kept said", {
+      stack: stackVm(local([pushed("Extract routing into its own module"), unpushed("Cache resolved routes", { is_head: true })]), undefined, never, () => 0, false, {
+        text: "rebase aborted: routing is at 9b1e0d4 Cache resolved routes, as before the rebase",
+        ok: true,
+        more: ["kept: your changes to src/widget/routing/prefix_tree.py, not amended, in stash@{0}; `git stash apply` brings them back"],
+      }),
+    }),
+    scenario("Stack: a push Gerrit refused, said in the view", {
+      stack: stackVm(local([unpushed("Cache resolved routes", { is_head: true })]), undefined, never, () => 0, false, {
+        text: "Gerrit rejected the push: branch release-9.9 not found",
+        ok: false,
+        more: ["next: the branch is not on Gerrit: set the upstream to one it has (`git branch --set-upstream-to=origin/main`)"],
+      }),
+    }),
+    scenario("Stack: commits push gives a Change-Id", {
+      stack: stackOf([pushed("Extract routing into its own module"), unpushed("Cache resolved routes", { change_id: null, adds_change_id: true, attention_reasons: ["missing-change-id"] }), unpushed("Evict stale routes", { is_head: true, change_id: null, adds_change_id: true, attention_reasons: ["missing-change-id"] })]),
+    }),
+    scenario("Stack: a detached HEAD", { stack: stackOf([pushed("Extract routing into its own module", { is_head: true })], { branch: null }) }),
+    scenario("Stack: the upstream is gone", {
+      stack: stackVm(
+        { error: { code: "CONFIG", message: "The upstream origin/release-9.9 of branch 'routing' is gone: it is configured, but no such remote-tracking branch is there (deleted on the remote, or pruned)." }, needs_upstream: true },
+        { branch: "routing", upstream: null, gone: "origin/release-9.9", suggested: "origin/main", why: "nearest: 1 ahead, 0 behind", candidates: ["origin/main"] },
+        never,
+      ),
+    }),
   ];
 }
 
@@ -481,7 +506,7 @@ function reviewScreen(at: ReviewAt = {}, reading: Reading = {}, busy?: string): 
 }
 
 /** Your stack, its commits oldest first, with the rebase stopped at the third. */
-function reworkStack(stop: RebaseStop, nothingLeft = false): Stack {
+function reworkStack(stop: RebaseStop, nothingLeft = false, uncommitted: string[] = []): Stack {
   const applied = stop === "edit";
   const edits = !nothingLeft;
   const commits = [
@@ -491,10 +516,12 @@ function reworkStack(stop: RebaseStop, nothingLeft = false): Stack {
     pushed("Cache resolved routes", { rebase: "todo", ...(edits ? { ci_failures: ["Verified"], verified: -1, needs_edit: true } : {}) }),
     unpushed("Evict stale routes", { rebase: "todo" }),
   ];
-  const refused = stop === "conflict" ? { continue: "src/routes.ts is still conflicted: resolve it and git add it first" } : {};
+  const notAmended = `you have unstaged changes to ${uncommitted.join(", ")}; amend them in (\`git commit --amend -a\`) or \`git stash\` them, then \`ger rebase --continue\``;
+  const refused = stop === "conflict" ? { continue: "the index has unresolved conflicts; resolve the conflicts in src/routes.ts, src/cache.ts, `git add` them, then `ger rebase --continue` to finish" } : uncommitted.length ? { continue: notAmended } : {};
   // Two files: the head then says how many, not a path (a path is theirs, and is replaced in a report).
   const unmerged = stop === "conflict" ? ["src/routes.ts", "src/cache.ts"] : [];
-  return local(commits, { rebase_in_progress: true, rebase: { branch: "routing", onto: null, orig_head: "f".repeat(40), stop, applied, current: null, unmerged, as_before: false, actions: WAYS_ON[stop], refused } });
+  const actions = uncommitted.length ? WAYS_ON[stop].filter((way) => way !== "continue") : WAYS_ON[stop];
+  return local(commits, { rebase_in_progress: true, rebase: { branch: "routing", onto: null, orig_head: "f".repeat(40), stop, applied, current: null, unmerged, uncommitted, as_before: false, actions, refused } });
 }
 
 /**
@@ -502,14 +529,14 @@ function reworkStack(stop: RebaseStop, nothingLeft = false): Stack {
  * which shows the commit stopped at (Local stack steps aside; shown with All chains, without its
  * banner), Next under it, as the window draws them (changeScreen.ts).
  */
-function reworking(stop: RebaseStop, options: { busy?: string; nothingLeft?: boolean; chains?: CommentChain[] } = {}): { stack: StackVm; change: ChangeVm } {
-  const stack = reworkStack(stop, options.nothingLeft);
+function reworking(stop: RebaseStop, options: { busy?: string; nothingLeft?: boolean; chains?: CommentChain[]; uncommitted?: string[]; outcome?: Outcome } = {}): { stack: StackVm; change: ChangeVm } {
+  const stack = reworkStack(stop, options.nothingLeft, options.uncommitted);
   const commit = stack.commits[2];
-  const task = taskVm(undefined, stack, { all: false, busy: options.busy });
+  const task = taskVm(undefined, stack, { all: false, busy: options.busy, ...(options.outcome ? { outcome: options.outcome } : {}) });
   const stopped = stop === "conflict" || stop === "resolved" ? { stop, unmerged: stack.rebase?.unmerged ?? [], actions: WAYS_ON[stop] } : undefined;
   const shownCommit = theChange({ ...commit, own: true });
   const chainsShown = options.chains ?? [];
-  const vm = change({ shown: shownCommit, chains: chainsShown, readOnly: READ_ONLY.rebase, stopped, task: "rework" });
+  const vm = change({ shown: shownCommit, chains: chainsShown, readOnly: READ_ONLY.rebase, stopped, task: "rework", notAmended: options.uncommitted ?? [] });
   const next = nextAction({ stack, shown: shownCommit, chains: chainsShown, local: true, reviewing: false, visited: new Set(), files: FILES.map((file) => file.path), seenFiles: new Set() });
   // Continue running in the terminal is the header's to say (task.ts busyUntilMoved), as in the window.
   return { stack: stackVm(stack, undefined, never, () => 0, true), change: changeScreen(vm, { task, next }) };
@@ -537,6 +564,13 @@ function taskScenarios(): Scenario[] {
     scenario("Task: reworking, Continue running in the terminal", { change: reworking("edit", { busy: "Continuing the rebase in the ger terminal…" }).change }),
     scenario("Task: reworking, nothing left", { change: reworking("edit", { nothingLeft: true }).change }),
     scenario("Task: reworking, all chains shown: Local stack without its banner", { stack: reworking("edit").stack }),
+    scenario("Task: reworking, a fix saved and not amended at the stop", { change: reworking("edit", { nothingLeft: true, uncommitted: ["src/widget/routing/prefix_tree.py"] }).change }),
+    scenario("Task: reworking, Continue refused, said in the header", {
+      change: reworking("edit", { nothingLeft: true, uncommitted: ["src/widget/routing/prefix_tree.py"], outcome: { text: "ger rebase --continue did not run: you have unstaged changes to src/widget/routing/prefix_tree.py; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`.", ok: false, more: [] } }).change,
+    }),
+    scenario("Task: reworking, a skip done, its outcome said", {
+      change: reworking("edit", { nothingLeft: true, outcome: { text: "stopped at 3f9a2c1 Route by longest matching prefix", ok: true, more: ["dropped 9b1e0d4 Cache resolved routes; its change 48213 stays open on Gerrit", "to get it back: once the rebase is finished, git cherry-pick 9b1e0d4 (or `ger rebase --abort` now)"] } }).change,
+    }),
   ];
 }
 

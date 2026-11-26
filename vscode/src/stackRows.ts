@@ -2,11 +2,12 @@
 // relates to Gerrit, where a rebase underway stands, and its votes as badges. The webview draws
 // it, the end-to-end suite prints it. Pure: no `vscode`, no I/O.
 
-import { CodeChange, CommitStatus, MoveConflict, Overview, Rebase, RebaseAction, Reviewer, Stack, StackCommit, UpstreamChoice, UpstreamStop } from "./api";
+import { AbortDiscards, CodeChange, CommitStatus, MoveConflict, Overview, Rebase, RebaseAction, Reviewer, Stack, StackCommit, UpstreamChoice, UpstreamStop } from "./api";
 import { CommentShape, CommentTone, commentState } from "./commentState";
-import { blockedMove, reasonWords, sentence, wouldConflict } from "./format";
+import { blockedMove, plural, reasonWords, sentence, wouldConflict } from "./format";
 import { stackProblem } from "./problemRows";
 import { Waiting } from "./state";
+import type { Outcome } from "./taskRows";
 
 
 /** How a commit relates to what Gerrit has: its icon and its colour. */
@@ -279,8 +280,10 @@ export const WALK_WORDS = {
   continues: (next: string) => `ger edit -n runs in the ger terminal: it continues the rebase and stops at "${next}", the next commit that needs edits`,
   last: "ger edit -n runs in the ger terminal: it continues the rebase; no commit after this one needs edits",
   starts: "ger edit runs in the ger terminal: it stops at the commit the attention walk is at, or the first that needs edits",
+  starting: "Starting the rework in the ger terminal…",
   notContinued: "Work on Next did not continue the rebase",
   nothing: "No commit of your stack needs edits: no comments to answer, failed builds or negative votes.",
+  nothingToPush: "Nothing to push either: Gerrit has every commit as it is.",
   finished: "The rebase is finished, and no commit after it needs edits.",
   finishedMore: (count: number) => `The rebase is finished. ${count === 1 ? "1 commit of your stack still needs" : `${count} commits of your stack still need`} edits.`,
   review: "Work on Next walks your own stack: here a staged review holds somebody else's change.",
@@ -302,6 +305,20 @@ export function workOnNext(stack: Stack): { kind: "continue"; next: StackCommit 
     return { kind: "continue", next: above.find((commit) => commit.needs_edit) };
   }
   return stack.summary.needs_edit ? { kind: "start" } : { kind: "nothing" };
+}
+
+/**
+ * Which of Local stack's title commands would do something now (P6: one that would refuse is not
+ * offered): Work on Next while a commit needs edits and the rebase underway can go on, Push while a
+ * push would send something (`pushable`, nothing blocking it). Neither without a stack to show.
+ */
+export function titleOffers(local: Overview["local"] | undefined, pushable: (stack: Stack) => boolean): { workOnNext: boolean; push: boolean } {
+  if (!local || "error" in local) {
+    return { workOnNext: false, push: false };
+  }
+  const plan = workOnNext(local);
+  const held = Boolean(local.rebase?.unmerged.length || local.rebase?.uncommitted?.length);
+  return { workOnNext: plan.kind === "start" || (plan.kind === "continue" && !held), push: !local.push_blocked && pushable(local) };
 }
 
 /** Why `ger rebase --<action>` is not to run now, in core's words (`rebase.refused`); undefined when it may, or core has said nothing yet (the CLI decides). */
@@ -343,6 +360,21 @@ export function skipQuestion(stack: Stack | undefined): { message: string; detai
   const stopped = stack?.commits.find((commit) => commit.rebase === "current");
   const what = stopped ? `"${stopped.summary}"` : "the commit the rebase stopped at";
   return { message: `Skip ${what}?`, detail: stopped?.pushed ? `${REBASE_WORDS.skipLoses} ${REBASE_WORDS.skipGerrit}` : REBASE_WORDS.skipLoses };
+}
+
+/**
+ * Abort's question (core's `discards`, asked only when `asks`): the commits made in this rebase that
+ * go with it, named, and a resolution; what a stash keeps is said too, so nothing is a surprise after.
+ */
+export function abortQuestion(discards: AbortDiscards): { message: string; detail: string } {
+  const gone = discards.rewritten.map((commit) => `${commit.short_sha} "${commit.summary}"`);
+  const lines = [
+    "The branch goes back to where it was before the rebase.",
+    gone.length ? `Gone from the branch with it, made in this rebase: ${gone.join(", ")}. git show <id> still shows ${gone.length === 1 ? "it" : "them"} while git keeps its reflog.` : "",
+    discards.resolution ? "The conflict resolution of the commit it stopped at goes too." : "",
+    discards.uncommitted.length ? `${discards.uncommitted.join(", ")}, not committed, ${discards.uncommitted.length === 1 ? "is" : "are"} kept in a stash: git stash apply brings ${discards.uncommitted.length === 1 ? "it" : "them"} back.` : "",
+  ];
+  return { message: gone.length ? `Abort the rebase, and with it ${plural(gone.length, "rewritten commit")}?` : "Abort the rebase, and the resolution?", detail: lines.filter(Boolean).join("\n\n") };
 }
 
 /** What Push offers instead while a rebase blocks it: the ways on core allows, but Skip (finishing is the point). */
@@ -477,7 +509,9 @@ function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: numb
   const target = commit.fixup_of ? stack.commits.find((c) => c.sha === commit.fixup_of) : undefined;
   const pending = stack.commits.filter((c) => c.fixup_of === commit.sha).length;
   const fixes = target ? FIXUP_WORDS.of(target.number ? String(target.number) : target.short_sha) : pending ? FIXUP_WORDS.pending(pending) : "";
-  const notes = [where, commit.short_sha, fixes, commit.merge ? "merge" : "", state === "code-changed" ? "code changed" : "", commit.held_back ? "held back" : "", commit.abandoned ? "abandoned" : ""];
+  // `ger push` gives it a Change-Id and sends it (core's `adds_change_id`): said as the push will do it, not as held back.
+  const addsId = commit.adds_change_id ? "push adds a Change-Id" : "";
+  const notes = [where, commit.short_sha, fixes, commit.merge ? "merge" : "", state === "code-changed" ? "code changed" : "", commit.held_back ? "held back" : addsId, commit.abandoned ? "abandoned" : ""];
   const tooltip = [
     commit.summary,
     `${commit.number ? `Change ${commit.number}: ` : ""}${SYNC_WORDS[state]}`,
@@ -485,6 +519,7 @@ function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: numb
     stopped ? MARKER_WORDS[stopped === "applied" ? "rebase" : stopped] : commit.rebase === "todo" ? "Still to be replayed by the rebase." : "",
     target ? FIXUP_WORDS.ofTooltip(target.summary) : pending ? FIXUP_WORDS.pendingTooltip : "",
     commit.held_back ? "Held back by the ready boundary: ger push will not send it." : "",
+    commit.adds_change_id ? `It has no valid Change-Id: ger push gives it one before its preview and sends it as a new change, so this local commit changes (taken back if the push is not sent).` : "",
     commit.merge ? MERGE_WORDS : "",
     isPinned ? "It stays where it is: git rebase cannot replay a merge, so the newest merge and what is below it are not moved, folded or dropped." : "",
     reviewerWords(commit.reviewers),
@@ -538,18 +573,51 @@ export function frozen(stack: Stack): string | null {
 
 /** The view for `local` (the overview's local stack, or why there is none). */
 /** `headerShown`: the task header (taskRows.ts) says what the rebase banner would, with its buttons: the banner is left out. */
-export function stackVm(local: Overview["local"] | undefined, choice: UpstreamChoice | undefined, conflicts: Conflicts, drafts: (sha: string) => number = () => 0, headerShown = false): StackVm {
+/** The last step's outcome as Local stack's first row, while no task header says it (the rebase over, a push). */
+export function outcomeRow(outcome: Outcome): StackInfo {
+  const upstream = outcome.more.some((line) => line.includes("--set-upstream-to"));
+  return {
+    text: outcome.text,
+    icon: outcome.ok ? "check" : "warning",
+    tone: outcome.ok ? "good" : "warn",
+    tooltip: [outcome.text, ...outcome.more].join("\n"),
+    ...(outcome.more.length ? { detail: outcome.more.filter((line) => !line.startsWith("next:")).join(" · ") || undefined } : {}),
+    ...(upstream ? { actions: [{ label: "Choose Upstream…", title: "Make another remote branch the upstream: the push goes to its branch on Gerrit", command: { id: "ger.setUpstream", args: [] } }] } : {}),
+  };
+}
+
+/** Said on a detached HEAD: what a commit made there becomes, and the way out. */
+export const DETACHED_WORDS = {
+  text: "Detached HEAD: commits made here belong to no branch",
+  tooltip: "HEAD is not on a branch. A commit made now is left behind once you check out a branch: create one here to keep working on it (Git: Create Branch…).",
+  create: "Create Branch Here…",
+};
+
+export function stackVm(
+  local: Overview["local"] | undefined,
+  choice: UpstreamChoice | undefined,
+  conflicts: Conflicts,
+  drafts: (sha: string) => number = () => 0,
+  headerShown = false,
+  outcome?: Outcome,
+): StackVm {
   if (!local) {
     return { info: [], rows: [], frozen: null, movable: 0 };
   }
+  const said = outcome && !headerShown ? [outcomeRow(outcome)] : [];
   if ("error" in local) {
     if (!local.needs_upstream) {
       const problem = stackProblem(local.error.message);
-      return { info: [{ text: problem.text, raw: problem.raw, icon: "warning", tone: "warn", actions: problem.actions }], rows: [], frozen: null, movable: 0 };
+      return { info: [...said, { text: problem.text, raw: problem.raw, icon: "warning", tone: "warn", actions: problem.actions }], rows: [], frozen: null, movable: 0 };
     }
+    // Configured and gone (deleted on the remote, or pruned) is not "none": say which.
+    const gone = choice?.gone;
     const info: StackInfo[] = [
+      ...said,
       {
-        text: `${choice?.branch ?? "This branch"} has no upstream, so ger cannot tell where your stack starts`,
+        text: gone
+          ? `The upstream ${gone} of ${choice?.branch ?? "this branch"} is gone, so ger cannot tell where your stack starts`
+          : `${choice?.branch ?? "This branch"} has no upstream, so ger cannot tell where your stack starts`,
         tooltip: `${local.error.message}\n\nger checkout (Check Out to Work On) sets the upstream when it creates the branch.`,
         icon: "warning",
         tone: "warn",
@@ -571,7 +639,10 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
     });
     return { info, rows: [], frozen: null, movable: 0 };
   }
-  const info: StackInfo[] = [];
+  const info: StackInfo[] = [...said];
+  if (!local.branch && !local.rebase_in_progress && !local.staged_review) {
+    info.push({ text: DETACHED_WORDS.text, icon: "git-commit", tone: "warn", tooltip: DETACHED_WORDS.tooltip, actions: [{ label: DETACHED_WORDS.create, title: DETACHED_WORDS.tooltip, command: { id: "git.branch", args: [] } }] });
+  }
   if (local.rebase_in_progress) {
     // The task header says what the banner does, and more: only the conflicted files stay under it.
     info.push(...(headerShown ? (local.rebase?.unmerged ?? []).map(conflictRow) : rebaseBanner(local.rebase)));
@@ -581,8 +652,9 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
     info.push(upstream);
   }
   if (!local.commits.length) {
-    const behind = local.upstream?.behind ? `is behind ${local.upstream.name}` : `is at ${local.stack.target_branch}`;
-    info.push({ text: "No local commits", detail: `${local.branch ?? "HEAD"} ${behind}` });
+    // The title says the branch and its upstream already ("main → origin/main"): the row only says what that means.
+    const behind = local.upstream?.behind ? `${local.branch ?? "HEAD"} is behind ${local.upstream.name}` : undefined;
+    info.push({ text: "No local commits", detail: behind, tooltip: `${local.branch ?? "HEAD"} is at ${local.stack.target_branch}: nothing to push, nothing to rework.` });
   }
   const commits = local.commits;
   const fixed = pinned(local);

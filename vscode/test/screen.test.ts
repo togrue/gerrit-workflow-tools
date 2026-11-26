@@ -57,7 +57,7 @@ test("the task scenarios name their next step on the one primary button", () => 
   assert.deepEqual(named("Task: reworking, stopped on a conflict"), ["Resolve src/routes.ts"]);
   assert.deepEqual(named("Task: reworking, the conflicts resolved"), ["Continue"], "the header's Continue, not a second one");
   assert.deepEqual(named("Task: reworking, stopped to edit"), ["Work on next"]);
-  assert.deepEqual(named("Task: reworking, nothing left"), ["Finish the rebase"]);
+  assert.deepEqual(named("Task: reworking, nothing left"), ["Continue"]);
   assert.deepEqual(named("Task: reviewing, Next is Update to patchset 6"), ["Update to patchset 6"]);
   assert.deepEqual(named("Task: reviewing, the last change of the chain after the vote"), ["Leave review"]);
   assert.deepEqual(named("Task: reworking, Continue running in the terminal"), [], "the step before it is still running");

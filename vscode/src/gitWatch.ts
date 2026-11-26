@@ -17,7 +17,8 @@ export interface Watch {
  * remote-tracking branches a fetch moves, and a rebase under way. Objects, the index and the logs change with every git command and say nothing more.
  */
 export function watches({ gitDir, commonDir }: GitDirs): Watch[] {
-  const own = "HEAD,rebase-merge,rebase-merge/*,rebase-apply,rebase-apply/*";
+  // ger-outcome.json: a step run in the terminal left how it ended (a refusal moves nothing else).
+  const own = "HEAD,rebase-merge,rebase-merge/*,rebase-apply,rebase-apply/*,ger-outcome.json";
   // refs/remotes too: a fetch moves the upstream, and with it what is ahead, behind and pushed.
   const shared = "packed-refs,refs/heads,refs/heads/**,refs/remotes,refs/remotes/**";
   // Outside a worktree they are one directory: one watcher.

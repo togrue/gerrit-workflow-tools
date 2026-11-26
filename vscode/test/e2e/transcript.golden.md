@@ -1572,15 +1572,14 @@ status bar message: $(check) Refreshed from Gerrit
 - stack  | Add e.txt — HEAD · <sha> · held back · not on Gerrit
 - stack  | test! temporary experiment — <sha> · held back · the same as on Gerrit  [review +2, ci bad]
 + change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-+ change | ▌ Left: 2 comments to answer · CI failed on 2 commits · 3 commits need edits
++ change | ▌ Left: 2 comments to answer · CI failed on 2 commits · 3 commits need edits · 1 commit to replay
 + change | ▌   1. Cleanup after experiment — replayed
 + change | ▌   2. Extract command routing — replayed · 2 to answer
 + change | ▌   3. Refactor parser init — replayed · CI failed
 + change | ▌ ▸ 4. test! temporary experiment — stopped here · needs edits · CI failed
 + change | ▌   5. Add e.txt — to come
-+ change | ▌ [Continue] commit this stop as it is, then replay the 1 commit above
++ change | ▌ [**Continue**] commit this stop as it is, then replay the 1 commit above
 + change | ▌ [Abort] put the branch back as it was before the rebase
-+ change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 + change | Commit message — test! temporary experiment  (read-only)
 - change | [Work on next] — Work on Next (Alt+Enter)
 - change | Commit message — test! temporary experiment  (editable)
@@ -1599,16 +1598,15 @@ stack  | (test! temporary experiment is HEAD)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · CI failed on 2 commits · 3 commits need edits
+change | ▌ Left: 2 comments to answer · CI failed on 2 commits · 3 commits need edits · 1 commit to replay
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌   3. Refactor parser init — replayed · CI failed
 change | ▌ ▸ 4. test! temporary experiment — stopped here · needs edits · CI failed
 change | ▌   5. Add e.txt — to come
-change | ▌ [Continue] commit this stop as it is, then replay the 1 commit above
+change | ▌ [**Continue**] commit this stop as it is, then replay the 1 commit above
 change | ▌ [Abort] put the branch back as it was before the rebase
 change | CI failed — V-1 CR+2
-change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 change | Commit message — test! temporary experiment  (read-only)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +1 −0
@@ -1626,7 +1624,13 @@ change | (the commit shown is HEAD)
 
 ```
 notification (warning): Work on Next did not continue the rebase: You have unstaged changes to c.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`.
-(no change)
++ change | ▌ Left: c.txt not amended · 2 comments to answer · CI failed on 2 commits · 3 commits need edits · 1 commit to replay
++ change | ▌ ⚠ Work on Next did not continue the rebase: You have unstaged changes to c.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`.
+- change | ▌ Left: 2 comments to answer · CI failed on 2 commits · 3 commits need edits · 1 commit to replay
++ change | ▌ [Continue] (not now: c.txt changed, not amended: amend or stash it first)
+- change | ▌ [**Continue**] commit this stop as it is, then replay the 1 commit above
++ change | Changed, not amended — 1 file
++ change |   ⚠ c.txt — changed, not amended
 --- shown now:
 status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
 stack header | (view not drawn)
@@ -1642,18 +1646,20 @@ stack  | (test! temporary experiment is HEAD)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · CI failed on 2 commits · 3 commits need edits
+change | ▌ Left: c.txt not amended · 2 comments to answer · CI failed on 2 commits · 3 commits need edits · 1 commit to replay
+change | ▌ ⚠ Work on Next did not continue the rebase: You have unstaged changes to c.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`.
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌   3. Refactor parser init — replayed · CI failed
 change | ▌ ▸ 4. test! temporary experiment — stopped here · needs edits · CI failed
 change | ▌   5. Add e.txt — to come
-change | ▌ [Continue] commit this stop as it is, then replay the 1 commit above
+change | ▌ [Continue] (not now: c.txt changed, not amended: amend or stash it first)
 change | ▌ [Abort] put the branch back as it was before the rebase
 change | CI failed — V-1 CR+2
-change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 change | Commit message — test! temporary experiment  (read-only)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
+change | Changed, not amended — 1 file
+change |   ⚠ c.txt — changed, not amended
 change | Files — 1 · +1 −0
 change |   c.txt — added +1 −0
 change | Comments — none
@@ -1669,7 +1675,8 @@ change | (the commit shown is HEAD)
 
 ```
 notification (warning): ger rebase --continue did not run: You have unstaged changes to c.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`.
-(no change)
++ change | ▌ ⚠ ger rebase --continue did not run: You have unstaged changes to c.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`.
+- change | ▌ ⚠ Work on Next did not continue the rebase: You have unstaged changes to c.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`.
 --- shown now:
 status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
 stack header | (view not drawn)
@@ -1685,18 +1692,20 @@ stack  | (test! temporary experiment is HEAD)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · CI failed on 2 commits · 3 commits need edits
+change | ▌ Left: c.txt not amended · 2 comments to answer · CI failed on 2 commits · 3 commits need edits · 1 commit to replay
+change | ▌ ⚠ ger rebase --continue did not run: You have unstaged changes to c.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`.
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌   3. Refactor parser init — replayed · CI failed
 change | ▌ ▸ 4. test! temporary experiment — stopped here · needs edits · CI failed
 change | ▌   5. Add e.txt — to come
-change | ▌ [Continue] commit this stop as it is, then replay the 1 commit above
+change | ▌ [Continue] (not now: c.txt changed, not amended: amend or stash it first)
 change | ▌ [Abort] put the branch back as it was before the rebase
 change | CI failed — V-1 CR+2
-change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 change | Commit message — test! temporary experiment  (read-only)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
+change | Changed, not amended — 1 file
+change |   ⚠ c.txt — changed, not amended
 change | Files — 1 · +1 −0
 change |   c.txt — added +1 −0
 change | Comments — none
@@ -1713,14 +1722,19 @@ change | (the commit shown is HEAD)
 ```
 + stack  | ▶ test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | ▶ test! temporary experiment — HEAD · <sha> · held back · the same as on Gerrit  [review +2, ci bad]
-+ change | ▌ Left: 2 comments to answer · CI failed on 1 commit · 2 commits need edits
-- change | ▌ Left: 2 comments to answer · CI failed on 2 commits · 3 commits need edits
++ change | ▌ Left: 2 comments to answer · CI failed on 1 commit · 2 commits need edits · 1 commit to replay
+- change | ▌ Left: c.txt not amended · 2 comments to answer · CI failed on 2 commits · 3 commits need edits · 1 commit to replay
+- change | ▌ ⚠ ger rebase --continue did not run: You have unstaged changes to c.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`.
 + change | ▌ ▸ 4. test! temporary experiment — stopped here
 - change | ▌ ▸ 4. test! temporary experiment — stopped here · needs edits · CI failed
++ change | ▌ [**Continue**] commit this stop as it is, then replay the 1 commit above
+- change | ▌ [Continue] (not now: c.txt changed, not amended: amend or stash it first)
 + change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 - change | CI failed — V-1 CR+2
 + change | Files — 1 · +2 −0
 + change |   c.txt — added +2 −0
+- change | Changed, not amended — 1 file
+- change |   ⚠ c.txt — changed, not amended
 - change | Files — 1 · +1 −0
 - change |   c.txt — added +1 −0
 + change |   Widget #55 — from patchset 1, before your local changes · 1 finding
@@ -1742,16 +1756,15 @@ stack  | (test! temporary experiment is HEAD)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · CI failed on 1 commit · 2 commits need edits
+change | ▌ Left: 2 comments to answer · CI failed on 1 commit · 2 commits need edits · 1 commit to replay
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌   3. Refactor parser init — replayed · CI failed
 change | ▌ ▸ 4. test! temporary experiment — stopped here
 change | ▌   5. Add e.txt — to come
-change | ▌ [Continue] commit this stop as it is, then replay the 1 commit above
+change | ▌ [**Continue**] commit this stop as it is, then replay the 1 commit above
 change | ▌ [Abort] put the branch back as it was before the rebase
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 change | Commit message — test! temporary experiment  (read-only)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +2 −0
@@ -1770,7 +1783,7 @@ change | (the commit shown is HEAD)
 ```
 terminal "ger": runs `ger rebase --continue`
 status bar message: $(terminal) ger rebase --continue runs in the ger terminal: the views follow once the rebase moves on
-notification (info): The rebase is finished. 2 commits of your stack still need edits.  [Work on Next] [Push to Gerrit…]
+notification (info): The rebase is finished. 2 commits of your stack still need edits.  [Work on Next]
     → dismissed
 + status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 - status bar | $(warning) Rebase stopped at 103  $(bell-dot) 1
@@ -1781,18 +1794,17 @@ notification (info): The rebase is finished. 2 commits of your stack still need 
 - stack  | Add e.txt — <sha> · held back · not on Gerrit  (dim)
 - stack  | ▶ test! temporary experiment — HEAD · <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-- change | ▌ Left: 2 comments to answer · CI failed on 1 commit · 2 commits need edits
+- change | ▌ Left: 2 comments to answer · CI failed on 1 commit · 2 commits need edits · 1 commit to replay
 - change | ▌   1. Cleanup after experiment — replayed
 - change | ▌   2. Extract command routing — replayed · 2 to answer
 - change | ▌   3. Refactor parser init — replayed · CI failed
 - change | ▌ ▸ 4. test! temporary experiment — stopped here
 - change | ▌   5. Add e.txt — to come
-- change | ▌ [Continue] commit this stop as it is, then replay the 1 commit above
+- change | ▌ [**Continue**] commit this stop as it is, then replay the 1 commit above
 - change | ▌ [Abort] put the branch back as it was before the rebase
 + change | [Work on next] — Work on Next (Alt+Enter)
 + change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 + change | Commit message — test! temporary experiment  (editable)
-- change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 - change | Commit message — test! temporary experiment  (read-only)
 --- shown now:
 status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
@@ -1839,16 +1851,15 @@ change | (the commit shown is below HEAD)
 - stack  | Refactor parser init — <sha> · the same as on Gerrit  [review +2, ci bad]
 + change | title: Change 102
 + change | ▌ Reworking your chain: Add e.txt — change 3 of 5  [All chains]
-+ change | ▌ Left: 2 comments to answer · 1 commit needs edits
++ change | ▌ Left: 2 comments to answer · 1 commit needs edits · 2 commits to replay
 + change | ▌   1. Cleanup after experiment — replayed
 + change | ▌   2. Extract command routing — replayed · 2 to answer
 + change | ▌ ▸ 3. Refactor parser init — stopped here
 + change | ▌   4. test! temporary experiment — to come
 + change | ▌   5. Add e.txt — to come
-+ change | ▌ [Continue] commit this stop as it is, then replay the 2 commits above
++ change | ▌ [**Continue**] commit this stop as it is, then replay the 2 commits above
 + change | ▌ [Abort] put the branch back as it was before the rebase
 - change | title: Change 103
-+ change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 + change | Commit message — Refactor parser init  (read-only)
 - change | [Work on next] — Work on Next (Alt+Enter)
 - change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
@@ -1873,16 +1884,15 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 102
 change | ▌ Reworking your chain: Add e.txt — change 3 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: 2 comments to answer · 1 commit needs edits · 2 commits to replay
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌ ▸ 3. Refactor parser init — stopped here
 change | ▌   4. test! temporary experiment — to come
 change | ▌   5. Add e.txt — to come
-change | ▌ [Continue] commit this stop as it is, then replay the 2 commits above
+change | ▌ [**Continue**] commit this stop as it is, then replay the 2 commits above
 change | ▌ [Abort] put the branch back as it was before the rebase
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 change | Commit message — Refactor parser init  (read-only)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 2 · +2 −0
@@ -1913,22 +1923,23 @@ change | (the commit shown is HEAD)
 - stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 + change | title: Change
 + change | ▌ Reworking your chain: Add e.txt — change 5 of 5  [All chains]
++ change | ▌ Left: 1 conflict to resolve · 2 comments to answer · 1 commit needs edits
 - change | title: Change 102
 - change | ▌ Reworking your chain: Add e.txt — change 3 of 5  [All chains]
+- change | ▌ Left: 2 comments to answer · 1 commit needs edits · 2 commits to replay
 + change | ▌   3. Refactor parser init — replayed
 + change | ▌   4. test! temporary experiment — replayed
 + change | ▌ ▸ 5. Add e.txt — stopped here
-+ change | ▌ [Continue] (not now: the index has unresolved conflicts; resolve the conflicts in e.txt, `git add` them, then `ger rebase --continue` to finish; `ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started)
++ change | ▌ [Continue] (not now: resolve e.txt first)
 - change | ▌ ▸ 3. Refactor parser init — stopped here
 - change | ▌   4. test! temporary experiment — to come
 - change | ▌   5. Add e.txt — to come
-- change | ▌ [Continue] commit this stop as it is, then replay the 2 commits above
+- change | ▌ [**Continue**] commit this stop as it is, then replay the 2 commits above
 + change | ▌ [Skip] leave this commit out and go on
 + change | No Change-Id — not on Gerrit
 + change | [Resolve e.txt] — it is still conflicted: open e.txt with its conflict markers, resolve them, then stage it (git add) so the rebase can go on (Alt+Enter)
 + change | Commit message — Add e.txt  (read-only)
 - change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-- change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 - change | Commit message — Refactor parser init  (read-only)
 + change | Conflicts — 1 file
 + change |   ⚠ e.txt — conflicted
@@ -1954,13 +1965,13 @@ stack  | (test! temporary experiment is HEAD)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change
 change | ▌ Reworking your chain: Add e.txt — change 5 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: 1 conflict to resolve · 2 comments to answer · 1 commit needs edits
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌   3. Refactor parser init — replayed
 change | ▌   4. test! temporary experiment — replayed
 change | ▌ ▸ 5. Add e.txt — stopped here
-change | ▌ [Continue] (not now: the index has unresolved conflicts; resolve the conflicts in e.txt, `git add` them, then `ger rebase --continue` to finish; `ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started)
+change | ▌ [Continue] (not now: resolve e.txt first)
 change | ▌ [Abort] put the branch back as it was before the rebase
 change | ▌ [Skip] leave this commit out and go on
 change | No Change-Id — not on Gerrit
@@ -1998,13 +2009,13 @@ stack  | (test! temporary experiment is HEAD)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change
 change | ▌ Reworking your chain: Add e.txt — change 5 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: 1 conflict to resolve · 2 comments to answer · 1 commit needs edits
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌   3. Refactor parser init — replayed
 change | ▌   4. test! temporary experiment — replayed
 change | ▌ ▸ 5. Add e.txt — stopped here
-change | ▌ [Continue] (not now: the index has unresolved conflicts; resolve the conflicts in e.txt, `git add` them, then `ger rebase --continue` to finish; `ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started)
+change | ▌ [Continue] (not now: resolve e.txt first)
 change | ▌ [Abort] put the branch back as it was before the rebase
 change | ▌ [Skip] leave this commit out and go on
 change | No Change-Id — not on Gerrit
@@ -2031,8 +2042,10 @@ change | (the commit shown is only on the branch as it was before)
 + stack  | ▶ Add e.txt — <sha> · held back · not on Gerrit
 - stack  |   ⚠ e.txt — conflicted
 - stack  | ⚠ Add e.txt — <sha> · held back · not on Gerrit
++ change | ▌ Left: 2 comments to answer · 1 commit needs edits
+- change | ▌ Left: 1 conflict to resolve · 2 comments to answer · 1 commit needs edits
 + change | ▌ [**Continue**] commit this stop as it is and finish the rebase
-- change | ▌ [Continue] (not now: the index has unresolved conflicts; resolve the conflicts in e.txt, `git add` them, then `ger rebase --continue` to finish; `ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started)
+- change | ▌ [Continue] (not now: resolve e.txt first)
 - change | [Resolve e.txt] — it is still conflicted: open e.txt with its conflict markers, resolve them, then stage it (git add) so the rebase can go on (Alt+Enter)
 - change | Conflicts — 1 file
 - change |   ⚠ e.txt — conflicted
@@ -2179,13 +2192,13 @@ status bar message: $(terminal) ger rebase origin/main runs in the ger terminal:
 + stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 + change | title: Change 103
 + change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-+ change | ▌ Left: 2 comments to answer · 1 commit needs edits
++ change | ▌ Left: 1 conflict to resolve · 2 comments to answer · 1 commit needs edits · 1 commit to replay
 + change | ▌   1. Cleanup after experiment — replayed
 + change | ▌   2. Extract command routing — replayed · 2 to answer
 + change | ▌   3. Refactor parser init — replayed
 + change | ▌ ▸ 4. test! temporary experiment — stopped here
 + change | ▌   5. Add e.txt — to come
-+ change | ▌ [Continue] (not now: the index has unresolved conflicts; resolve the conflicts in c.txt, `git add` them, then `ger rebase --continue` to finish; `ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started)
++ change | ▌ [Continue] (not now: resolve c.txt first)
 + change | ▌ [Abort] put the branch back as it was before the rebase
 + change | ▌ [Skip] leave this commit out and go on
 + change | Awaiting review — last pushed V-1 CR+2
@@ -2226,13 +2239,13 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: 1 conflict to resolve · 2 comments to answer · 1 commit needs edits · 1 commit to replay
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌   3. Refactor parser init — replayed
 change | ▌ ▸ 4. test! temporary experiment — stopped here
 change | ▌   5. Add e.txt — to come
-change | ▌ [Continue] (not now: the index has unresolved conflicts; resolve the conflicts in c.txt, `git add` them, then `ger rebase --continue` to finish; `ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started)
+change | ▌ [Continue] (not now: resolve c.txt first)
 change | ▌ [Abort] put the branch back as it was before the rebase
 change | ▌ [Skip] leave this commit out and go on
 change | Awaiting review — last pushed V-1 CR+2
@@ -2275,13 +2288,13 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: 1 conflict to resolve · 2 comments to answer · 1 commit needs edits · 1 commit to replay
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌   3. Refactor parser init — replayed
 change | ▌ ▸ 4. test! temporary experiment — stopped here
 change | ▌   5. Add e.txt — to come
-change | ▌ [Continue] (not now: the index has unresolved conflicts; resolve the conflicts in c.txt, `git add` them, then `ger rebase --continue` to finish; `ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started)
+change | ▌ [Continue] (not now: resolve c.txt first)
 change | ▌ [Abort] put the branch back as it was before the rebase
 change | ▌ [Skip] leave this commit out and go on
 change | Awaiting review — last pushed V-1 CR+2
@@ -2330,13 +2343,13 @@ status bar message: $(terminal) ger rebase --abort runs in the ger terminal: the
 + change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 + change | Commit message — test! temporary experiment  (editable)
 - change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-- change | ▌ Left: 2 comments to answer · 1 commit needs edits
+- change | ▌ Left: 1 conflict to resolve · 2 comments to answer · 1 commit needs edits · 1 commit to replay
 - change | ▌   1. Cleanup after experiment — replayed
 - change | ▌   2. Extract command routing — replayed · 2 to answer
 - change | ▌   3. Refactor parser init — replayed
 - change | ▌ ▸ 4. test! temporary experiment — stopped here
 - change | ▌   5. Add e.txt — to come
-- change | ▌ [Continue] (not now: the index has unresolved conflicts; resolve the conflicts in c.txt, `git add` them, then `ger rebase --continue` to finish; `ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started)
+- change | ▌ [Continue] (not now: resolve c.txt first)
 - change | ▌ [Abort] put the branch back as it was before the rebase
 - change | ▌ [Skip] leave this commit out and go on
 - change | Awaiting review — last pushed V-1 CR+2
@@ -2393,16 +2406,15 @@ change | (the commit shown is below HEAD)
 - stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 + change | title: Change 102
 + change | ▌ Reworking your chain: Add e.txt — change 3 of 5  [All chains]
-+ change | ▌ Left: 2 comments to answer · 1 commit needs edits
++ change | ▌ Left: 2 comments to answer · 1 commit needs edits · 2 commits to replay
 + change | ▌   1. Cleanup after experiment — replayed
 + change | ▌   2. Extract command routing — replayed · 2 to answer
 + change | ▌ ▸ 3. Refactor parser init — stopped here
 + change | ▌   4. test! temporary experiment — to come
 + change | ▌   5. Add e.txt — to come
-+ change | ▌ [Continue] commit this stop as it is, then replay the 2 commits above
++ change | ▌ [**Continue**] commit this stop as it is, then replay the 2 commits above
 + change | ▌ [Abort] put the branch back as it was before the rebase
 - change | title: Change 103
-+ change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 + change | Commit message — Refactor parser init  (read-only)
 - change | [Work on next] — Work on Next (Alt+Enter)
 - change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
@@ -2427,16 +2439,15 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 102
 change | ▌ Reworking your chain: Add e.txt — change 3 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: 2 comments to answer · 1 commit needs edits · 2 commits to replay
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌ ▸ 3. Refactor parser init — stopped here
 change | ▌   4. test! temporary experiment — to come
 change | ▌   5. Add e.txt — to come
-change | ▌ [Continue] commit this stop as it is, then replay the 2 commits above
+change | ▌ [**Continue**] commit this stop as it is, then replay the 2 commits above
 change | ▌ [Abort] put the branch back as it was before the rebase
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 change | Commit message — Refactor parser init  (read-only)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 2 · +2 −0
@@ -2457,8 +2468,8 @@ change | (the commit shown is HEAD)
 + change | title: Change
 - change | title: Change 102
 + change | No Change-Id — not on Gerrit
-- change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 + change | Commit message — Add e.txt  (read-only)
+- change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
 - change | Commit message — Refactor parser init  (read-only)
 + change | Files — 1 · +1 −0
 + change |   e.txt — modified +1 −0
@@ -2483,16 +2494,15 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change
 change | ▌ Reworking your chain: Add e.txt — change 3 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: 2 comments to answer · 1 commit needs edits · 2 commits to replay
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌ ▸ 3. Refactor parser init — stopped here
 change | ▌   4. test! temporary experiment — to come
 change | ▌   5. Add e.txt — to come
-change | ▌ [Continue] commit this stop as it is, then replay the 2 commits above
+change | ▌ [**Continue**] commit this stop as it is, then replay the 2 commits above
 change | ▌ [Abort] put the branch back as it was before the rebase
 change | No Change-Id — not on Gerrit
-change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 change | Commit message — Add e.txt  (read-only)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +1 −0
@@ -2523,16 +2533,15 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change
 change | ▌ Reworking your chain: Add e.txt — change 3 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: 2 comments to answer · 1 commit needs edits · 2 commits to replay
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌ ▸ 3. Refactor parser init — stopped here
 change | ▌   4. test! temporary experiment — to come
 change | ▌   5. Add e.txt — to come
-change | ▌ [Continue] commit this stop as it is, then replay the 2 commits above
+change | ▌ [**Continue**] commit this stop as it is, then replay the 2 commits above
 change | ▌ [Abort] put the branch back as it was before the rebase
 change | No Change-Id — not on Gerrit
-change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 change | Commit message — Add e.txt  (read-only)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 1 · +1 −0
@@ -2550,8 +2559,8 @@ diff tab | e.txt (<sha>) (ger-file on the right, active)
 + change | title: Change 102
 - change | title: Change
 + change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-- change | No Change-Id — not on Gerrit
 + change | Commit message — Refactor parser init  (read-only)
+- change | No Change-Id — not on Gerrit
 - change | Commit message — Add e.txt  (read-only)
 + change | Files — 2 · +2 −0
 + change |   a.txt — added +1 −0
@@ -2576,16 +2585,15 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 102
 change | ▌ Reworking your chain: Add e.txt — change 3 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: 2 comments to answer · 1 commit needs edits · 2 commits to replay
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌ ▸ 3. Refactor parser init — stopped here
 change | ▌   4. test! temporary experiment — to come
 change | ▌   5. Add e.txt — to come
-change | ▌ [Continue] commit this stop as it is, then replay the 2 commits above
+change | ▌ [**Continue**] commit this stop as it is, then replay the 2 commits above
 change | ▌ [Abort] put the branch back as it was before the rebase
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 change | Commit message — Refactor parser init  (read-only)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 2 · +2 −0
@@ -2621,16 +2629,15 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 102
 change | ▌ Reworking your chain: Add e.txt — change 3 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: 2 comments to answer · 1 commit needs edits · 2 commits to replay
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌ ▸ 3. Refactor parser init — stopped here
 change | ▌   4. test! temporary experiment — to come
 change | ▌   5. Add e.txt — to come
-change | ▌ [Continue] commit this stop as it is, then replay the 2 commits above
+change | ▌ [**Continue**] commit this stop as it is, then replay the 2 commits above
 change | ▌ [Abort] put the branch back as it was before the rebase
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 change | Commit message — Refactor parser init  (read-only)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 2 · +2 −0
@@ -2666,16 +2673,15 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 102
 change | ▌ Reworking your chain: Add e.txt — change 3 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: 2 comments to answer · 1 commit needs edits · 2 commits to replay
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌ ▸ 3. Refactor parser init — stopped here
 change | ▌   4. test! temporary experiment — to come
 change | ▌   5. Add e.txt — to come
-change | ▌ [Continue] commit this stop as it is, then replay the 2 commits above
+change | ▌ [**Continue**] commit this stop as it is, then replay the 2 commits above
 change | ▌ [Abort] put the branch back as it was before the rebase
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 change | Commit message — Refactor parser init  (read-only)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 2 · +2 −0
@@ -2698,9 +2704,16 @@ dialog (warning): Save e.txt first? ger rebase --continue then says what it stil
     detail: e.txt has edits that are not saved, and ger rebase --continue sees only the files on disk. Continue without saving: the edits stay in the editor, git rewrites the files under them, and VS Code says so when you save.
     → pressed "Save All"
 notification (warning): ger rebase --continue did not run: You have unstaged changes to e.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`.
+status bar message: $(warning) refused: you have unstaged changes to e.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`
 ger terminal | error: you have unstaged changes to e.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`
 ger terminal | (exit 2)
-(no change)
++ change | ▌ Left: e.txt not amended · 2 comments to answer · 1 commit needs edits · 2 commits to replay
++ change | ▌ ⚠ refused: you have unstaged changes to e.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`
+- change | ▌ Left: 2 comments to answer · 1 commit needs edits · 2 commits to replay
++ change | ▌ [Continue] (not now: e.txt changed, not amended: amend or stash it first)
+- change | ▌ [**Continue**] commit this stop as it is, then replay the 2 commits above
++ change | Changed, not amended — 1 file
++ change |   ⚠ e.txt — changed, not amended
 --- shown now:
 status bar | $(warning) Rebase stopped at 102  $(bell-dot) 1
 stack header | (view not drawn)
@@ -2716,18 +2729,20 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 102
 change | ▌ Reworking your chain: Add e.txt — change 3 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: e.txt not amended · 2 comments to answer · 1 commit needs edits · 2 commits to replay
+change | ▌ ⚠ refused: you have unstaged changes to e.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌ ▸ 3. Refactor parser init — stopped here
 change | ▌   4. test! temporary experiment — to come
 change | ▌   5. Add e.txt — to come
-change | ▌ [Continue] commit this stop as it is, then replay the 2 commits above
+change | ▌ [Continue] (not now: e.txt changed, not amended: amend or stash it first)
 change | ▌ [Abort] put the branch back as it was before the rebase
 change | Local changes not pushed, awaiting review — last pushed V-1 CR+2
-change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 change | Commit message — Refactor parser init  (read-only)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
+change | Changed, not amended — 1 file
+change |   ⚠ e.txt — changed, not amended
 change | Files — 2 · +2 −0
 change |   a.txt — added +1 −0
 change |   e.txt — added +1 −0
@@ -2756,20 +2771,22 @@ diff tab | e.txt (<sha>) (ger-file on the right)
 - stack  | test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]  (dim)
 - stack  | ▶ Refactor parser init — HEAD · <sha> · code changed · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - change | ▌ Reworking your chain: Add e.txt — change 3 of 5  [All chains]
-- change | ▌ Left: 2 comments to answer · 1 commit needs edits
+- change | ▌ Left: e.txt not amended · 2 comments to answer · 1 commit needs edits · 2 commits to replay
+- change | ▌ ⚠ refused: you have unstaged changes to e.txt; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`
 - change | ▌   1. Cleanup after experiment — replayed
 - change | ▌   2. Extract command routing — replayed · 2 to answer
 - change | ▌ ▸ 3. Refactor parser init — stopped here
 - change | ▌   4. test! temporary experiment — to come
 - change | ▌   5. Add e.txt — to come
-- change | ▌ [Continue] commit this stop as it is, then replay the 2 commits above
+- change | ▌ [Continue] (not now: e.txt changed, not amended: amend or stash it first)
 - change | ▌ [Abort] put the branch back as it was before the rebase
 + change | [Work on next] — Work on Next (Alt+Enter)
 + change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 + change | Commit message — Refactor parser init  (editable)
-- change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter)
 - change | Commit message — Refactor parser init  (read-only)
 + change | Files — 2 · +3 −0
+- change | Changed, not amended — 1 file
+- change |   ⚠ e.txt — changed, not amended
 - change | Files — 2 · +2 −0
 + change |   e.txt — added +2 −0
 - change |   e.txt — added +1 −0
@@ -2969,13 +2986,13 @@ diff tab | e.txt (<sha>) (file on the right, unsaved, active)
 + stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 + change | title: Change 103
 + change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-+ change | ▌ Left: 2 comments to answer · 1 commit needs edits
++ change | ▌ Left: 1 conflict to resolve · 2 comments to answer · 1 commit needs edits · 1 commit to replay
 + change | ▌   1. Cleanup after experiment — replayed
 + change | ▌   2. Extract command routing — replayed · 2 to answer
 + change | ▌   3. Refactor parser init — replayed
 + change | ▌ ▸ 4. test! temporary experiment — stopped here
 + change | ▌   5. Add e.txt — to come
-+ change | ▌ [Continue] (not now: the index has unresolved conflicts; resolve the conflicts in c.txt, `git add` them, then `ger rebase --continue` to finish; `ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started)
++ change | ▌ [Continue] (not now: resolve c.txt first)
 + change | ▌ [Abort] put the branch back as it was before the rebase
 + change | ▌ [Skip] leave this commit out and go on
 + change | Awaiting review — last pushed V-1 CR+2
@@ -3018,13 +3035,13 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: 1 conflict to resolve · 2 comments to answer · 1 commit needs edits · 1 commit to replay
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌   3. Refactor parser init — replayed
 change | ▌ ▸ 4. test! temporary experiment — stopped here
 change | ▌   5. Add e.txt — to come
-change | ▌ [Continue] (not now: the index has unresolved conflicts; resolve the conflicts in c.txt, `git add` them, then `ger rebase --continue` to finish; `ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started)
+change | ▌ [Continue] (not now: resolve c.txt first)
 change | ▌ [Abort] put the branch back as it was before the rebase
 change | ▌ [Skip] leave this commit out and go on
 change | Awaiting review — last pushed V-1 CR+2
@@ -3055,8 +3072,10 @@ diff tab | e.txt (<sha>) — stale (file on the right, unsaved, active)
 - stack  |   ⚠ c.txt — conflicted
 + stack  | ▶ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
 - stack  | ⚠ test! temporary experiment — <sha> · code changed · held back · its code changed since the last push  [last pushed review +2, last pushed ci bad]
++ change | ▌ Left: 2 comments to answer · 1 commit needs edits · 1 commit to replay
+- change | ▌ Left: 1 conflict to resolve · 2 comments to answer · 1 commit needs edits · 1 commit to replay
 + change | ▌ [**Continue**] commit this stop as it is, then replay the 1 commit above
-- change | ▌ [Continue] (not now: the index has unresolved conflicts; resolve the conflicts in c.txt, `git add` them, then `ger rebase --continue` to finish; `ger rebase --skip` leaves this commit out, `ger rebase --abort` goes back to where the rebase started)
+- change | ▌ [Continue] (not now: resolve c.txt first)
 - change | [Resolve c.txt] — it is still conflicted: open c.txt with its conflict markers, resolve them, then stage it (git add) so the rebase can go on (Alt+Enter)
 - change | Conflicts — 1 file
 - change |   ⚠ c.txt — conflicted
@@ -3075,7 +3094,7 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: 2 comments to answer · 1 commit needs edits · 1 commit to replay
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌   3. Refactor parser init — replayed
@@ -3118,7 +3137,7 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: 2 comments to answer · 1 commit needs edits · 1 commit to replay
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌   3. Refactor parser init — replayed
@@ -3164,7 +3183,7 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: 2 comments to answer · 1 commit needs edits · 1 commit to replay
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌   3. Refactor parser init — replayed
@@ -3207,7 +3226,7 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: 2 comments to answer · 1 commit needs edits · 1 commit to replay
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌   3. Refactor parser init — replayed
@@ -3251,7 +3270,7 @@ stack  | (test! temporary experiment is only on the branch as it was before)
 stack  | (Add e.txt is only on the branch as it was before)
 change | title: Change 103
 change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-change | ▌ Left: 2 comments to answer · 1 commit needs edits
+change | ▌ Left: 2 comments to answer · 1 commit needs edits · 1 commit to replay
 change | ▌   1. Cleanup after experiment — replayed
 change | ▌   2. Extract command routing — replayed · 2 to answer
 change | ▌   3. Refactor parser init — replayed
@@ -3298,7 +3317,7 @@ notification (info): The rebase is finished. 1 commit of your stack still needs 
 + change | This commit is ahead of Gerrit — its code changed since the last push: the votes are the last pushed patchset's, and Gerrit may not keep them when you push
 + change | Commit message — test! temporary experiment  (editable)
 - change | ▌ Reworking your chain: Add e.txt — change 4 of 5  [All chains]
-- change | ▌ Left: 2 comments to answer · 1 commit needs edits
+- change | ▌ Left: 2 comments to answer · 1 commit needs edits · 1 commit to replay
 - change | ▌   1. Cleanup after experiment — replayed
 - change | ▌   2. Extract command routing — replayed · 2 to answer
 - change | ▌   3. Refactor parser init — replayed
@@ -3609,7 +3628,7 @@ notification (info): Left the review of change 900.
 + stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 + stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 + change | title: (nothing shown)
-+ change | Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.
++ change | "Add retry to the uploader" is not in the local stack any more (a checkout, a drop or a squash). Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.
 - chains |   test! temporary experiment — 4 changes · V-1 CR+2 💬2 open · active <age> ago  [ger.chain.url]
 - chains |     test! temporary experiment — 103 · V-1 CR+2  [ger.change.url]
 - chains |     Refactor parser init — 102 · V-1 CR+2  [ger.change.url]
@@ -3655,6 +3674,6 @@ stack  | Refactor parser init — <sha> · code changed · its code changed sinc
 stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 change | title: (nothing shown)
-change | Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.
+change | "Add retry to the uploader" is not in the local stack any more (a checkout, a drop or a squash). Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.
 editor | uploader.txt (file, line 1)
 ```

@@ -49,7 +49,7 @@ function action(kind: NextKind, label: string, why: string): NextAction {
 }
 
 /** Changes a push would send or publish: new code, a commit not on Gerrit yet, drafts that go along. */
-function pushable(stack: Stack): boolean {
+export function pushable(stack: Stack): boolean {
   return !stack.push_blocked && stack.commits.some((c) => !c.held_back && (c.patchset_status === "newer" || c.patchset_status === "absent" || (c.comments_drafted ?? 0) > 0));
 }
 
@@ -100,6 +100,10 @@ function reworkNext(state: NextState, stack: Stack): NextAction | undefined {
   if (stack.rebase?.stop === "resolved" && stack.rebase.actions.includes("continue")) {
     return action("continue", "Continue", "the conflicts are resolved: commit this stop and go on with the rebase");
   }
+  if (stack.rebase?.uncommitted?.length) {
+    // Saved, not amended: amending is the terminal's (git commit --amend -a) until the views can (issue 132); nothing here would go on.
+    return undefined;
+  }
   const left = state.chains.filter(toAnswer);
   if (left.length) {
     const unread = left.filter((chain) => !state.visited.has(chain.root_id)).length;
@@ -111,7 +115,8 @@ function reworkNext(state: NextState, stack: Stack): NextAction | undefined {
     return action("workOnNext", "Work on next", plan.kind === "continue" && plan.next ? `go on to "${plan.next.summary}", the next commit that needs edits` : WALK_WORDS.title);
   }
   if (plan.kind === "continue") {
-    return action("workOnNext", "Finish the rebase", "no commit after this one needs edits");
+    // The header's Continue, under its name: one action, one name (vscode/README.md, "Next").
+    return action("continue", "Continue", "no commit after this one needs edits: commit this stop and finish the rebase");
   }
   return pushable(stack) ? action("push", "Push", "nothing needs edits: ger push sends the stack and publishes your drafts") : undefined;
 }

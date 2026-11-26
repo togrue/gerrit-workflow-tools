@@ -130,9 +130,12 @@ test("reworking your commit, Next goes through each conflicted file by name, Con
   for (const [rule, state, label] of rows) {
     assert.equal(nextAction(rework(state))?.label, label, rule);
   }
-  // Rule 5: a rebase underway, no commit above the stop needs edits.
+  // Rule 5: a rebase underway, no commit above the stop needs edits: the header's Continue, by its name.
   const stopped = stack([{ ...top, rebase: "current", needs_edit: false }], { rebase_in_progress: true, rebase: { unmerged: [] } as unknown as Rebase });
-  assert.equal(nextAction(rework({ stack: stopped }))?.label, "Finish the rebase");
+  assert.deepEqual([nextAction(rework({ stack: stopped }))?.kind, nextAction(rework({ stack: stopped }))?.label], ["continue", "Continue"]);
+  // A fix saved and not amended at the stop: nothing here goes on (Continue would refuse); the stop says why.
+  const unamended = stack([{ ...top, rebase: "current", needs_edit: false }], { rebase_in_progress: true, rebase: { unmerged: [], uncommitted: ["a.txt"] } as unknown as Rebase });
+  assert.equal(nextAction(rework({ stack: unamended })), undefined);
   // Somebody's change you only look at: review it.
   assert.equal(nextAction({ ...rework({}), local: false, shown: shown({ own: false, pushed: true }) })?.label, "Review change");
 });

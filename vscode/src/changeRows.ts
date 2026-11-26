@@ -58,6 +58,8 @@ export interface ChangeState extends CompareState {
    * the files still conflicted), or with the conflicts resolved. Core's verdict, from the stack.
    */
   stopped?: Stopped;
+  /** The rebase stopped at this commit with it applied, and these files are changed and not amended (core's `uncommitted`). */
+  notAmended?: string[];
   /**
    * The change a staged review holds here (core's `staged_review`): read as somebody else's change,
    * with what is new since your review; `behind` when Gerrit has a newer patchset than the one
@@ -177,8 +179,8 @@ export interface ChangeVm {
   compare?: CompareVm;
   /** Someone's change you reviewed before: what is new, one click away. */
   hint?: { text: string; show: boolean };
-  /** A rebase stopped here on a conflict: the files still conflicted, as Local stack lists them under its banner. */
-  conflicts?: { summary: string; rows: StackInfo[] };
+  /** A rebase stopped here: the files still conflicted, as Local stack lists them under its banner; at an edit stop, the files not amended. */
+  conflicts?: { title?: string; summary: string; rows: StackInfo[] };
   files?: { title: string; summary: string; added: number; deleted: number; note: string; tooltip: string; rows: FileRow[]; markAll?: string };
   comments?: { summary: string; open: boolean; threads: ThreadRow[] };
   /** Next: the one thing to do now, its button's text and why (nextAction.ts). */
@@ -221,8 +223,16 @@ export const STOPPED_WORDS = {
   conflicts: (count: number) => `Conflicts in ${count} files — resolve them, then Continue`,
   resolved: "Conflicts resolved — Continue",
   files: "Files, as before the rebase",
+  notAmendedTitle: "Changed, not amended",
+  notAmended: "changed, not amended",
+  notAmendedTooltip: "Saved in the work tree, not in the commit: Continue waits for it. git commit --amend -a (in the terminal) takes it into this commit, git stash sets it aside.",
   filesTooltip: "The rebase has not applied this commit yet: these are its files as they were before the rebase, against its old parent. What is left to resolve is under Conflicts.",
 };
+
+/** A file changed and not amended at an edit stop: a click opens it. */
+function notAmendedRow(file: string): StackInfo {
+  return { text: file, detail: STOPPED_WORDS.notAmended, icon: "diff-modified", tone: "warn", tooltip: STOPPED_WORDS.notAmendedTooltip, conflict: file };
+}
 
 /** The head of a commit a rebase stopped at before applying it: what is left to do, and the buttons to go on. */
 function stoppedHead(stopped: Stopped): Icon & { text: string; actions: StackAction[] } {
@@ -554,7 +564,11 @@ export function changeVm(state: ChangeState): ChangeVm {
       badges: commit.pushed ? badges(commit, loading?.commit ? 0 : draftsIn(chains)).filter((badge): badge is Badge => badge !== null) : [],
       ...(stopped && !quietStop ? stoppedHead(stopped) : {}),
     },
-    conflicts: stopped?.unmerged.length ? { summary: plural(stopped.unmerged.length, "file"), rows: stopped.unmerged.map(conflictRow) } : undefined,
+    conflicts: stopped?.unmerged.length
+      ? { summary: plural(stopped.unmerged.length, "file"), rows: stopped.unmerged.map(conflictRow) }
+      : state.notAmended?.length
+        ? { title: STOPPED_WORDS.notAmendedTitle, summary: plural(state.notAmended.length, "file"), rows: state.notAmended.map(notAmendedRow) }
+        : undefined,
     notes,
     message: state.base?.message
       ? {
@@ -632,7 +646,7 @@ export function changeLines(vm: ChangeVm): string[] {
     add(0, vm.hint.text);
   }
   if (vm.conflicts) {
-    add(0, "Conflicts", vm.conflicts.summary);
+    add(0, vm.conflicts.title ?? "Conflicts", vm.conflicts.summary);
     vm.conflicts.rows.forEach((row) => add(1, `⚠ ${row.text}`, row.detail));
   }
   if (vm.files) {

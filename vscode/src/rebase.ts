@@ -11,7 +11,7 @@ import { runInTerminal } from "./launch";
 import { sentence } from "./format";
 import { Model, describeError } from "./model";
 import { RebaseAction } from "./api";
-import { REBASE_ACTIONS, REBASE_WORDS, pushWaysOn, rebaseNotNowFresh, skipQuestion } from "./stackRows";
+import { REBASE_ACTIONS, REBASE_WORDS, abortQuestion, pushWaysOn, rebaseNotNowFresh, skipQuestion } from "./stackRows";
 import { saveBeforeContinue } from "./staleDiffs";
 import { feedback, ui } from "./ui";
 
@@ -21,28 +21,46 @@ const SAID: Record<RebaseAction, string> = {
   skip: "ger rebase --skip runs in the ger terminal: the rebase goes on without that commit",
 };
 
+/** What the views say around a step run in the terminal: that it started (sent, nothing left to ask), or why it did not. */
+export interface StepHooks {
+  started?(): void;
+  refused?(text: string): void;
+}
+
+/** A refusal said before anything ran: in the view (the hooks), and as a warning that is not waited on. */
+function refuse(hooks: StepHooks, text: string): void {
+  hooks.refused?.(text);
+  void ui().message("warning", text, {}, []);
+}
+
 /**
  * `ger rebase --<step>` in the ger terminal, where git can open an editor or say why not. Only a
  * way on core allows from this stop: the palette has Skip only where it does (`ger.rebaseSkippable`),
  * and says why not when it is run anyway, after a fresh look at the stack (a `git add` in the terminal
- * may have resolved it since). Skip asks first: it leaves a commit out. Continue asks to save the
- * repository's files with unsaved edits first: git goes on with the files on disk.
+ * may have resolved it since). Skip asks first: it leaves a commit out. Abort asks first where it
+ * throws away what no stash keeps (core's `discards`: commits made in this rebase, a resolution).
+ * Continue asks to save the repository's files with unsaved edits first: git goes on with the files
+ * on disk. `hooks.started` runs once every question is answered and the step is sent, never before.
  */
-export async function rebaseStep(model: Model, step: RebaseAction): Promise<boolean> {
+export async function rebaseStep(model: Model, step: RebaseAction, hooks: StepHooks = {}): Promise<boolean> {
   const notNow = await rebaseNotNowFresh(model, step);
   if (notNow) {
-    await ui().message("warning", notNow, {}, []);
+    refuse(hooks, `ger rebase --${step} did not run: ${notNow}`);
     return false;
   }
   if (step === "skip" && !(await confirmSkip(model))) {
     return false;
   }
+  if (step === "abort" && !(await confirmAbort(model, hooks))) {
+    return false;
+  }
   if (step === "continue" && !(await saveBeforeContinue(ui(), unsavedInRepo(model.repo)))) {
     return false;
   }
-  if (step !== "abort" && (await refusedNow(model, step, `ger rebase --${step} did not run`))) {
+  if (step !== "abort" && (await refusedNow(model, step, `ger rebase --${step} did not run`, hooks))) {
     return false;
   }
+  hooks.started?.();
   runInTerminal(model.repo, ["rebase", `--${step}`]);
   feedback(SAID[step], { icon: "terminal", milliseconds: 8000 });
   return true;
@@ -53,7 +71,7 @@ export async function rebaseStep(model: Model, step: RebaseAction): Promise<bool
  * (`GET /rebase/refusal`: the stop, and for Continue the files changed and not amended or added).
  * A refusal is said here, after `what`: in the terminal it would go unseen behind the views.
  */
-export async function refusedNow(model: Model, step: RebaseAction, what: string): Promise<boolean> {
+export async function refusedNow(model: Model, step: RebaseAction, what: string, hooks: StepHooks = {}): Promise<boolean> {
   let refused: string | null;
   try {
     refused = await (await model.client()).rebaseRefusal(step);
@@ -61,9 +79,30 @@ export async function refusedNow(model: Model, step: RebaseAction, what: string)
     refused = describeError(error);
   }
   if (refused) {
-    await ui().message("warning", `${what}: ${sentence(refused)}.`, {}, []);
+    refuse(hooks, `${what}: ${sentence(refused)}.`);
   }
   return Boolean(refused);
+}
+
+/** Abort's question, where it throws away what no stash keeps: what goes, in words, and the button. A ger before API 1.8 says nothing: no question, as before. */
+async function confirmAbort(model: Model, hooks: StepHooks): Promise<boolean> {
+  let check: Awaited<ReturnType<Awaited<ReturnType<Model["client"]>>["abortCheck"]>>;
+  try {
+    check = await (await model.client()).abortCheck();
+  } catch (error) {
+    refuse(hooks, `ger rebase --abort did not run: ${sentence(describeError(error))}.`);
+    return false;
+  }
+  if (check.refused) {
+    refuse(hooks, `ger rebase --abort did not run: ${sentence(check.refused)}.`);
+    return false;
+  }
+  if (!check.discards?.asks) {
+    return true;
+  }
+  const { message, detail } = abortQuestion(check.discards);
+  const abort = REBASE_ACTIONS.abort.label;
+  return (await ui().message("warning", message, { modal: true, detail }, [abort])) === abort;
 }
 
 /**

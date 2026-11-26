@@ -86,6 +86,8 @@ class Terminals {
   private readonly byName = new Map<string, vscode.Terminal>();
   private readonly busy = new Set<vscode.Terminal>();
   private watching = false;
+  /** Told the name of a terminal of ours whose command just ended (shell integration; never without it). */
+  readonly ended = new Set<(name: string) => void>();
 
   take(options: TerminalOptions): vscode.Terminal {
     this.watch();
@@ -107,7 +109,13 @@ class Terminals {
     this.watching = true;
     const events = vscode.window as unknown as ShellExecutionEvents;
     events.onDidStartTerminalShellExecution?.((event) => this.busy.add(event.terminal));
-    events.onDidEndTerminalShellExecution?.((event) => this.busy.delete(event.terminal));
+    events.onDidEndTerminalShellExecution?.((event) => {
+      this.busy.delete(event.terminal);
+      const name = [...this.byName].find(([, term]) => term === event.terminal)?.[0];
+      if (name !== undefined) {
+        this.ended.forEach((listener) => listener(name));
+      }
+    });
     vscode.window.onDidCloseTerminal((closed) => {
       this.busy.delete(closed);
       for (const [name, term] of this.byName) {
@@ -120,6 +128,15 @@ class Terminals {
 }
 
 const terminals = new Terminals();
+
+/**
+ * Call `listener` with the terminal's name each time a command the extension ran in one of its
+ * terminals ends: the views look again at once instead of waiting for the repository watcher.
+ */
+export function onTerminalCommandEnd(listener: (name: string) => void): vscode.Disposable {
+  terminals.ended.add(listener);
+  return new vscode.Disposable(() => terminals.ended.delete(listener));
+}
 
 export const vscodeUi: Ui = {
   message(level, text, options, buttons) {
