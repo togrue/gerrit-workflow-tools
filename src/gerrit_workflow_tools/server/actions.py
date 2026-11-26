@@ -25,6 +25,7 @@ from gerrit_workflow_tools.core.comment_write import (
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
 from gerrit_workflow_tools.core.gerrit_patchset import resolve_patchset
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
+from gerrit_workflow_tools.core.git_state import checked_out_branch_name
 from gerrit_workflow_tools.core.reorder import STEP_ACTIONS, StackStep, rewrite_stack, undo_rewrite
 from gerrit_workflow_tools.core.review_checkout import (
     CheckoutOptions,
@@ -84,12 +85,14 @@ def review_open(ctx: Context, req: Request) -> dict[str, Any]:
 
 
 def review_done(ctx: Context, _req: Request) -> dict[str, Any]:
-    """Leave the review (``ger review --done``): which ``change-<n>`` branches went, which stayed."""
+    """Leave the review (``ger review --done``): which ``change-<n>`` branches went, which stayed,
+    and where the checkout the review was in is now (``branch``, ``null`` when detached; ``worktree``)."""
     state = find_review(ctx.cwd, ctx.settings)
     if state is None:
         raise ReviewUsageError("no review going on here")
     deleted, kept = close_review(state)
-    return {"done": state.number, "deleted": deleted, "kept": kept}
+    where = {"branch": checked_out_branch_name(state.worktree), "worktree": str(state.worktree), "mode": state.mode}
+    return {"done": state.number, "deleted": deleted, "kept": kept, **where}
 
 
 def reply(ctx: Context, req: Request) -> dict[str, Any]:

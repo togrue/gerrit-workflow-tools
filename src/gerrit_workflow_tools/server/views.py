@@ -34,6 +34,7 @@ from gerrit_workflow_tools.core.rebasing_stack import stopped_rebase
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import find_review, staged_review
 from gerrit_workflow_tools.core.review_target import drafts_published_by, related_chain_numbers
+from gerrit_workflow_tools.core.rewrite_refusal import review_here_refusal
 from gerrit_workflow_tools.core.stack import merge_commits, pinned_below
 from gerrit_workflow_tools.core.upstream import branch_has_upstream
 from gerrit_workflow_tools.render.agent_runbook import runbook_json
@@ -143,6 +144,7 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
     # A fixup stopped while folding: the stop is about the commit it folds into.
     folding = next((c for c in view.commits if progress and c.sha == progress.folding_into), None)
     rebase = RebaseHeadline(progress.stop, folding or stopped_at, folding=folding is not None) if progress else None
+    staged = _staged_review_json(ctx)
     answer = {
         "branch": ctx.run.worktree.branch,
         "head": head,
@@ -150,7 +152,8 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
         "rebase": rebase_json(view, progress),
         "upstream": upstream_json(overview.moved),
         "push_blocked": _push_blocked_json(ctx),
-        "staged_review": _staged_review_json(ctx),
+        "staged_review": staged,
+        "review_blocked": None if staged else _review_blocked_json(ctx),
         "stack": {
             "project": context.project,
             "target_branch": context.target_branch or None,
@@ -176,6 +179,12 @@ def _staged_review_json(ctx: Context) -> dict[str, object] | None:
     other rewrites refuse over."""
     state = staged_review(ctx.run.worktree.repository_dir, ctx.cwd)
     return review_state_json(state, chain=None, url=None) if state else None
+
+
+def _review_blocked_json(ctx: Context) -> dict[str, object] | None:
+    """Why ``ger review`` would refuse a checkout here now (``reason``, ``message``, ``files``), or ``None``."""
+    blocked = review_here_refusal(ctx.cwd, ctx.settings)
+    return {"reason": blocked.reason, "message": str(blocked), "files": list(blocked.files)} if blocked else None
 
 
 def _push_blocked_json(ctx: Context) -> dict[str, str] | None:
@@ -287,6 +296,8 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
     introduced = introduced_fingerprints([item.ci_verdict_contents for item in shown]) if is_chain else None
     holds = load_holds(ctx.cwd)
     me = ctx.service.self_account_id() if any(item.commit.pushed for item in shown) else None
+    # A change staged for review here: the working files hold it, so its comments are placed there too.
+    staged = staged_review(ctx.run.worktree.repository_dir, ctx.cwd)
     commits = []
     for index, item in enumerate(shown):
         payload = commit_json_payload(
@@ -306,7 +317,7 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
             for entry, comment in zip(chain_payload["comments"], chain.comments, strict=True):
                 entry["text"] = comment_text(comment.message, comment.suggested_edits)
                 entry["markdown"] = comment_text(comment.message, comment.suggested_edits, markdown=True)
-        if item.target.is_local_commit:
+        if item.target.is_local_commit or (staged is not None and staged.number == item.commit.number):
             add_worktree_places(ctx.cwd, served_chains, item.chains)
         payload["updated"] = iso_utc(parse_gerrit_time(item.commit.updated))
         if req.flag("markdown"):

@@ -385,6 +385,14 @@ with it as a `next:` line.
 `git am` underway), and `message` is the refusal `ger push` prints. A client asks it before it
 starts `ger push`, so it can offer to finish the rebase instead.
 
+`review_blocked` is why `ger review` would refuse to check a change out for review here now, or
+`null`: only where the review goes into this checkout (`ger.reviewCheckout` = `branch`) and no
+review is staged here, when tracked files have uncommitted changes. `reason` is
+`uncommitted-changes`, `message` the refusal `ger review` prints, `files` the changed files. A
+`POST /review/open` that meets them refuses with the same `reason`; a client offers the review
+worktree instead (`mode: worktree`), which uncommitted changes here do not stand in the way of.
+Costs two `git diff` calls, and only in that configuration.
+
 `staged_review` is the **staged review** in this checkout, or `null`: the **review state** as
 [`GET /review`](#get-review) has it (`chain` and `url` `null`), while HEAD still sits at the
 change's parent and its `change-<number>` branch on the change. The stack is then somebody
@@ -456,8 +464,8 @@ Each comment also carries its whole text with the Gerrit fix suggestions written
 plain, as `ger show` prints them without its box and colours, and `markdown` with each
 replacement fenced. A ```` ```suggestion ```` block is in the message already and is not repeated.
 
-For a commit of the local stack (`local_commit: true`), an editor draws the threads in the working
-files, which may hold another version of a commented file than the patchset the comment was written
+For a commit of the local stack (`local_commit: true`), and for the change a **staged review** holds
+here, an editor draws the threads in the working files, which may hold another version of a commented file than the patchset the comment was written
 on (a comment on an earlier commit, seen at the tip; a commit changed since its push). So each open
 Gerrit chain there also carries `worktree`: where its lines are in the working file, mapped from the
 version the comment was written on (Gerrit's `commit_id`) as local comments are re-anchored
@@ -620,7 +628,7 @@ a vote no change takes is `USAGE`, as on the command line.
 | Endpoint | Body | Does |
 |----------|------|------|
 | `/review/open` | `change`, optional `patchset`, `mode`, `stage`, `force`; or `step` instead of `change` | `ger review CHANGEISH`: the **review checkout**. `step` (`1` or `-1`) is `ger review --next` / `--prev`: the change above or below in the review chain of the review going on, at its current patchset, in that review's mode; at the end of the chain it is `NOT_FOUND`, with `ger review`'s words. Answers `review` (with `chain`) and `moved_from`. |
-| `/review/done` | — | `ger review --done`. |
+| `/review/done` | — | `ger review --done`: `done` (the change), the `change-<n>` branches `deleted` and `kept`, and where the review's checkout is now: `mode`, `worktree`, `branch` (`null` when detached). |
 | `/reviewed` | `change`, `patchset` (numbers), `path`, optional `reviewed` | Mark `path` of that patchset reviewed on Gerrit (`reviewed` `true`, the default), or clear the mark (`false`): Gerrit's per-file flag, which its own web UI shows as a tick. One request; answers `change`, `patch_set`, `path`, `reviewed`. |
 | `/vote` | `change`, `patch_sets`, optional `chain`, `votes`, `message` | `ger review --vote`: publish your drafts on the change (with `chain`, on every open change of its chain), with `votes` (`{label: value}`; `{}` or none: the drafts go out without a vote, as `ger reply --publish CHANGEISH`) and `message` on each. With `chain`, a change that carries your vote on a label keeps it: the vote goes to the others, and your drafts and the message still go there. `patch_sets` (`{change number: patchset}`) is what `GET /vote` showed: when the changes or a patchset are not that any more, nothing is sent and it is `REFUSED`. A change that rules a vote out is skipped; when none takes it, or there is nothing to send (no draft, no vote, no message), or `GER_NO_PUBLISH` is set, it is `USAGE`. Answers as `ger review --vote --json` for several changes: `changes` (each `change`, `number`, `drafts`, `labels` (the votes that went there), `keeps` (your votes it kept), `message`, `status`) and `skipped` (`change`, `number`, `ruled_out`). |
 | `/comments/reply` | `rev`, `comment_id`, `message`, optional `resolved` | `ger reply`: a **draft** reply in that chain. Publishing stays with `ger push` and `ger review --vote`. |
