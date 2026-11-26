@@ -3,7 +3,7 @@
 // too, and is drawn only once Gerrit took it (a refusal is said, never ticked); a version Gerrit
 // does not have (your local commit) is kept here for the session. A file is
 // seen once its diff, opened from the Change view (a click, Next file), was shown to its end, or by
-// a click on its tick.
+// a click on its tick. The file alone in an editor (opened from a CI finding or a comment) is not its diff.
 //
 // The combined diff (Open All Changes) does not tick a file on its own: VS Code reports every file in
 // it as shown whole, wherever it is scrolled. Read there, Next offers to mark them all seen (`markAll`),
@@ -135,11 +135,15 @@ export class FilesSeen implements vscode.Disposable {
     }
   }
 
-  /** An editor showing a file of the version looked at, scrolled to its last line: seen. Not inside the combined diff. */
+  /**
+   * The right side of a file's own diff, scrolled to its last line: seen. Not inside the combined
+   * diff, and not the file alone in an editor (a CI finding or a comment opens it at a line: that
+   * is not reading the change, state 13).
+   */
   private look(editor: vscode.TextEditor): void {
     const file = this.watched.has(editor.document.uri.toString()) ? this.fileOf(editor.document.uri) : undefined;
     const last = editor.visibleRanges.at(-1);
-    if (!file || !last || inCombinedDiff(editor) || this.sets.get(file.where.key)?.has(file.path)) {
+    if (!file || !last || !inOwnDiff(editor) || inCombinedDiff(editor) || this.sets.get(file.where.key)?.has(file.path)) {
       return;
     }
     if (last.end.line >= editor.document.lineCount - 1) {
@@ -151,6 +155,16 @@ export class FilesSeen implements vscode.Disposable {
     this.subscriptions.forEach((subscription) => subscription.dispose());
     this.changed.dispose();
   }
+}
+
+/** Whether `editor` shows the right side of a diff in a tab of its own, not its file alone. */
+function inOwnDiff(editor: vscode.TextEditor): boolean {
+  const uri = editor.document.uri.toString();
+  const groups = editor.viewColumn === undefined ? vscode.window.tabGroups.all : vscode.window.tabGroups.all.filter((group) => group.viewColumn === editor.viewColumn);
+  return groups.some((group) => {
+    const input = group.activeTab?.input;
+    return input instanceof vscode.TabInputTextDiff && input.modified.toString() === uri;
+  });
 }
 
 /**

@@ -124,8 +124,8 @@ The commits above your upstream, newest first. One row per commit:
   Gerrit's current patchset came from somewhere else). A dimmed **empty circle** is a commit
   Gerrit does not have yet; a green check, one that is merged. Hover it for the words.
 - On the right, as icons: **unresolved comments** (with their number), the **review vote** and the
-  **CI vote**. Dimmed, they are the last pushed patchset's: the commit's code changed since, and
-  Gerrit may not keep them. Hover any of them for the words; the review vote's tooltip names the
+  **CI vote**. Grey and ending in **?** (*+2?*), they are the last pushed patchset's: the commit's
+  code changed since, and Gerrit may not keep them. Hover any of them for the words; the review vote's tooltip names the
   reviewers (and who is CC'd). A pushed change with nobody to review it shows a **person +** icon
   where the review vote goes.
 - `HEAD`, the short commit id, *code changed* (see above), and *held back* where `ger push` would
@@ -443,8 +443,15 @@ The commits above your upstream, newest first. One row per commit:
   **To**, it is a draft on that patchset, on the lines its diff shows.
 - **CI**: opened on demand (it downloads build logs: this change's and its parent's, not the rest
   of its chain). Findings this change **introduced** are
-  on top with a flame; findings that already fail on its parent are dimmed. Click a finding to
-  jump to its file and line.
+  on top with a flame; findings that already fail on its parent are dimmed. A finding's message
+  wraps to three lines (a JUnit assertion goes on in its detail; the tooltip has it whole), where
+  and whence under it, and opening the section brings its first rows into view. Every finding with
+  a place in a file is also an editor problem of the change shown: a marker at its line, a row in
+  **Problems**, the whole message on hover, source *ger CI*, the build as the code (a link to its
+  log); they go when the Change view leaves the change. Nothing in it knows a language: a
+  compiler's error, a failed test and a linter's warning are a path, a line and words. Click a
+  finding to jump to its file and line; that opens the file, not its diff, so the file is not
+  ticked seen.
 - **Vote and Publish…** (check icon in the Change view's title bar for someone else's change, and
   on a *To review* row, where it takes the row's whole chain): `ger review --vote`. A picker offers
   the votes Gerrit lets you give there, each with what the project says it means, opening on
@@ -830,6 +837,11 @@ is listed under the frame.
   would answer, built from the fixtures the unit tests use (`test/fixtures.ts`); the task scenarios
   put the Change view together as the window does (`changeScreen()` with `nextAction()`), so Next and
   the one primary button are what a user sees. A new state of a view gets a scenario there.
+- `test/contrast.test.ts` measures every state colour of the pages without a browser: the `--ger-*`
+  tokens of `views.css` resolved per theme kind with `theme.ts`'s values of Dark and Light Modern
+  and both high-contrast themes, against the side bar, a hovered and a selected row (WCAG: 4.5:1
+  for words, 3:1 for an icon that carries a state and for the focus ring). A rule that colours a
+  state without a token fails it.
 - `npm run gallery -- report.json` adds snapshot files as scenarios, in front of the built-in
   ones. A snapshot is `{ "format": 1, "name": "…", "stack": <StackVm or null>, "change": <ChangeVm or null> }`,
   other keys ignored (`src/snapshot.ts`). The report of **ger: Report Issue…** is one: this is how a
@@ -909,6 +921,7 @@ estimate, the totals per loop and the steps over budget. See
 | `src/changeScreen.ts` | The Change view as a screen: the change, the task header and Next put together, one primary button that is the next step. Pure, unit-tested. |
 | `src/nextAction.ts` | Next: the one thing to do now on the change shown. Pure, the rules are the table above, unit-tested row by row. |
 | `src/stackSummary.ts` | Local stack at a glance: `ger log`'s summary line, and the row the ready boundary is drawn under. Pure, unit-tested. |
+| `src/ciDiagnostics.ts`, `src/ciProblems.ts` | The CI findings of the change shown as editor problems: what each says (pure, unit-tested), and the diagnostic collection that holds them while the change is shown. |
 | `src/commentState.ts` | A change's comments at a glance: the state, the open count, the share for the ring, the words. Pure, unit-tested. |
 | `src/walk.ts` | Work on Next: the attention walk (`ger edit -n`) from the views, and what follows once it has stopped or the rebase is finished. |
 | `src/vote.ts`, `src/voteText.ts` | Vote and Publish, Publish Drafts: the questions, around `GET /vote` and `POST /vote`; their words (pure, unit-tested). |

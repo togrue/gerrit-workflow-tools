@@ -130,6 +130,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   const overviewView = new OverviewView(model, context.workspaceState);
   const stackView = new StackView(context.extensionUri, model);
   const changeView = new ChangeView(context.extensionUri, model, context.globalState);
+  context.subscriptions.push(changeView.ciProblems);
   const task = new Task(model);
   // The task header is drawn where the task is worked, the Change view, in both modes; Local stack,
   // while shown beside it (All chains), leaves out its rebase banner: Continue and Abort are said once.

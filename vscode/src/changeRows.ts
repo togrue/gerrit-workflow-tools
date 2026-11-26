@@ -2,6 +2,7 @@
 // version is compared with what, the files with their line counts, the comment chains and the
 // CI findings. The webview draws it, the end-to-end suite prints it. Pure: no `vscode`, no I/O.
 
+import { wholeMessage } from "./ciDiagnostics";
 import * as path from "node:path";
 
 import { Attended, CiContent, CiFinding, Comment, CommentChain, Diff, RebaseAction, Severity, ShownCommit } from "./api";
@@ -448,6 +449,7 @@ function thread(chain: CommentChain, applies: boolean, shownPatchset?: number): 
 }
 
 function finding(item: CiFinding, introduced: boolean | null, patchSet: number | null = null): FindingRow {
+  // (the row's text: `wholeMessage`, ciDiagnostics.ts, as the editor's problem says it)
   // A last pushed patchset's finding sits where its line is now; core says where CI saw it.
   const moved = patchSet && item.patchset_line ? ` (line ${item.patchset_line} on patchset ${patchSet}${item.line_changed ? ", changed since" : ""})` : "";
   const where = item.path ? `${item.path}${item.line ? `:${item.line}` : ""}${moved}` : "";
@@ -455,7 +457,8 @@ function finding(item: CiFinding, introduced: boolean | null, patchSet: number |
   const icon: Icon = introduced === null ? { icon: "question" } : introduced ? { icon: "flame", tone: "bad" } : { icon: "circle-outline", tone: "dim" };
   return {
     ...icon,
-    text: item.message,
+    // The message whole, its detail too (a JUnit assertion goes on there): the row wraps it to three lines, the tooltip has the rest.
+    text: wholeMessage(item),
     notes: [item.tool, item.severity === "warning" ? "warning" : "", where, origin].filter(Boolean),
     tooltip: [item.message, item.detail ?? "", origin].filter(Boolean).join("\n\n"),
     path: item.path,
@@ -735,7 +738,7 @@ export function changeLines(vm: ChangeVm): string[] {
     }
     for (const link of vm.ci.links) {
       add(1, link.text, link.detail);
-      link.findings.forEach((row) => add(2, row.text, row.notes.join(" · ")));
+      link.findings.forEach((row) => add(2, row.text.split("\n").join(" / "), row.notes.join(" · ")));
       if (link.warnings.length) {
         add(2, plural(link.warnings.length, "warning"), "collapsed");
       }

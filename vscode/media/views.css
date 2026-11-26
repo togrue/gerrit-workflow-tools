@@ -712,6 +712,41 @@ select:focus {
   padding-left: 66px;
 }
 
+/* A CI finding: the message wraps, at most three lines of it (the tooltip has it whole); where and whence under it. */
+.item.message-row {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  height: auto;
+  min-height: 22px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  line-height: 18px;
+  white-space: normal;
+}
+.message-row > .codicon {
+  margin-top: 1px;
+}
+.message-row > .label {
+  flex: 1 1 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.message-row > .detail {
+  flex: 1 0 100%;
+  padding-left: 22px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* The sticky Next bar covers the top of the view: a section brought into view keeps its head below it. */
+.section-head {
+  scroll-margin-top: 34px;
+}
+
 .reply .label {
   flex: none;
 }
