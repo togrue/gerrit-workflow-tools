@@ -941,7 +941,7 @@ estimate, the totals per loop and the steps over budget. See
 | `src/changeLoad.ts` | Which change the Change view shows and what of it has come: drawn at once from the clicked row, filled in answer by answer, a stale answer dropped. Pure, unit-tested. |
 | `src/review.ts` | Review Change, Check Out to Work On, Leave Review Checkout, Edit Commit Here; moving a review along its chain. |
 | `src/reviewWalk.ts`, `src/reviewAhead.ts` | The review walk as the views do it: the change under review shown with all its files; the next one asked ahead and drawn from it before the checkout, its diff from git, then your files. |
-| `src/task.ts`, `src/taskRows.ts` | The task you are in (a review, a rework): its header (pure, unit-tested), and the context keys the lists step aside by. |
+| `src/task.ts`, `src/taskRows.ts`, `src/reviewTask.ts` | The task you are in (a review, a rework): its header (pure, unit-tested; the review's in reviewTask.ts), and the context keys the lists step aside by. |
 | `src/changeScreen.ts` | The Change view as a screen: the change, the task header and Next put together, one primary button that is the next step. Pure, unit-tested. |
 | `src/nextAction.ts` | Next: the one thing to do now on the change shown. Pure, the rules are the table above, unit-tested row by row. |
 | `src/stackSummary.ts` | Local stack at a glance: `ger log`'s summary line, and the row the ready boundary is drawn under. Pure, unit-tested. |

@@ -23,7 +23,7 @@ import { SECTION_TITLES, TREE_WORDS, allRowContexts } from "./rows";
 import { BOUNDARY_WORDS } from "./stackSummary";
 import { MARKER_WORDS, MERGE_WORDS, REBASE_ACTIONS, REBASE_WORDS, REVIEW_FROZEN, STACK_GERRIT_WORDS, SYNC_ICONS, SYNC_WORDS } from "./stackRows";
 import { PROBLEM_ACTIONS, PROBLEM_WORDS } from "./problemRows";
-import { NOT_KNOWN, NOT_LISTED } from "./taskRows";
+import { NOT_KNOWN, NOT_LISTED } from "./reviewTask";
 
 type Json = Record<string, unknown>;
 const isObject = (value: unknown): value is Json => typeof value === "object" && value !== null && !Array.isArray(value);
