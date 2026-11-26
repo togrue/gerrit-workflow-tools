@@ -205,7 +205,9 @@ def _run_setup(args: argparse.Namespace, run: RunContext, gerrit: GerritRest | N
         values = _flag_values(args, saved_url, saved)
         if needs_insecure_opt_in(values.url, run.settings) and not values.insecure:
             raise UsageError(f"{INSECURE_HTTP}; to use it anyway, add --allow-insecure-http ({_INSECURE} true)")
-    # Gerrit refused the credentials at the saved URL: those alone are asked (the editor's Check Credentials).
+    # Gerrit refused the credentials at the URL in use (saved here, or the repository's): those alone are asked.
+    if args.credentials and not values.url:
+        values.url = run.settings.gerrit_web_url or ""
     ask_url = not (args.credentials and values.url)
     while True:
         if interactive:
