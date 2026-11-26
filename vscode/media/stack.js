@@ -55,7 +55,8 @@
       h(
         "span",
         { class: "actions" },
-        h("button", { class: "codicon codicon-edit", title: "Edit Commit Here", "data-command": "ger.stack.edit" }),
+        // Not while the stack is frozen (a rebase underway, a staged review): ger edit would refuse.
+        vm.frozen ? null : h("button", { class: "codicon codicon-edit", title: "Edit Commit Here", "data-command": "ger.stack.edit" }),
         row.url ? h("button", { class: "codicon codicon-link-external", title: "Open in Gerrit", "data-command": "ger.openInGerrit" }) : null,
       ),
       h("span", { class: "badges" }, slots.map((slot) => (slot === 0 && row.badges[0] ? commentBadge(row) : badge(row.badges[slot], slot)))),
