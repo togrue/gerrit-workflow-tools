@@ -8,7 +8,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { Comment, CommentChain, NewCommentState, ShownCommit } from "./api";
-import { NOT_FILES, answeredByDraft, ownComment } from "./changeRows";
+import { NOT_FILES, answeredByDraft, ownComment, replyName } from "./changeRows";
 import { ChangeView } from "./changeView";
 import { FILE_SCHEME, filePath, repoPath } from "./diffTabs";
 import { commentLocation } from "./format";
@@ -184,6 +184,8 @@ export class CommentThreads implements vscode.Disposable {
     this.listeners.push(
       vscode.window.onDidChangeActiveTextEditor(() => this.offer()),
       model.onDidChange(() => this.offer()),
+      // The reply box names whom it answers: the thread the cursor is in, wherever it was opened from.
+      vscode.window.onDidChangeTextEditorSelection((event) => this.nameReplies(this.threadAt(event.textEditor))),
     );
     // The "+" in the gutter: on the shown change's own lines, where a line number means the same to Gerrit.
     this.controller.commentingRangeProvider = {
@@ -356,6 +358,32 @@ export class CommentThreads implements vscode.Disposable {
       thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
       this.anchors.set(thread, { rev: target.rev, chain, outdated: place.outdated });
     }
+    this.nameReplies(); // a name from the change shown before must not stay
+  }
+
+  /** The chain of the thread whose lines hold `editor`'s cursor; none when it is in no thread. */
+  private threadAt(editor: vscode.TextEditor): CommentChain | undefined {
+    const [uri, line] = [editor.document.uri.toString(), editor.selection.active.line];
+    for (const [thread, anchor] of this.anchors) {
+      if (thread.uri.toString() === uri && thread.range && line >= thread.range.start.line && line <= thread.range.end.line) {
+        return anchor.chain;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Say in the reply box whom it answers (`replyName`): the chain `at`, else the one person every
+   * thread shown answers, else nobody. While a new comment's box is open, its own text stays.
+   */
+  private nameReplies(at?: CommentChain): void {
+    if (this.boxes.size) {
+      return;
+    }
+    const options = BOX.reply(replyName([...this.anchors.values()].map((anchor) => anchor.chain), at));
+    if (options.prompt !== this.controller.options?.prompt) {
+      this.controller.options = options;
+    }
   }
 
   /**
@@ -427,7 +455,7 @@ export class CommentThreads implements vscode.Disposable {
    */
   async show(chain: CommentChain): Promise<void> {
     // The reply box of the thread it opens answers the last of them who spoke.
-    this.controller.options = BOX.reply(chain.comments.filter((comment) => comment.state === "published").at(-1)?.author);
+    this.nameReplies(chain);
     this.seen(chain);
     const editor = await this.view.openLocation({ path: chain.path, line: this.view.placeOf(chain).line });
     for (const [thread, anchor] of this.anchors) {

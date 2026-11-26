@@ -337,8 +337,12 @@ The commits above your upstream, newest first. One row per commit:
   is drawn where they were, its thread saying *outdated: line 11 has changed since*, and its row in
   the Change view *outdated: changed since*; one that moved says *line 13 in your file*. Reply, or reply "Done" and resolve — saved as **drafts** on Gerrit, published later:
   on your own commit by your next `ger push`, anywhere else by *Vote and Publish…*. A reply box says whom it answers (*Reply to Bob…*: the last who
-  spoke in the chain; in an editor thread once it is opened from the Change view or the walk, as VS Code has
-  one prompt for all of an extension's threads). It has **Save**, **Done** (what you typed, or "Done",
+  spoke in the chain). VS Code has one prompt for all of an extension's threads, so in an editor
+  thread the name is said only where it is sure: the thread opened from the Change view or the walk,
+  or the one the cursor is in; else the one person every thread of the change shown answers; else
+  just *Reply…*. A name from the change shown before never stays (it named Bob under a thread of
+  Alice's alone). A thread opened by clicking its gutter mark, the cursor elsewhere, keeps the name
+  of where the cursor is. It has **Save**, **Done** (what you typed, or "Done",
   saved as your draft resolving the comment) and **Cancel**, and Gerrit's **Resolved**
   checkbox: in an editor thread a toggle in the thread's header
   (VS Code empties the reply box on any button beside it), its label saying what Save will do;

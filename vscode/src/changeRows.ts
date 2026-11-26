@@ -265,6 +265,24 @@ export function ownComment(chain: CommentChain): Comment | undefined {
   return own?.comment_id ? own : undefined;
 }
 
+/** Whom a reply in `chain` answers: the last who spoke in it on Gerrit. */
+export function answers(chain: CommentChain): string | undefined {
+  return chain.comments.filter((comment) => comment.state === "published").at(-1)?.author;
+}
+
+/**
+ * Whom the reply box of an editor thread names. VS Code has one box text for all of an extension's
+ * threads, so a name is said only where it is sure: `at`, the chain gone to or the cursor is in;
+ * else the one person every chain that can be answered answers; else none ("Reply…").
+ */
+export function replyName(chains: readonly CommentChain[], at?: CommentChain): string | undefined {
+  if (at) {
+    return answers(at);
+  }
+  const names = new Set(chains.filter((chain) => !isYours(chain)).map(answers));
+  return names.size === 1 ? [...names][0] : undefined;
+}
+
 /** How many chains hold an unpublished comment of yours: chains you started, and your draft replies. */
 export function draftsIn(chains: readonly CommentChain[]): number {
   return chains.filter((chain) => ownComment(chain) !== undefined).length;

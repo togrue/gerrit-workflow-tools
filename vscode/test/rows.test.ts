@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { CommentChain, Rebase, RebaseAction, StackCommit } from "../src/api";
-import { ChangeState, READ_ONLY, answeredByDraft, changeHeading, changeLines, changeVm, toAnswer } from "../src/changeRows";
+import { ChangeState, READ_ONLY, answeredByDraft, changeHeading, changeLines, changeVm, replyName, toAnswer } from "../src/changeRows";
 import { fitSides, modeSides, modesFor } from "../src/compareRows";
 import { attentionIcon, reasonWords, votes } from "../src/format";
 import { commentState } from "../src/commentState";
@@ -740,4 +740,16 @@ test("a fixup row names the commit it folds into, and that commit how many wait 
     [fix.short_sha, "→ 2168"],
   ]);
   assert.deepEqual(notes("Other"), [[commit("Other").short_sha]]);
+});
+
+test("the reply box names whom it answers only where that is sure: the chain gone to, else the one person all answer", () => {
+  // Change 2176 in the playground: one comment, by Alice. A box left saying Bob from another change named the wrong person.
+  const alice = chain("a", [comment("Population or sample standard deviation?", { author: "pg-alice" })]);
+  const bob = chain("b", [comment("Why?", { author: "pg-alice" }), comment("Because.", { author: "pg-bob" })]);
+  const mine = chain("m", [comment("A note", { state: "note", author: undefined, comment_id: "n" })]);
+  assert.equal(replyName([alice, mine]), "pg-alice", "every chain that can be answered answers Alice");
+  assert.equal(replyName([alice, bob]), undefined, "two people: no name, rather than the wrong one");
+  assert.equal(replyName([alice, bob], bob), "pg-bob", "the chain gone to, or the cursor is in: its last word on Gerrit");
+  assert.equal(replyName([bob], { ...bob, comments: [...bob.comments, comment("Draft", { state: "draft", author: undefined, comment_id: "d" })] }), "pg-bob", "your draft is not who it answers");
+  assert.equal(replyName([]), undefined);
 });
