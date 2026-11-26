@@ -1,6 +1,8 @@
 // The review walk as the views do it: the change a staged review holds shown with all its files,
 // the next one asked ahead while you read (reviewAhead.ts) so Review Next Change draws it at once
 // and reads its diff from git while the checkout runs, then your files once it is checked out.
+// Review Previous and a click on a neighbour in the task header take the same way: what was not
+// asked ahead is asked at the press, one request before the checkout.
 
 import * as vscode from "vscode";
 
@@ -92,8 +94,18 @@ export function reviewWalk({ model, changeView, task, open, voteChain }: WalkVie
     voteChain,
     ahead: async (step) => {
       const next = neighbour(model, step);
-      const got = next && (await ahead.take(next.member));
-      if (!next || !got) {
+      if (!next) {
+        return undefined;
+      }
+      // Not asked ahead (the change below, or the one above before it was asked): asked now, one
+      // request before the checkout, so it is drawn in ~0.2 s instead of after it.
+      if (!ahead.has(next.member)) {
+        busy(`Checking out ${next.member.number}…`); // at the press: the answer takes a request
+        ahead.fetch(next.member);
+      }
+      const got = await ahead.take(next.member);
+      if (!got) {
+        busy(undefined);
         return undefined;
       }
       await changeView.closeCombined();

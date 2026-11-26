@@ -68,7 +68,9 @@ class Input {
     this[as === "click" ? "clicks" : "keys"] += 1;
     this.given.push(`command ${id}`);
     this.mark();
-    await vscode.commands.executeCommand(id, ...args);
+    // As a click does not wait for what it starts: a command that asks a question waits for its answer, which a later step gives.
+    void vscode.commands.executeCommand(id, ...args).then(undefined, () => undefined);
+    await wait(50);
   }
 }
 
@@ -136,9 +138,12 @@ export async function run(): Promise<void> {
 
   let n = 0;
   let place = "explorer";
+  /** What the Change view's Next button names now ("" for none). */
+  const nextNamed = () => api.changeView.next()?.label ?? "";
   const step = async (spec: StepSpec, perform: (input: Input) => Promise<void>): Promise<void> => {
     n += 1;
     const input = new Input(window);
+    const namedBefore = nextNamed();
     const t0 = now();
     input.last = t0;
     tracer.write({ kind: "step-start", loop: spec.loop, n, title: spec.title });
@@ -188,6 +193,7 @@ export async function run(): Promise<void> {
       ...(error ? { error } : {}),
       ...(reached === null && !error ? { error: "its outcome did not show in time" } : {}),
       picture: pictureName(n, `${spec.loop}-${spec.title}`),
+      next: [namedBefore, nextNamed()],
     };
     tracer.write({ ...record });
     await wait(300);
@@ -261,6 +267,26 @@ export async function run(): Promise<void> {
     window.boxOf(`return [...document.querySelectorAll(".editor-instance .view-line, .monaco-editor .view-line")].find((l) => l.textContent.replace(/\\u00a0/g, " ").includes(${JSON.stringify(text)}) && l.getBoundingClientRect().width > 0);`);
   const changeShown = (number: number) => () => api.changeView.target?.number === number && api.changeView.heading !== undefined;
   const activeEditor = () => vscode.window.activeTextEditor?.document.uri.toString() ?? vscode.window.tabGroups.activeTabGroup.activeTab?.label ?? "";
+  /**
+   * Next, as a user is led: when the Change view's button names `what` (within `ms`: it follows the
+   * change being loaded), Alt+Enter, wherever the keyboard is. False when it names something else.
+   */
+  const pressNext = async (input: Input, what: RegExp, ms = 3000): Promise<boolean> => {
+    for (const until = Date.now() + ms; !what.test(nextNamed()) && Date.now() < until; ) await wait(50);
+    const named = nextNamed();
+    if (!what.test(named)) {
+      note(`step ${n}: Next names "${named || "nothing"}", not ${what}`);
+      return false;
+    }
+    await input.key("alt+enter");
+    input.given[input.given.length - 1] += ` (Next: "${named}")`;
+    return true;
+  };
+  /** A button of the task header, by its label: in the Change view or in Local stack, wherever it is drawn. */
+  const headerButton = async (label: string) => {
+    const find = `return [...document.querySelectorAll(".task .task-action button")].find((b) => b.textContent.trim() === ${JSON.stringify(label)} && !b.disabled);`;
+    return (await window.boxInView("change", find)) ?? (await window.boxInView("stack", find));
+  };
 
   // --- (a) The review loop ------------------------------------------------------------------
   const toReview = api.model.overview?.sections?.find((section) => section.name === "to-review");
@@ -270,6 +296,18 @@ export async function run(): Promise<void> {
   const bottom = chain?.members[0];
   note(`review: chain ${chain?.key ?? "none"} "${chain?.top.subject ?? ""}", bottom ${bottom?.number ?? "-"}`);
   const only = process.env.GER_WALK_ONLY;
+  // Gerrit's reviewed flags of the chain (the files a step ticks): what they were, so they are put back after.
+  const flags = async () => {
+    const client = await api.model.client();
+    const all = await Promise.all(
+      (chain?.members ?? []).map(async (m) => {
+        const ps = (await client.show([`change:${m.number}`], {}).catch(() => []))[0]?.current_patch_set ?? null;
+        return { number: m.number, ps, paths: ps ? await client.reviewedFiles(m.number, ps).catch(() => [] as string[]) : [] };
+      }),
+    );
+    return all;
+  };
+  const flagsBefore = only === "rework" ? [] : await flags();
   if (chain && bottom && only !== "rework") {
     await step({ loop: "review", title: "Open the review queue", budget: "walk", where: ["activity bar", "Review chains"], until: async () => Boolean(await treeRow("Review chains", "To review")) }, async (input) => {
       if (!(await input.click(await window.boxOf(`return [...document.querySelectorAll(".activitybar .action-item .action-label")].find((a) => (a.getAttribute("aria-label") || "").startsWith("Gerrit"));`), "the Gerrit icon in the activity bar"))) {
@@ -294,9 +332,41 @@ export async function run(): Promise<void> {
       }
     });
     const reviewed = () => api.model.stack?.staged_review?.number ?? bottom.number;
-    await step({ loop: "review", title: "Open all changes", budget: "change", where: ["Change view", "editor"], until: () => /\bfiles?\b|changes/i.test(vscode.window.tabGroups.activeTabGroup.activeTab?.label ?? "") }, async (input) => {
-      if (!(await input.click(await titleAction("Change", "Open All Changes"), "Open All Changes in the Change view"))) {
-        await input.command("ger.openAllChanges", "no Open All Changes button found", "click");
+    // Review Change opened all its files (the combined diff): what is left of the files is to see
+    // them, as Next leads (Next file per file, or Mark N files seen once they were read there).
+    const fileStep = /^(Next file|Mark (all|\d+) files? seen)$/;
+    const filesLeft = () => fileStep.test(nextNamed());
+    await step({ loop: "review", title: "See every file (Next)", budget: "change", where: ["Change view", "editor"], until: () => !filesLeft() }, async (input) => {
+      let pressed = 0;
+      let stuck = 0;
+      const why = () => `${nextNamed()} ${api.changeView.next()?.title ?? ""}`;
+      for (let i = 0; i < 12 && stuck < 2; i++) {
+        const before = why();
+        if (!(await pressNext(input, fileStep, i === 0 ? 3000 : 500))) {
+          break;
+        }
+        pressed += 1;
+        // Ticked once the file was shown to its end (a moment after it is laid out), or by Mark seen's one request.
+        for (let j = 0; j < 60 && why() === before; j++) await wait(50);
+        stuck = why() === before ? stuck + 1 : 0;
+      }
+      if (stuck >= 2) {
+        // Pressed twice and nothing moved: a user ticks the files by hand, in the Change view's Files.
+        note(`step ${n}: Next "${nextNamed()}" changed nothing twice: the files ticked by hand`);
+        const unseen = async () => (await window.inView<number>("change", `return document.querySelectorAll(".item.file:not(.seen)").length;`)) ?? 0;
+        for (let i = 0; i < 12 && filesLeft(); i++) {
+          const left = await unseen();
+          if (!(await input.click(await inChange(`return document.querySelector(".item.file:not(.seen) button.seen");`), "a file's tick in the Change view"))) {
+            break;
+          }
+          for (let j = 0; j < 40 && (await unseen()) === left; j++) await wait(50);
+        }
+      }
+      if (!pressed) {
+        // Next leads elsewhere: the old way, all the files in one editor.
+        if (!(await input.click(await titleAction("Change", "Open All Changes"), "Open All Changes in the Change view"))) {
+          await input.command("ger.openAllChanges", "no Open All Changes button found", "click");
+        }
       }
     });
     note(`review: reviewing ${reviewed()}; tab "${vscode.window.tabGroups.activeTabGroup.activeTab?.label ?? ""}"`);
@@ -305,6 +375,9 @@ export async function run(): Promise<void> {
       let before = activeEditor();
       await step({ loop: "review", title: "Go to a comment", budget: "walk", where: ["Change view", "editor"], until: () => activeEditor() !== before || (vscode.window.activeTextEditor?.selection.active.line ?? -1) + 1 === firstThread.line }, async (input) => {
         before = activeEditor();
+        if (await pressNext(input, /^Next comment$/, 500)) {
+          return;
+        }
         if (!(await input.click(await inChange(threadRow(firstThread.comments[0]?.message.split("\n")[0].slice(0, 40) ?? "")), "the comment in the Change view"))) {
           await input.command("ger.nextComment", "no comment row found", "key");
         }
@@ -342,7 +415,7 @@ export async function run(): Promise<void> {
     });
     let voted = false;
     await step({ loop: "review", title: "Vote and Publish", budget: "slow", where: ["Change view", "quick input", "notification"], until: async () => voted && Boolean(await dialogButton("Next Change")), timeoutMs: 45_000 }, async (input) => {
-      if (!(await input.click(await titleAction("Change", "Vote and Publish"), "Vote and Publish… in the Change view"))) {
+      if (!(await pressNext(input, /^Vote and publish$/)) && !(await input.click(await titleAction("Change", "Vote and Publish"), "Vote and Publish… in the Change view"))) {
         void vscode.commands.executeCommand("ger.vote");
         input.real = false;
         input.fallbacks.push("ger.vote (no Vote button found)");
@@ -363,7 +436,8 @@ export async function run(): Promise<void> {
       voted = await answer(input, "Publish", "Publish in the question");
     });
     await step({ loop: "review", title: "Next change", budget: "change", where: ["notification", "Change view", "editor"], until: () => (api.model.stack?.staged_review?.number ?? 0) !== bottom.number, timeoutMs: 60_000 }, async (input) => {
-      if (!(await answer(input, "Next Change", "Next Change in the notification", 3000))) {
+      // Next names it once the vote is in; the notification's Next Change is the same, where the eyes already are.
+      if (!(await pressNext(input, /^Next change$/)) && !(await answer(input, "Next Change", "Next Change in the notification", 3000))) {
         await input.key("ctrl+alt+pagedown");
       }
     });
@@ -401,8 +475,12 @@ export async function run(): Promise<void> {
     const inPage = await window.inView<string>("change", `window.__walkKeys = []; document.addEventListener("keydown", (e) => window.__walkKeys.push((e.altKey ? "alt+" : "") + e.key), true); const a = document.activeElement; return document.hasFocus() + " " + (a ? a.tagName + "." + a.className : "none");`);
     note(`rework: before the ${which} Alt+F9 the keyboard is at ${focus} (Change view page: focus ${inPage}); editor ${position()}`);
     const pressed = now();
-    await step({ loop: "rework", title: `Next comment (${which})`, budget: "walk", where: ["editor"], until: () => position() !== at || said.at > pressed, timeoutMs: 5000 }, (input) => input.key("alt+f9"));
-    note(`rework: after Alt+F9 the editor is at ${position()}${said.at > pressed ? `; the status bar says "${said.text}"` : ""}`);
+    await step({ loop: "rework", title: `Next comment (${which})`, budget: "walk", where: ["editor"], until: () => position() !== at || said.at > pressed, timeoutMs: 5000 }, async (input) => {
+      if (!(await pressNext(input, /^Next comment$/, 500))) {
+        await input.key("alt+f9");
+      }
+    });
+    note(`rework: after the key the editor is at ${position()}${said.at > pressed ? `; the status bar says "${said.text}"` : ""}`);
     note(`rework: the Change view page saw the keys ${await window.inView<string>("change", `return JSON.stringify(window.__walkKeys || null);`)}`);
     }
     const suggestion = api.changeView.chains().find((c) => /```suggestion/.test(c.comments.map((m) => m.message).join("\n")) && !c.resolved);
@@ -410,9 +488,22 @@ export async function run(): Promise<void> {
       const text = suggestion.comments[0].message.split("\n")[0].slice(0, 30);
       const dirty = () => vscode.workspace.textDocuments.some((d) => d.isDirty && d.uri.path.endsWith(suggestion.path));
       await step({ loop: "rework", title: "Apply the suggested edit", budget: "walk", where: ["Change view", "editor"], until: dirty }, async (input) => {
-        if (!(await input.click(await threadButton(text, "Apply Suggested Edit"), "Apply Suggested Edit on the comment row"))) {
-          await input.command("ger.applySuggestion", "no Apply button found", "click", { kind: "thread", chain: suggestion });
+        // The Change view's list is an index: its row opens the thread in the editor, whose title has Apply.
+        if (await input.click(await threadButton(text, "Apply Suggested Edit"), "Apply Suggested Edit on the comment row")) {
+          return;
         }
+        if (await input.click(await inChange(threadRow(text)), "the suggestion's row in the Change view")) {
+          const apply = `return [...document.querySelectorAll(".review-widget .action-label, .comment-title .action-label")].find((a) => (a.getAttribute("aria-label") || a.title || "").startsWith("Apply Suggested Edit") && a.getBoundingClientRect().width > 0);`;
+          let box: Box | null = null;
+          for (let i = 0; i < 40 && !box; i++) {
+            box = await window.boxOf(apply);
+            if (!box) await wait(100);
+          }
+          if (await input.click(box, "Apply Suggested Edit in the comment thread's title")) {
+            return;
+          }
+        }
+        await input.command("ger.applySuggestion", "no Apply button found", "click", { kind: "thread", chain: suggestion });
       });
       // Apply may ask whether to answer the comment too: that answer is the Reply Done.
       const asked = await dialogButton("Reply Done");
@@ -437,11 +528,14 @@ export async function run(): Promise<void> {
       note("rework: no unresolved suggested edit at this stop");
     }
     await step(
-      { loop: "rework", title: "Next stop (Work on Next)", budget: "slow", where: ["Local stack", "notification", "terminal", "Local stack", "terminal", "Change view", "editor"], until: () => stoppedNumber() !== null && stoppedNumber() !== first && api.changeView.target?.number === stoppedNumber(), timeoutMs: 90_000 },
+      { loop: "rework", title: "Next stop (Work on Next)", budget: "slow", where: ["Change view", "notification", "terminal", "Change view", "terminal", "Change view", "editor"], until: () => stoppedNumber() !== null && stoppedNumber() !== first && api.changeView.target?.number === stoppedNumber(), timeoutMs: 90_000 },
       async (input) => {
-        if (!(await input.click(await titleAction("Local stack", "Work on Next"), "Work on Next in Local stack"))) {
-          await input.command("ger.workOnNext", "no Work on Next button found", "click");
-        }
+        const workOnNext = async (what: string) => {
+          if (!(await pressNext(input, /^(Work on next|Finish the rebase)$/)) && !(await input.click(await titleAction("Local stack", "Work on Next"), what))) {
+            await input.command("ger.workOnNext", "no Work on Next button found", "click");
+          }
+        };
+        await workOnNext("Work on Next in Local stack");
         // Refused while the fix is saved and not amended (a warning, with no way on): amend it in the terminal, as a user must, and press again.
         for (let i = 0; i < 40 && stoppedNumber() === first; i++) await wait(100);
         if (stoppedNumber() === first) {
@@ -451,9 +545,7 @@ export async function run(): Promise<void> {
           await input.type("git commit -q -a --amend --no-edit");
           await input.key("enter");
           await wait(2500);
-          if (!(await input.click(await titleAction("Local stack", "Work on Next"), "Work on Next in Local stack, again"))) {
-            await input.command("ger.workOnNext", "no Work on Next button found", "click");
-          }
+          await workOnNext("Work on Next in Local stack, again");
         }
       },
     );
@@ -461,14 +553,29 @@ export async function run(): Promise<void> {
     const terminalText = () => window.evaluate<string>(`return [...document.querySelectorAll(".xterm-rows")].map((r) => r.textContent).join("\\n");`);
     let shownBefore = "";
     let pushed = false;
+    let continuing: number | false = false;
     await step(
-      { loop: "rework", title: "Push preview", budget: "slow", where: ["Local stack", "notification", "terminal", "Local stack", "terminal"], until: async () => pushed && (await terminalText()) !== shownBefore && /push/i.test(await terminalText()), timeoutMs: 60_000 },
+      { loop: "rework", title: "Push preview", budget: "slow", where: ["task header", "terminal", "Local stack", "terminal"], until: async () => pushed && (await terminalText()) !== shownBefore && /push/i.test(await terminalText()), timeoutMs: 60_000 },
       async (input) => {
         const push = async (what: string) => {
           if (!(await input.click(await titleAction("Local stack", "Push to Gerrit"), what))) {
             await input.command("ger.push", "no Push button found", "click");
           }
         };
+        // The header's Continue says what it does (replays the commits above): the way out of the rework, then Push.
+        if (await input.click(await headerButton("Continue"), "Continue in the task header")) {
+          const clicked = now();
+          for (let i = 0; i < 600 && api.model.stack?.rebase_in_progress; i++) {
+            continuing ||= Boolean(api.task.vm()?.busy) && now() - clicked;
+            await wait(100);
+          }
+          note(`push: the rebase ${api.model.stack?.rebase_in_progress ? "is still underway" : "is finished"}${continuing ? `; the header said so after ${Math.round(continuing)} ms` : "; the header said nothing while it ran"}`);
+          await wait(500);
+          shownBefore = await terminalText();
+          await push("Push to Gerrit… in Local stack");
+          pushed = true;
+          return;
+        }
         await push("Push to Gerrit… in Local stack");
         // During the rebase Push says to finish it first, and offers Continue: take it, then push.
         if (await answer(input, "Continue", "Continue in the question", 2000)) {
@@ -494,6 +601,20 @@ export async function run(): Promise<void> {
       await vscode.commands.executeCommand("ger.rebase.abort").then(undefined, () => undefined);
     }
   }
+  // Not a step: the reviewed flags the walk set on the chain taken off again, as found.
+  if (flagsBefore.length) {
+    const client = await api.model.client();
+    for (const now of await flags()) {
+      const before = flagsBefore.find((b) => b.number === now.number && b.ps === now.ps)?.paths ?? [];
+      const added = now.paths.filter((p) => !before.includes(p));
+      if (now.ps && added.length) {
+        for (const file of added) await client.markReviewed(now.number, now.ps, file, false).catch(() => undefined);
+        note(`reset: ${now.number}/${now.ps}: the walk's reviewed flags taken off: ${added.join(", ")}`);
+      }
+    }
+  }
+  // The terminals' text, for run.ts to look for a traceback from ger in.
+  fs.writeFileSync(path.join(shots, "terminal.txt"), `${await window.evaluate<string>(`return [...document.querySelectorAll(".xterm-rows")].map((r) => [...r.children].map((l) => l.textContent).join("\\n")).join("\\n----\\n");`).catch(() => "")}\n`);
   // What the run reset undoes on Gerrit (run.ts): the changes it voted on and saved drafts on.
   tracer.write({ kind: "touched", changes: [...(chain?.members.map((m) => m.number) ?? []), ...(api.model.stack?.commits.map((c) => c.number ?? 0).filter(Boolean) ?? [])] });
   window.close();

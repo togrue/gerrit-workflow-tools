@@ -22,6 +22,7 @@ from gerrit_workflow_tools.cli_args import (
 )
 from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, may_prompt, run_cli_command
 from gerrit_workflow_tools.cli_terminal import ask_choice
+from gerrit_workflow_tools.core.commit_diff import commit_diff
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.config_write import ConfigWrite, apply_config_write
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
@@ -41,6 +42,7 @@ from gerrit_workflow_tools.core.review_checkout import (
 )
 from gerrit_workflow_tools.core.review_delta import ReviewDelta, load_review_delta
 from gerrit_workflow_tools.core.review_target import related_chain_numbers, review_neighbour
+from gerrit_workflow_tools.core.reviewed_files import mark_reviewed, reviewed_files
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.render.comments import drafts_elsewhere
 from gerrit_workflow_tools.render.review_json import review_state_json
@@ -58,6 +60,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "[--force]\n"
             "       ger review (--next | --prev) [--stage | --no-stage] [--force]\n"
             "       ger review (--stage | --unstage | --status | --done)\n"
+            "       ger review (--seen PATH ... | --seen --all | --unseen PATH ...)\n"
             "       ger review --vote [LABEL]+N ... [--chain | --change CHANGEISH ...] [-m MSG | -F FILE] [--dry-run] "
             "[-y]"
         ),
@@ -87,6 +90,13 @@ def _build_parser() -> argparse.ArgumentParser:
     where.add_argument("--in-worktree", dest="mode", action="store_const", const="worktree", help="Review worktree.")
     where.add_argument("--in-place", dest="mode", action="store_const", const="branch", help="This checkout.")
     p.add_argument("--force", action="store_true", help="Move a change-<n> branch that has commits of yours.")
+    seen = p.add_argument_group(
+        "files seen",
+        "Gerrit's per-file reviewed flag of the patchset under review, as Gerrit's web UI and VS Code tick it.",
+    )
+    seen.add_argument("--seen", nargs="*", metavar="PATH", help="Mark these files of the review seen.")
+    seen.add_argument("--unseen", nargs="+", metavar="PATH", help="Take the mark off these files.")
+    seen.add_argument("--all", action="store_true", help="With --seen: every file of the change under review.")
     vote = p.add_argument_group(
         "voting",
         "--vote publishes all your drafts on the change with the vote, and -m (or -F) as its message; to publish "
@@ -110,6 +120,15 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _check_args(p: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     opens = args.changeish is not None or args.next or args.prev
+    marks = args.seen is not None or args.unseen is not None
+    if args.all and args.seen is None:
+        p.error("--all goes with --seen")
+    if args.seen is not None and args.unseen is not None:
+        p.error("give one of --seen and --unseen")
+    if args.seen is not None and bool(args.seen) == args.all:
+        p.error("--seen takes the files' paths, or --all")
+    if marks and (opens or args.vote is not None or args.status or args.done or args.stage is not None):
+        p.error("--seen and --unseen act on the change under review; give them on their own")
     if args.vote is None and (args.change or args.chain or args.message or args.file or args.dry_run or args.yes):
         p.error("--change, --chain, -m, -F, --dry-run and -y belong to --vote")
     if args.message is not None and args.file is not None:
@@ -124,7 +143,7 @@ def _check_args(p: argparse.ArgumentParser, args: argparse.Namespace) -> None:
         p.error("--bottom goes with a CHANGEISH, without --patchset: it starts at the chain's lowest open change")
     if not opens and (args.patchset is not None or args.mode is not None or args.force):
         p.error("--patchset, --in-worktree, --in-place and --force go with a CHANGEISH or --next/--prev")
-    if not opens and args.vote is None and not args.status and not args.done and args.stage is None:
+    if not opens and not marks and args.vote is None and not args.status and not args.done and args.stage is None:
         p.error("name a CHANGEISH to review (or --next, --prev, --stage, --unstage, --status, --vote, --done)")
 
 
@@ -241,6 +260,31 @@ def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: Re
     return int(ExitCode.OK)
 
 
+def _mark_seen(args: argparse.Namespace, service: GerritService, state: ReviewState) -> int:
+    """``--seen`` / ``--unseen``: Gerrit's reviewed flag on files of the patchset under review."""
+    files = [f.path for f in commit_diff(state.worktree, state.commit).files]
+    wanted = files if args.all else [p.removeprefix("./") for p in (args.seen or args.unseen)]
+    unknown = [p for p in wanted if p not in files]
+    if unknown:
+        where = f"{state.number} patchset {state.patch_set}"
+        raise ReviewUsageError(f"not a file of {where}: {', '.join(unknown)} (its files: {', '.join(files)})")
+    flag = args.unseen is None
+    marked = mark_reviewed(service.rest, state.number, state.patch_set, wanted, flag)
+    seen = [p for p in reviewed_files(service.rest, state.number, state.patch_set) if p in files]
+    left = [p for p in files if p not in seen]
+    if args.json_:
+        payload = {"change": state.number, "patch_set": state.patch_set, "reviewed": flag, "marked": marked}
+        print(json.dumps({**payload, "seen": seen, "files": files}, indent=2))
+        return int(ExitCode.OK)
+    print(f"{'seen' if flag else 'not seen'} on {state.number} patchset {state.patch_set}: {', '.join(marked)}")
+    print(f"  {len(seen)} of {len(files)} files seen" + (f"; not yet: {', '.join(left)}" if left else ""))
+    say(
+        "next: ger review --vote +1 · ger review --next" if not left else f"next: ger review --seen {left[0]}",
+        file=sys.stdout,
+    )
+    return int(ExitCode.OK)
+
+
 def _drafts_left(run: RunContext, state: ReviewState) -> dict[int, int]:
     """Your unpublished drafts on the changes this review visited; nobody sees them until published.
 
@@ -294,6 +338,10 @@ def _act(args: argparse.Namespace, p: argparse.ArgumentParser, run: RunContext) 
             sys.stdout.flush()  # after what was done, also when both go to one pipe
             print(f"warning: {drafts_elsewhere(left)}", file=sys.stderr)
         return int(ExitCode.OK)
+    if args.seen is not None or args.unseen is not None:
+        if state is None:
+            raise ReviewUsageError("no review going on here: name a CHANGEISH first")
+        return _mark_seen(args, run.gerrit, state)
     if args.vote is None and args.changeish is None and not args.next and not args.prev:
         if state is None:
             raise ReviewUsageError("no review going on here: name a CHANGEISH first")

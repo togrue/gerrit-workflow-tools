@@ -9,7 +9,7 @@ import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
 import { ChangeDetail, ciRevs, sameChange, stoppedHere } from "./changeLoad";
-import { ChangeState, ChangeVm, SeenWhere, seenWhere, CiView, From, MODES, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Sides, Version, changeHeading, changeLines, changeVm, fitSides, isYours, modeSides, toAnswer } from "./changeRows";
+import { ChainCounts, ChangeState, ChangeVm, SeenWhere, chainCounts, seenWhere, CiView, From, MODES, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Sides, Version, changeHeading, changeLines, changeVm, fitSides, isYours, modeSides, toAnswer } from "./changeRows";
 import { FILE_SCHEME, filePath, fileUri, openDiff } from "./diffTabs";
 import { FilesSeen } from "./filesSeen";
 import { ChangeTarget, Model, describeError } from "./model";
@@ -18,8 +18,8 @@ import { waitingFor } from "./state";
 import { NextAction, nextAction } from "./nextAction";
 import { focusedMember, reviewFocus } from "./reviewFocus";
 import { markOf } from "./staleDiffs";
-import { ui } from "./ui";
-import { TaskVm, taskLines } from "./taskRows";
+import { feedback, ui } from "./ui";
+import { TaskMode, TaskVm, taskLines } from "./taskRows";
 import { Message, WebView } from "./webview";
 
 /** What the comment commands take: the chain a row of the view stands for. */
@@ -107,11 +107,52 @@ export class ChangeView extends WebView<ChangeVm> {
       local: Boolean(this.target?.local),
       reviewing: this.holdsReview(),
       visited: this.visited(),
-      files: (this.shownDiff()?.files ?? []).map((file) => file.path),
+      files: this.seenable(),
       seenFiles: this.seenHere(),
+      combinedActive: this.combinedActive(),
       yourTurn: member?.your_turn,
       above: focus ? above : undefined,
     });
+  }
+
+  /** The files of the comparison shown, each of which carries a tick, as the Files list draws them. */
+  private seenable(): string[] {
+    return (this.shownDiff()?.files ?? []).map((file) => file.path);
+  }
+
+  /**
+   * Whether the editor in front is the combined diff of the change shown (Open All Changes, also the
+   * one read from git before its checkout): VS Code titles it as `openAll` did, `Change 2156 (…)`.
+   */
+  combinedActive(): boolean {
+    const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
+    const number = this.shown?.number ?? this.target?.number;
+    return Boolean(number && (tab?.input as { textDiffs?: unknown } | undefined)?.textDiffs && tab?.label.startsWith(`Change ${number} (`));
+  }
+
+  /**
+   * The change shown with its comments counted from its chains, as the Comments section counts them
+   * (`chainCounts`): the task header takes this over the served counts for it. Keyed as the header's
+   * rows are, by change number reviewing and by commit reworking; undefined while it loads.
+   */
+  shownCounts(mode: TaskMode | undefined): { key: string; counts: ChainCounts } | undefined {
+    const shown = this.shown;
+    if (!shown || !mode || this.detail.loading()) {
+      return undefined;
+    }
+    const key = mode === "review" ? String(shown.number ?? "") : (this.target?.sha ?? shown.sha ?? "");
+    return key ? { key, counts: chainCounts(this.chains()) } : undefined;
+  }
+
+  /** Mark seen: every file of the comparison shown not seen yet, ticked at once, on Gerrit in one request. */
+  async markAllSeen(): Promise<void> {
+    const where = this.seenWhere();
+    if (where) {
+      const seen = this.seenHere();
+      const left = this.seenable().filter((file) => !seen.has(file));
+      await this.filesSeen.markAll(where, left);
+      feedback(`${left.length === 1 ? "1 file" : `${left.length} files`} marked seen`, { icon: "pass-filled" });
+    }
   }
 
   /** Next file: the first file of the comparison shown that was not seen yet, in the Files list's order. */
@@ -162,6 +203,14 @@ export class ChangeView extends WebView<ChangeVm> {
     super(extensionUri, "change");
     this.filesSeen = new FilesSeen(() => model.client(), (uri) => this.fileOf(uri));
     this.filesSeen.onDidChange(() => this.render());
+    // Next names Mark seen while the combined diff of the change shown is in front: drawn again when that flips.
+    let combined = false;
+    vscode.window.tabGroups.onDidChangeTabs(() => {
+      if (combined !== this.combinedActive()) {
+        combined = !combined;
+        this.render();
+      }
+    });
     // The view says why nothing is shown while ger is not running, and whether a rebase keeps the message read-only.
     model.onDidChange(() => this.render());
   }
@@ -544,7 +593,11 @@ export class ChangeView extends WebView<ChangeVm> {
       return { empty: this.target && this.detail.loading() ? `Loading ${this.target.title}…` : NOTHING_SHOWN, task: this.task() };
     }
     const next = this.busyText ? undefined : this.next();
-    return { ...changeVm(state), next: next && { label: next.label, title: next.title }, busy: this.busyText, task: this.task() };
+    const task = this.task();
+    const vm = changeVm(state);
+    // Reworking, the header holds Continue, Abort and Skip: the head of a commit stopped at says what is left, not the buttons again.
+    const head = vm.head && task?.mode === "rework" ? { ...vm.head, actions: undefined } : vm.head;
+    return { ...vm, head, next: next && { label: next.label, title: next.title }, busy: this.busyText, task };
   }
 
   /** The view as text, with the CI findings fetched: for the end-to-end suite. */
@@ -592,6 +645,8 @@ export class ChangeView extends WebView<ChangeVm> {
         const file = diff?.files[message.index as number];
         return file ? this.openDiff(file, diff) : undefined;
       }
+      case "seenAll":
+        return this.markAllSeen();
       case "seen": {
         const [file, where] = [diff?.files[message.index as number], this.seenWhere()];
         return file && where ? this.filesSeen.mark(where, file.path, !this.seenHere().has(file.path)) : undefined;

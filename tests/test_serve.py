@@ -338,6 +338,21 @@ def test_reviewed_files_are_gerrits_flag_one_request_each_way(stack_repo: Path) 
         _get(api, "/reviewed", change="101")
 
 
+def test_reviewed_marks_several_files_in_one_request(stack_repo: Path) -> None:
+    """Mark all seen: one request here, one to Gerrit per path; a bad path changes nothing."""
+    store, _keys, _rows = _gerrit(stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+    marked = _post(api, "/reviewed", {"change": 101, "patchset": 1, "paths": ["b.txt", "a.txt", "b.txt"]})
+    assert marked == {"change": 101, "patch_set": 1, "paths": ["b.txt", "a.txt"], "reviewed": True}
+    assert [call.method for call in store.calls].count("set_file_reviewed") == 2
+    assert _get(api, "/reviewed", change="101", patchset="1")["reviewed"] == ["a.txt", "b.txt"]
+    store.calls.clear()
+    for body in ({"paths": ["a.txt", "-x"]}, {"paths": [1]}, {"path": "a.txt", "paths": ["b.txt"]}, {}):
+        with pytest.raises(BadRequest):
+            _post(api, "/reviewed", {"change": 101, "patchset": 1, **body})
+    assert not [call for call in store.calls if call.method == "set_file_reviewed"], "nothing set"
+
+
 def test_file_reads_an_object_beside_the_request_being_served(stack_repo: Path) -> None:
     """`/file` is not serialised: a checkout cannot change what a commit id names."""
     store, _keys, rows = _gerrit(stack_repo)
@@ -1107,7 +1122,7 @@ def _http(
 def test_http_answers_only_with_the_token_on_a_loopback_host(served: GerHttpServer) -> None:
     status, body = _http(served, f"{V1}/health")
     assert status == 200
-    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.6.0", "feature", "g.example")
+    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.7.0", "feature", "g.example")
     assert _http(served, f"{V1}/health", token=None)[0] == 401
     assert _http(served, f"{V1}/health", token="wrong")[0] == 401
     # A page that rebinds its own name to 127.0.0.1 still sends its name as Host.

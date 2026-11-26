@@ -61,7 +61,7 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
 - **While you review a chain** (a staged review here) the view steps aside, and so does *Local
   stack*: the **task header** at the top of the Change view says what *Review chains* said about
   the chain, and the Change view has the side bar. While you rework your own (a rebase underway)
-  it steps aside too; *Local stack* stays, as it is the chain. **All chains** (in the header) brings
+  both step aside too, and the header lists your chain's commits. **All chains** (in the header) brings
   them back for the rest of that task; the eye in this view's title bar hides them again. When the
   task ends they are back by themselves. The change a staged review holds is marked *reviewing*
   here when you see it.
@@ -278,9 +278,12 @@ The commits above your upstream, newest first. One row per commit:
   it off). The ticks are Gerrit's own per-file *reviewed* flag of the patchset looked at, the one
   its web UI shows, so they are there again after a reload or on another machine; on a version
   Gerrit does not have (your local commit) they are kept for the session. On somebody's change the
-  header says how far you are: *2 of 4 files seen*. Inside the combined diff (*Open All Changes*)
-  VS Code reports every file as shown whole wherever it is scrolled, so there only a click ticks
-  one; *Next file* opens the first file not seen on its own, where reading it to the end ticks it.
+  header says how far you are: *2 of 4 files seen*, with **Mark all seen** beside it. Inside the
+  combined diff (*Open All Changes*) VS Code reports every file as shown whole wherever it is
+  scrolled, so it ticks none on its own: while it is the editor in front, Next reads *Mark N files
+  seen* and one press ticks them all (one request to ger serve; Gerrit takes one per file). Else
+  *Next file* opens the first file not seen on its own, where reading it to the end ticks it. The
+  command line does the same: `ger review --seen PATH…`, `--unseen PATH…`, `--seen --all`.
   Click a row for the diff of what is compared; an added or deleted file opens on its own. What your working files
   hold diffs against the real file: the commit you are standing on, so you can fix things in the
   diff editor; and in a **staged review** (`ger review`, in the review worktree or in place), the
@@ -441,20 +444,27 @@ aside (their `when` clauses read `ger.task` and `ger.taskAll`) so the Change vie
 
 - **Reviewing** (at the top of the Change view; *Review chains* and *Local stack* step aside):
   *Reviewing Alice's chain · change 2 of 4*, then **Left**: how many changes are still to vote on,
-  how many are not ready for review, how many comments are left to read. Then the chain in reading
+  how many are not ready for review, how many comments are left to read (for the change shown, the
+  Change view's own count of its comments, so both say one number). Then the chain in reading
   order, oldest first, one row each: its subject and its state in an icon **and** a word —
   *reviewing* (an eye, the row barred and bold), *you voted +1* (a thumb), *to review* (an empty
   circle), *not ready: WIP*, the comment ring with *2 to answer* / *your drafts* / *waits on a
   reply*, *CI failed*. A click on a row goes there: the change reviewed is shown, the one above or
   below is *Review Next / Previous Change*, another is *Review Change*. Under it **Leave review**,
   with where it goes back to.
-- **Reworking** (in place of *Local stack*'s rebase banner; *Review chains* steps aside, *Local
-  stack* stays: its rows are the chain, marked replayed, stopped and to come): *Reworking your chain
-  · change 2 of 5*, **Left** over the whole chain (*3 comments to answer · 1 CI failure · 2 commits
-  need edits*), and **Continue** (*commit this stop as it is, then replay the 3 commits above*) and
-  **Abort** (*put the branch back as it was before the rebase*), **Skip** at a conflict, each with
-  what it does beside it, or why it does not run now in core's words. The conflicted files stay
-  under it.
+- **Reworking** (at the top of the Change view too; *Review chains* and *Local stack* step aside,
+  so the comments you answer have the room): *Reworking your chain · change 2 of 5*, **Left** over
+  the whole chain (*3 comments to answer · CI failed on 1 commit · 2 commits need edits*: CI is
+  counted by commit, as the rows show it, since the findings are known only once a log is read),
+  the chain oldest first, each commit *replayed*, *stopped here* (barred and bold) or *to come*
+  (dimmed), with its comment ring, *needs edits* and *CI failed*; a click shows that commit. Then
+  **Continue** (*commit this stop as it is, then replay the 3 commits above*) and **Abort** (*put
+  the branch back as it was before the rebase*), **Skip** at a conflict, each with what it does
+  beside it, or why it does not run now in core's words. They are shown only here: the Change
+  view's head of a commit stopped on a conflict says what is left without them, and *Local stack*,
+  when *All chains* shows it, leaves out its rebase banner (the conflicted files stay there). They
+  run in the ger terminal; from the click until the stack moves on (another stop, or the rebase
+  over) the header says *Continuing the rebase in the ger terminal…* and its buttons wait.
 - **All chains** (top right of the header) brings the lists back for the rest of the task; there
   it reads **Only this task**. Something else that needs you stays on the status bar item, which
   opens it, the lists coming back when it is in one of them.
@@ -471,10 +481,11 @@ Gerrit whose last published word is not yours and that no draft of yours answers
 | You are | # | When | Next |
 |---|---|---|---|
 | reviewing (a staged review holds the change shown) | 1 | a chain yours to read you have not gone to | *Next comment* |
-| | 2 | a file of the comparison shown is not seen (its tick: shown to its end, or clicked) | *Next file* (the first not seen) |
-| | 3 | drafts of yours wait, or Gerrit's attention set holds you (or ger cannot tell) | *Vote and publish* |
-| | 4 | the chain goes on above the change (or ger cannot tell) | *Next change* |
-| | 5 | the top of the chain | *Leave review* |
+| | 2 | files of the comparison shown are not seen, and its combined diff is the editor in front (where they were read) | *Mark N files seen* (all of them, one request) |
+| | 3 | a file of the comparison shown is not seen (its tick: shown to its end, or clicked) | *Next file* (the first not seen) |
+| | 4 | drafts of yours wait, or Gerrit's attention set holds you (or ger cannot tell) | *Vote and publish* |
+| | 5 | the chain goes on above the change (or ger cannot tell) | *Next change* |
+| | 6 | the top of the chain | *Leave review* |
 | on your own commit, no staged review | 1 | a rebase stopped on a conflict, files still conflicted | *Resolve the conflict* (the first file) |
 | | 2 | a chain left to answer here, gone to or not (a reply typed into its box but not saved does not answer it) | *Next comment* |
 | | 3 | a commit above the stop needs edits, or (no rebase) any commit does | *Work on next* |

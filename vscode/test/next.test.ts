@@ -81,11 +81,14 @@ test("reviewing, Next goes through the comments not read, the files not seen, th
   const draft = chain("mine", [comment("Typo", { state: "draft", comment_id: "d", author: undefined })]);
   const rows: [string, Partial<NextState>, string | undefined][] = [
     ["1 an open comment yours to read, not looked at", { chains: [open] }, "Next comment"],
-    ["2 a file of the comparison not seen", { chains: [open], visited: new Set(["open"]) }, "Next file"],
-    ["3 your turn on Gerrit", seen, "Vote and publish"],
-    ["3 not your turn, but a draft of yours waits", { ...seen, yourTurn: false, chains: [{ ...draft, resolved: true }] }, "Vote and publish"],
-    ["4 voted, the chain goes on above", { ...seen, yourTurn: false }, "Next change"],
-    ["5 voted, the top of the chain", { ...seen, yourTurn: false, above: false }, "Leave review"],
+    ["2 files not seen, read in the combined diff in front", { chains: [open], visited: new Set(["open"]), combinedActive: true }, "Mark 2 files seen"],
+    ["2 a file not seen, read in the combined diff in front", { seenFiles: new Set(["a.py"]), combinedActive: true }, "Mark 1 file seen"],
+    ["3 a file of the comparison not seen", { chains: [open], visited: new Set(["open"]) }, "Next file"],
+    ["4 your turn on Gerrit", seen, "Vote and publish"],
+    ["4 all seen, the combined diff still in front", { ...seen, combinedActive: true }, "Vote and publish"],
+    ["4 not your turn, but a draft of yours waits", { ...seen, yourTurn: false, chains: [{ ...draft, resolved: true }] }, "Vote and publish"],
+    ["5 voted, the chain goes on above", { ...seen, yourTurn: false }, "Next change"],
+    ["6 voted, the top of the chain", { ...seen, yourTurn: false, above: false }, "Leave review"],
     ["- nothing loaded yet", { shown: undefined }, undefined],
   ];
   for (const [rule, state, label] of rows) {

@@ -115,7 +115,7 @@
           "id": "ger.stack",
           "name": "Local stack",
           "type": "webview",
-          "when": "ger.task != review || ger.taskAll"
+          "when": "!ger.task || ger.taskAll"
         },
         {
           "id": "ger.change",

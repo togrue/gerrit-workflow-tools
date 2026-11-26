@@ -418,8 +418,11 @@ function reviewTask(all = false, busy?: string): TaskVm | undefined {
   return taskVm(overview, local([], { staged_review: review }), { all, busy });
 }
 
-/** Your stack, a rebase stopped at its third commit: Local stack with the task header in place of the banner. */
-function reworking(stop: RebaseStop): StackVm {
+/**
+ * Your stack, a rebase stopped at its third commit: the task header at the top of the Change view,
+ * which shows the commit stopped at (Local stack steps aside; shown with All chains, without its banner).
+ */
+function reworking(stop: RebaseStop, options: { busy?: string } = {}): { stack: StackVm; change: ChangeVm } {
   const applied = stop === "edit";
   const commits = [
     pushed("Add the routing table", { rebase: "done", code_review: 2, verified: 1 }),
@@ -429,9 +432,14 @@ function reworking(stop: RebaseStop): StackVm {
     unpushed("Evict stale routes", { rebase: "todo" }),
   ];
   const refused = stop === "conflict" ? { continue: "src/routes.ts is still conflicted: resolve it and git add it first" } : {};
-  const unmerged = stop === "conflict" ? ["src/routes.ts"] : [];
+  // Two files: the head then says how many, not a path (a path is theirs, and is replaced in a report).
+  const unmerged = stop === "conflict" ? ["src/routes.ts", "src/cache.ts"] : [];
   const stack = local(commits, { rebase_in_progress: true, rebase: { branch: "routing", onto: null, orig_head: "f".repeat(40), stop, applied, current: null, unmerged, as_before: false, actions: WAYS_ON[stop], refused } });
-  return stackVm(stack, undefined, never, () => 0, taskVm(undefined, stack, { all: false }));
+  const task = taskVm(undefined, stack, { all: false, busy: options.busy });
+  const stopped = stop === "conflict" ? { stop: "conflict" as const, unmerged, actions: WAYS_ON[stop] } : undefined;
+  const shown = change({ shown: theChange({ ...commits[2], own: true }), readOnly: "A rebase is in progress: finish or abort it first.", stopped });
+  // As the Change view draws it reworking: the header holds the rebase's buttons, the head only says what is left.
+  return { stack: stackVm(stack, undefined, never, () => 0, true), change: { ...shown, head: shown.head && { ...shown.head, actions: undefined }, task } };
 }
 
 function taskScenarios(): Scenario[] {
@@ -442,8 +450,10 @@ function taskScenarios(): Scenario[] {
     scenario("Task: reviewing a chain, the header on the Change view", { change: reviewed(reviewTask()) }),
     scenario("Task: reviewing, all chains shown again", { change: reviewed(reviewTask(true)) }),
     scenario("Task: reviewing, the next change checking out", { change: { ...reviewed(reviewTask(false, "Checking out 48212…")), next: undefined, busy: "Checking out 48212… Go to Definition and edits in your files once it is checked out" } }),
-    scenario("Task: reworking, stopped to edit", { stack: reworking("edit") }),
-    scenario("Task: reworking, stopped on a conflict", { stack: reworking("conflict") }),
+    scenario("Task: reworking, stopped to edit", { change: reworking("edit").change }),
+    scenario("Task: reworking, stopped on a conflict", { change: reworking("conflict").change }),
+    scenario("Task: reworking, Continue running in the terminal", { change: reworking("edit", { busy: "Continuing the rebase in the ger terminal…" }).change }),
+    scenario("Task: reworking, all chains shown: Local stack without its banner", { stack: reworking("edit").stack }),
   ];
 }
 

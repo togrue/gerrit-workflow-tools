@@ -8,7 +8,7 @@ import { draftsIn, toAnswer } from "./changeRows";
 import { WALK_WORDS, workOnNext } from "./stackRows";
 
 /** What Next does; extension.ts maps each to its command. */
-export type NextKind = "comment" | "file" | "vote" | "nextChange" | "leave" | "conflict" | "workOnNext" | "push" | "review";
+export type NextKind = "comment" | "file" | "seen" | "vote" | "nextChange" | "leave" | "conflict" | "workOnNext" | "push" | "review";
 
 export interface NextAction {
   kind: NextKind;
@@ -32,6 +32,8 @@ export interface NextState {
   /** The files of the comparison shown, and those seen (Gerrit's reviewed flag, or opened here). */
   files: readonly string[];
   seenFiles: ReadonlySet<string>;
+  /** The combined diff of the comparison shown is the editor in front: its files are being read there. */
+  combinedActive?: boolean;
   /** Under review: Gerrit's attention set holds you on it (core's `your_turn`); undefined when not known. */
   yourTurn?: boolean;
   /** Under review: the chain goes on above it; undefined when not known. */
@@ -51,7 +53,8 @@ function pushable(stack: Stack): boolean {
 
 /**
  * Reviewing: the comments yours to read you have not looked at (not those waiting on the author's
- * reply to you, nor those your draft answers), the files not seen, then the vote (while it is your
+ * reply to you, nor those your draft answers), the files not seen (all at once while the combined
+ * diff is in front, where they are read), then the vote (while it is your
  * turn, or drafts of yours wait), then the next change of the chain, at its top leaving the review.
  */
 function reviewNext(state: NextState): NextAction {
@@ -60,6 +63,10 @@ function reviewNext(state: NextState): NextAction {
     return action("comment", "Next comment", `${unread} open comment${unread === 1 ? "" : "s"} not looked at yet`);
   }
   const unseen = state.files.filter((file) => !state.seenFiles.has(file)).length;
+  if (unseen && state.combinedActive) {
+    // Read in the combined diff, which cannot tell what was scrolled through: one press says so.
+    return action("seen", `Mark ${unseen === 1 ? "1 file" : `${unseen} files`} seen`, `you read them in the combined diff: ticks the ${unseen === 1 ? "file" : `${unseen} files`} not seen yet, on Gerrit too`);
+  }
   if (unseen) {
     return action("file", "Next file", `${unseen} of ${state.files.length} files not seen yet`);
   }

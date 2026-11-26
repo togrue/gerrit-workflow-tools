@@ -18,6 +18,7 @@ from gerrit_workflow_tools.core.gerrit_patchset import fetch_patchset, resolve_c
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_targets
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.review_delta import last_reviewed_patch_set, load_review_delta
+from gerrit_workflow_tools.core.reviewed_files import ReviewedPathError, mark_reviewed, reviewed_files
 from gerrit_workflow_tools.render.review_json import iso_utc
 from gerrit_workflow_tools.server.request import OBJECT_ID, BadRequest, Context, Request, safe_rev
 
@@ -143,19 +144,23 @@ def file(cwd: Path, req: Request) -> dict[str, Any]:
 def reviewed(ctx: Context, req: Request) -> dict[str, Any]:
     """The files of patchset ``patchset`` of change ``change`` (numbers) you marked reviewed on Gerrit."""
     change, patch_set = _change_patchset(req.number("change"), req.number("patchset"))
-    paths = ctx.service.rest.list_reviewed_files(str(change), patch_set)
-    return {"change": change, "patch_set": patch_set, "reviewed": sorted(paths)}
+    return {"change": change, "patch_set": patch_set, "reviewed": reviewed_files(ctx.service.rest, change, patch_set)}
 
 
-def mark_reviewed(ctx: Context, req: Request) -> dict[str, Any]:
-    """Mark ``path`` of that patchset reviewed on Gerrit (``reviewed`` true, the default), or clear the mark."""
+def mark_reviewed_files(ctx: Context, req: Request) -> dict[str, Any]:
+    """Mark ``path`` (or each of ``paths``) of that patchset reviewed on Gerrit (``reviewed`` true, the
+    default), or clear the mark: one request here, one to Gerrit per path (it has no call for several)."""
     change, patch_set = _change_patchset(req.body_field("change", int), req.body_field("patchset", int))
-    path = req.body_field("path", str, required=True)
-    if not path or path.startswith("-") or "\0" in path:
-        raise BadRequest("path is not a repository path")
-    flag = req.body_field("reviewed", bool)
-    ctx.service.rest.set_file_reviewed(str(change), patch_set, path, flag is not False)
-    return {"change": change, "patch_set": patch_set, "path": path, "reviewed": flag is not False}
+    one, several = req.body_field("path", str), req.body_field("paths", list)
+    if (one is None) == (several is None) or (several is not None and not all(isinstance(p, str) for p in several)):
+        raise BadRequest("give path, a repository path, or paths, a list of them")
+    flag = req.body_field("reviewed", bool) is not False
+    try:
+        marked = mark_reviewed(ctx.service.rest, change, patch_set, [one] if one is not None else several, flag)
+    except ReviewedPathError as error:
+        raise BadRequest(str(error)) from error
+    answer: dict[str, Any] = {"change": change, "patch_set": patch_set, "reviewed": flag}
+    return {**answer, "path": one} if one is not None else {**answer, "paths": marked}
 
 
 def _change_patchset(change: int | None, patch_set: int | None) -> tuple[int, int]:

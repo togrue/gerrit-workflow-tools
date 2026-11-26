@@ -4,7 +4,6 @@
 
 import { CodeChange, CommitStatus, MoveConflict, Overview, Rebase, RebaseAction, Reviewer, Stack, StackCommit, UpstreamChoice, UpstreamStop } from "./api";
 import { CommentShape, CommentTone, commentState } from "./commentState";
-import type { TaskVm } from "./taskRows";
 import { blockedMove, reasonWords, sentence, wouldConflict } from "./format";
 import { Waiting } from "./state";
 
@@ -215,8 +214,6 @@ export interface StackVm {
   movable: number;
   /** A staged review: the rows are somebody else's commits, and offer review actions only. */
   review?: boolean;
-  /** Reworking: the task header (taskRows.ts) in place of the rebase banner; the rows are its chain. */
-  task?: TaskVm;
 }
 
 /** Where a rebase stopped, in the row's tooltip: why, by core's verdict. */
@@ -535,7 +532,8 @@ export function frozen(stack: Stack): string | null {
 }
 
 /** The view for `local` (the overview's local stack, or why there is none). */
-export function stackVm(local: Overview["local"] | undefined, choice: UpstreamChoice | undefined, conflicts: Conflicts, drafts: (sha: string) => number = () => 0, task?: TaskVm): StackVm {
+/** `headerShown`: the task header (taskRows.ts) says what the rebase banner would, with its buttons: the banner is left out. */
+export function stackVm(local: Overview["local"] | undefined, choice: UpstreamChoice | undefined, conflicts: Conflicts, drafts: (sha: string) => number = () => 0, headerShown = false): StackVm {
   if (!local) {
     return { info: [], rows: [], frozen: null, movable: 0 };
   }
@@ -570,7 +568,7 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
   const info: StackInfo[] = [];
   if (local.rebase_in_progress) {
     // The task header says what the banner does, and more: only the conflicted files stay under it.
-    info.push(...(task ? (local.rebase?.unmerged ?? []).map(conflictRow) : rebaseBanner(local.rebase)));
+    info.push(...(headerShown ? (local.rebase?.unmerged ?? []).map(conflictRow) : rebaseBanner(local.rebase)));
   }
   const upstream = upstreamRow(local);
   if (upstream) {
@@ -584,7 +582,7 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
   const fixed = pinned(local);
   const rows = commits.map((commit, index) => row(commit, local, index, fixed, conflicts, drafts)).reverse();
   const review = Boolean(local.staged_review);
-  return { info, rows, frozen: frozen(local), movable: review ? 0 : commits.length - fixed, review, task };
+  return { info, rows, frozen: frozen(local), movable: review ? 0 : commits.length - fixed, review };
 }
 
 /** Buttons as the transcript shows them: `[Continue] [Abort]`, the one to press now in bold. */

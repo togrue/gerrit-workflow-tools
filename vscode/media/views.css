@@ -929,3 +929,10 @@ select:focus {
 .file.seen .label {
   opacity: 0.8;
 }
+
+/* The Files header's "Mark all seen": a link after the count, before the line counts. */
+.section-head .mark-all {
+  margin-left: 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}

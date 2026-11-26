@@ -185,7 +185,7 @@ a client words its own advice while `message` stays ger's.
 
 ## API version
 
-`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.6.0`); the URL
+`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.7.0`); the URL
 prefix carries only the major (`/api/v1`). It moves on its own, not with ger's package version:
 
 | Bump | When |
@@ -542,7 +542,13 @@ no run is opened).
 Gerrit's per-file *reviewed* flag: `reviewed`, the paths of that patchset you marked reviewed
 (sorted), with `change` and `patch_set`. Both are numbers, so nothing is resolved: one request
 to Gerrit, outside the trust window (the flag is yours and changes with every file you mark).
-`POST /reviewed` sets it.
+
+`POST /reviewed` sets it: `{change, patchset, path}` marks one file, `{change, patchset, paths}`
+(a list, API 1.7) several in one request, and `reviewed: false` clears the mark. Gerrit sets the
+flag one file per request, so `paths` costs one Gerrit request per path; a path that is not a
+repository path is refused before any. The answer echoes `change`, `patch_set`, `reviewed` and
+`path`, or `paths` (each once, in order). `ger review --seen` is the same from the command line
+([review](review.md)); both go through `core/reviewed_files.py`.
 
 ### `GET /agent/runbook`
 

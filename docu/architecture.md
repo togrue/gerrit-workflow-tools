@@ -550,6 +550,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/gerrit_project_id.py` | Gerrit project from config or remote URL |
 | `core/commit_diff.py` | What one commit changed: `commit_diff` (files against the first parent), `diff_between`, `file_text`, and its unified diff with each line numbered (`numbered_diff`) |
 | `core/review_delta.py` | The **review delta**: `last_reviewed_patch_set`, `load_review_delta` (the patchset you reviewed against the current one, another patchset, or the local commit) |
+| `core/reviewed_files.py` | Gerrit's per-file *reviewed* flag of one patchset (`reviewed_files`, `mark_reviewed`): `ger review --seen` and `ger serve`'s `/reviewed` share it |
 | `core/reorder.py` | Rewriting the local stack, all or nothing: `rewrite_stack` (reorder, fold, drop; `autostash`), `fold_fixup` (`ger fix --autosquash`), `undo_rewrite`, `ReorderRefusal`; also the sequence editor that run uses |
 | `core/rewrite_outcome.py` | What a finished rewrite of the local stack did, as data (`rewrite_outcome`, `RewriteOutcome`): commits rewritten, how many of them now ahead of Gerrit (from the cache, no request), fixups squashed, commits already upstream, and the commits it dropped (`DroppedCommit`, `dropped_commit`), against the stack before it (`stack_before`) |
 | `core/reword.py` | Message-only rewrites, every tree kept: `rewrite_messages` (recreate commits with new messages), `move_head`, `reword_commit` (one stack commit, its **Change-Id** kept), `add_missing_change_ids` (`ger change-id --fix`) |
@@ -641,7 +642,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `server/request.py` | `Request` (query, body, path captures), `Context`, `BadRequest`, `safe_rev` (client input never reaches git as an option) |
 | `server/views.py` | Read endpoints: health, overview, stack (with rebase progress and how far the upstream moved), chain, show, review, agent runbook; `error_json` |
 | `server/stack_views.py` | Read endpoints about moving the local stack: stack moves (conflict preview), the upstream and which to offer |
-| `server/diff_views.py` | Read endpoints about what a change changed: diff (a commit, a patchset, the **review delta**, Gerrit against local), patchsets, file, and Gerrit's per-file *reviewed* flag (`/reviewed`, read and set) |
+| `server/diff_views.py` | Read endpoints about what a change changed: diff (a commit, a patchset, the **review delta**, Gerrit against local), patchsets, file, and Gerrit's per-file *reviewed* flag (`/reviewed`, read and set, through `core/reviewed_files.py`) |
 | `server/actions.py` | Endpoints that change something: review checkout, draft reply, hold, stack rewrite, reword and their undo |
 | `server/vote.py` | The vote: what it would send (`GET /vote`, with the votes on offer) and sending it (`POST /vote`), through core's `plan_vote` and `send_vote` |
 | `server/httpd.py` | HTTP transport: loopback, bearer token, JSON bodies, `failure_response` (failure to status), a request's trace (`ACTION_HEADER` in, `TRACE_HEADER` out) |

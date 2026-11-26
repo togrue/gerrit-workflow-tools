@@ -6,6 +6,7 @@ import * as path from "node:path";
 
 import { Attended, CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, RebaseAction, Severity, ShownCommit } from "./api";
 import { attentionIcon, commitVotes, fileState, plural, reasonWords, sentence } from "./format";
+import type { Commented } from "./commentState";
 import { Badge, SYNC_WORDS, StackAction, StackInfo, Tone, actionsText, badges, sync, conflictRow, rebaseButtons } from "./stackRows";
 import { Waiting } from "./state";
 import { latestSuggestion } from "./suggestions";
@@ -258,7 +259,7 @@ export interface ChangeVm {
   hint?: { text: string; show: boolean };
   /** A rebase stopped here on a conflict: the files still conflicted, as Local stack lists them under its banner. */
   conflicts?: { summary: string; rows: StackInfo[] };
-  files?: { title: string; summary: string; added: number; deleted: number; note: string; tooltip: string; rows: FileRow[] };
+  files?: { title: string; summary: string; added: number; deleted: number; note: string; tooltip: string; rows: FileRow[]; markAll?: string };
   comments?: { summary: string; open: boolean; threads: ThreadRow[] };
   /** Next: the one thing to do now, its button's text and why (nextAction.ts). */
   next?: { label: string; title: string };
@@ -429,6 +430,9 @@ function deltaTitle(state: ChangeState): "Gerrit vs. local" | "Since your review
   return state.from === "reviewed" || from === state.patchsets?.reviewed ? "Since your review" : "Compared";
 }
 
+/** The Files header's way to tick every file not seen yet (the combined diff ticks none on its own). */
+export const MARK_ALL_SEEN = "Mark all seen";
+
 function files(state: ChangeState): NonNullable<ChangeVm["files"]> {
   const compared = state.from !== "base";
   const diff = compared ? state.delta : state.base;
@@ -483,7 +487,9 @@ function files(state: ChangeState): NonNullable<ChangeVm["files"]> {
   // How much is left on somebody's change: `2 of 4 files seen`; on yours only once you tick one.
   const tracked = rows.length > 0 && (seen > 0 || state.shown?.own === false);
   const summary = note || (tracked ? `${seen} of ${plural(rows.length, "file")} seen` : plural(rows.length, "file"));
-  return { title, summary, added, deleted, note, tooltip, rows };
+  // Read in the combined diff, which ticks none: the header ticks the rest in one go.
+  const markAll = !note && tracked && seen < rows.length ? MARK_ALL_SEEN : undefined;
+  return { title, summary, added, deleted, note, tooltip, rows, ...(markAll ? { markAll } : {}) };
 }
 
 /** `applies`: an edit a comment suggests may be written into your file (your own local commit). */
@@ -588,21 +594,41 @@ function ciLinks(ci: CiView): CiLinkRow[] {
   });
 }
 
+/** Core's counts of a row (`Commented`), every one known: what `chainCounts` gives. */
+export type ChainCounts = { [K in keyof Commented]-?: number };
+
 /**
- * What the comments from Gerrit leave for you: on a change you review (not yours), how many are
- * unresolved; else what is left to answer, what your drafts answer (and what publishes them), and
- * what waits on a reply. Unresolved on Gerrit, all three, until the drafts are published.
+ * What a change's comment chains from Gerrit leave for you, from the chains themselves: left to
+ * answer (`toAnswer`), answered by your drafts, waiting on a reply, all of them, as core's counts
+ * of a row are shaped (`Commented`). The one count of the change shown: the Change view says it,
+ * and the task header takes it for that change over the counts served with the inbox and the stack.
  */
-function commentCounts(commit: ShownCommit, chains: CommentChain[], open: number, fromGerrit: number): string {
-  if (commit.own === false) {
-    return `${open} unresolved of ${fromGerrit}`;
-  }
-  const answered = chains.filter((chain) => !chain.resolved && answeredByDraft(chain)).length;
-  const waiting = chains.filter((chain) => !chain.resolved && !isYours(chain) && !answeredByDraft(chain) && chain.turn === "theirs").length;
-  const left = chains.filter(toAnswer).length;
+export function chainCounts(chains: readonly CommentChain[]): ChainCounts {
+  const fromGerrit = chains.filter((chain) => !isYours(chain));
+  const open = fromGerrit.filter((chain) => !chain.resolved);
+  return {
+    comments_unresolved: open.length,
+    comments_to_answer: open.filter(toAnswer).length,
+    comments_drafted: open.filter(answeredByDraft).length,
+    comments_awaiting_reply: open.filter((chain) => !answeredByDraft(chain) && chain.turn === "theirs").length,
+    comments_total: fromGerrit.length,
+  };
+}
+
+/**
+ * What the comments from Gerrit leave for you: left to answer (on a change you review, to read),
+ * what your drafts answer (and what publishes them), and what waits on a reply. Unresolved on
+ * Gerrit, all three, until the drafts are published.
+ */
+function commentCounts(commit: ShownCommit, counts: ChainCounts): string {
+  const { comments_to_answer: left, comments_drafted: answered, comments_awaiting_reply: waiting } = counts;
   const publish = commit.drafts_published_by === "push" ? "push publishes them" : "Vote and Publish sends them";
-  const parts = [left ? `${left} to answer` : "", answered ? `${answered} answered by your drafts (${publish})` : "", waiting ? `${waiting} waiting on a reply` : ""];
-  return parts.filter(Boolean).join(" · ") || `all ${fromGerrit} resolved`;
+  const parts = [
+    left ? `${left} ${commit.own === false ? "to read" : "to answer"}` : "",
+    answered ? `${answered} answered by your drafts (${publish})` : "",
+    waiting ? `${waiting} waiting on a reply` : "",
+  ];
+  return parts.filter(Boolean).join(" · ") || `all ${counts.comments_total} resolved`;
 }
 
 export function changeVm(state: ChangeState): ChangeVm {
@@ -638,10 +664,10 @@ export function changeVm(state: ChangeState): ChangeVm {
   // Someone's change, also one checked out for review (unless it is behind: the update says it).
   const theirs = !state.local || (state.reviewing !== undefined && !state.reviewing.behind);
   const reviewed = theirs && state.from === "base" && since && since.patch_set !== null;
-  const open = chains.filter((chain) => !chain.resolved && !isYours(chain)).length;
-  const fromGerrit = chains.filter((chain) => !isYours(chain)).length;
+  const left = chainCounts(chains);
+  const [open, fromGerrit] = [left.comments_unresolved, left.comments_total];
   const yours = chains.length - fromGerrit;
-  const counts = [fromGerrit ? commentCounts(commit, chains, open, fromGerrit) : "", yours ? `${yours} of yours, not published` : ""];
+  const counts = [fromGerrit ? commentCounts(commit, left) : "", yours ? `${yours} of yours, not published` : ""];
   const hasCi = commit.ci_failures.length > 0 || commit.ci_links.length > 0 || commit.attention_reasons.includes("ci-failed");
   const loading = state.loading;
   const words = sentence(reasonWords(commit.attention_reasons));

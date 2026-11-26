@@ -57,7 +57,7 @@ from gerrit_workflow_tools.server.diff_views import add_worktree_places, commit_
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
 
-API_VERSION = "1.6.0"
+API_VERSION = "1.7.0"
 """The serve contract's version, ``MAJOR.MINOR.PATCH`` (bump rules: ``docu/spec/commands/serve.md``)."""
 _T = TypeVar("_T")
 _NOT_ON_GERRIT = frozenset({Attention.NOT_PUSHED, Attention.AHEAD_OF_GERRIT, Attention.DIVERGED})
