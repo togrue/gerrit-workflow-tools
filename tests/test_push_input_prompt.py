@@ -169,3 +169,12 @@ def test_a_starting_line_ends_in_a_space_so_typing_starts_a_new_word(
     assert seen == ["publish-drafts ", ""]
     assert res.state.publish_drafts and res.state.answer == "push" and not res.state.reviewers
     assert empty.state.answer == "push"
+
+
+def test_a_short_terminal_gets_the_bare_prompt_and_is_told_where_the_preview_is() -> None:
+    """State 19 of the outside-the-happy-path run: a panel 2 rows high showed only "Window too small..."."""
+    full = pip.prompt_room(24)
+    assert (full.menu, full.toolbar, full.note) == (8, True, None)
+    short = pip.prompt_room(2)
+    assert (short.menu, short.toolbar) == (0, False)
+    assert short.note == "(the terminal is 2 rows high: the preview is above, scroll up or make the terminal taller)"

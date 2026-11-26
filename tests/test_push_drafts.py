@@ -127,6 +127,20 @@ def test_drafts_on_unchanged_commits_are_named(stack_repo: Path, monkeypatch: py
     assert "Drafts" not in out.replace(f"drafts on {rows[0].short_sha}", "")
 
 
+def test_publish_drafts_says_it_does_not_reach_drafts_on_unchanged_commits(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """State 19 of the outside-the-happy-path run: with publish-drafts asked for, the line read as if it was ignored."""
+    store, rows, keys = _pushed(stack_repo, updated=False)
+    _with_draft(store, keys[0])
+    code, out, _err, _refspec = _run_push(stack_repo, monkeypatch, ["--dry-run", "--publish-comments"], store)
+    assert code == ExitCode.OK
+    assert (
+        f"drafts on {rows[0].short_sha} stay drafts: Gerrit gets no new patchset there, "
+        "so publish-drafts does not reach them"
+    ) in out
+
+
 def test_drafts_on_an_outdated_change_are_named(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """An outdated change gets no patchset either, with --force pushing the commit above it: its drafts stay."""
     rows = commits_in_range(stack_repo, "main..feature")[:2]
