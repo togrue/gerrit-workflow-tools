@@ -431,6 +431,7 @@ button.twist:hover {
   color: var(--vscode-descriptionForeground);
   font-family: var(--vscode-editor-font-family);
   font-size: 11px;
+  overflow-wrap: anywhere;
   user-select: text;
 }
 
@@ -505,6 +506,11 @@ button.twist:hover {
 
 .compare select {
   width: 100%;
+}
+
+/* In a task, From and To at their default: one line, what is compared, and "Change" to open them. */
+.compare-line .words {
+  color: var(--vscode-descriptionForeground);
 }
 
 /* The default mode: a toggle as VS Code draws one (the search box's Aa), spanning both rows. */

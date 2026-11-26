@@ -33,10 +33,14 @@
     const bar = h("div", { class: "message-bar" }, apply, revert, note);
     const changeId = h("div", { class: "change-id" });
     const block = h("div", { class: "message-block" }, h("div", { class: "heading" }, h("span", { class: "label" }, "Commit message"), author), box, changeId, bar);
-    const state = { key, base: "", block, box, author, changeId };
+    const state = { key, base: "", block, box, author, changeId, compact: false };
+    // Reworking, the message is not what you came for: two lines until the box has the keyboard.
     const fit = () => {
-      box.rows = Math.max(3, Math.min(16, box.value.split("\n").length + 1));
+      const whole = Math.max(3, Math.min(16, box.value.split("\n").length + 1));
+      box.rows = state.compact && document.activeElement !== box ? 2 : whole;
     };
+    box.addEventListener("focus", fit);
+    box.addEventListener("blur", fit);
     state.sync = () => {
       const changed = box.value !== state.base;
       if (changed && !box.readOnly) {
@@ -157,6 +161,7 @@
       editor.box.value = message.text;
     }
     editor.base = message.text;
+    editor.compact = Boolean(vm.task && vm.task.mode === "rework");
     editor.box.readOnly = Boolean(message.readOnly);
     editor.box.title = message.readOnly || "";
     editor.author.textContent = message.author;
@@ -404,6 +409,17 @@
     return h("div", { class: "compare" }, ...picker("From", compare.from, "from"), toggle, ...picker("To", compare.to, "to"));
   }
 
+  /**
+   * In a task, From and To at the default mode's sides are one line that says what is compared, in
+   * its words: "Base commit → Local commit 464bd89". "Change" opens the pickers; picked by hand
+   * (the default no longer holds) they stay open.
+   */
+  function compareLine(compare) {
+    const label = (side) => (side.options.find((option) => option.value === side.selected) || { label: side.selected }).label;
+    const open = h("button", { class: "link", title: "Choose From and To, and the default comparison", onclick: () => ((toggled.compare = true), draw(vm)) }, "Change");
+    return h("div", { class: "head note wraps compare-line", title: compare.mode.title }, icon(compare.mode.icon), words(`${label(compare.from)} → ${label(compare.to)}`), open);
+  }
+
   /** An explanation: an icon and words that wrap under each other in a narrow view, never cut off. */
   function explain(iconId, tone, text, detail, ...rest) {
     return h("div", { class: "head note wraps" }, icon(iconId, tone), words(text, detail), ...rest);
@@ -446,6 +462,7 @@
     if (key !== shownKey) {
       shownKey = key;
       delete toggled.ci;
+      delete toggled.compare;
       expanded.clear();
       revealed = null;
     }
@@ -494,7 +511,7 @@
       parts.push(messagePlace(vm.loading.readOnly, vm.loading.plain));
     }
     if (vm.compare) {
-      parts.push(compareBlock(vm.compare));
+      parts.push(vm.task && vm.compare.mode.active && !toggled.compare ? compareLine(vm.compare) : compareBlock(vm.compare));
     }
     if (vm.hint) {
       const to = vm.compare ? vm.compare.to.selected : "current";

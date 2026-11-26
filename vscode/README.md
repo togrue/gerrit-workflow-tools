@@ -273,7 +273,10 @@ The commits above your upstream, newest first. One row per commit:
   paragraphs and list items hard-wrapped at 72 joined again, so they wrap once, where the view
   does; indented and fenced blocks kept line for line in the editor font (they scroll sideways when
   wide); the trailers (`Bug:`, `Signed-off-by:`) small and dim, as the Change-Id is.
-- **From / To**: what is compared. *To* is the version you look at: your **local commit** (when
+- **From / To**: what is compared. In a task (reviewing, reworking), while they are the default
+  mode's sides, they are one line that says it (*Base commit → Local commit 464bd89*) with
+  **Change** to open the pickers; picked by hand, they stay open. Reworking, the commit message box
+  is two lines high until it has the keyboard: the comments and files you came for come up. *To* is the version you look at: your **local commit** (when
   the change is in your stack) or any patchset on Gerrit. *From* is what it is compared with:
   the **base commit** (what the change does) or any patchset older than *To*. Both lists run
   newest first and mark the current patchset and the one you reviewed. Picking *To* at or below
