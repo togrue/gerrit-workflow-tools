@@ -224,6 +224,7 @@ test("F4: Gerrit refusing a reload leaves what is local of the change drawn, mar
   assert.ok(detail.fail(again, refused.message, refused, true));
   assert.equal(detail.problem, undefined, "the message and the files stay");
   assert.deepEqual(detail.shown?.gerrit_unavailable, refused);
+  assert.deepEqual([detail.shown?.patchset_status, detail.shown?.own], ["unknown", null], "said unknown, as /show says it");
   assert.ok(detail.diff, "its files too");
   // Nothing drawn yet: the refusal is the view, as before.
   const fresh = new ChangeDetail();

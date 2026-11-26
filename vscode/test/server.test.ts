@@ -42,4 +42,5 @@ test("a ger serve that died is started again, and the log has one line for it", 
   assert.equal(restart.length, 1, restart.join("\n"));
   assert.match(restart[0], /^ger serve exited \(.+\) and was started again: listening on http:\/\/127\.0\.0\.1:\d+/);
   assert.ok(log.slice(0, before).some((line) => line.startsWith("starting: ")), "the first start is said in full");
+  assert.equal(log.filter((line) => line.startsWith("warning: ")).length, 1, "its warning once, not again with the restart");
 });

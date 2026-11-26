@@ -124,7 +124,8 @@ export class GerProcess {
       child.stderr?.setEncoding("utf8").on("data", (chunk: string) => {
         err += chunk;
         // While it starts again (and a moment after), what it said at its first start is not said twice.
-        const fresh = chunk.trimEnd().split("\n").filter((line) => Date.now() >= quietUntil || !this.said.has(line));
+        // A configuration warning, which ger prints with each request, is said once a session.
+        const fresh = chunk.trimEnd().split("\n").filter((line) => !this.said.has(line) || (Date.now() >= quietUntil && !line.startsWith("warning: ")));
         chunk.trimEnd().split("\n").forEach((line) => this.said.add(line));
         if (fresh.length) {
           this.log(fresh.join("\n"));

@@ -219,7 +219,8 @@ export class ChangeDetail {
       return false;
     }
     if (away && this.shown && error) {
-      this.shown = { ...this.shown, gerrit_unavailable: error };
+      // As `/show` serves a commit Gerrit could not be asked about: its state unknown, whose it is unknown.
+      this.shown = { ...this.shown, gerrit_unavailable: error, patchset_status: "unknown", own: null };
       this.waiting.clear();
       return true;
     }
