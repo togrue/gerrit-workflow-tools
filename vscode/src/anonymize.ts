@@ -146,7 +146,7 @@ const reasons = (text: string) => text.split(", ").every((word) => REASON_WORDS.
 
 /** What a view says in place of its content (state.ts, waitingFor). */
 const WAITING: Shape = {
-  text: ours(["Starting ger serve…", "Asking Gerrit…", /^Asking Gerrit… If it does not answer within \d{1,3} seconds, the views say so\.$/, /(Your local stack|A change) shows here once ger runs\. Review chains says what is missing and what to do next\./]),
+  text: ours(["Starting ger serve…", "Asking Gerrit…", "Asking Gerrit… If it does not answer within seconds, the views say so.", /(Your local stack|A change) shows here once ger runs\. Review chains says what is missing and what to do next\./]),
   link: { label: ours(["Show Review Chains"]), command: ours(["ger.overview.focus"]) },
 };
 
@@ -202,7 +202,7 @@ const ACTIONS: Shape = [
   {
     label: ours([...Object.values(REBASE_ACTIONS), ...Object.values(PROBLEM_ACTIONS)].map((action) => action.label)),
     title: ours([...Object.values(REBASE_ACTIONS), ...Object.values(PROBLEM_ACTIONS)].map((action) => action.title)),
-    command: { id: ours([...Object.values(REBASE_ACTIONS).map((action) => action.command), ...Object.values(PROBLEM_ACTIONS).map((action) => action.command.id)]), args: [TEXT] },
+    command: { id: ours([...Object.values(REBASE_ACTIONS).map((action) => action.command), ...Object.values(PROBLEM_ACTIONS).map((action) => action.command.id)]), args: [ours(["credentials"], TEXT)] },
     primary: KEEP,
   },
 ];
@@ -432,7 +432,7 @@ const CHANGE: Shape = {
         {
           label: ours([new RegExp(`Update to patchset ${PATCHSET}`), "Update to the newest patchset", ...Object.values(PROBLEM_ACTIONS).map((action) => action.label)]),
           title: ours([REVIEW_UPDATE.title, ...Object.values(PROBLEM_ACTIONS).map((action) => action.title)]),
-          command: { id: ours([REVIEW_UPDATE.command, ...Object.values(PROBLEM_ACTIONS).map((action) => action.command.id)]), args: [TEXT] },
+          command: { id: ours([REVIEW_UPDATE.command, ...Object.values(PROBLEM_ACTIONS).map((action) => action.command.id)]), args: [ours(["credentials"], TEXT)] },
           primary: KEEP,
         },
       ],

@@ -22,7 +22,7 @@ import { GER_TERMINAL, configWarner, gerProgram, installGer, runInTerminal, vers
 import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
 import { Poller } from "./poller";
-import { PROBLEM_ACTIONS, gerritProblem } from "./problemRows";
+import { PROBLEM_ACTIONS, gerritProblem, shortAway } from "./problemRows";
 import { openConflict, push, rebaseOntoUpstream, rebaseStep } from "./rebase";
 import { RepoWatcher } from "./repoWatcher";
 import { reportIssue } from "./reportIssue";
@@ -374,7 +374,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       task.pressed();
       return push(model);
     },
-    review: () => review(model, changeView.target, reviewSteps),
+    // Your edits here are in the way of a checkout here: the review worktree, as Next names it.
+    review: () => review(model, changeView.target, reviewSteps, model.stack?.review_blocked?.files.length ? "worktree" : undefined),
     reviewWindow: () => {
       const worktree = model.reviewElsewhere(changeView.target?.number);
       return worktree ? ui().openFolder(vscode.Uri.file(worktree)) : undefined;
@@ -412,7 +413,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
         if (away) {
           // The local stack was read again, Gerrit was not: said as a failure, never a tick. The views
           // say it with the ways on (Check Credentials, Retry): a toast would offer them a second time.
-          feedback(`Not refreshed from Gerrit: ${away.message}`, { icon: "warning" });
+          feedback(`Not refreshed from Gerrit: ${shortAway(away)}`, { icon: "warning" });
         } else {
           feedback("Refreshed from Gerrit");
         }
@@ -477,9 +478,11 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.rebase.abort": () => stepInTerminal("abort", "Aborting the rebase in the ger terminal…"),
     "ger.rebase.skip": () => stepInTerminal("skip", "Skipping the commit in the ger terminal…"),
     "ger.rebase.upstream": () => rebaseOntoUpstream(model),
-    "ger.setup": () => {
-      runInTerminal(repo, ["setup"]);
-      feedback("ger setup runs in the ger terminal", { icon: "terminal" });
+    // Gerrit refused the credentials (Check Credentials): those alone are asked, not the address first (F12).
+    "ger.setup": (what?: string) => {
+      const argv = what === "credentials" ? ["setup", "--credentials"] : ["setup"];
+      runInTerminal(repo, argv);
+      feedback(`ger ${argv.join(" ")} runs in the ger terminal`, { icon: "terminal" });
     },
     "ger.installCli": () => installGer(repo, context.extension.packageJSON),
     "ger.stack.squash": (arg: CommitArg) => stackView.fold(arg, false),

@@ -9,6 +9,7 @@ import { Model } from "./model";
 import { pollSeconds } from "./poller";
 import { WAITING_WORDS } from "./state";
 import { waitsOnYou } from "./rows";
+import { shortAway } from "./problemRows";
 
 /** `note` says which repository it is about, when the window has several folders. */
 export function statusBar(model: Model, events: EventFollower, note: string | undefined): vscode.StatusBarItem {
@@ -26,13 +27,13 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
       const untrusted = model.state === "untrusted";
       const why = untrusted ? "ger starts once you trust this folder." : (model.failure ?? (model.state === "asking" ? WAITING_WORDS.asking(model.gerritWait) : WAITING_WORDS.starting));
       item.text = untrusted ? "$(shield) Gerrit" : model.failure ? "$(warning) Gerrit" : "$(sync~spin) Gerrit";
-      tooltip.appendMarkdown(markdownText(why));
+      tooltip.appendMarkdown(markdownText(model.state === "asking" && model.gerritWait && !model.failure ? `${why} ${WAITING_WORDS.given(model.gerritWait)}` : why));
       label = `Gerrit: ${why}`;
       item.backgroundColor = undefined;
     } else {
       const headline = model.headline;
       const rebase = headline?.section === "local" ? rebaseItem(headline, model.stack?.rebase) : undefined;
-      const text = rebase ? rebase.text : headline ? headline.text : overview.error ? overview.error.message : "nothing needs you";
+      const text = rebase ? rebase.text : headline ? headline.text : overview.error ? shortAway(overview.error) : "nothing needs you";
       // A failure is said with its own icon, never the check of "nothing needs you".
       const glyph = `$(${!rebase && !headline && overview.error ? "error" : headlineIcon(headline)})`;
       // Out of date: the last refresh failed, and this is the answer before it.
@@ -46,6 +47,8 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
       }
       if (headline) {
         tooltip.appendMarkdown(markdownText(headline.text)).appendMarkdown("\n\n");
+      } else if (overview.error) {
+        tooltip.appendMarkdown(markdownText(overview.error.message)).appendMarkdown("\n\n");
       }
       if (rebase) {
         tooltip.appendMarkdown(markdownText(rebase.next)).appendMarkdown("\n\n");

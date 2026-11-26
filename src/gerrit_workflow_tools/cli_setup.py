@@ -205,7 +205,8 @@ def _run_setup(args: argparse.Namespace, run: RunContext, gerrit: GerritRest | N
         values = _flag_values(args, saved_url, saved)
         if needs_insecure_opt_in(values.url, run.settings) and not values.insecure:
             raise UsageError(f"{INSECURE_HTTP}; to use it anyway, add --allow-insecure-http ({_INSECURE} true)")
-    ask_url = True
+    # Gerrit refused the credentials at the saved URL: those alone are asked (the editor's Check Credentials).
+    ask_url = not (args.credentials and values.url)
     while True:
         if interactive:
             values = _ask_values(run.settings, saved, values, url=ask_url)
@@ -252,6 +253,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--url", metavar="URL", help="The Gerrit web URL (no prompts once --user and --token-file are given too)."
+    )
+    parser.add_argument(
+        "--credentials",
+        action="store_true",
+        help="Ask only for the user and token: the saved web URL stays (Gerrit refused the credentials there).",
     )
     parser.add_argument("--user", metavar="USER", help="Your Gerrit username.")
     parser.add_argument("--token-file", metavar="FILE", help="Read the HTTP password from FILE ('-': stdin).")

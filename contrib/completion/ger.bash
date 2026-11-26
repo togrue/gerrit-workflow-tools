@@ -415,7 +415,7 @@ _ger_setup() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --local --url --user --token-file --allow-insecure-http --no-check
+        __gwt_flags "$cur" -h --help --local --url --credentials --user --token-file --allow-insecure-http --no-check
         return
     fi
 }

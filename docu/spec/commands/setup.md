@@ -14,7 +14,7 @@ git config, check them with Gerrit before saving anything, and say what comes ne
 ## Usage
 
 ```
-ger setup [--local] [--url URL --user USER --token-file FILE] [--allow-insecure-http] [--no-check]
+ger setup [--local] [--credentials] [--url URL --user USER --token-file FILE] [--allow-insecure-http] [--no-check]
 ```
 
 | Flag | Effect |
@@ -22,6 +22,7 @@ ger setup [--local] [--url URL --user USER --token-file FILE] [--allow-insecure-
 | (none) | Write to **global** git config (`git config --global`) |
 | `--local` | Write to this repository's git config |
 | `--url URL` | The Gerrit web URL. With `--user` and `--token-file` too, nothing is asked, terminal or not |
+| `--credentials` | In a terminal, ask only for the user and token: the saved web URL stays. What the VS Code extension's *Check Credentials* runs once Gerrit refused them there |
 | `--user USER` | Your Gerrit username |
 | `--token-file FILE` | Read the HTTP password from `FILE` (`-`: stdin); never on the command line, where `ps` shows it |
 | `--allow-insecure-http` | Accept an `http://` URL: sets `ger.allowInsecureHttp true` at the same scope |

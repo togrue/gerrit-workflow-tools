@@ -88,7 +88,8 @@ async function checkOutForReview(model: Model, target: ChangeTarget, walk?: Revi
       }
       return;
     }
-    const picked = await ui().message("info", reviewOpened(opened, false), {}, ["Open Review Worktree"]);
+    // Named as the view names the same step once it is open there (F13: two names, two filled buttons).
+    const picked = await ui().message("info", reviewOpened(opened, false), {}, ["Go to Review Window"]);
     void model.refresh(); // a review is open now: the Change view offers to leave it
     if (picked) {
       await ui().openFolder(where);

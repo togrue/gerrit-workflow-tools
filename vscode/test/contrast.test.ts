@@ -123,8 +123,8 @@ function opacity(selector: string, theme: ThemeName): number {
 interface Pair {
   what: string;
   colour: string;
-  /** Words need 4.5:1, an icon or a ring 3:1. */
-  minimum: 4.5 | 3;
+  /** Words need 4.5:1, an icon or a ring 3:1; small words drawn on a selection need room for anti-aliasing (5:1). */
+  minimum: 5 | 4.5 | 3;
   on: string[];
   /** The selector whose opacity fades it. */
   faded?: string;
@@ -135,6 +135,8 @@ const PAIRS: Pair[] = [
   { what: "good: a +1 vote, replayed, seen, merged", colour: "var(--ger-good)", minimum: 4.5, on: ALL },
   { what: "bad: a -1 vote, CI failed, outdated", colour: "var(--ger-bad)", minimum: 4.5, on: ALL },
   { what: "warn: to answer, code changed, stopped here", colour: "var(--ger-warn)", minimum: 4.5, on: ALL },
+  // 22 of 20-states-after: "stopped here", "needs edits" measured 4.3:1 in the pixels at 11 px, where the token gave 4.6.
+  { what: "a step's warn mark (stopped here, needs edits) on the current step", colour: "var(--ger-warn)", minimum: 5, on: ["selected"] },
   { what: "info: your drafts, diverged", colour: "var(--ger-info)", minimum: 4.5, on: ALL },
   { what: "dim icon: not on Gerrit, to come", colour: "var(--ger-dim)", minimum: 3, on: ALL },
   { what: "lines added", colour: "var(--ger-added)", minimum: 4.5, on: ["side bar", "hover"] },

@@ -47,5 +47,5 @@ test("Local stack says once why every commit's Gerrit state is unknown, with Ret
 });
 
 test("while ger serve runs and Gerrit is asked, the views say that, not that ger serve is starting", () => {
-  assert.deepEqual(waitingFor("asking", "A change", undefined, undefined, 10), { text: "Asking Gerrit… If it does not answer within 10 seconds, the views say so." });
+  assert.deepEqual(waitingFor("asking", "A change", undefined, undefined, 10), { text: "Asking Gerrit… If it does not answer within seconds, the views say so." });
 });

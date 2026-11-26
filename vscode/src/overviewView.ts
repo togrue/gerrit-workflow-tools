@@ -145,7 +145,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
       // Said once, with the ways on as rows to click, and what still works without it.
       const problem = gerritProblem(overview.error);
       const reason: Node = { kind: "info", text: problem.raw, tooltip: problem.text, icon: icon("error", "list.errorForeground") };
-      return nodes.concat(reason, ...problem.actions.map(actionNode), { kind: "info", text: PROBLEM_WORDS.localGoesOn, icon: new vscode.ThemeIcon("info") });
+      return nodes.concat(reason, ...problem.actions.map(actionNode), { kind: "info", text: PROBLEM_WORDS.localGoesOnShort, tooltip: PROBLEM_WORDS.localGoesOn, icon: new vscode.ThemeIcon("info") });
     }
     if (overview.error) {
       return nodes.concat({ kind: "info", text: overview.error.message, icon: icon("error", "list.errorForeground") });
