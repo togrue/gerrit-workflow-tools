@@ -1,0 +1,39 @@
+Triggered by Gerrit: patchset-created
+Running as SYSTEM
+[EnvInject] - Loading node environment variables.
+Building on the built-in node in workspace /home/agent/ger-playground/.work-langs/cpp/jenkins/workspace/ger-playground-cpp
+Building in workspace /home/agent/ger-playground/.work-langs/cpp/jenkins/workspace/ger-playground-cpp
+ > git checkout -f 911639204c4ca47e4c21eeadc3a206d95a058e76 # timeout=10
+Commit message: "report: export and read back rows as CSV"
+[ger-playground-cpp] $ /bin/bash -xe /tmp/jenkins7154.sh
++ cmake -S . -B build
+-- The CXX compiler identification is GNU 16.2.1
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done (0.2s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/agent/ger-playground/.work-langs/cpp/jenkins/workspace/ger-playground-cpp/build
++ cmake --build build -j4
+[  5%] Building CXX object src/CMakeFiles/ledger.dir/money.cpp.o
+[ 21%] Building CXX object tests/CMakeFiles/check_main.dir/check_main.cpp.o
+[ 21%] Building CXX object src/CMakeFiles/ledger.dir/ledger.cpp.o
+[ 21%] Building CXX object src/CMakeFiles/ledger.dir/account.cpp.o
+[ 26%] Building CXX object src/CMakeFiles/ledger.dir/parse.cpp.o
+[ 31%] Linking CXX static library libcheck_main.a
+[ 31%] Built target check_main
+[ 36%] Building CXX object src/CMakeFiles/ledger.dir/report.cpp.o
+[ 42%] Building CXX object src/CMakeFiles/ledger.dir/csv.cpp.o
+/home/agent/ger-playground/.work-langs/cpp/jenkins/workspace/ger-playground-cpp/src/csv.cpp: In function ‘ledger::ReportRow ledger::parse_csv_row(std::string_view)’:
+/home/agent/ger-playground/.work-langs/cpp/jenkins/workspace/ger-playground-cpp/src/csv.cpp:28:19: error: ‘parse_amount’ was not declared in this scope; did you mean ‘parse_money’?
+   28 |     row.balance = parse_amount(line.substr(second + 1));
+      |                   ^~~~~~~~~~~~
+      |                   parse_money
+make[2]: *** [src/CMakeFiles/ledger.dir/build.make:149: src/CMakeFiles/ledger.dir/csv.cpp.o] Error 1
+make[2]: *** Waiting for unfinished jobs....
+make[1]: *** [CMakeFiles/Makefile2:164: src/CMakeFiles/ledger.dir/all] Error 2
+make: *** [Makefile:101: all] Error 2
+Build step 'Execute shell' marked build as failure
+Finished: FAILURE

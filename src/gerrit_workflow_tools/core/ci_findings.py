@@ -61,7 +61,11 @@ _VERDICTS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("gradle", re.compile(r"^> (?P<msg>Task \S+ FAILED)$")),
     ("sbt", re.compile(r"^\[error\] (?P<msg>\([^)]+\) .+)$")),
     ("generic", re.compile(r"^(?:ERROR|Error|error|FATAL|Fatal|fatal):\s+(?P<msg>.+)$")),
-    ("generic", re.compile(r"^(?P<msg>make(?:\[\d+\])?: \*\*\* .*)$")),
+    # make's own errors; its echo of a failed recipe (``*** [target] Error N``) is a restatement, see below.
+    ("generic", re.compile(r"^(?P<msg>make(?:\[\d+\])?: \*\*\* (?!\[).*)$")),
+)
+_RESTATING_VERDICTS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("generic", re.compile(r"^(?P<msg>make(?:\[\d+\])?: \*\*\* \[.*\] (?:Error \d+|Terminated|Interrupt))$")),
     ("generic", re.compile(r"(?P<msg>script returned exit code [1-9]\d*)")),
     (
         "generic",
@@ -70,12 +74,13 @@ _VERDICTS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("generic", re.compile(r"(?P<msg>Build step '.*' marked build as failure)")),
     ("generic", re.compile(r"^Finished: (?P<msg>FAILURE|UNSTABLE|ABORTED)$")),
 )
-_JOB_VERDICTS = frozenset(range(len(_VERDICTS) - 2, len(_VERDICTS)))
-"""Of :data:`_VERDICTS`, the job's own last words (Jenkins): they say the build failed, never where or why."""
+"""What the job or make says about a failure that something else already told: no finding where anything is
+found; where nothing is, the first of them is the one summary (so, of make's echoes, the innermost target)."""
 JOB_VERDICT = "verdict"
-"""The ``kind`` of a finding that is only the job's verdict: kept as the one summary when nothing else is found."""
+"""The ``kind`` of a finding that only restates that the build failed (the job's own verdict, make's echo of a
+failed recipe): kept as the one summary when nothing else is found."""
 _RESTATED = re.compile(
-    r"^(?:ninja: build stopped: .*|\[INFO\] BUILD FAILURE"
+    r"^(?:ninja: build stopped: .*|make(?:\[\d+\])?: \*\*\* Waiting for unfinished jobs\.*|\[INFO\] BUILD FAILURE"
     r"|FAILURE: Build failed with an exception\.|BUILD FAILED in .*)$"
 )
 """A second line for a verdict already found: claimed, so the fallback does not repeat it."""
@@ -93,11 +98,10 @@ def find_generic(lines: Sequence[str], claimed: set[int]) -> list[CiFinding]:
         if _RESTATED.match(line):
             claimed.add(i)
             continue
-        for index, (tool, rx) in enumerate(_VERDICTS):
-            if m := rx.search(line):
+        for kind, rules in (("error", _VERDICTS), (JOB_VERDICT, _RESTATING_VERDICTS)):
+            if found := next(((tool, m) for tool, rx in rules if (m := rx.search(line))), None):
                 claimed.add(i)
-                kind = JOB_VERDICT if index in _JOB_VERDICTS else "error"
-                findings.append(CiFinding(tool=tool, kind=kind, message=m.group("msg").strip()))
+                findings.append(CiFinding(tool=found[0], kind=kind, message=found[1].group("msg").strip()))
                 break
     return findings
 

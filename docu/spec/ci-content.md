@@ -99,7 +99,7 @@ Each **CI finding** carries a tool/kind tag. Precise finders run before generic 
 | Scala | `scalac` | `error`, `warning` | sbt's `[error] /path/Foo.scala:12[:5]: msg`, Scala 3's `-- [E007] … Error: path:line:col`, and through Maven `Foo.scala:12: warning: msg` |
 | | `scalatest` | `failed` | `- name *** FAILED ***` and the `(File.scala:12)` line under it |
 | | `sbt` | `error` | `[error] (Compile / compileIncremental) Compilation failed` |
-| any | `generic` | `error`, `verdict` | `Error:` lines, `make: ***`, non-zero exit statuses; the job's own verdict (`Build step '…' marked build as failure`, `Finished: FAILURE`) is kind `verdict`, and only where nothing else is found: then one finding, the first of them |
+| any | `generic` | `error`, `verdict` | `Error:` lines, make's own errors (`make: *** No rule to make target …`), non-zero exit statuses; what only restates that the build failed is kind `verdict`: the job's own verdict (`Build step '…' marked build as failure`, `Finished: FAILURE`) and make's echo of a failed recipe (`make[2]: *** [target] Error 1`). A `verdict` is a finding only where nothing else is found: then one finding, the first of them (of make's echoes, the innermost failed target). `make: *** Waiting for unfinished jobs` is never one |
 
 npm, Maven, Gradle, sbt, Ninja and Make mostly *wrap* another tool: the finding worth reading comes from what they ran, and their own line only says which step failed.
 
