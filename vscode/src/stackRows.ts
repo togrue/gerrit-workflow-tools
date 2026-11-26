@@ -130,7 +130,8 @@ export function badges(commit: CommitStatus, drafts = 0): (Badge | null)[] {
           kind: "review",
           icon: review > 0 ? "thumbsup" : "thumbsdown",
           tone: review > 0 ? "good" : "bad",
-          text: signed(review),
+          // Of the last pushed patchset: "+2?", not only greyed (Q4).
+          text: `${signed(review)}${stale ? "?" : ""}`,
           title: [`Code-Review ${signed(review)}${note}`, who].filter(Boolean).join("\n"),
           stale,
         }
@@ -149,12 +150,12 @@ export function badges(commit: CommitStatus, drafts = 0): (Badge | null)[] {
           kind: "ci",
           icon: unstable ? "warning" : "error",
           tone: unstable ? "warn" : "bad",
-          text: "",
+          text: stale ? "?" : "",
           title: `${unstable ? "CI unstable" : "CI failed"}${commit.ci_failures.length ? `: ${commit.ci_failures.join(", ")}` : ""}${note}`,
           stale,
         }
       : verified
-        ? { kind: "ci", icon: "pass", tone: "good", text: "", title: `Verified ${signed(verified)}${note}`, stale }
+        ? { kind: "ci", icon: "pass", tone: "good", text: stale ? "?" : "", title: `Verified ${signed(verified)}${note}`, stale }
         : null,
   ];
 }

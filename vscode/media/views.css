@@ -25,20 +25,51 @@ body {
   text-align: center;
 }
 
+/*
+ * The state colours, each a theme variable picked per theme kind so it reads on the side bar and
+ * on a selected row: 4.5:1 for words (a vote's +1), 3:1 for an icon that carries a state.
+ * test/contrast.test.ts measures every one in Dark and Light Modern and both high-contrast themes;
+ * a rule colours a state only through these. Where a theme's own variable falls short (Light
+ * Modern's green and blue are pale on white), a darker one of the same theme is mixed in.
+ */
+:root {
+  --ger-good: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+  --ger-bad: var(--vscode-list-errorForeground, var(--vscode-charts-red));
+  --ger-warn: var(--vscode-list-warningForeground, var(--vscode-charts-yellow));
+  --ger-info: var(--vscode-textLink-foreground);
+  /* Quiet, but readable: the only sign of "not on Gerrit" is a hollow circle in it (finding 28). */
+  --ger-dim: color-mix(in srgb, var(--vscode-foreground) 65%, var(--vscode-sideBar-background));
+  --ger-added: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-charts-green));
+  --ger-deleted: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-charts-red));
+  /* The focus ring on a selected row: the theme's own for that, else the selection's text colour (focusBorder is too close to it). */
+  --ger-focus-on-selected: var(--vscode-list-focusAndSelectionOutline, var(--vscode-contrastActiveBorder, var(--vscode-list-activeSelectionForeground, var(--vscode-foreground))));
+}
+/* Light: testing.iconPassed is the dark theme's pale green; git's green, darkened toward the text. */
+body[data-vscode-theme-kind="vscode-light"],
+body[data-vscode-theme-kind="vscode-high-contrast-light"] {
+  --ger-good: color-mix(in srgb, var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-charts-green)) 75%, var(--vscode-foreground));
+  --ger-added: var(--ger-good);
+}
+/* Dark: git's red for deleted lines is too dark for words on the side bar. */
+body[data-vscode-theme-kind="vscode-dark"],
+body[data-vscode-theme-kind="vscode-high-contrast"] {
+  --ger-deleted: var(--vscode-list-errorForeground, var(--vscode-charts-red));
+}
+
 .tone-good {
-  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+  color: var(--ger-good);
 }
 .tone-bad {
-  color: var(--vscode-list-errorForeground, var(--vscode-charts-red));
+  color: var(--ger-bad);
 }
 .tone-warn {
-  color: var(--vscode-list-warningForeground, var(--vscode-charts-yellow));
+  color: var(--ger-warn);
 }
 .tone-info {
-  color: var(--vscode-charts-blue, var(--vscode-textLink-foreground));
+  color: var(--ger-info);
 }
 .tone-dim {
-  color: var(--vscode-disabledForeground);
+  color: var(--ger-dim);
 }
 
 /* --- Rows, as in a tree ---------------------------------------------------------- */
@@ -190,12 +221,25 @@ button.twist:hover {
   outline-offset: -1px;
 }
 
-/* Not there yet: still to be replayed by the rebase, or stopped part-way on a conflict. */
+.list:focus .row.focused.selected {
+  outline-color: var(--ger-focus-on-selected);
+}
+
+/* Not there yet: still to be replayed by the rebase (its marker, a hollow circle, says it too). Faded, still readable. */
 .row.dim .label,
 .row.dim .detail,
 .row.dim .sync,
 .row.dim .badges {
-  opacity: 0.5;
+  opacity: 0.8;
+}
+/* High contrast: no fading at all; the marker says it. */
+body[data-vscode-theme-kind="vscode-high-contrast"] .row.dim .label,
+body[data-vscode-theme-kind="vscode-high-contrast"] .row.dim .detail,
+body[data-vscode-theme-kind="vscode-high-contrast-light"] .row.dim .label,
+body[data-vscode-theme-kind="vscode-high-contrast-light"] .row.dim .detail,
+body[data-vscode-theme-kind="vscode-high-contrast"] .step.phase-todo .step-title,
+body[data-vscode-theme-kind="vscode-high-contrast-light"] .step.phase-todo .step-title {
+  opacity: 1;
 }
 
 .list.dragging .row.selected {
@@ -265,23 +309,23 @@ button.twist:hover {
 .sync-rebased,
 .sync-code-changed,
 .sync-ahead {
-  color: var(--vscode-charts-yellow);
+  color: var(--ger-warn);
 }
 .sync-outdated {
-  color: var(--vscode-charts-red);
+  color: var(--ger-bad);
 }
 .sync-diverged {
-  color: var(--vscode-charts-blue);
+  color: var(--ger-info);
 }
 .sync-not-pushed,
 .sync-unknown {
-  color: var(--vscode-disabledForeground);
+  color: var(--ger-dim);
 }
 .row.merge .codicon-git-merge {
   color: var(--vscode-descriptionForeground);
 }
 .sync-merged {
-  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+  color: var(--ger-good);
 }
 
 /* The selection colours a row's text; the sync icon and the votes keep their own meaning. */
@@ -326,8 +370,9 @@ button.twist:hover {
   stroke: currentColor;
 }
 
+/* A vote of the last pushed patchset: Gerrit may not keep it. Not only greyed: its value ends in "?" (stackRows.ts). */
 .badge.stale {
-  opacity: 0.5;
+  color: var(--vscode-descriptionForeground);
 }
 
 .head .badges {
@@ -759,7 +804,6 @@ select:focus {
   margin-left: auto;
   font-size: 0.9em;
   font-variant-numeric: tabular-nums;
-  opacity: 0.85;
 }
 
 .counts .added,
@@ -769,11 +813,11 @@ select:focus {
 }
 
 .added {
-  color: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-charts-green));
+  color: var(--ger-added);
 }
 
 .deleted {
-  color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-charts-red));
+  color: var(--ger-deleted);
 }
 
 /* --- Nothing to show ------------------------------------------------------------- */
@@ -968,6 +1012,10 @@ select:focus {
   outline-offset: -1px;
 }
 
+.step.current:focus {
+  outline-color: var(--ger-focus-on-selected);
+}
+
 /* The change you are on: a bar in the margin and bold, not only a colour. */
 .step.current {
   border-left-color: var(--vscode-focusBorder);
@@ -976,7 +1024,7 @@ select:focus {
 }
 
 .step.phase-todo .step-title {
-  opacity: 0.75;
+  opacity: 0.8;
 }
 
 .step-position {
@@ -1018,6 +1066,11 @@ select:focus {
 
 .mark-text {
   color: var(--vscode-descriptionForeground);
+}
+
+/* On the current step's selection background the quiet colour is too quiet for words. */
+.step.current .mark-text {
+  color: inherit;
 }
 
 .task-actions {
@@ -1064,7 +1117,7 @@ select:focus {
   cursor: pointer;
 }
 .file .seen.tone-good {
-  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+  color: var(--ger-good);
 }
 .file.seen .label {
   opacity: 0.8;

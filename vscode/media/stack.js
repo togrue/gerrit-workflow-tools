@@ -38,7 +38,15 @@
     const { classes, ...attributes } = selection.attributes(row);
     const all = ["row", ...classes, row.dim ? "dim" : "", row.merge ? "merge" : "", row.pinned ? "pinned" : ""];
     // Stopped on a conflict: a red warning, the row not dimmed; stopped with the commit applied: a marker.
-    const marker = row.marker === "conflict" ? icon("warning", "bad", "The rebase stopped here on a conflict") : row.marker ? icon("debug-stackframe", "warn") : null;
+    // Still to be replayed: a hollow circle as the task header's "to come", not the fading alone (Q4).
+    const marker =
+      row.marker === "conflict"
+        ? icon("warning", "bad", "The rebase stopped here on a conflict")
+        : row.marker
+          ? icon("debug-stackframe", "warn")
+          : row.dim
+            ? icon("circle-large-outline", "dim", "Still to be replayed by the rebase")
+            : null;
     return h(
       "div",
       {

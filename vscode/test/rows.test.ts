@@ -40,7 +40,8 @@ test("a row carries comments, the review vote and the CI vote as badges, in that
   assert.equal(badges(commit("c", { ci_failures: ["build"] }))[2]?.title, "CI failed: build");
   // New code since the push: the votes are the last pushed patchset's, shown as that.
   const stale = badges(commit("c", { last_pushed_votes: { verified: -1, code_review: 2 } }));
-  assert.deepEqual([stale[1]?.text, stale[1]?.stale, stale[2]?.tone, stale[2]?.stale], ["+2", true, "bad", true]);
+  // Not only greyed (finding 26): the value of the last pushed patchset ends in "?".
+  assert.deepEqual([stale[1]?.text, stale[1]?.stale, stale[2]?.tone, stale[2]?.stale, stale[2]?.text], ["+2?", true, "bad", true, "?"]);
   assert.match(stale[1]?.title ?? "", /last pushed patchset/);
 });
 

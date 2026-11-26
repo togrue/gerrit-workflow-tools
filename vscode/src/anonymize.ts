@@ -181,8 +181,8 @@ const BADGE: Shape = {
   kind: ours(["comments", "review", "ci"]),
   icon: ICON,
   tone: TONE,
-  /** A count of comments, or a vote. */
-  text: ours([new RegExp(`([+-]?${COUNT})?`)]),
+  /** A count of comments, or a vote; "?" after one of the last pushed patchset. */
+  text: ours([new RegExp(`([+-]?${COUNT})?\\??`)]),
   title: TOOLTIP,
   stale: KEEP,
   /** The comment ring: a share and a shape, no words of anybody's. */
