@@ -11,14 +11,37 @@ import { ChangeTarget, Model, describeError } from "./model";
 import { failureWays } from "./problemRows";
 import { feedback, offerWaysOn, ui } from "./ui";
 
-/** Your own stack commit: `ger edit` stops an interactive rebase on it, here, to amend it in place. */
-export function editCommit(model: Model, target: ChangeTarget | undefined): void {
+/** How long Edit Commit Here says it is starting, at most: the terminal may be waiting on a question. */
+const EDIT_START_MS = 20_000;
+
+/**
+ * Your own stack commit: `ger edit` stops an interactive rebase on it, here, to amend it in place.
+ * No question (Abort puts the branch back, and says so), so it answers at once instead: the press is
+ * the next action (`pressed`: the last step's outcome is history), and Local stack says it is starting
+ * until the rebase has stopped.
+ */
+export function editCommit(model: Model, target: ChangeTarget | undefined, pressed?: () => void): void {
   if (!target) {
     return;
   }
+  pressed?.();
   runInTerminal(model.repo, ["edit", target.rev]);
   // It runs in the terminal: say what to do once it stopped, not that it already has.
   feedback(`ger edit runs in the ger terminal: once the rebase stops at "${target.title}", amend it, then ger rebase --continue`, { icon: "terminal", milliseconds: 12000 });
+  void ui().progress({ viewId: "ger.stack" }, `Starting ger edit of "${target.title}" in the ger terminal…`, () => rebaseStarted(model, EDIT_START_MS));
+}
+
+/** Resolves once a rebase is underway (or after `ms`). */
+function rebaseStarted(model: Model, ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const listener = model.onDidChange(() => (model.stack?.rebase_in_progress ? end() : undefined));
+    const timer = setTimeout(() => end(), ms);
+    const end = () => {
+      listener.dispose();
+      clearTimeout(timer);
+      resolve();
+    };
+  });
 }
 
 /**
@@ -26,12 +49,12 @@ export function editCommit(model: Model, target: ChangeTarget | undefined): void
  * tracks its target branch, so it is your local stack. It may ask (update to the newest patchset?),
  * so it runs in a terminal; the views follow once it moves HEAD (repoWatcher.ts), as the terminal does not say when it ends.
  */
-export function checkout(model: Model, target: ChangeTarget | undefined): void {
+export function checkout(model: Model, target: ChangeTarget | undefined, pressed?: () => void): void {
   if (!target) {
     return;
   }
   if (target.local) {
-    editCommit(model, target); // already in your stack: nothing to fetch, edit it where it is
+    editCommit(model, target, pressed); // already in your stack: nothing to fetch, edit it where it is
     return;
   }
   runInTerminal(model.repo, ["checkout", target.rev]);
@@ -107,7 +130,7 @@ export async function leaveReview(model: Model, walk?: Pick<ReviewWalk, "leave">
     const done = await ui().progress(vscode.ProgressLocation.Window, "Leaving the review", () => client.reviewDone());
     await walk?.leave();
     await model.refresh();
-    const headline = model.overview?.headline;
+    const headline = model.headline;
     const text = `${leftReview(done, model.repo)} ${headline ? `Next: ${headline.text}.` : "Nothing else waits on you now."}`;
     void ui().message("info", text, {}, headline ? [OPEN_NEXT] : []).then((picked) => (picked ? vscode.commands.executeCommand("ger.openHeadline") : undefined));
   } catch (error) {

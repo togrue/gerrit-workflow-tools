@@ -30,7 +30,7 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
       label = `Gerrit: ${why}`;
       item.backgroundColor = undefined;
     } else {
-      const headline = overview.headline;
+      const headline = model.headline;
       const rebase = headline?.section === "local" ? rebaseItem(headline, model.stack?.rebase) : undefined;
       const text = rebase ? rebase.text : headline ? headline.text : overview.error ? overview.error.message : "nothing needs you";
       // A failure is said with its own icon, never the check of "nothing needs you".

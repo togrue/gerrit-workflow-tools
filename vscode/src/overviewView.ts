@@ -44,7 +44,7 @@ function chainTop(chain: Chain): Member | undefined {
 
 /** The change a headline points at, found again in the overview it came from. */
 export function headlineTarget(model: Model): ChangeTarget | undefined {
-  const headline = model.overview?.headline;
+  const headline = model.headline;
   for (const section of model.overview?.sections ?? []) {
     for (const chain of section.chains) {
       const member = chain.members.find((m) => m.number === headline?.number);
@@ -136,9 +136,10 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
         ...[PROBLEM_ACTIONS.restart, PROBLEM_ACTIONS.log].map((action) => actionNode(action)),
       );
     }
-    if (overview.headline) {
+    const headline = this.model.headline;
+    if (headline) {
       // A rebase underway still leads when the inbox cannot be read.
-      nodes.push({ kind: "headline", headline: overview.headline });
+      nodes.push({ kind: "headline", headline });
     }
     if (overview.error && gerritAway(overview.error)) {
       // Said once, with the ways on as rows to click, and what still works without it.
@@ -149,7 +150,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
     if (overview.error) {
       return nodes.concat({ kind: "info", text: overview.error.message, icon: icon("error", "list.errorForeground") });
     }
-    if (!overview.headline) {
+    if (!headline) {
       nodes.push({ kind: "info", text: TREE_WORDS.nothingNeedsYou, icon: icon("pass", "testing.iconPassed") });
     }
     // What waits on your review first: somebody cannot go on without you. Your own chains below.

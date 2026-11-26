@@ -453,8 +453,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       return undefined;
     },
     "ger.review": (arg: unknown) => review(model, targetOf(arg), reviewSteps),
-    "ger.checkout": (arg: unknown) => checkout(model, targetOf(arg)),
-    "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg)),
+    "ger.checkout": (arg: unknown) => checkout(model, targetOf(arg), () => task.pressed()),
+    "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg), () => task.pressed()),
     "ger.setUpstream": (upstream?: unknown) => setUpstream(model, typeof upstream === "string" ? upstream : undefined),
     "ger.reviewDone": () => leaveReview(model, reviewSteps),
     "ger.vote": (arg: unknown) => {

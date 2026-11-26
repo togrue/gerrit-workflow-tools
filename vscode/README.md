@@ -17,7 +17,8 @@ Failed CI counts only on the chain of your local stack, and the item then just s
 *CI failed:* and the change number; the tooltip has the change's subject. A bell
 with a count appears when chains had activity since you last looked. Click to open the change.
 While a rebase is underway (a `ger edit`, a conflict, also one you started in a terminal), the item
-shows that instead, as ger serve's headline does (and so does the first row of *Review chains*): *Rebase stopped at 101*,
+shows that instead, as ger serve's headline does (and so does the first row of *Review chains*; both read it from the
+local stack, so it goes from both with the rebase): *Rebase stopped at 101*,
 *Rebase stopped to split 101*, *Conflict in 103*, *Conflict resolved in 103*, *Rebase paused*, *Rebase stopped* when the
 commit it stopped at was reset away, or *Rebase underway* when it cannot tell why it stopped — the change number when the
 commit is on Gerrit, else its subject in quotes. A conflict is shown in the error colour, another stop as a warning. The
@@ -264,8 +265,10 @@ The commits above your upstream, newest first. One row per commit:
   the push: branch no-such-branch not found*, with **Choose Upstream…** where ger's next step is
   another upstream), and once in the status bar. It comes from core's **step outcome** (`GET /stack`'s
   `last_outcome`), which each of those commands leaves in the git dir; the view looks again as soon
-  as the command in the terminal ends (VS Code's shell integration) or the file changes. Once `HEAD`
-  moves on, the outcome is history and goes.
+  as the command in the terminal ends (VS Code's shell integration) or the file changes. It lives
+  until the next action (Edit Commit Here, Work on Next, a rebase step, Push) or until what it says
+  is no longer true, whichever is first: once `HEAD` moves on, a rebase begins or ends, or the
+  changes it kept in a stash are back in the work tree (`git stash apply`), it is history and goes.
 - **The title bar offers Work on Next and Push only where they would do something** (P6): Work on
   Next while a commit needs edits and nothing blocks the rebase underway (no conflict, no fix
   left unamended), Push while a push would send something (new code, a commit not on Gerrit,

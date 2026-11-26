@@ -29,6 +29,7 @@ import {
   vote,
   votes,
   WORDED_REASONS,
+  currentHeadline,
   headlineNews,
 } from "../src/format";
 import { attended } from "./fixtures";
@@ -169,6 +170,15 @@ test("a rebase is never news, and the headline from before it is not news when i
   assert.equal(state.news, false, "the CI failure from before the rebase is not news again");
   const other: Headline = { ...ci, number: 104 };
   assert.equal(headlineNews(state.last, other, true).news, true, "a new headline in a background load is news");
+});
+
+test("state 24: the stack says whether a rebase headline is the present; an ended one leaves no \"Rebase stopped at\"", () => {
+  const ci: Headline = { section: "outgoing", reason: "ci-failed", severity: "error", chain: "k", number: 102, subject: "s", url: null, text: "CI failed" };
+  const rebase = { section: "local", reason: "rebase", severity: "warning", stop: "edit", chain: null, number: 103, subject: "t", sha: null, url: null, text: "Rebase stopped at t" } as Headline;
+  assert.equal(currentHeadline({ headline: rebase }, { headline: null }), undefined, "aborted: the overview's rebase line is history");
+  assert.equal(currentHeadline({ headline: ci }, { headline: rebase }), rebase, "begun since the overview: the stack's leads");
+  assert.equal(currentHeadline({ headline: ci }, { headline: null }), ci);
+  assert.equal(currentHeadline({ headline: rebase }, {}), rebase, "a ger before API 1.10 serves none: the overview's stands");
 });
 
 test("activity is what moved since the chain was last seen", () => {

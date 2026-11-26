@@ -4,7 +4,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { ApiError, GerApiError, GerClient, Headline, MoveConflict, Overview, ReviewState, Stack, UpstreamChoice, isStack } from "./api";
-import { Seen, blockedSwaps, chainsWithActivity, headlineNews, rememberSeen, swapKey } from "./format";
+import { Seen, blockedSwaps, chainsWithActivity, currentHeadline, headlineNews, rememberSeen, swapKey } from "./format";
 import type { RowStatus } from "./changeLoad";
 import { IncompatibleServe } from "./compat";
 import { GerProcess, ServeFailed } from "./server";
@@ -142,6 +142,11 @@ export class Model implements vscode.Disposable {
     return isStack(local) ? local : undefined;
   }
 
+  /** The headline the views show: a rebase underway as the stack says it, else the overview's (`currentHeadline`). */
+  get headline(): Headline | undefined {
+    return currentHeadline(this.overview, this.stack);
+  }
+
   /** Why Gerrit could not be asked in the last overview (the inbox's error, else the stack's), when it could not. */
   gerritAway(): ApiError | undefined {
     const inbox = this.overview?.error;
@@ -181,8 +186,13 @@ export class Model implements vscode.Disposable {
     this.loadStartedAt = Date.now();
     try {
       const stack = await (await this.client()).stack();
+      // A rebase headline that ended with this stack hid the inbox's: that one is asked again.
+      const ended = this.overview?.headline?.section === "local" && stack.headline === null;
       this.setStack(stack);
       this.stackContext();
+      if (ended) {
+        void this.refresh();
+      }
     } catch {
       await this.refresh(); // a whole load says what went wrong, as any refresh does
     }
