@@ -47,10 +47,15 @@ def test_an_unscoped_token_still_works_and_warns_once_with_the_move(config_warni
     assert gerrit_auth_from_settings(settings) == GerritAuth("bob", "tok")
     assert gerrit_auth_from_settings(settings) == GerritAuth("bob", "tok")
     assert config_warnings() == [
-        "git config key ger.token is sent to whatever host ger.webUrl names; move it with: "
-        f'git config --global ger.{HOST}.token "$(git config --global ger.token)" '
-        "&& git config --global --unset ger.token"
+        f"git config key ger.token is sent to whatever host ger.webUrl names; move it to ger.{HOST}.token "
+        "with: ger config --migrate"
     ]
+    # Where ger config --migrate does not write (system config), the git config commands that do.
+    system = Settings.from_map(
+        {"ger.webUrl": HOST, "ger.user": "bob", "ger.password": "pw"}, scopes={"ger.password": ConfigScope.SYSTEM}
+    )
+    gerrit_auth_from_settings(system)
+    assert config_warnings()[-1].endswith("&& git config --system --unset ger.password")
 
 
 def test_a_refusal_names_the_keys_the_credentials_came_from(

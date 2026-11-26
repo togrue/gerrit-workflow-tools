@@ -123,7 +123,42 @@ def test_ger_config_migrate_moves_every_old_key_without_a_terminal(
     assert config_warnings() == []
     assert read_recent_upstream_abbrevs(stack_repo) == ["origin/a", "origin/b"]
     code, out, _err = run_cli(stack_repo, config_main, ["--migrate"], monkeypatch)
-    assert (code, out.strip()) == (0, "nothing to migrate: no old key names")
+    assert (code, out.strip()) == (0, "nothing to migrate: no old key names, no unscoped secret")
+
+
+def test_ger_config_migrate_moves_an_unscoped_token_to_its_host_so_the_warning_has_one_command(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch, config_warnings: Callable[[], list[str]]
+) -> None:
+    """The warning on every command named a git config pipeline; it now names this, and this does it."""
+    from gerrit_workflow_tools.cli_config import main as config_main
+    from gerrit_workflow_tools.core.gerrit.credentials import gerrit_auth_from_settings
+    from tests.conftest import run_cli
+
+    host = "http://gerrit.example:8081"
+    git("config", "ger.webUrl", host, cwd=stack_repo)
+    git("config", "ger.user", "pg-you", cwd=stack_repo)
+    git("config", "--global", "ger.token", "tok", cwd=stack_repo)
+    assert gerrit_auth_from_settings(Settings.from_cwd(stack_repo)) is not None
+    assert config_warnings() == [
+        f"git config key ger.token is sent to whatever host ger.webUrl names; move it to ger.{host}.token "
+        "with: ger config --migrate"
+    ]
+    # An unscoped password beside the host's own: the host's wins, the unscoped one only goes.
+    git("config", "ger.password", "pw", cwd=stack_repo)
+    git("config", f"ger.{host}.password", "the host's own", cwd=stack_repo)
+    code, out, err = run_cli(stack_repo, config_main, ["--migrate"], monkeypatch)
+    assert code == 0, err
+    assert set(out.splitlines()) == {
+        f"ger.token -> ger.{host}.token (global)",
+        "ger.password removed; the new name was set already (local)",
+        "moved 2 keys",
+    }
+    assert git("config", "--global", "--get", f"ger.{host}.token", cwd=stack_repo).stdout.strip() == "tok"
+    assert git("config", "--get", "ger.token", cwd=stack_repo, check=False).returncode != 0
+    count = len(config_warnings())
+    assert gerrit_auth_from_settings(Settings.from_cwd(stack_repo)) is not None
+    assert git("config", "--get", f"ger.{host}.password", cwd=stack_repo).stdout.strip() == "the host's own"
+    assert len(config_warnings()) == count, "no warning left to give"
 
 
 def test_the_notice_prints_as_one_plain_line_and_diagnostics_keep_their_prefix() -> None:

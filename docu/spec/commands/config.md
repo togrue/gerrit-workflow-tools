@@ -21,7 +21,7 @@ ger config --migrate
 
 Shared `--color`, `--hyperlinks`, and `--debug-log` flags apply.
 
-`--migrate` moves every old key name (`gerrit.*`, `inbox.*`, `branch.<name>.gerrit*`) to its `ger.*` name in local and global config, prints one line per key (`gerrit.project -> ger.project (local)`, or `… removed; the new name was set already` when that wins) and `moved N keys`, and exits `0`; with none, `nothing to migrate: no old key names`. It needs no terminal and opens no editor. It is the command the old-key warning names ([Renamed keys](../../Configuration.md#renamed-keys-gerrit-inbox-branchnamegerrit)).
+`--migrate` moves every old key name (`gerrit.*`, `inbox.*`, `branch.<name>.gerrit*`) to its `ger.*` name in local and global config, prints one line per key (`gerrit.project -> ger.project (local)`, or `… removed; the new name was set already` when that wins) and `moved N keys`, and exits `0`; with none, `nothing to migrate: no old key names, no unscoped secret`. It also moves an unscoped `ger.token` or `ger.password` to the host `ger.webUrl` names (`ger.token -> ger.https://gerrit.example.com.token (global)`), at the scope it was set; where the host has its own at that scope, that one wins and the unscoped one is removed. Without `ger.webUrl` the secrets stay. It needs no terminal and opens no editor. It is the command the old-key warning names ([Renamed keys](../../Configuration.md#renamed-keys-gerrit-inbox-branchnamegerrit)).
 
 Non-interactive environments print an error and exit `2` (`USAGE`), as every command does that needs a terminal it does not have.
 
