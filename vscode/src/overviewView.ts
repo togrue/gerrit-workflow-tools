@@ -15,6 +15,17 @@ import { attentionThemeIcon, icon } from "./icons";
 import { ChangeTarget, Model } from "./model";
 import { SECTION_TITLES, TREE_WORDS, changeRowContext, waitsOnYou } from "./rows";
 import { feedback, ui } from "./ui";
+import { PROBLEM_ACTIONS, PROBLEM_WORDS, gerritAway, gerritProblem } from "./problemRows";
+import type { StackAction } from "./stackRows";
+
+/** The icon of a way on, by the command it runs. */
+const ACTION_ICONS: Record<string, string> = { "ger.refresh": "refresh", "ger.setup": "gear", "ger.showLog": "output" };
+
+/** A way on (a button of problemRows.ts) as a row to click. */
+function actionNode(action: StackAction): Node {
+  const command = { command: action.command.id, title: action.title, arguments: action.command.args };
+  return { kind: "info", text: action.label, icon: new vscode.ThemeIcon(ACTION_ICONS[action.command.id] ?? "arrow-right"), command };
+}
 
 type Node =
   | { kind: "headline"; headline: Headline }
@@ -22,7 +33,7 @@ type Node =
   | { kind: "waiting"; section: Section; chains: Chain[] }
   | { kind: "chain"; chain: Chain; section: Section }
   | { kind: "member"; member: Member; chain: Chain; section: Section }
-  | { kind: "info"; text: string; detail?: string; icon?: vscode.ThemeIcon; command?: vscode.Command };
+  | { kind: "info"; text: string; detail?: string; tooltip?: string; icon?: vscode.ThemeIcon; command?: vscode.Command };
 
 const SORT_KEY = "ger.chainSort";
 
@@ -118,9 +129,22 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
       return []; // the welcome text for the model's state says why, and what to do
     }
     const nodes: Node[] = [];
+    if (this.model.stale) {
+      // The last refresh failed (Gerrit away, ger serve stopped and not restarted): this is the last answer, and here is why, with the ways on.
+      nodes.push(
+        { kind: "info", text: `Out of date: ${this.model.stale}`, tooltip: TREE_WORDS.stale, icon: icon("warning", "list.warningForeground") },
+        ...[PROBLEM_ACTIONS.restart, PROBLEM_ACTIONS.log].map((action) => actionNode(action)),
+      );
+    }
     if (overview.headline) {
       // A rebase underway still leads when the inbox cannot be read.
       nodes.push({ kind: "headline", headline: overview.headline });
+    }
+    if (overview.error && gerritAway(overview.error)) {
+      // Said once, with the ways on as rows to click, and what still works without it.
+      const problem = gerritProblem(overview.error);
+      const reason: Node = { kind: "info", text: problem.raw, tooltip: problem.text, icon: icon("error", "list.errorForeground") };
+      return nodes.concat(reason, ...problem.actions.map(actionNode), { kind: "info", text: PROBLEM_WORDS.localGoesOn, icon: new vscode.ThemeIcon("info") });
     }
     if (overview.error) {
       return nodes.concat({ kind: "info", text: overview.error.message, icon: icon("error", "list.errorForeground") });
@@ -146,7 +170,9 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
       case "section": {
         const { name, chains, summary } = node.section;
         const item = new vscode.TreeItem(SECTION_TITLES[name] ?? name, vscode.TreeItemCollapsibleState.Expanded);
-        const notes = [plural(chains.filter((chain) => waitsOnYou(chain, name)).length, "chain")];
+        // As `ger inbox` heads it: every chain the section holds, and how many of them are your turn.
+        const yours = chains.filter((chain) => waitsOnYou(chain, name)).length;
+        const notes = [yours === chains.length ? plural(chains.length, "chain") : `${plural(chains.length, "chain")} · ${yours} your turn`];
         if (summary.ci_failures) {
           notes.push(`${summary.ci_failures} with failed CI`);
         }
@@ -177,6 +203,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
         item.description = node.detail;
         item.iconPath = node.icon;
         item.command = node.command;
+        item.tooltip = [node.text, node.tooltip, node.command?.title].filter(Boolean).join("\n\n");
         return item;
       }
     }

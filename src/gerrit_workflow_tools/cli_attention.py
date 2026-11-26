@@ -8,7 +8,6 @@ from pathlib import Path
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_notes import print_stack_commit_notes
-from gerrit_workflow_tools.core.annotated_stack import branches_needing_upstream, resolve_rev_range
 from gerrit_workflow_tools.core.attention_cursor import (
     EditAttentionMode,
     load_branch_cursor,
@@ -23,6 +22,7 @@ from gerrit_workflow_tools.core.edit_attention_walk import (
 from gerrit_workflow_tools.core.gerrit.change_resolution import StackCommit, resolve_stack_changeish
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.git_run import GitError
+from gerrit_workflow_tools.core.rev_range import branches_needing_upstream, resolve_rev_range
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
 

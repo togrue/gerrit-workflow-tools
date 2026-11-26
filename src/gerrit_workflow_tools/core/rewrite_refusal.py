@@ -2,7 +2,8 @@
 or because Gerrit already closed the change a rewrite targets.
 
 Every history rewrite asks :func:`history_rewrite_refusal` before it starts; ``ger review`` and
-the reorder ask the parts they need. A rebase underway is :mod:`gerrit_workflow_tools.core.rebase_state`.
+the reorder ask the parts they need, and ``GET /stack`` says beforehand what ``ger review`` would
+refuse here (:func:`review_here_refusal`). A rebase underway is :mod:`gerrit_workflow_tools.core.rebase_state`.
 ``ger edit``, ``ger reword`` and ``ger fix`` also ask :func:`closed_change_refusal` of their target.
 """
 
@@ -14,12 +15,13 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from gerrit_workflow_tools.core.config import ConfigError
+from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
 from gerrit_workflow_tools.core.rebase_next_step import rebase_refusal
 from gerrit_workflow_tools.core.tracked_changes import TrackedChanges, tracked_changes
+from gerrit_workflow_tools.core.usage import UsageError
 
 
 if TYPE_CHECKING:
@@ -87,6 +89,36 @@ def uncommitted_changes_refusal(cwd: Path | str | None, changes: TrackedChanges 
             "or `git stash` them first"
         )
     return None
+
+
+class CheckoutOverEdits(UsageError):
+    """A checkout here would carry over or lose uncommitted changes to tracked files (``USAGE``).
+
+    *files* are the changed files; ``reason`` is what ``ger serve`` serves, so a client offers the
+    other ways (a checkout elsewhere, the files to commit or stash) instead of a command line.
+    """
+
+    reason = "uncommitted-changes"
+
+    def __init__(self, files: tuple[str, ...], *, rerun: str) -> None:
+        super().__init__(
+            f"your working tree has changes to tracked files ({', '.join(files)}): "
+            f"commit or stash them (git stash), then run {rerun} again"
+        )
+        self.files = files
+
+
+def review_here_refusal(cwd: Path | str | None, settings: Settings) -> CheckoutOverEdits | None:
+    """Why ``ger review`` would refuse to check a change out for review now, said before it is asked.
+
+    Only where the review goes into this checkout (``ger.reviewCheckout`` = ``branch``): the review
+    worktree is its own checkout, and uncommitted changes here do not stand in its way. Costs the
+    two ``git diff`` calls of :func:`tracked_changes`, and only then.
+    """
+    if settings.review_checkout != "branch":
+        return None
+    files = tracked_changes(cwd).files
+    return CheckoutOverEdits(files, rerun="ger review") if files else None
 
 
 def history_rewrite_refusal(cwd: Path | str | None) -> str | None:

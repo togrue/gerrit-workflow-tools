@@ -16,8 +16,9 @@ from gerrit_workflow_tools.cli_args import (
 from gerrit_workflow_tools.cli_attention import require_stack_upstream
 from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, may_prompt, run_cli_command
 from gerrit_workflow_tools.cli_notes import print_note
-from gerrit_workflow_tools.core.annotated_stack import load_stack_overview, resolve_rev_range
+from gerrit_workflow_tools.core.annotated_stack import load_stack_overview
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
+from gerrit_workflow_tools.core.rev_range import resolve_rev_range
 from gerrit_workflow_tools.render.ai_text import stack_ai_lines
 from gerrit_workflow_tools.render.show_json import (
     log_commit_json,

@@ -10,7 +10,7 @@ import type { Commented } from "./commentState";
 import { Badge, SYNC_WORDS, StackAction, StackInfo, Tone, actionsText, badges, sync, conflictRow, rebaseButtons } from "./stackRows";
 import { Waiting } from "./state";
 import { latestSuggestion } from "./suggestions";
-import { Problem, problemLines } from "./problemRows";
+import { Problem, gerritProblem, problemLines } from "./problemRows";
 import { CompareState, CompareVm, MODES, Option, compareVm, deltaTitle } from "./compareRows";
 import type { TaskMode, TaskVm } from "./taskRows";
 
@@ -75,6 +75,14 @@ export interface ChangeState extends CompareState {
    * stands and holds its buttons: the change does not say it again (P4).
    */
   task?: TaskMode;
+  /** The change is under review in the review worktree's own window: its path. */
+  elsewhere?: string;
+  /** Files whose uncommitted changes stand in the way of a review checked out here (core's `review_blocked`). */
+  blocked?: string[];
+  /** The patchset whose lines are shown (`ChangeView.shownPatchset`): a comment written on another is marked so. */
+  patchset?: number;
+  /** The comment chains already gone to on this change (Next comment, a click): the count says how many. */
+  visited?: ReadonlySet<string>;
 }
 
 /** The way on from a staged review behind Gerrit: `ger review` checks the newest patchset out. */
@@ -168,7 +176,8 @@ export interface ChangeVm {
   loading?: { message: boolean; readOnly: string; plain: boolean };
   /** `badges` as the Local stack draws them; `detail` says them in words (or that the change is not on Gerrit). `actions`: the way on from a rebase stopped here, as Local stack's banner offers it. */
   head?: Icon & { text: string; detail: string; badges: Badge[]; actions?: StackAction[] };
-  notes?: (Icon & { text: string; detail: string; actions?: StackAction[] })[];
+  /** `raw`: the words of git or Gerrit (or a path) the note rests on, as they came, drawn under it. */
+  notes?: (Icon & { text: string; detail: string; raw?: string; actions?: StackAction[] })[];
   /**
    * `text` without the Change-Id footer, which `changeId` names (empty when there is none): the page
    * shows it read-only under the message, and core puts it back on Apply (`keep_change_id`). `plain`: a message
@@ -364,9 +373,11 @@ function files(state: ChangeState): NonNullable<ChangeVm["files"]> {
 }
 
 /** `applies`: an edit a comment suggests may be written into your file (your own local commit). */
-function thread(chain: CommentChain, applies: boolean): ThreadRow {
+function thread(chain: CommentChain, applies: boolean, shownPatchset?: number): ThreadRow {
   const first = chain.comments[0];
-  const where = NOT_FILES.includes(chain.path) ? "whole change" : `${path.posix.basename(chain.path)}${chain.line ? `:${chain.line}` : ""}`;
+  // Written on another patchset than the one shown: said, so its line is not read as this one's (W10).
+  const elsewhere = first?.patch_set != null && shownPatchset !== undefined && first.patch_set !== shownPatchset ? ` (patchset ${first.patch_set})` : "";
+  const where = NOT_FILES.includes(chain.path) ? "whole change" : `${path.posix.basename(chain.path)}${chain.line ? `:${chain.line}` : ""}${elsewhere}`;
   const replies = chain.comments.slice(1);
   const mine = isYours(chain) ? YOURS[first?.state ?? ""] : undefined;
   const answered = !chain.resolved && chain.resolved_after_publish;
@@ -487,15 +498,16 @@ export function chainCounts(chains: readonly CommentChain[]): ChainCounts {
 }
 
 /**
- * What the comments from Gerrit leave for you: left to answer (on a change you review, to read),
- * what your drafts answer (and what publishes them), and what waits on a reply. Unresolved on
- * Gerrit, all three, until the drafts are published.
+ * What the comments from Gerrit leave for you: left to answer (of them, how many you went to
+ * already, so the count moves as you walk them), what your drafts answer (and what publishes
+ * them), and what waits on a reply. Unresolved on Gerrit, all three, until the drafts are published.
+ * "To answer" is the one word for it, on your change and on one you review alike (CONTEXT.md: turn).
  */
-function commentCounts(commit: ShownCommit, counts: ChainCounts): string {
+function commentCounts(commit: ShownCommit, counts: ChainCounts, goneTo = 0): string {
   const { comments_to_answer: left, comments_drafted: answered, comments_awaiting_reply: waiting } = counts;
   const publish = commit.drafts_published_by === "push" ? "push publishes them" : "Vote and Publish sends them";
   const parts = [
-    left ? `${left} ${commit.own === false ? "to read" : "to answer"}` : "",
+    left ? `${left} to answer${goneTo ? `, ${Math.min(goneTo, left)} gone to` : ""}` : "",
     answered ? `${answered} answered by your drafts (${publish})` : "",
     waiting ? `${waiting} waiting on a reply` : "",
   ];
@@ -533,6 +545,27 @@ export function changeVm(state: ChangeState): ChangeVm {
   } else if (status === "outdated") {
     notes.push({ icon: "history", tone: "warn", text: "Gerrit has a newer patchset than this commit", detail: "comments and CI below are about Gerrit's version" });
   }
+  if (state.blocked?.length && !state.elsewhere && !state.local && !state.reviewing && commit.own === false) {
+    // Said before Review Change is pressed (P6): what would stand in its way here, and the way around it.
+    const files = state.blocked.join(", ");
+    notes.push({ icon: "warning", tone: "warn", text: "Uncommitted changes here", detail: "a review in this checkout needs them committed or stashed; Review Change offers the review worktree instead", raw: files });
+  }
+  if (state.elsewhere) {
+    notes.push({ icon: "multiple-windows", tone: "info", text: "Under review in its own window", detail: "the review goes on there: Go to Review Window", raw: state.elsewhere });
+  }
+  // Closed while you look at it: no vote, no published comment; a draft of yours stays one, said with what can be done.
+  const closed = commit.change_status === "ABANDONED" ? "abandoned" : commit.change_status === "MERGED" ? "merged" : undefined;
+  const stranded = draftsIn(chains);
+  if (closed && (state.reviewing || stranded)) {
+    const kept = stranded ? `${stranded === 1 ? "your draft stays a draft" : `your ${stranded} drafts stay drafts`}: publishable once the change is restored, or delete ${stranded === 1 ? "it" : "them"}` : "";
+    notes.push({ icon: "circle-slash", tone: "warn", text: `This change is ${closed}: Gerrit takes no vote and no comment on it`, detail: kept });
+  }
+  // Gerrit could not be asked: its state, votes and comments are unknown, said once with why and the ways on.
+  const away = commit.gerrit_unavailable;
+  if (away) {
+    const problem = gerritProblem(away);
+    notes.push({ icon: "warning", tone: "warn", text: UNKNOWN_WORDS.note, detail: "", raw: away.message, actions: problem.actions.map(({ primary: _primary, ...action }) => action) });
+  }
   const since = state.delta?.since;
   // Someone's change, also one checked out for review (unless it is behind: the update says it).
   const theirs = !state.local || (state.reviewing !== undefined && !state.reviewing.behind);
@@ -544,7 +577,8 @@ export function changeVm(state: ChangeState): ChangeVm {
   const left = chainCounts(chains);
   const [open, fromGerrit] = [left.comments_unresolved, left.comments_total];
   const yours = chains.length - fromGerrit;
-  const counts = [fromGerrit ? commentCounts(commit, left) : "", yours ? `${yours} of yours, not published` : ""];
+  const goneTo = chains.filter((chain) => toAnswer(chain) && state.visited?.has(chain.root_id)).length;
+  const counts = [fromGerrit ? commentCounts(commit, left, goneTo) : "", yours ? `${yours} of yours, not published` : ""];
   const hasCi = commit.ci_failures.length > 0 || commit.ci_links.length > 0 || commit.attention_reasons.includes("ci-failed");
   const loading = state.loading;
   // Stopped before it is applied, what a push of it would do is not known yet. Reworking, the task
@@ -560,8 +594,8 @@ export function changeVm(state: ChangeState): ChangeVm {
     head: {
       ...(unsure ? { icon: "loading" } : headIcon(commit)),
       text: words || (commit.submittable ? "Ready to submit" : unsure ? "Loading…" : quietStop ? NOTHING_FROM_GERRIT : "Nothing to do"),
-      // "Not pushed" says it already: no second "not on Gerrit" beside it.
-      detail: commit.pushed ? commitVotes(commit) : /not pushed/i.test(words) ? "" : "not on Gerrit",
+      // "Not pushed" says it already, and unknown is not "not on Gerrit": the note under the head says why.
+      detail: commit.pushed ? commitVotes(commit) : status === "unknown" || /not pushed/i.test(words) ? "" : "not on Gerrit",
       badges: commit.pushed ? badges(commit, loading?.commit ? 0 : draftsIn(chains)).filter((badge): badge is Badge => badge !== null) : [],
       ...(stopped && !quietStop ? stoppedHead(stopped) : {}),
     },
@@ -589,7 +623,7 @@ export function changeVm(state: ChangeState): ChangeVm {
     files: files(state),
     comments: loading?.commit
       ? { summary: LOADING, open: false, threads: [] }
-      : { summary: counts.filter(Boolean).join(" · ") || "none", open: open > 0 || yours > 0, threads: chains.map((chain) => thread(chain, state.local && commit.own !== false && !state.reviewing)) },
+      : { summary: counts.filter(Boolean).join(" · ") || (away ? UNKNOWN_WORDS.comments : "none"), open: open > 0 || yours > 0, threads: chains.map((chain) => thread(chain, state.local && commit.own !== false && !state.reviewing, state.patchset)) },
     ci: hasCi
       ? {
           // The head already says "CI failed": the section names the failing builds, or nothing.
@@ -606,6 +640,12 @@ export function changeVm(state: ChangeState): ChangeVm {
       : undefined,
   };
 }
+
+/** What the Change view says while Gerrit cannot be asked: unknown, never none. */
+export const UNKNOWN_WORDS = {
+  note: "Gerrit could not be asked: what it says of this change (state, votes, comments) is unknown",
+  comments: "unknown: Gerrit could not be asked",
+};
 
 /** The view's title bar: `Change <number>`. The subject is not repeated there: the commit message says it. */
 export function changeHeading(number: number | null | undefined): string {
@@ -631,7 +671,7 @@ export function changeLines(vm: ChangeVm): string[] {
   }
   vm.notes?.forEach((note) => {
     const buttons = actionsText(note.actions);
-    add(0, note.text, `${note.detail}${buttons ? `  ${buttons}` : ""}`);
+    add(0, note.text, `${note.detail}${note.raw ? `  (${note.raw})` : ""}${buttons ? `  ${buttons}` : ""}`);
   });
   if (vm.message) {
     add(0, "Commit message", `${vm.message.text.split("\n")[0]}${vm.message.readOnly ? "  (read-only)" : "  (editable)"}`);
@@ -705,4 +745,22 @@ export function seenWhere(
   const number = target.number;
   const ps = typeof version === "number" ? version : patchSet.staged ?? (target.local ? undefined : (patchSet.current ?? undefined));
   return number && ps ? { key: `${number}/${ps}`, number, patchSet: ps } : { key: `${target.changeId ?? target.rev}/${version}` };
+}
+
+/**
+ * Where a thread was written, when that is not where it is drawn (W10): on an earlier patchset, at
+ * its line there; placed by its lines when ger could map them (`worktree`), else said to be outdated.
+ */
+export function placeWords(chain: Pick<CommentChain, "line" | "comments" | "worktree">, outdated: boolean, shownPatchset?: number): string {
+  const written = chain.comments[0]?.patch_set;
+  const older = written != null && shownPatchset !== undefined && written !== shownPatchset;
+  const at = chain.line ? `, line ${chain.line}` : "";
+  if (older && (outdated || !chain.worktree)) {
+    return ` · written on patchset ${written}${at}: outdated, that line may be gone or moved`;
+  }
+  if (older) {
+    return ` · written on patchset ${written}${at}, placed where those lines are now`;
+  }
+  // Its lines changed in your file since the version it was written on: drawn where they were.
+  return outdated ? ` · outdated: line ${chain.line} has changed since` : "";
 }

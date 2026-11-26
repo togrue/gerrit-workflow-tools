@@ -172,3 +172,44 @@ def test_a_change_id_lookalike_says_what_a_change_id_is(stack_repo: Path, monkey
     code, _out, err = run_cli(stack_repo, show_main, ["Inotachangeid"], monkeypatch)
     assert code == ExitCode.NOT_FOUND
     assert "no Change-Id either (I plus 40 hex digits)" in err
+
+
+def test_a_host_that_does_not_answer_is_said_so_with_the_wait_and_not_asked_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A wait that runs out names how long it waited; the rest of the run does not wait again (ADR-0014)."""
+    calls: list[str] = []
+
+    def _silent(request: Any, **_kwargs: object) -> Any:
+        calls.append(request.full_url)
+        raise URLError(TimeoutError("timed out"))
+
+    monkeypatch.setattr(http_rest, "urlopen", _silent)
+    rest = HttpGerritRest("https://g.example:8081", auth=GerritAuth("u", "s"))
+    for _ in range(3):
+        with pytest.raises(GerritUnavailableError) as caught:
+            rest.query_changes("status:open")
+        assert str(caught.value) == "Gerrit at g.example:8081 does not answer (waited 0 s)"
+        assert caught.value.reason == "no-answer"
+    assert len(calls) == 1
+    # The next run builds its own client, and asks again.
+    with pytest.raises(GerritUnavailableError):
+        HttpGerritRest("https://g.example:8081", auth=GerritAuth("u", "s")).query_changes("status:open")
+    assert len(calls) == 2
+
+
+def test_connecting_waits_at_most_the_connect_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A request's long read timeout does not make connecting to a silent host wait as long."""
+    from gerrit_workflow_tools.core import http_connect
+
+    limits: list[float | None] = []
+
+    def _race(_infos: object, limit: float | None, _source: object) -> Any:
+        limits.append(limit)
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(http_connect, "_race", _race)
+    resolve = lambda *_a: [(2, 1, 6, "", ("10.255.255.1", 8081))]  # noqa: E731
+    with pytest.raises(TimeoutError):
+        http_connect.connect(("silent.example", 8081), 120, resolve=resolve)
+    assert limits == [http_connect.CONNECT_TIMEOUT]

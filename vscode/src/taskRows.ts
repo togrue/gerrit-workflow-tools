@@ -88,7 +88,22 @@ export interface TaskOptions {
    * `key` is its change number (reviewing) or its commit (reworking).
    */
   shown?: { key: string; counts: Commented };
+  /**
+   * The review chain at the patchset under review, base first, as core says it (`/review?chain=1`):
+   * a change of it the inbox no longer lists (a new patchset dropped its Verified vote, or split the
+   * chain) stays in the header, marked so, instead of dropping out without a word.
+   */
+  chain?: number[];
+  /** The inbox could not be read (Gerrit away): what is left is unknown, never "not in your inbox". */
+  inboxUnknown?: boolean;
+  /** Subjects of changes as the inbox last listed them: a change it does not list now keeps its name. */
+  subjects?: ReadonlyMap<number, string>;
 }
+
+/** What the header says of a change of the chain under review that the inbox does not list now. */
+export const NOT_LISTED = "not in your inbox now";
+/** What it says of the chain's changes while the inbox cannot be read. */
+export const NOT_KNOWN = "unknown: Gerrit could not be asked";
 
 /** Which mode the checkout is in: a staged review here, else a rebase on your own stack. */
 export function taskMode(stack: Stack | undefined): TaskMode | undefined {
@@ -130,6 +145,12 @@ function voteMark(member: Member): TaskMark | undefined {
   if (review) {
     return { icon: review > 0 ? "thumbsup" : "thumbsdown", text: `you voted ${review > 0 ? "+" : ""}${review}`, tone: review > 0 ? "good" : "bad" };
   }
+  if (member.not_ready === NOT_KNOWN) {
+    return undefined; // said once, in what is left
+  }
+  if (member.not_ready === NOT_LISTED) {
+    return { icon: "question", text: member.not_ready, tone: "dim" };
+  }
   if (member.not_ready) {
     return { icon: "circle-slash", text: `not ready: ${member.not_ready}`, tone: "dim" };
   }
@@ -141,10 +162,26 @@ function counted<T extends Commented>(item: T, key: string, options: TaskOptions
   return options.shown?.key === key ? options.shown.counts : item;
 }
 
+/** A change of the chain under review the inbox does not list: what is known of it is its number. */
+function unlisted(number: number, subject?: string, unknown = false): Member {
+  const member: Member = { number, change_id: "", subject: subject ?? `Change ${number}`, verified: null, code_review: null, comments_unresolved: 0, attention_reasons: [], severity: "ok", url: null, local_sha: null, sha: null };
+  return { ...member, not_ready: unknown ? NOT_KNOWN : NOT_LISTED };
+}
+
 function reviewTask(overview: Overview | undefined, stack: Stack, options: TaskOptions): TaskVm {
   const review = stack.staged_review!;
-  const focus = reviewFocus(overview, stack);
-  const members = focus?.chain.members ?? [];
+  // The inbox's chain of the change under review, else of another change of its chain (the inbox lost the one reviewed).
+  const others = (options.chain ?? []).filter((number) => number !== review.number);
+  const focus = reviewFocus(overview, stack) ?? others.map((number) => reviewFocus(overview, { ...stack, staged_review: { ...review, number } })).find(Boolean);
+  const listed = focus?.chain.members ?? [];
+  // A change of the chain the inbox lists in a chain of its own (its base is an older patchset of the one below).
+  const inbox = (overview?.sections ?? []).flatMap((section) => section.chains.flatMap((chain) => chain.members));
+  // The chain as core has it at the reviewed patchset: members the inbox lost are kept, in their place.
+  const known: Member[] = (options.chain ?? []).length > 1
+    ? options.chain!.map((number) => (listed.find((member) => member.number === number) ?? inbox.find((member) => member.number === number)) ?? unlisted(number, number === review.number ? review.subject : options.subjects?.get(number), options.inboxUnknown))
+    : listed;
+  // Core's chain holds open changes only: the change under review, closed meanwhile, is still the one reviewed.
+  const members = known.length && !known.some((member) => member.number === review.number) ? [unlisted(review.number, review.subject, options.inboxUnknown), ...known] : known;
   const comments = (member: Member) => counted(member, String(member.number), options);
   const at = members.findIndex((member) => member.number === review.number);
   const steps: TaskStep[] = members.map((member, index) => {
@@ -162,13 +199,21 @@ function reviewTask(overview: Overview | undefined, stack: Stack, options: TaskO
     steps.push({ key: String(review.number), position: 1, title: review.subject, current: true, marks: [{ icon: "eye", text: "reviewing", tone: "info" }], tooltip: `${review.number}: ${review.subject}` });
   }
   const voted = members.filter((member) => member.your_votes?.["Code-Review"]).length;
-  const toVote = members.filter((member) => !member.your_votes?.["Code-Review"] && !member.not_ready).length;
-  const notReady = members.filter((member) => !member.your_votes?.["Code-Review"] && member.not_ready).length;
+  const toVote = members.filter((member) => !member.your_votes?.["Code-Review"] && (!member.not_ready || member.not_ready === NOT_LISTED || member.not_ready === NOT_KNOWN)).length;
+  const notReady = members.filter((member) => !member.your_votes?.["Code-Review"] && member.not_ready && member.not_ready !== NOT_LISTED && member.not_ready !== NOT_KNOWN).length;
+  const gone = members.filter((member) => member.not_ready === NOT_LISTED).length;
   const toAnswer = members.reduce((sum, member) => sum + commentTurns(comments(member)).left, 0);
   const left = [
-    members.length ? (toVote ? `${toVote} of ${members.length} to vote on` : `you voted on ${voted} of ${members.length}`) : "its chain is not in your inbox",
+    options.inboxUnknown
+      ? `what is left is ${NOT_KNOWN}`
+      : members.length
+        ? toVote
+          ? `${toVote} of ${members.length} to vote on`
+          : `you voted on ${voted} of ${members.length}`
+        : "its chain is not in your inbox",
     notReady ? `${notReady} not ready for review` : "",
-    toAnswer ? `${plural(toAnswer, "comment")} to read` : "",
+    gone ? `${gone} ${NOT_LISTED}` : "",
+    toAnswer ? `${plural(toAnswer, "comment")} to answer` : "",
   ].filter(Boolean);
   const owner = focus?.chain.owner.name;
   const back = review.return_to;

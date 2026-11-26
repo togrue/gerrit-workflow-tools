@@ -9,13 +9,12 @@ import pytest
 
 from gerrit_workflow_tools.core.annotated_stack import (
     annotate,
-    branches_needing_upstream,
     load_annotated_stack,
-    resolve_rev_range,
 )
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.rev_range import branches_needing_upstream, resolve_rev_range
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import commits_in_range
 from tests.change_store import ChangeStore

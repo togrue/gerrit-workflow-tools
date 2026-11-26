@@ -53,6 +53,27 @@ def test_an_unscoped_token_still_works_and_warns_once_with_the_move(config_warni
     ]
 
 
+def test_a_refusal_names_the_keys_the_credentials_came_from(
+    config_warnings: Callable[[], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A 401 names the keys in use: the plain ones when those were sent, not the per-host ones."""
+    from urllib.error import HTTPError
+
+    from gerrit_workflow_tools.core.gerrit import http_rest
+    from gerrit_workflow_tools.core.gerrit.rest import GerritUnavailableError
+
+    def _refuse(*_args: object, **_kwargs: object) -> object:
+        raise HTTPError(f"{HOST}/a/changes/", 401, "Unauthorized", {}, None)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(http_rest, "urlopen", _refuse)
+    plain = Settings.from_map({"ger.webUrl": HOST, "ger.user": "bob", f"ger.{HOST}.password": "pw"})
+    with pytest.raises(GerritUnavailableError) as caught:
+        HttpGerritRest.from_settings(plain).query_changes("status:open")
+    assert f"check ger.user and ger.{HOST}.password, or run `ger setup`" in str(caught.value)
+    assert caught.value.reason == "credentials"
+    del config_warnings
+
+
 def test_a_command_sends_only_its_hosts_token(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Through ``ger fetch-api``, with the keys as git writes them."""
     for key, value in SCOPED.items():

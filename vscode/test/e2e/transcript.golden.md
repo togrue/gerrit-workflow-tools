@@ -122,7 +122,7 @@ status bar message: $(check) Refreshed from Gerrit
 - change | Commit message — Extract command routing  (editable)
 - change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 + change |   uploader.txt — added +1 −0
-+ change | Comments — 1 to read
++ change | Comments — 1 to answer
 + change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
 - change |   b.txt — added +1 −0
 - change | Comments — 2 to answer
@@ -238,7 +238,9 @@ notification (info): Change 900 (patchset 1) is checked out for review on change
     → pressed "Open Review Worktree"
 new VS Code window on: <repo>-review
 --- on screen:
-(no change)
++ change | [Go to Review Window] — the review of 900 is open in <repo>-review, in its own window (Alt+Enter)
++ change | Under review in its own window — the review goes on there: Go to Review Window  (<repo>-review)
+- change | [Review change] — check it out for review, staged, with all its files (Alt+Enter)
 ```
 
 ## 16. Change › … › Leave Review Checkout
@@ -246,9 +248,13 @@ new VS Code window on: <repo>-review
 **Expect:** The review checkout of 900 is closed, and a notification says so.
 
 ```
-notification (info): Left the review of change 900.
+progress (notification): Leaving the review
+notification (info): Left the review of change 900: the review worktree is free for the next review. Next: 2 unresolved comments on 101: Extract command routing.  [Open It]
+    → dismissed
 --- on screen:
-(no change)
++ change | [Review change] — check it out for review, staged, with all its files (Alt+Enter)
+- change | [Go to Review Window] — the review of 900 is open in <repo>-review, in its own window (Alt+Enter)
+- change | Under review in its own window — the review goes on there: Go to Review Window  (<repo>-review)
 ```
 
 ## 17. Command palette › ger: Leave Review Checkout, with none open
@@ -295,7 +301,7 @@ notification (info): No review checkout is open here.
 - change | Comparing — Base commit → Patchset 1 (current) · default: Against its base commit
 - change | Files — 1 · +1 −0
 - change |   uploader.txt — added +1 −0
-- change | Comments — 1 to read
+- change | Comments — 1 to answer
 - change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
 ```
 
@@ -305,7 +311,8 @@ notification (info): No review checkout is open here.
 
 ```
 progress (notification): Restarting ger serve
-notification (warning): Still not working: there is no program "ger-not-installed": install ger, or set ger.executable to how to run it (its full path works too)
+notification (warning): Still not working: there is no program "ger-not-installed": install ger, or set ger.executable to how to run it (its full path works too)  [Retry] [Show Log]
+    → dismissed
 --- on screen:
 (no change)
 ```
@@ -354,7 +361,7 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 + change | Comparing — Base commit → Patchset 1 (current) · default: Against its base commit
 + change | Files — 1 · +1 −0
 + change |   uploader.txt — added +1 −0
-+ change | Comments — 1 to read
++ change | Comments — 1 to answer
 + change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
 - change | A change shows here once ger runs. Review chains says what is missing and what to do next.
 ```
@@ -366,7 +373,8 @@ status bar message: $(terminal) Installing ger with uv in the ger terminal: Retr
 ```
 progress (in view ger.overview): Refreshing from Gerrit
 progress (in view ger.stack): Refreshing from Gerrit
-notification (warning): Refresh failed: ger.webUrl must use https:// (got 'http://gerrit.example'): credentials go with every request. For a local test Gerrit on plain http, opt in with `git config ger.allowInsecureHttp true`
+notification (warning): Refresh failed: ger.webUrl must use https:// (got 'http://gerrit.example'): credentials go with every request. For a local test Gerrit on plain http, opt in with `git config ger.allowInsecureHttp true`  [Check the Gerrit Address (ger setup)…] [Retry]
+    → dismissed
 --- on screen:
 + status bar | $(warning) Gerrit
 + state  | setup
@@ -394,7 +402,7 @@ notification (warning): Refresh failed: ger.webUrl must use https:// (got 'http:
 - change | Comparing — Base commit → Patchset 1 (current) · default: Against its base commit
 - change | Files — 1 · +1 −0
 - change |   uploader.txt — added +1 −0
-- change | Comments — 1 to read
+- change | Comments — 1 to answer
 - change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
 ```
 
@@ -404,7 +412,8 @@ notification (warning): Refresh failed: ger.webUrl must use https:// (got 'http:
 
 ```
 progress (notification): Restarting ger serve
-notification (warning): Still not working: ger.webUrl must use https:// (got 'http://gerrit.example'): credentials go with every request. For a local test Gerrit on plain http, opt in with `git config ger.allowInsecureHttp true`
+notification (warning): Still not working: ger.webUrl must use https:// (got 'http://gerrit.example'): credentials go with every request. For a local test Gerrit on plain http, opt in with `git config ger.allowInsecureHttp true`  [Check the Gerrit Address (ger setup)…] [Retry]
+    → dismissed
 --- on screen:
 + events | (not said)
 - events | live
@@ -445,7 +454,7 @@ status bar message: $(check) Refreshed from Gerrit
 + change | Comparing — Base commit → Patchset 1 (current) · default: Against its base commit
 + change | Files — 1 · +1 −0
 + change |   uploader.txt — added +1 −0
-+ change | Comments — 1 to read
++ change | Comments — 1 to answer
 + change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
 - change | A change shows here once ger can ask Gerrit. ger says: ger.webUrl must use https:// (got 'http://gerrit.example'): credentials go with every request. For a local test Gerrit on plain http, opt in with `git config ger.allowInsecureHttp true`
 ```
@@ -473,7 +482,7 @@ status bar message: $(check) Refreshed from Gerrit
 + change |   Is this the right design? — b.txt:1 · Bob Architect  [open]
 + change |   Looks good overall. — whole change · Alice Reviewer  [resolved]
 - change |   uploader.txt — added +1 −0
-- change | Comments — 1 to read
+- change | Comments — 1 to answer
 - change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
 ```
 
@@ -585,6 +594,8 @@ status bar message: Comment 1 of 2 to answer
 --- on screen:
 + change | [Next comment] — 2 comments left to answer here, 1 not gone to yet (Alt+Enter)
 - change | [Next comment] — 2 comments left to answer here, 2 not gone to yet (Alt+Enter)
++ change | Comments — 2 to answer, 1 gone to
+- change | Comments — 2 to answer
 + editor | b.txt (file, line 1)
 - editor | Preview ger-brief-<id>.md (webview)
 ```
@@ -598,6 +609,8 @@ status bar message: Comment 2 of 2 to answer
 --- on screen:
 + change | [Next comment] — 2 comments left to answer here, gone to, not answered yet (Alt+Enter)
 - change | [Next comment] — 2 comments left to answer here, 1 not gone to yet (Alt+Enter)
++ change | Comments — 2 to answer, 2 gone to
+- change | Comments — 2 to answer, 1 gone to
 ```
 
 ## 35. Next Unresolved Comment a third time
@@ -704,10 +717,10 @@ notification (info): Draft saved, visible only to you: your next push publishes 
 + change | [Next comment] — 1 comment left to answer here, gone to, not answered yet (Alt+Enter)
 - change | Unresolved comments — V+1 CR+2 💬2 open
 - change | [Next comment] — 2 comments left to answer here, gone to, not answered yet (Alt+Enter)
-+ change | Comments — 1 to answer · 1 answered by your drafts (push publishes them)
++ change | Comments — 1 to answer, 1 gone to · 1 answered by your drafts (push publishes them)
 + change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
 + change |     you — [draft] Renamed it.
-- change | Comments — 2 to answer
+- change | Comments — 2 to answer, 2 gone to
 - change |   Please rename this. — suggested edit · b.txt:1 · Alice Reviewer  [open]
 ```
 
@@ -761,7 +774,7 @@ status bar message: $(check) Draft saved, resolving the comment, visible only to
 - change | Unresolved comments, drafts to publish with the push — V+1 CR+2 💬2 open ✎1
 - change | [Next comment] — 1 comment left to answer here, gone to, not answered yet (Alt+Enter)
 + change | Comments — 2 answered by your drafts (push publishes them)
-- change | Comments — 1 to answer · 1 answered by your drafts (push publishes them)
+- change | Comments — 1 to answer, 1 gone to · 1 answered by your drafts (push publishes them)
 + change |   Is this the right design? — your draft resolves it · b.txt:1 · Bob Architect · 1 reply  [open]
 + change |     you — [draft] Done
 - change |   Is this the right design? — b.txt:1 · Bob Architect  [open]
@@ -1397,6 +1410,9 @@ notification (info): The report was closed without saving it, so nothing was sha
 + status bar | $(error) CI failed: 102 $(warning)
 - status bar | $(error) CI failed: 102
 + events | (not said)
++ chains | Out of date: fake ger: down for this test
++ chains | Restart ger serve
++ chains | Show Log
 - events | live
 ```
 
@@ -1406,7 +1422,8 @@ notification (info): The report was closed without saving it, so nothing was sha
 
 ```
 progress (notification): Restarting ger serve
-notification (warning): Still out of date: fake ger: down for this test
+notification (warning): Still out of date: fake ger: down for this test  [Retry] [Show Log]
+    → dismissed
 ```
 
 ## Meanwhile: ger serve can start again, and the next background refresh works
@@ -1421,6 +1438,9 @@ notification (info): 2 unresolved comments on 101: Extract command routing  [Ope
 + events | live
 + chains | 2 unresolved comments on 101: Extract command routing
 - events | (not said)
+- chains | Out of date: fake ger: down for this test
+- chains | Restart ger serve
+- chains | Show Log
 - chains | CI failed on 102: test! temporary experiment
 + chains | Outgoing — 1 chain · 1 with failed CI · 1 with comments
 + chains |   test! temporary experiment — 4 changes · V-1 CR+2 💬2 open · active <age> ago  [ger.chain.url.local]
@@ -3383,7 +3403,7 @@ change | (the commit shown is below HEAD)
 - change | Commit message — test! temporary experiment  (editable)
 - change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 + change |   uploader.txt — added +1 −0
-+ change | Comments — 2 to read
++ change | Comments — 2 to answer
 + change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
 + change |   And cap the delay. — uploader.txt:1 · Bob Architect  [open]
 - change |   c.txt — modified +1 −0
@@ -3401,8 +3421,8 @@ change | (the commit shown is below HEAD)
 notification (info): Draft saved on Gerrit, visible only to you: Vote and Publish sends it.  [Vote and Publish…]
     → dismissed
 --- on screen:
-+ change | Comments — 2 to read · 1 of yours, not published
-- change | Comments — 2 to read
++ change | Comments — 2 to answer · 1 of yours, not published
+- change | Comments — 2 to answer
 + change |   Cap the retries at 5? — your draft · uploader.txt:1  [yours]
 ```
 
@@ -3457,8 +3477,8 @@ notification (info): Published Code-Review +1 and 1 draft on change 900.
 - chains |   Add retry to the uploader — alice · 1 change · V+1 💬2 open · waiting <age> · active <age> ago  [ger.change.url.toreview]
 + change | Waiting for your review, unresolved comments — V+1 CR+1 💬2 open
 - change | Waiting for your review, unresolved comments — V+1 💬2 open
-+ change | Comments — 3 to read
-- change | Comments — 2 to read · 1 of yours, not published
++ change | Comments — 3 to answer
+- change | Comments — 2 to answer · 1 of yours, not published
 + change |   Cap the retries at 5? — uploader.txt:1  [open]
 - change |   Cap the retries at 5? — your draft · uploader.txt:1  [yours]
 ```
@@ -3536,10 +3556,10 @@ notification (info): Change 900 (patchset 1) is checked out for review: this che
 - stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 - stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
 + change | ▌ Reviewing alice's chain: Add retry to the uploader — change 1 of 1  [All chains]
-+ change | ▌ Left: you voted on 1 of 1 · 3 comments to read
++ change | ▌ Left: you voted on 1 of 1 · 3 comments to answer
 + change | ▌ ▸ 1. Add retry to the uploader — reviewing · you voted +1 · 3 to answer
 + change | ▌ [Leave review] back to feature; the review's branches go
-+ change | [Next comment] — 3 open comments not looked at yet (Alt+Enter)
++ change | [Next comment] — 3 of 3 to answer not gone to yet (Alt+Enter)
 - change | [Review change] — check it out for review, staged, with all its files (Alt+Enter)
 + change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 - change | Comparing — Base commit → Patchset 1 (current) · default: Against its base commit
@@ -3565,8 +3585,8 @@ notification (info): Change 900 (patchset 1) is checked out for review: this che
 ```
 status bar message: $(check) Draft saved on Gerrit, visible only to you: Vote and Publish sends it.
 --- on screen:
-+ change | Comments — 3 to read · 1 of yours, not published
-- change | Comments — 3 to read
++ change | Comments — 3 to answer · 1 of yours, not published
+- change | Comments — 3 to answer
 + change |   Is 3 enough on a slow link? — your draft · uploader.txt:1  [yours]
 ```
 
@@ -3577,8 +3597,10 @@ status bar message: $(check) Draft saved on Gerrit, visible only to you: Vote an
 ```
 status bar message: Comment 1 of 4
 --- on screen:
-+ change | [Next comment] — 2 open comments not looked at yet (Alt+Enter)
-- change | [Next comment] — 3 open comments not looked at yet (Alt+Enter)
++ change | [Next comment] — 2 of 3 to answer not gone to yet (Alt+Enter)
+- change | [Next comment] — 3 of 3 to answer not gone to yet (Alt+Enter)
++ change | Comments — 3 to answer, 1 gone to · 1 of yours, not published
+- change | Comments — 3 to answer · 1 of yours, not published
 ```
 
 ## 118. Change › Review Next Change in Chain
@@ -3609,7 +3631,9 @@ notification (info): Change 900 has no review chain to walk.  [Vote on the Chain
 **Expect:** Back on the branch it came from; the views are your stack again, and the task header is gone.
 
 ```
-notification (info): Left the review of change 900.
+progress (notification): Leaving the review
+notification (info): Left the review of change 900: this checkout is back on feature. Next: 2 unresolved comments on 101: Extract command routing.  [Open It]
+    → dismissed
 --- on screen:
 + status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing
 - status bar | $(eye) alice has waited <age> for your review of 900: Add retry to t…
@@ -3637,16 +3661,16 @@ notification (info): Left the review of change 900.
 - stack  | Add retry to the uploader — under review · <sha> · the same as on Gerrit  [comments 2, review +1, ci good]
 - change | title: Change 900
 - change | ▌ Reviewing alice's chain: Add retry to the uploader — change 1 of 1  [Only this task]
-- change | ▌ Left: you voted on 1 of 1 · 3 comments to read
+- change | ▌ Left: you voted on 1 of 1 · 3 comments to answer
 - change | ▌ ▸ 1. Add retry to the uploader — reviewing · you voted +1 · 3 to answer
 - change | ▌ [Leave review] back to feature; the review's branches go
 - change | Waiting for your review, unresolved comments — V+1 CR+1 💬2 open
-- change | [Next comment] — 2 open comments not looked at yet (Alt+Enter)
+- change | [Next comment] — 2 of 3 to answer not gone to yet (Alt+Enter)
 - change | Commit message — Add retry to the uploader  (read-only)
 - change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 - change | Files — 1 · +1 −0
 - change |   uploader.txt — added +1 −0
-- change | Comments — 3 to read · 1 of yours, not published
+- change | Comments — 3 to answer, 1 gone to · 1 of yours, not published
 - change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
 - change |   And cap the delay. — uploader.txt:1 · Bob Architect  [open]
 - change |   Cap the retries at 5? — uploader.txt:1  [open]

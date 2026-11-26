@@ -21,6 +21,7 @@ import { GER_TERMINAL, configWarner, gerProgram, installGer, runInTerminal, vers
 import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
 import { Poller } from "./poller";
+import { PROBLEM_ACTIONS, gerritProblem } from "./problemRows";
 import { openConflict, push, rebaseOntoUpstream, rebaseStep } from "./rebase";
 import { RepoWatcher } from "./repoWatcher";
 import { reportIssue } from "./reportIssue";
@@ -34,7 +35,7 @@ import { statusBar } from "./statusBar";
 import { Task } from "./task";
 import { activeTracer } from "./trace";
 import { startTracing, tracedCommand, tracedTree, tracedUi } from "./tracing";
-import { Ui, feedback, onTerminalCommandEnd, saveReplyResolved, ui, useUi, vscodeUi } from "./ui";
+import { Ui, feedback, offerWaysOn, onTerminalCommandEnd, saveReplyResolved, ui, useUi, vscodeUi } from "./ui";
 import { setUpstream } from "./upstream";
 import { voteAndPublish } from "./vote";
 import { AttentionWalk } from "./walk";
@@ -269,7 +270,9 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     changeView.onDidLoad(() => {
       const shown = changeView.target ? changeView.shown : undefined;
       void vscode.commands.executeCommand("setContext", "ger.changeOnGerrit", Boolean(shown?.pushed));
-      void vscode.commands.executeCommand("setContext", "ger.changeVotable", Boolean(shown?.pushed) && shown?.own === false);
+      // Not on a closed change: Gerrit takes no vote there (Next names the way on instead).
+      const open = !shown?.change_status || shown.change_status === "NEW";
+      void vscode.commands.executeCommand("setContext", "ger.changeVotable", Boolean(shown?.pushed) && shown?.own === false && open);
     }),
   );
   /** What was published shows at once: Review chains (it may leave *To review*), the change and its threads. */
@@ -329,7 +332,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     }
     return index < chain.length - 1
       ? { label: "Next Change", run: () => stepReview(model, 1, reviewSteps) }
-      : { label: "Leave Review", run: () => leaveReview(model) };
+      : { label: "Leave Review", run: () => leaveReview(model, reviewSteps) };
   };
   /**
    * Continue, Abort or Skip in the ger terminal. What the last step said is history from the press;
@@ -359,7 +362,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     seen: () => changeView.markAllSeen(),
     vote: () => vscode.commands.executeCommand("ger.vote"),
     nextChange: () => stepReview(model, 1, reviewSteps),
-    leave: () => leaveReview(model),
+    leave: () => leaveReview(model, reviewSteps),
     update: () => vscode.commands.executeCommand("ger.reviewUpdate"),
     conflict: () => {
       const first = model.stack?.rebase?.unmerged[0];
@@ -372,6 +375,15 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       return push(model);
     },
     review: () => review(model, changeView.target, reviewSteps),
+    reviewWindow: () => {
+      const worktree = model.reviewElsewhere(changeView.target?.number);
+      return worktree ? ui().openFolder(vscode.Uri.file(worktree)) : undefined;
+    },
+    gerrit: () => {
+      const away = changeView.shown?.gerrit_unavailable;
+      const fix = away ? gerritProblem(away).actions[0] : PROBLEM_ACTIONS.retry;
+      return vscode.commands.executeCommand(fix.command.id, ...fix.command.args);
+    },
   };
 
   const commands: Record<string, (...args: never[]) => unknown> = {
@@ -390,12 +402,19 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       }
       if (model.stale) {
         // Failed again: the views keep the last answer (marked out of date); you asked, so say why.
-        void ui().message("warning", `Still out of date: ${model.stale}`, {}, []);
+        void offerWaysOn("warning", `Still out of date: ${model.stale}`, [PROBLEM_ACTIONS.retry, PROBLEM_ACTIONS.log]);
       } else if (model.failure) {
         // You asked, and it cannot show anything: say what it found this time, not only that it tried.
-        void ui().message("warning", `${retried ? "Still not working" : "Refresh failed"}: ${model.failure}`, {}, []);
+        const ways = model.state === "setup" ? [PROBLEM_ACTIONS.address, PROBLEM_ACTIONS.retry] : [PROBLEM_ACTIONS.retry, PROBLEM_ACTIONS.log];
+        void offerWaysOn("warning", `${retried ? "Still not working" : "Refresh failed"}: ${model.failure}`, ways);
       } else if (model.state === "ready") {
-        feedback("Refreshed from Gerrit");
+        const away = model.gerritAway();
+        if (away) {
+          // The local stack was read again, Gerrit was not: say so, with the ways on, never a tick.
+          void offerWaysOn("warning", `Not refreshed from Gerrit: ${away.message}`, gerritProblem(away).actions);
+        } else {
+          feedback("Refreshed from Gerrit");
+        }
         await changeView.open(); // still failing: the change shown stays as it was, the welcome text says why
       }
     },
@@ -435,7 +454,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.checkout": (arg: unknown) => checkout(model, targetOf(arg)),
     "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg)),
     "ger.setUpstream": (upstream?: unknown) => setUpstream(model, typeof upstream === "string" ? upstream : undefined),
-    "ger.reviewDone": () => leaveReview(model),
+    "ger.reviewDone": () => leaveReview(model, reviewSteps),
     "ger.vote": (arg: unknown) => {
       const target = targetOf(arg);
       return voteAndPublish(model, target, { chain: isChainRow(arg), after: afterVote, next: isChainRow(arg) ? undefined : nextAfterVote(target) });

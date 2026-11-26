@@ -14,13 +14,12 @@ Two entry points, because only some callers start from a revision range:
 whole, each computed once: the ready boundary, the rebase underway, how far the upstream moved.
 
 Nothing here prompts or prints. Revision ranges may reference an ``@{upstream}`` that is not
-configured; :func:`branches_needing_upstream` reports which branches those are, and the
+configured; ``rev_range.branches_needing_upstream`` reports which branches those are, and the
 caller decides whether to prompt, fail, or carry on.
 """
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
@@ -36,13 +35,11 @@ from gerrit_workflow_tools.core.git_run import GitError, git
 from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack, change_ids_push_adds
 from gerrit_workflow_tools.core.rebase_state import RebaseProgress, rebase_progress
 from gerrit_workflow_tools.core.rebasing_stack import RebasingStack, load_rebasing_stack
+from gerrit_workflow_tools.core.rev_range import resolve_rev_range
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, upstream_tracking_tip_and_display
 from gerrit_workflow_tools.core.upstream import NeedsUpstreamError
 from gerrit_workflow_tools.core.upstream_moved import UpstreamMoved, merged_same, upstream_moved
-
-
-_UPSTREAM_TOKEN_RE = re.compile(r"(?P<branch>[^\s@]+)?@\{upstream\}")
 
 
 @dataclass(frozen=True)
@@ -77,41 +74,6 @@ class AnnotatedStack:
         if self.gerrit_unavailable is not None:
             raise self.gerrit_unavailable
         return self.commits
-
-
-def resolve_rev_range(arg_rev_range: str | None, *, branch: str) -> str:
-    """Return the revision range to inspect.
-
-    A bare ref becomes ``<ref>@{upstream}..<ref>``; a range is taken as given. With no
-    argument, the stack of *branch* (the run's ``stack_branch``): its upstream range.
-    """
-    if arg_rev_range:
-        if ".." in arg_rev_range:
-            return arg_rev_range
-        return f"{arg_rev_range}@{{upstream}}..{arg_rev_range}"
-    if branch == "HEAD":
-        return "@{upstream}..HEAD"
-    return f"{branch}@{{upstream}}..{branch}"
-
-
-def branches_needing_upstream(rev_range: str, *, branch: str) -> list[str]:
-    """Return branch names in *rev_range* whose ``@{upstream}`` the caller must ensure exists.
-
-    A bare ``@{upstream}`` or ``HEAD`` stands for *branch*, the stack's branch. Reports
-    only; resolving an upstream is interactive and stays with the caller.
-    """
-    current = branch
-    required: list[str] = []
-    seen: set[str] = set()
-    for match in _UPSTREAM_TOKEN_RE.finditer(rev_range):
-        branch = (match.group("branch") or current).lstrip(".")
-        if branch in ("HEAD", ""):
-            branch = current
-        if branch in seen:
-            continue
-        seen.add(branch)
-        required.append(branch)
-    return required
 
 
 def annotate(
@@ -235,8 +197,9 @@ def load_annotated_stack(
     *,
     first_parent: bool = True,
     fetch_ci_pipelines: bool = False,
+    gerrit: bool = True,
 ) -> AnnotatedStack:
-    """Load *rev_range*, overlay Gerrit state, annotate attention, and derive notes.
+    """Load *rev_range*, overlay Gerrit state (unless *gerrit* is off), annotate attention, and derive notes.
 
     With no *rev_range*, the run's **local stack**: while a rebase is underway, the commits it
     replayed so far as they are now, then those still to replay as they were
@@ -256,7 +219,7 @@ def load_annotated_stack(
         return AnnotatedStack(rebase=rebasing)
     on_target = _commits_on_target(run, rows, rev_range) if rev_range else frozenset()
     # A detached HEAD's rebase has no working branch, so no push branch to find its changes on.
-    overlay = rebasing is None or run.repo.working_branch is not None
+    overlay = gerrit and (rebasing is None or run.repo.working_branch is not None)
     annotated = annotate(
         rows, service=service, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines, on_target=on_target, overlay=overlay
     )
@@ -371,9 +334,11 @@ def load_stack_overview(
     *,
     first_parent: bool = True,
     fetch_ci_pipelines: bool = False,
+    gerrit: bool = True,
 ) -> StackOverview:
     """:func:`load_annotated_stack`, with the ready boundary ``ger push`` stops at, the rebase and the upstream."""
-    view = load_annotated_stack(run, rev_range, first_parent=first_parent, fetch_ci_pipelines=fetch_ci_pipelines)
+    loaded = {"first_parent": first_parent, "fetch_ci_pipelines": fetch_ci_pipelines, "gerrit": gerrit}
+    view = load_annotated_stack(run, rev_range, **loaded)
     settings = run.settings
     progress = view.rebase.rebase if view.rebase else rebase_progress(run.cwd, repo_dir=run.worktree.repository_dir)
     on_stack = rev_range is None and progress is None

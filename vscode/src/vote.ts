@@ -6,7 +6,8 @@ import * as vscode from "vscode";
 
 import { GerApiError, VoteOption, VotePlan } from "./api";
 import { ChangeTarget, Model, describeError } from "./model";
-import { ui } from "./ui";
+import { failureWays, servedError } from "./problemRows";
+import { WayOn, offerWaysOn, ui } from "./ui";
 import { VoteItem, confirmVote, defaultVoteItem, sentVote, voteItems, votePlaceholder, voteTitle } from "./voteText";
 
 export interface VoteRequest {
@@ -36,7 +37,7 @@ export async function voteAndPublish(model: Model, target: ChangeTarget | undefi
     const client = await model.client();
     plan = await ui().progress(vscode.ProgressLocation.Window, "Reading your drafts", () => client.votePlan(number, chain));
   } catch (error) {
-    void ui().message("error", `Cannot vote: ${describeError(error)}`, {}, []);
+    void offerWaysOn(error instanceof GerApiError && error.reason === "closed" ? "warning" : "error", `Cannot vote: ${describeError(error)}`, waysOn(error));
     return;
   }
   let option: VoteOption | undefined;
@@ -67,11 +68,18 @@ export async function voteAndPublish(model: Model, target: ChangeTarget | undefi
   const votes = option ? { [option.label]: option.value } : {};
   try {
     const client = await model.client();
-    const sent = await ui().progress(vscode.ProgressLocation.Notification, `Publishing on ${number}`, () => client.vote(number, chain, votes, message.trim() || undefined, patchSets));
+    // "Publishing" until Gerrit answered and the views have read it back: the answer, Next and the
+    // Comments section then change at the same moment (W11), never "Published" beside "Vote and publish".
+    const sent = await ui().progress(vscode.ProgressLocation.Notification, `Publishing on ${number}`, async () => {
+      const answer = await client.vote(number, chain, votes, message.trim() || undefined, patchSets);
+      await request.after?.().catch(() => undefined);
+      return answer;
+    });
     const next = await request.next?.().catch(() => undefined);
     void ui()
       .message("info", sentVote(sent, option), {}, next ? [next.label] : [])
       .then((picked) => (picked && next ? next.run() : undefined));
+    return;
   } catch (error) {
     // The changes moved since they were shown: nothing went out. Look again, and decide on what is there now.
     if (error instanceof GerApiError && error.code === "REFUSED") {
@@ -80,7 +88,16 @@ export async function voteAndPublish(model: Model, target: ChangeTarget | undefi
       }
       return;
     }
-    void ui().message("error", `Not published: ${describeError(error)}`, {}, []);
+    // Nothing went out: said as a failure, with what can be done about it.
+    void offerWaysOn("error", `Not published: ${describeError(error)}`, waysOn(error));
   }
   await request.after?.();
+}
+
+/** Leave Review, while a staged review sits here: the way on from a change nothing can be voted on any more. */
+const LEAVE: WayOn = { label: "Leave Review", command: { id: "ger.reviewDone", args: [] } };
+
+/** What a refused or failed vote offers: Gerrit away, its fixes; a closed change, leaving its review; else the log. */
+export function waysOn(error: unknown): WayOn[] {
+  return servedError(error)?.reason === "closed" ? [LEAVE] : failureWays(error);
 }

@@ -134,6 +134,60 @@ def test_stack_is_the_annotated_stack_with_the_ready_boundary(stack_repo: Path) 
     assert [c["code_change"] for c in stack["commits"]] == [None] * 4, "only a commit ahead of Gerrit has one"
 
 
+def test_stack_local_answers_from_git_alone_without_asking_gerrit(stack_repo: Path) -> None:
+    """``local=1``: the same commits at once, every Gerrit state unknown, Gerrit never asked."""
+    _store, _keys, rows = _gerrit(stack_repo)
+    stack = _get(GerApi(stack_repo, gerrit=_Refusing()), "/stack", local="1")
+    assert stack["local_only"] is True
+    assert [c["sha"] for c in stack["commits"]] == [row.sha for row in rows]
+    assert {c["patchset_status"] for c in stack["commits"]} == {"unknown"}
+    assert "gerrit_unavailable" not in stack
+    assert [c["held_back"] for c in stack["commits"]] == [False, False, True, True], "the ready boundary is git's"
+
+
+def test_show_says_why_gerrit_state_is_unknown_when_gerrit_refuses(stack_repo: Path) -> None:
+    """Refused credentials: the commit carries the reason, so a viewer says unknown, never none."""
+    from gerrit_workflow_tools.core.gerrit.rest import GerritUnavailableError
+
+    _gerrit(stack_repo)
+    refused = "Gerrit at g.example rejected the credentials (HTTP 401)"
+
+    class _Rejecting:
+        web_base = WEB
+
+        def __getattr__(self, name: str) -> Any:
+            def _fail(*_args: object, **_kwargs: object) -> Any:
+                raise GerritUnavailableError(refused, status=401, reason="credentials")
+
+            return _fail
+
+    shown = _get(GerApi(stack_repo, gerrit=_Rejecting()), "/show", rev="HEAD")["commits"][0]
+    assert shown["gerrit_unavailable"] == {"code": "GERRIT", "message": refused, "reason": "credentials"}
+    assert shown["patchset_status"] == "unknown"
+
+
+def test_stack_says_before_the_press_that_review_here_would_refuse_over_edits(stack_repo: Path) -> None:
+    """ger.reviewCheckout=branch and a changed tracked file: /stack names it, as ger review would refuse."""
+    store, _keys, _rows = _gerrit(stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+    assert _get(api, "/stack")["review_blocked"] is None
+    (stack_repo / "a.txt").write_text("edited\n")
+    assert _get(api, "/stack")["review_blocked"] is None, "a review worktree is not in the way of edits here"
+    git("config", "ger.reviewCheckout", "branch", cwd=stack_repo)
+    blocked = _get(api, "/stack")["review_blocked"]
+    assert (blocked["reason"], blocked["files"]) == ("uncommitted-changes", ["a.txt"])
+    assert blocked["message"].startswith("your working tree has changes to tracked files (a.txt)")
+
+
+class _Refusing:
+    """A Gerrit that fails the test when asked anything."""
+
+    web_base = WEB
+
+    def __getattr__(self, name: str) -> Any:
+        raise AssertionError(f"Gerrit was asked ({name})")
+
+
 def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Both answer from one stack overview: the keys each has today, and the same commits and boundary."""
     store, _keys, rows = _gerrit(stack_repo)
@@ -143,17 +197,8 @@ def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monk
     assert code == ExitCode.OK
     assert list(log) == ["stack", "rebase", "upstream", "commits", "next"]
     assert list(stack) == [
-        *(
-            "branch",
-            "head",
-            "rebase_in_progress",
-            "rebase",
-            "upstream",
-            "push_blocked",
-            "staged_review",
-            "last_outcome",
-            "stack",
-        ),
+        *("branch", "head", "rebase_in_progress", "rebase", "upstream", "push_blocked", "staged_review"),
+        *("review_blocked", "last_outcome", "stack"),
         *("summary", "commits"),
         "next",
     ]
@@ -541,6 +586,21 @@ def test_show_places_a_comment_of_a_stack_commit_in_the_working_file(stack_repo:
     assert shown() == ({"start_line": 1, "line": 1, "outdated": True}, (None, "file b.txt\n"))
 
 
+def test_show_places_a_comment_of_the_change_under_review_in_its_working_files(stack_repo: Path) -> None:
+    """Staged for review here, a change's files are the working files: a comment on them is placed there too."""
+    store, keys, rows = _gerrit(stack_repo)
+    for number, row in enumerate(rows, start=100):
+        git("update-ref", changes_ref(number, 1), row.sha, cwd=stack_repo)
+    _post(GerApi(stack_repo, gerrit=store), "/review/open", {"change": 102})
+    worktree = stack_repo.parent / f"{stack_repo.name}-review"
+    [path] = [p for p in git_out("show", "--name-only", "--format=", rows[2].sha, cwd=stack_repo).split() if p]
+    comment = {"id": "c1", "line": 1, "message": "x", "unresolved": True, "patch_set": 1, "commit_id": rows[2].sha}
+    store.set_comments(keys[2], {path: [comment]})
+    (worktree / path).write_text("a line above\n" + (worktree / path).read_text(encoding="utf-8"), encoding="utf-8")
+    [chain] = _get(GerApi(worktree, gerrit=store), "/show", rev="change:102")["commits"][0]["comment_chains"]
+    assert chain["worktree"] == {"start_line": 2, "line": 2, "outdated": False}
+
+
 def test_show_claims_no_place_for_a_comment_on_a_version_that_is_not_here(stack_repo: Path) -> None:
     store, keys, rows = _gerrit(stack_repo, [{}, {"unresolved_comment_count": 1}, {}, {}])
     comment = {"id": "c1", "line": 1, "message": "x", "unresolved": True, "patch_set": 1, "commit_id": "f" * 40}
@@ -821,7 +881,14 @@ def test_review_open_checks_out_in_the_review_worktree_and_done_leaves_it(stack_
     with pytest.raises(BadRequest):
         _post(api, "/review/open", {"step": 2})
     assert _post(api, "/review/open", {"step": -1})["review"]["number"] == 102
-    assert _post(api, "/review/done", {}) == {"done": 102, "deleted": ["change-102", "change-103"], "kept": []}
+    done = _post(api, "/review/done", {})
+    assert {k: done[k] for k in ("done", "deleted", "kept")} == {
+        "done": 102,
+        "deleted": ["change-102", "change-103"],
+        "kept": [],
+    }
+    # Where the review's checkout is now: the review worktree, detached and free for the next review.
+    assert (done["mode"], done["branch"], Path(done["worktree"])) == ("worktree", None, worktree)
 
 
 def test_reorder_rewrites_the_stack_and_keeps_every_change_id(stack_repo: Path) -> None:

@@ -1,6 +1,7 @@
 // Files seen, as the Change view ticks them: Gerrit's per-file *reviewed* flag of the patchset
 // looked at (`/reviewed`, ger serve 1.6), so a tick is there in Gerrit's web UI and after a reload
-// too; a version Gerrit does not have (your local commit) is kept here for the session. A file is
+// too, and is drawn only once Gerrit took it (a refusal is said, never ticked); a version Gerrit
+// does not have (your local commit) is kept here for the session. A file is
 // seen once its diff, opened from the Change view (a click, Next file), was shown to its end, or by
 // a click on its tick.
 //
@@ -10,7 +11,7 @@
 
 import * as vscode from "vscode";
 
-import { GerClient } from "./api";
+import { ApiError, GerApiError, GerClient } from "./api";
 import { SeenWhere } from "./changeRows";
 
 export class FilesSeen implements vscode.Disposable {
@@ -55,11 +56,22 @@ export class FilesSeen implements vscode.Disposable {
     return set;
   }
 
-  /** Tick `path` of `where`, or take the tick off: here at once, on Gerrit behind it. */
-  async mark(where: SeenWhere, path: string, seen = true): Promise<void> {
+  /**
+   * Tick `path` of `where`, or take the tick off. A patchset's tick is Gerrit's flag: it shows once
+   * Gerrit has taken it, and a refusal leaves it as it was and is said (`refused`). A version only
+   * here (your local commit) is ticked at once. Undefined when it was taken, else why not.
+   */
+  async mark(where: SeenWhere, path: string, seen = true): Promise<ApiError | undefined> {
     const set = this.set(where);
     if (set.has(path) === seen) {
-      return;
+      return undefined;
+    }
+    if (where.number && where.patchSet) {
+      const failed = await this.send(() => this.client().then((client) => client.markReviewed(where.number!, where.patchSet!, path, seen)));
+      if (failed) {
+        this.refused(failed);
+        return failed;
+      }
     }
     if (seen) {
       set.add(path);
@@ -67,22 +79,37 @@ export class FilesSeen implements vscode.Disposable {
       set.delete(path);
     }
     this.changed.fire();
-    if (where.number && where.patchSet) {
-      await (await this.client()).markReviewed(where.number, where.patchSet, path, seen).catch(() => undefined);
-    }
+    return undefined;
   }
 
-  /** Tick every one of `paths` of `where` not ticked yet: here at once, on Gerrit in one request behind it. */
-  async markAll(where: SeenWhere, paths: readonly string[]): Promise<void> {
+  /** Tick every one of `paths` of `where` not ticked yet, on Gerrit in one request: as {@link mark}, all or none. */
+  async markAll(where: SeenWhere, paths: readonly string[]): Promise<ApiError | undefined> {
     const set = this.set(where);
     const left = paths.filter((path) => !set.has(path));
     if (!left.length) {
-      return;
+      return undefined;
+    }
+    if (where.number && where.patchSet) {
+      const failed = await this.send(() => this.client().then((client) => client.markAllReviewed(where.number!, where.patchSet!, left)));
+      if (failed) {
+        return failed;
+      }
     }
     left.forEach((path) => set.add(path));
     this.changed.fire();
-    if (where.number && where.patchSet) {
-      await (await this.client()).markAllReviewed(where.number, where.patchSet, left).catch(() => undefined);
+    return undefined;
+  }
+
+  /** Told when a tick Gerrit refused is left off; set by the Change view, which says it. */
+  refused: (why: ApiError) => void = () => undefined;
+
+  /** Run `request`; why it failed (as ger serve served it), or undefined. */
+  private async send(request: () => Promise<unknown>): Promise<ApiError | undefined> {
+    try {
+      await request();
+      return undefined;
+    } catch (error) {
+      return error instanceof GerApiError ? { code: error.code, message: error.message, reason: error.reason } : { code: "INTERNAL", message: error instanceof Error ? error.message : String(error) };
     }
   }
 

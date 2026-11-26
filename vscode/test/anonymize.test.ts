@@ -195,7 +195,7 @@ test("a field that is kept only keeps what it was classified for: a count is not
 });
 
 test("what the scenarios show of ours is kept as it is: icons, tones, states, counts, our own sentences", () => {
-  const ours = /(^|\.)(icon|tone|kind|sync|syncIcon|syncTitle|marker|state|selected|value|disabled|stale|dim|merge|pinned|squash|movable|added|deleted|open|file|reply|held|resolved|resolving|draft|edit|discard|show|message|plain)$|^stack\.frozen$|waiting|head\.(text|detail)$|change\.notes|compare\.mode\.title|files\.(title|summary|note|tooltip)$|comments\.summary$|hint\.text$|loading\.readOnly$|message\.readOnly$|badges\[\]\.text$/;
+  const ours = /(^|\.)(icon|tone|kind|sync|syncIcon|syncTitle|marker|state|selected|value|disabled|stale|dim|merge|pinned|squash|movable|added|deleted|open|file|reply|held|resolved|resolving|draft|edit|discard|show|message|plain)$|^stack\.frozen$|waiting|head\.(text|detail)$|change\.notes(?!\[\]\.raw$)|compare\.mode\.title|files\.(title|summary|note|tooltip)$|comments\.summary$|hint\.text$|loading\.readOnly$|message\.readOnly$|badges\[\]\.text$/;
   let compared = 0;
   for (const scenario of scenarios()) {
     const before = { stack: scenario.stack, change: scenario.change };

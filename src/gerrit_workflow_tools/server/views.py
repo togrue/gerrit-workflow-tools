@@ -26,6 +26,7 @@ from gerrit_workflow_tools.core.gerrit.change_view import parse_gerrit_time
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
 from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
+from gerrit_workflow_tools.core.http_connect import CONNECT_TIMEOUT
 from gerrit_workflow_tools.core.inbox import RebaseHeadline, load_inbox, pick_headline, project_scope
 from gerrit_workflow_tools.core.push_checks import push_blocked
 from gerrit_workflow_tools.core.rebase_abort import abort_loss
@@ -35,6 +36,7 @@ from gerrit_workflow_tools.core.rebasing_stack import stopped_rebase
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import find_review, staged_review
 from gerrit_workflow_tools.core.review_target import drafts_published_by, related_chain_numbers
+from gerrit_workflow_tools.core.rewrite_refusal import review_here_refusal
 from gerrit_workflow_tools.core.stack import merge_commits, pinned_below
 from gerrit_workflow_tools.core.step_outcome import StepOutcome, last_outcome
 from gerrit_workflow_tools.core.upstream import branch_has_upstream
@@ -78,8 +80,9 @@ def error_json(error: BaseException) -> dict[str, str]:
 
 
 def health(ctx: Context, _req: Request) -> dict[str, Any]:
-    """Who is answering, for which repository, whether Gerrit's event stream is followed, and what
-    in this repository's configuration ger warns about (old key names), with the command that fixes it."""
+    """Who is answering, for which repository, how long Gerrit is given to answer (``gerrit_wait``,
+    seconds), whether Gerrit's event stream is followed, and what in this repository's configuration
+    ger warns about (old key names), with the command that fixes it."""
     top = ctx.run.repo.root
     legacy = legacy_keys_notice(ctx.settings.values, ctx.settings.scopes)
     return {
@@ -89,6 +92,7 @@ def health(ctx: Context, _req: Request) -> dict[str, Any]:
         "repo": str(top) if top else None,
         "branch": ctx.run.worktree.branch,
         "host": host_from_web_base(ctx.service.web_base),
+        "gerrit_wait": CONNECT_TIMEOUT,
         "warnings": [{"message": legacy.message, "argv": list(legacy.argv) if legacy.argv else None}] if legacy else [],
         **ctx.activity.json(),
     }
@@ -121,7 +125,8 @@ def rebase_refusal(ctx: Context, req: Request) -> dict[str, Any]:
 def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline | None]:
     """:func:`stack`, and the rebase underway as the headline it makes: ``None`` without one."""
     cwd = ctx.cwd
-    overview = load_stack_overview(ctx.run, fetch_ci_pipelines=req.flag("pipelines"))
+    local_only = req.flag("local")
+    overview = load_stack_overview(ctx.run, fetch_ci_pipelines=req.flag("pipelines"), gerrit=not local_only)
     view, blocked, progress = overview.view, overview.blocked, overview.progress
     context = ctx.run.repo.shown_stack
     head = commit_sha_or_none(cwd, "HEAD")
@@ -153,6 +158,7 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
     # A fixup stopped while folding: the stop is about the commit it folds into.
     folding = next((c for c in view.commits if progress and c.sha == progress.folding_into), None)
     rebase = RebaseHeadline(progress.stop, folding or stopped_at, folding=folding is not None) if progress else None
+    staged = _staged_review_json(ctx)
     answer = {
         "branch": ctx.run.worktree.branch,
         "head": head,
@@ -160,7 +166,8 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
         "rebase": rebase_json(view, progress),
         "upstream": upstream_json(overview.moved),
         "push_blocked": _push_blocked_json(ctx),
-        "staged_review": _staged_review_json(ctx),
+        "staged_review": staged,
+        "review_blocked": None if staged else _review_blocked_json(ctx),
         "last_outcome": _outcome_json(last_outcome(ctx.run.worktree.repository_dir)),
         "stack": {
             "project": context.project,
@@ -177,6 +184,7 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
         "commits": commits,
         "next": next_steps_json(overview),
         **({"gerrit_unavailable": error_json(view.gerrit_unavailable)} if view.gerrit_unavailable else {}),
+        **({"local_only": True} if local_only else {}),
     }
     return answer, rebase
 
@@ -193,6 +201,12 @@ def _staged_review_json(ctx: Context) -> dict[str, object] | None:
     other rewrites refuse over."""
     state = staged_review(ctx.run.worktree.repository_dir, ctx.cwd)
     return review_state_json(state, chain=None, url=None) if state else None
+
+
+def _review_blocked_json(ctx: Context) -> dict[str, object] | None:
+    """Why ``ger review`` would refuse a checkout here now (``reason``, ``message``, ``files``), or ``None``."""
+    blocked = review_here_refusal(ctx.cwd, ctx.settings)
+    return {"reason": blocked.reason, "message": str(blocked), "files": list(blocked.files)} if blocked else None
 
 
 def _push_blocked_json(ctx: Context) -> dict[str, str] | None:
@@ -304,6 +318,8 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
     introduced = introduced_fingerprints([item.ci_verdict_contents for item in shown]) if is_chain else None
     holds = load_holds(ctx.cwd)
     me = ctx.service.self_account_id() if any(item.commit.pushed for item in shown) else None
+    # A change staged for review here: the working files hold it, so its comments are placed there too.
+    staged = staged_review(ctx.run.worktree.repository_dir, ctx.cwd)
     commits = []
     for index, item in enumerate(shown):
         payload = commit_json_payload(
@@ -323,7 +339,7 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
             for entry, comment in zip(chain_payload["comments"], chain.comments, strict=True):
                 entry["text"] = comment_text(comment.message, comment.suggested_edits)
                 entry["markdown"] = comment_text(comment.message, comment.suggested_edits, markdown=True)
-        if item.target.is_local_commit:
+        if item.target.is_local_commit or (staged is not None and staged.number == item.commit.number):
             add_worktree_places(ctx.cwd, served_chains, item.chains)
         payload["updated"] = iso_utc(parse_gerrit_time(item.commit.updated))
         if req.flag("markdown"):
@@ -347,6 +363,8 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
         if introduced is not None:
             found = introduced[index]
             payload["ci_introduced"] = sorted(found) if found is not None else None
+        if item.gerrit_unavailable is not None:
+            payload["gerrit_unavailable"] = error_json(item.gerrit_unavailable)
         commits.append(payload)
     return {"commits": commits}
 

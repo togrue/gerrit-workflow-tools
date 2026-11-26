@@ -33,6 +33,12 @@ export class ServeFailed extends Error {
 export class GerProcess {
   private child: ChildProcess | undefined;
   private starting: Promise<GerClient> | undefined;
+  /**
+   * Called when a service that was serving exits without being asked to (killed, crashed): the
+   * model starts it again at once, so a failed restart is said while the views are watched, not
+   * at the next click. Not called for `stop()`.
+   */
+  onDied: (code: number | null) => void = () => undefined;
 
   constructor(
     private readonly cwd: string,
@@ -113,11 +119,15 @@ export class GerProcess {
       );
       child.on("exit", (code) => {
         this.log(`ger serve exited (${code ?? "killed"})`);
+        const died = this.child === child && settled;
         if (this.child === child) {
           this.child = undefined;
           this.starting = undefined;
         }
         fail(new ServeFailed(err.trim() || `${shown} exited with code ${code}`));
+        if (died) {
+          this.onDied(code);
+        }
       });
     });
   }
@@ -138,6 +148,7 @@ export class GerProcess {
       this.stop();
       throw problem;
     }
+    client.served = health;
     this.onServed(health);
     return client;
   }

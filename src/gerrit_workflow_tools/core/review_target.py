@@ -160,6 +160,24 @@ class VoteMoved(Refusal):
     """The changes moved on since the vote was shown: nothing was sent; look again (``REFUSED``)."""
 
 
+class VoteClosed(Refusal):
+    """Every change to vote on is abandoned or merged: Gerrit takes no vote and no comment there (``REFUSED``)."""
+
+    reason = "closed"
+    """What ``ger serve`` serves beside the message: a client offers the way on instead of the vote."""
+
+
+def _closed_words(targets: Sequence[VoteTarget]) -> str:
+    """Which changes are closed, and what becomes of your drafts on them."""
+    said = "; ".join(f"change {t.number} is {(t.change.status or 'closed').lower()}" for t in targets)
+    drafts = sum(t.draft_count for t in targets)
+    kept = {
+        0: "",
+        1: "; your draft on it stays a draft: publishable once the change is restored, or delete it",
+    }.get(drafts, f"; your {drafts} drafts on it stay drafts: publishable once the change is restored, or delete them")
+    return f"{said}: Gerrit takes no vote and no comment on it{kept}"
+
+
 def moved_since_preview(changes: Sequence[ChangeView], previewed: Mapping[int, int]) -> str | None:
     """Why a vote must be looked at again: the changes are not those *previewed* (number: patchset), or one moved on."""
     shown = sorted(previewed)
@@ -268,13 +286,16 @@ def plan_vote(
     me: int | None = None,
     keep_yours: bool = False,
 ) -> VotePlan:
-    """The plan of a vote with *votes* and *message* on *changes*; :class:`UsageError` when no change takes it.
+    """The plan of a vote with *votes* and *message* on *changes*; :class:`UsageError` when no change takes it,
+    :class:`VoteClosed` when every one is abandoned or merged.
 
     *me* (your account id) tells which changes are yours and your votes on each. With
     *keep_yours* (a chain vote over several changes), a change that carries your vote on a label
     keeps it: the vote goes to the others, never silently over yours.
     """
     targets = tuple(vote_targets(service, changes, votes, me=me))
+    if targets and all(not t.change.is_open for t in targets):
+        raise VoteClosed(_closed_words(targets))
     # A chain of one change is that change, named: a vote there replaces yours.
     plan = VotePlan(targets, dict(votes), message or None, keep_yours=keep_yours and len(targets) > 1)
     if votes and not plan.takes:

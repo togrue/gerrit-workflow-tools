@@ -142,8 +142,13 @@
       },
       {
         "view": "ger.overview",
-        "contents": "Starting `ger serve`…\n[Show Log](command:ger.showLog)",
+        "contents": "Starting ger serve…\n[Show Log](command:ger.showLog)",
         "when": "ger.state == starting"
+      },
+      {
+        "view": "ger.overview",
+        "contents": "Asking Gerrit… If it does not answer within seconds, this view says so. Local stack below shows what git knows meanwhile.\n[Show Log](command:ger.showLog)",
+        "when": "ger.state == asking"
       },
       {
         "view": "ger.overview",

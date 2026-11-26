@@ -1,13 +1,15 @@
 // What every view reads: the last overview, which chains moved since you looked, and the client.
 
+import * as path from "node:path";
 import * as vscode from "vscode";
 
-import { GerApiError, GerClient, Headline, MoveConflict, Overview, ReviewState, Stack, UpstreamChoice, isStack } from "./api";
+import { ApiError, GerApiError, GerClient, Headline, MoveConflict, Overview, ReviewState, Stack, UpstreamChoice, isStack } from "./api";
 import { Seen, blockedSwaps, chainsWithActivity, headlineNews, rememberSeen, swapKey } from "./format";
 import type { RowStatus } from "./changeLoad";
 import { IncompatibleServe } from "./compat";
 import { GerProcess, ServeFailed } from "./server";
 import { GerState, failureState, staleReason } from "./state";
+import { gerritAway } from "./problemRows";
 
 const SEEN_KEY = "ger.seen";
 
@@ -90,7 +92,11 @@ export class Model implements vscode.Disposable {
     private readonly process: GerProcess,
     private readonly memento: vscode.Memento,
     readonly repo: string,
-  ) {}
+  ) {
+    // ger serve died under the views: start it again now (quietly, as any background refresh). A
+    // restart that fails leaves the last answer marked out of date, with the reason and Restart.
+    process.onDied = () => void this.refresh({ background: true });
+  }
 
   client(): Promise<GerClient> {
     if (!vscode.workspace.isTrusted) {
@@ -99,8 +105,47 @@ export class Model implements vscode.Disposable {
     return this.process.client();
   }
 
+  /**
+   * The local stack read from git alone before the first overview came (`GET /stack?local=1`):
+   * Local stack draws it while Gerrit is being asked, which may take as long as Gerrit's timeout.
+   * Dropped once an overview arrives.
+   */
+  early: Stack | undefined;
+  /**
+   * The review open for this checkout (`GET /review`): here, or in the review worktree, whose own
+   * window then holds it. Undefined without one, and while it is not known.
+   */
+  review: ReviewState | undefined;
+
+  /** The review worktree holding a review of change `number` in another window: its path, when it does. */
+  reviewElsewhere(number: number | undefined): string | undefined {
+    const review = this.review;
+    return review && number !== undefined && review.number === number && !this.stack?.staged_review && path.resolve(review.worktree) !== path.resolve(this.repo) ? review.worktree : undefined;
+  }
+
+  /** The chain of the staged review here at its patchset, base first (`/review?chain=1`); undefined without one. */
+  reviewChain: number[] | undefined;
+  /** Subjects of the changes the inbox listed this session: the task header names a change it no longer lists. */
+  readonly subjects = new Map<number, string>();
+  /** When the last overview that Gerrit answered came; undefined before the first. */
+  loadedAt: Date | undefined;
+  /** Seconds Gerrit is given to answer, as the running ger serve said (`/health`'s `gerrit_wait`). */
+  gerritWait: number | undefined;
+
+  /** The local stack as the views draw it: the overview's, else the one git alone gave meanwhile. */
+  get local(): Overview["local"] | undefined {
+    return this.overview?.local ?? this.early;
+  }
+
   get stack(): Stack | undefined {
-    return isStack(this.overview?.local) ? this.overview?.local : undefined;
+    const local = this.local;
+    return isStack(local) ? local : undefined;
+  }
+
+  /** Why Gerrit could not be asked in the last overview (the inbox's error, else the stack's), when it could not. */
+  gerritAway(): ApiError | undefined {
+    const inbox = this.overview?.error;
+    return inbox && gerritAway(inbox) ? inbox : this.stack?.gerrit_unavailable;
   }
 
   /** Reload the overview. */
@@ -181,13 +226,34 @@ export class Model implements vscode.Disposable {
     try {
       const client = await this.client();
       const first = this.overview === undefined;
+      if (first && this.state !== "asking") {
+        // ger serve runs; its first answer asks Gerrit, which may not answer for a while. What git
+        // alone knows is drawn first: one quick request, served before the overview.
+        this.gerritWait = client.served?.gerrit_wait;
+        await this.setState("asking");
+        this.early = await client.stack(true).catch(() => undefined);
+        this.changed.fire();
+      }
       this.overview = await client.overview(fromGerrit);
+      this.early = undefined;
+      for (const member of (this.overview.sections ?? []).flatMap((section) => section.chains.flatMap((chain) => chain.members))) {
+        this.subjects.set(member.number, member.subject);
+      }
       this.failure = undefined;
       this.incompatible = undefined;
       this.setupReason = "";
       this.stale = undefined;
-      // Leave Review Checkout is offered only while there is one to leave.
-      const review = await client.review().catch(() => null);
+      // Leave Review Checkout is offered only while there is one to leave. While one is open, its
+      // chain at the reviewed patchset too (one Gerrit request): the task header keeps the members
+      // the inbox no longer lists.
+      // Gerrit away: the chain cannot be asked, but the review is still git's to say; the chain last
+      // known for the same review stays, so the header does not lose it.
+      const staged = this.stack?.staged_review;
+      const review = await client.review(Boolean(staged)).catch(() => client.review(false)).catch(() => null);
+      const same = review && this.review?.number === review.number && this.review.patch_set === review.patch_set;
+      // `[]` is core's "Gerrit cannot say": not known, so not a chain of none.
+      this.reviewChain = review?.chain?.length ? review.chain : same ? this.reviewChain : undefined;
+      this.review = review ?? undefined;
       void vscode.commands.executeCommand("setContext", "ger.reviewOpen", Boolean(review));
       this.stackContext();
       const headline = this.overview.headline ?? undefined;
@@ -200,6 +266,8 @@ export class Model implements vscode.Disposable {
       const seen = rememberSeen(this.overview, this.memento.get<Seen>(SEEN_KEY, {}));
       this.active = chainsWithActivity(this.overview, seen);
       await this.memento.update(SEEN_KEY, seen);
+      // When the views last heard from Gerrit: said while they cannot follow it live. Not when Gerrit could not be asked.
+      this.loadedAt = this.gerritAway() ? this.loadedAt : new Date();
       await this.setState("ready");
     } catch (error) {
       const state = failureState(error);
@@ -207,6 +275,7 @@ export class Model implements vscode.Disposable {
         // A hiccup, whoever asked: what was shown is still the best there is. Say it is old; the next refresh that works clears it.
         this.stale = staleReason(error);
         // Not known now whether a review checkout is open: no Leave offered on an old answer.
+        this.review = undefined;
         await vscode.commands.executeCommand("setContext", "ger.reviewOpen", false);
       } else {
         // What was shown may be wrong now: the views say what went wrong and what to do instead.
@@ -216,6 +285,7 @@ export class Model implements vscode.Disposable {
         await vscode.commands.executeCommand("setContext", "ger.setupReason", this.setupReason);
         this.stale = undefined;
         this.overview = undefined;
+        this.early = undefined;
         await this.setState(state);
       }
     }

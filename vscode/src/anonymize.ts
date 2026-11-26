@@ -15,13 +15,14 @@
 import { randomInt } from "node:crypto";
 
 import { commentPhrases } from "./commentState";
-import { DISCARD, LOADING, NOTHING_FROM_GERRIT, NOTHING_SHOWN, NOT_FILES, NO_CI_LINK, READ_ONLY, REVIEW_UPDATE, STOPPED_WORDS, YOURS } from "./changeRows";
+import { DISCARD, LOADING, NOTHING_FROM_GERRIT, NOTHING_SHOWN, NOT_FILES, NO_CI_LINK, READ_ONLY, REVIEW_UPDATE, STOPPED_WORDS, UNKNOWN_WORDS, YOURS } from "./changeRows";
 import { MODES, MODE_ICONS, SIDE_WORDS } from "./compareRows";
 import { Names, Random } from "./fakes";
 import { ATTENTION_ICONS, FILE_STATES, REASON_WORDS } from "./format";
 import { SECTION_TITLES, TREE_WORDS, allRowContexts } from "./rows";
-import { MARKER_WORDS, MERGE_WORDS, REBASE_ACTIONS, REBASE_WORDS, REVIEW_FROZEN, SYNC_ICONS, SYNC_WORDS } from "./stackRows";
+import { MARKER_WORDS, MERGE_WORDS, REBASE_ACTIONS, REBASE_WORDS, REVIEW_FROZEN, STACK_GERRIT_WORDS, SYNC_ICONS, SYNC_WORDS } from "./stackRows";
 import { PROBLEM_ACTIONS, PROBLEM_WORDS } from "./problemRows";
+import { NOT_KNOWN, NOT_LISTED } from "./taskRows";
 
 type Json = Record<string, unknown>;
 const isObject = (value: unknown): value is Json => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -125,7 +126,7 @@ function around(pattern: RegExp, rebuild: (names: Names, ...theirs: string[]) =>
 export const ICONS = [
   ...Object.values(SYNC_ICONS),
   ...ATTENTION_ICONS,
-  ...["beaker", "check", "circle-large-outline", "circle-slash", "comment", "debug-continue", "debug-stackframe", "edit", "error", "eye", "flame", "git-branch", "history", "list-selection", "loading", "note", "person", "person-add", "target", "thumbsdown", "thumbsup"],
+  ...["beaker", "check", "circle-large-outline", "circle-slash", "comment", "debug-continue", "debug-stackframe", "edit", "error", "eye", "flame", "git-branch", "history", "list-selection", "loading", "note", "multiple-windows", "person", "person-add", "question", "sync", "target", "thumbsdown", "thumbsup", "warning"],
   ...Object.values(MODE_ICONS),
 ];
 const ICON = ours(ICONS);
@@ -144,7 +145,7 @@ const reasons = (text: string) => text.split(", ").every((word) => REASON_WORDS.
 
 /** What a view says in place of its content (state.ts, waitingFor). */
 const WAITING: Shape = {
-  text: ours(["Starting ger serve…", /(Your local stack|A change) shows here once ger runs\. Review chains says what is missing and what to do next\./]),
+  text: ours(["Starting ger serve…", "Asking Gerrit…", /^Asking Gerrit… If it does not answer within \d{1,3} seconds, the views say so\.$/, /(Your local stack|A change) shows here once ger runs\. Review chains says what is missing and what to do next\./]),
   link: { label: ours(["Show Review Chains"]), command: ours(["ger.overview.focus"]) },
 };
 
@@ -190,7 +191,7 @@ const BADGE: Shape = {
 const ROW_KEY = string((text, names, row) => (text === row.changeId ? names.changeId(text) : names.key(text)));
 
 /** A banner's words, or a line about the upstream ("<branch> has no upstream…", "Track <branch>", an error of git's: filler). */
-const INFO_TEXT = ours([PROBLEM_WORDS.stack, REBASE_WORDS.conflict, REBASE_WORDS.resolved, REBASE_WORDS.split, REBASE_WORDS.progress, "No local commits", "Choose another upstream branch…", "Choose an upstream branch…"]);
+const INFO_TEXT = ours([PROBLEM_WORDS.stack, STACK_GERRIT_WORDS.asking, STACK_GERRIT_WORDS.unknown, REBASE_WORDS.conflict, REBASE_WORDS.resolved, REBASE_WORDS.split, REBASE_WORDS.progress, "No local commits", "Choose another upstream branch…", "Choose an upstream branch…"]);
 
 /** A rebase's buttons: Continue, Abort, Skip; and the ways on from an error state (problemRows.ts). */
 const ACTIONS: Shape = [
@@ -231,7 +232,9 @@ const TASK: Shape = {
       new RegExp(`${COUNT} of ${COUNT} to vote on`),
       new RegExp(`you voted on ${COUNT} of ${COUNT}`),
       new RegExp(`${COUNT} not ready for review`),
-      new RegExp(`${COUNT} comments? to (read|answer)`),
+      new RegExp(`${COUNT} comments? to answer`),
+      new RegExp(`${COUNT} ${NOT_LISTED}`),
+      `what is left is ${NOT_KNOWN}`,
       new RegExp(`CI failed on ${COUNT} commits?`),
       new RegExp(`${COUNT} commits? needs? edits`),
       "its chain is not in your inbox",
@@ -250,7 +253,7 @@ const TASK: Shape = {
       marks: [
         {
           icon: ICON,
-          text: ours(["reviewing", "to review", "CI failed", "your drafts", "waits on a reply", "replayed", "stopped here", "to come", "needs edits", new RegExp(`you voted [+-]${COUNT}`), new RegExp(`${COUNT} to answer`)], around(/not ready: (.+)/, (names, why) => `not ready: ${names.text(why)}`)),
+          text: ours([NOT_LISTED, NOT_KNOWN, "reviewing", "to review", "CI failed", "your drafts", "waits on a reply", "replayed", "stopped here", "to come", "needs edits", new RegExp(`you voted [+-]${COUNT}`), new RegExp(`${COUNT} to answer`)], around(/not ready: (.+)/, (names, why) => `not ready: ${names.text(why)}`)),
           tone: TONE,
           ring: { share: KEEP, shape: ours(["solid", "dashed", "thin", "tick"]) },
         },
@@ -390,14 +393,30 @@ const CHANGE: Shape = {
     {
       icon: ICON,
       tone: TONE,
-      text: ours(["This commit is ahead of Gerrit", "Gerrit has a newer patchset than this commit", "Gerrit has a newer patchset than the one checked out"]),
-      detail: ours([...Object.values(SYNC_WORDS), "comments and CI below are about Gerrit's version"]),
+      text: ours(
+        [
+          ...["This commit is ahead of Gerrit", "Gerrit has a newer patchset than this commit", "Gerrit has a newer patchset than the one checked out"],
+          ...["This change is abandoned: Gerrit takes no vote and no comment on it", "This change is merged: Gerrit takes no vote and no comment on it", UNKNOWN_WORDS.note, "Under review in its own window", "Uncommitted changes here"],
+        ],
+      ),
+      raw: TEXT,
+      detail: ours(
+        [
+          ...Object.values(SYNC_WORDS),
+          "comments and CI below are about Gerrit's version",
+          "a review in this checkout needs them committed or stashed; Review Change offers the review worktree instead",
+          "your draft stays a draft: publishable once the change is restored, or delete it",
+          new RegExp(`your ${COUNT} drafts stay drafts: publishable once the change is restored, or delete them`),
+          "the review goes on there: Go to Review Window",
+          "",
+        ],
+      ),
       /** Update to patchset N, in a staged review behind Gerrit. */
       actions: [
         {
-          label: ours([new RegExp(`Update to patchset ${PATCHSET}`), "Update to the newest patchset"]),
-          title: ours([REVIEW_UPDATE.title]),
-          command: { id: ours([REVIEW_UPDATE.command]), args: [TEXT] },
+          label: ours([new RegExp(`Update to patchset ${PATCHSET}`), "Update to the newest patchset", ...Object.values(PROBLEM_ACTIONS).map((action) => action.label)]),
+          title: ours([REVIEW_UPDATE.title, ...Object.values(PROBLEM_ACTIONS).map((action) => action.title)]),
+          command: { id: ours([REVIEW_UPDATE.command, ...Object.values(PROBLEM_ACTIONS).map((action) => action.command.id)]), args: [TEXT] },
           primary: KEEP,
         },
       ],
@@ -473,7 +492,8 @@ const CHANGE: Shape = {
       ours([
         LOADING,
         "none",
-        new RegExp(`${COUNT} to (answer|read)`),
+        UNKNOWN_WORDS.comments,
+        new RegExp(`${COUNT} to answer(, ${COUNT} gone to)?`),
         new RegExp(`${COUNT} answered by your drafts \\((push publishes them|Vote and Publish sends them)\\)`),
         new RegExp(`${COUNT} waiting on a reply`),
         new RegExp(`all ${COUNT} resolved`),

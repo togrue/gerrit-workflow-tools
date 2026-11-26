@@ -58,7 +58,7 @@ test("reviewing, the header says whose chain, which change of how many, what is 
   assert.equal(taskMode(stack([], { staged_review: review })), "review");
   assert.deepEqual(taskLines(vm), [
     "Reviewing Alice's chain: change 103 — change 2 of 3  [All chains]",
-    "Left: 1 of 3 to vote on · 1 not ready for review · 3 comments to read",
+    "Left: 1 of 3 to vote on · 1 not ready for review · 3 comments to answer",
     "  1. change 101 — you voted +1 · waits on a reply",
     "▸ 2. change 102 — reviewing · to review · 3 to answer · CI failed",
     "  3. change 103 — not ready: WIP",
@@ -81,6 +81,33 @@ test("reviewing, the header says whose chain, which change of how many, what is 
 test("a review whose chain is not in the inbox still says the mode, with the change alone", () => {
   const vm = taskVm(overview([member(500)]), stack([], { staged_review: review }), { all: false, busy: "Checking out 102…" })!;
   assert.deepEqual(taskLines(vm).slice(0, 4), ["Reviewing 102: parser — change 1 of 1  [All chains]", "Left: its chain is not in your inbox", "… Checking out 102…", "▸ 1. parser — reviewing"]);
+});
+
+test("a change of the chain the inbox no longer lists stays in the header, marked so, and the count stays (W7)", () => {
+  // 102 got a new patchset: its Verified vote went, and with it its place in the to-review query.
+  const vm = taskVm(overview([member(103, { your_turn: true })]), stack([], { staged_review: review }), { all: false, chain: [102, 103] })!;
+  assert.equal(vm.position, "change 1 of 2");
+  assert.deepEqual(taskLines(vm).slice(1, 4), ["Left: 2 of 2 to vote on · 1 not in your inbox now", "▸ 1. parser — reviewing · not in your inbox now", "  2. change 103 — to review"]);
+});
+
+test("a change of the chain the inbox lists apart (on an older base) is shown as the inbox has it, not as missing", () => {
+  const apart: Overview = { host: "g", sections: [{ name: "to-review", query: "", summary: {}, chains: [chainOf([member(102, { your_turn: true })]), chainOf([member(103, { your_turn: true })])] } as Section], local: stack([]) };
+  const vm = taskVm(apart, stack([], { staged_review: review }), { all: false, chain: [102, 103] })!;
+  assert.deepEqual(taskLines(vm).slice(1, 4), ["Left: 2 of 2 to vote on", "▸ 1. change 102 — reviewing · to review", "  2. change 103 — to review"]);
+});
+
+test("the change under review stays in the header when core's chain (open changes only) leaves it out: abandoned meanwhile", () => {
+  const vm = taskVm(overview([member(103, { your_turn: true })]), stack([], { staged_review: review }), { all: false, chain: [103, 104] })!;
+  assert.equal(vm.position, "change 1 of 3");
+  assert.equal(taskLines(vm)[2], "▸ 1. parser — reviewing · not in your inbox now");
+});
+
+test("while Gerrit refuses, the header keeps the chain it knew and says what is left is unknown, never 'not in your inbox' (W2)", () => {
+  const away: Overview = { host: "g", error: { code: "GERRIT", message: "rejected", reason: "credentials" }, local: stack([]) };
+  const vm = taskVm(away, stack([], { staged_review: review }), { all: false, chain: [101, 102, 103], inboxUnknown: true, subjects: new Map([[101, "lexer"]]) })!;
+  assert.equal(vm.position, "change 2 of 3");
+  // Said once, in what is left; each change keeps the name the inbox last gave it.
+  assert.deepEqual(taskLines(vm).slice(1, 4), ["Left: what is left is unknown: Gerrit could not be asked", "  1. lexer — ", "▸ 2. parser — reviewing"]);
 });
 
 test("reworking, the header says which change of how many, what is left over the chain, and Continue and Abort with what each does", () => {
@@ -163,11 +190,11 @@ test("the header and the Change view say one number of comments for the change s
     chain("done", [comment("Ok")], { resolved: true }),
   ];
   const view = changeVm(fixtureState({ local: false, shown: shown({ own: false }), chains }));
-  assert.equal(view.comments?.summary, "1 to read · 1 answered by your drafts (Vote and Publish sends them) · 1 waiting on a reply");
+  assert.equal(view.comments?.summary, "1 to answer · 1 answered by your drafts (Vote and Publish sends them) · 1 waiting on a reply");
   const counts = chainCounts(chains);
   const header = taskVm(overview(members), stack([], { staged_review: review }), { all: false, shown: { key: "102", counts } })!;
-  assert.equal(taskLines(header)[1], "Left: 1 of 2 to vote on · 1 comment to read");
+  assert.equal(taskLines(header)[1], "Left: 1 of 2 to vote on · 1 comment to answer");
   assert.match(taskLines(header)[3], /1 to answer/);
   // Without the view's count (it is loading), the served one.
-  assert.match(taskLines(taskVm(overview(members), stack([], { staged_review: review }), { all: false })!)[1], /3 comments to read/);
+  assert.match(taskLines(taskVm(overview(members), stack([], { staged_review: review }), { all: false })!)[1], /3 comments to answer/);
 });

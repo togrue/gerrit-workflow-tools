@@ -283,6 +283,24 @@ def test_vote_refuses_when_gerrit_has_a_newer_patchset(
     assert store.calls_to("publish_drafts") == []
 
 
+def test_vote_on_an_abandoned_change_is_refused_in_words_and_names_the_stranded_draft(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gerrit answers 409 "change is closed"; ger says abandoned before asking, and what becomes of the draft."""
+    store, keys, _shas = gerrit
+    _review(stack_repo, store, ["102"], monkeypatch)
+    worktree = _worktree(stack_repo)
+    run_cli(worktree, comment_main, ["c.txt:1", "-m", "nit"], monkeypatch, gerrit=store)
+    store._row_or_raise(keys[2])["status"] = "ABANDONED"
+    code, _, err = _review(worktree, store, ["--vote", "CR+1", "-y"], monkeypatch)
+    assert code == ExitCode.REFUSED
+    assert (
+        "change 102 is abandoned: Gerrit takes no vote and no comment on it; your draft on it stays a draft: "
+        "publishable once the change is restored, or delete it"
+    ) in err
+    assert store.calls_to("publish_drafts") == []
+
+
 @pytest.mark.parametrize(
     "argv",
     [[], ["102", "--next"], ["--vote", "CR+1", "--next"], ["--patchset", "2"], ["-y"], ["--vote", "CR"]],

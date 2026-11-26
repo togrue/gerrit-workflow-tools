@@ -211,7 +211,8 @@ All under `/api/v1`.
 ### `GET /health`
 
 `name`, `version` (ger's package version), `api` (the [API version](#api-version)), `repo`,
-`branch`, `host`; `activity` (the activity sequence) and `events`: the event stream's `state`,
+`branch`, `host`, `gerrit_wait` (the seconds Gerrit is given to answer a connection, after which
+it is said not to answer); `activity` (the activity sequence) and `events`: the event stream's `state`,
 `reason` and `source` (`ssh://user@host:port`, or `null`). `warnings`: what ger warns about in
 this repository's configuration, each with `message` (the line every command logs once: old
 key names it still answers from, [config](config.md)) and `argv`, the ger command that fixes it
@@ -273,7 +274,11 @@ local commit changes; only on the branch checked out, where the push does that) 
 `needs_edit` (edit attention). `summary` counts `commits`, `ready`, `attention`, `needs_edit`
 and `not_on_gerrit`. `pipelines=1` adds `ci_pipelines`. When Gerrit could not be asked at all,
 the commits still come back with `patchset_status: "unknown"`, and `gerrit_unavailable` is the
-`{code, message}` saying why. `next` is `ger log --json`'s: the stack's next steps, as
+`{code, message}` saying why: its `reason` is `credentials` (HTTP 401), `unreachable` or
+`no-answer` (connecting waits at most 10 s, each read 60 s; the message says how long it waited),
+and the rest of that request does not ask Gerrit again. `local=1` does not ask Gerrit at all and
+answers with `local_only: true`: what git alone knows, every Gerrit state `unknown`, for a client
+to draw at once while the full answer is on its way. `next` is `ger log --json`'s: the stack's next steps, as
 [log.md](log.md#json-fields) describes them.
 
 For a view that draws the stack, each commit also says:
@@ -396,6 +401,14 @@ step), `at` (seconds since the epoch) and `head` (`HEAD` then). A client that ra
 terminal takes a newer `at` as the step's end and shows `text`; once `HEAD` is not `head` any
 more, the outcome is history. It is written to the file ger-outcome.json in the worktree's git dir.
 
+`review_blocked` is why `ger review` would refuse to check a change out for review here now, or
+`null`: only where the review goes into this checkout (`ger.reviewCheckout` = `branch`) and no
+review is staged here, when tracked files have uncommitted changes. `reason` is
+`uncommitted-changes`, `message` the refusal `ger review` prints, `files` the changed files. A
+`POST /review/open` that meets them refuses with the same `reason`; a client offers the review
+worktree instead (`mode: worktree`), which uncommitted changes here do not stand in the way of.
+Costs two `git diff` calls, and only in that configuration.
+
 `staged_review` is the **staged review** in this checkout, or `null`: the **review state** as
 [`GET /review`](#get-review) has it (`chain` and `url` `null`), while HEAD still sits at the
 change's parent and its `change-<number>` branch on the change. The stack is then somebody
@@ -468,13 +481,17 @@ local commit with its Change-Id pushes to is that change, `local_commit: false`,
 other code, keeps that patchset's `ci_content`, marked with its `patch_set` and its findings' lines
 mapped onto the local commit ([while you fix it](../ci-content.md#while-you-fix-it)).
 
+When Gerrit could not be asked at all, a commit carries `gerrit_unavailable` (`{code, message,
+reason}`, as in [`GET /stack`](#get-stack)): its Gerrit state, votes and comments are then not
+known, and `comment_chains` holds only what is local. A client says them as unknown, never as none.
+
 Each comment also carries its whole text with the Gerrit fix suggestions written out below it
 (`render/suggested_fixes.py`), so a viewer shows them without rendering them itself: `text`
 plain, as `ger show` prints them without its box and colours, and `markdown` with each
 replacement fenced. A ```` ```suggestion ```` block is in the message already and is not repeated.
 
-For a commit of the local stack (`local_commit: true`), an editor draws the threads in the working
-files, which may hold another version of a commented file than the patchset the comment was written
+For a commit of the local stack (`local_commit: true`), and for the change a **staged review** holds
+here, an editor draws the threads in the working files, which may hold another version of a commented file than the patchset the comment was written
 on (a comment on an earlier commit, seen at the tip; a commit changed since its push). So each open
 Gerrit chain there also carries `worktree`: where its lines are in the working file, mapped from the
 version the comment was written on (Gerrit's `commit_id`) as local comments are re-anchored
@@ -637,7 +654,7 @@ a vote no change takes is `USAGE`, as on the command line.
 | Endpoint | Body | Does |
 |----------|------|------|
 | `/review/open` | `change`, optional `patchset`, `mode`, `stage`, `force`; or `step` instead of `change` | `ger review CHANGEISH`: the **review checkout**. `step` (`1` or `-1`) is `ger review --next` / `--prev`: the change above or below in the review chain of the review going on, at its current patchset, in that review's mode; at the end of the chain it is `NOT_FOUND`, with `ger review`'s words. Answers `review` (with `chain`) and `moved_from`. |
-| `/review/done` | — | `ger review --done`. |
+| `/review/done` | — | `ger review --done`: `done` (the change), the `change-<n>` branches `deleted` and `kept`, and where the review's checkout is now: `mode`, `worktree`, `branch` (`null` when detached). |
 | `/reviewed` | `change`, `patchset` (numbers), `path`, optional `reviewed` | Mark `path` of that patchset reviewed on Gerrit (`reviewed` `true`, the default), or clear the mark (`false`): Gerrit's per-file flag, which its own web UI shows as a tick. One request; answers `change`, `patch_set`, `path`, `reviewed`. |
 | `/vote` | `change`, `patch_sets`, optional `chain`, `votes`, `message` | `ger review --vote`: publish your drafts on the change (with `chain`, on every open change of its chain), with `votes` (`{label: value}`; `{}` or none: the drafts go out without a vote, as `ger reply --publish CHANGEISH`) and `message` on each. With `chain`, a change that carries your vote on a label keeps it: the vote goes to the others, and your drafts and the message still go there. `patch_sets` (`{change number: patchset}`) is what `GET /vote` showed: when the changes or a patchset are not that any more, nothing is sent and it is `REFUSED`. A change that rules a vote out is skipped; when none takes it, or there is nothing to send (no draft, no vote, no message), or `GER_NO_PUBLISH` is set, it is `USAGE`. Answers as `ger review --vote --json` for several changes: `changes` (each `change`, `number`, `drafts`, `labels` (the votes that went there), `keeps` (your votes it kept), `message`, `status`) and `skipped` (`change`, `number`, `ruled_out`). |
 | `/comments/reply` | `rev`, `comment_id`, `message`, optional `resolved` | `ger reply`: a **draft** reply in that chain. Publishing stays with `ger push` and `ger review --vote`. |

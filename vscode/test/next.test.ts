@@ -7,7 +7,7 @@ import { Chain, Member, Overview, Rebase, ReviewState, Section } from "../src/ap
 import { commentEntries } from "../src/commentEntries";
 import { NextState, nextAction } from "../src/nextAction";
 import { focusedMember, reviewFocus } from "../src/reviewFocus";
-import { changeVm, seenWhere } from "../src/changeRows";
+import { changeVm, placeWords, seenWhere } from "../src/changeRows";
 import { chain, comment, commit, diff, shown, stack, state as fixtureState } from "./fixtures";
 
 const file = (path: string) => ({ path, status: "M", old_path: null, insertions: 1, deletions: 0 });
@@ -166,4 +166,61 @@ test("files seen: the ticks are Gerrit's reviewed flag of the patchset looked at
   assert.equal(changeVm(fixtureState({ base: two, shown: shown({ own: true }) })).files?.summary, "2 files");
   // Next file goes to the first not seen, and is no longer next once all are.
   assert.equal(nextAction(reviewing({ files: ["a.py", "b.py"], seenFiles: new Set(["b.py"]) }))?.title, "1 of 2 files not seen yet (Alt+Enter)");
+});
+
+test("while Gerrit refuses the credentials, Next names the fix, never the vote (N3)", () => {
+  const refused = { code: "GERRIT", message: "Gerrit at g rejected the credentials (HTTP 401)", reason: "credentials" };
+  const next = nextAction(reviewing({ shown: shown({ own: false, gerrit_unavailable: refused }), files: [], yourTurn: true }));
+  assert.equal(next?.kind, "gerrit");
+  assert.equal(next?.label, "Check credentials");
+  const away = nextAction(reviewing({ shown: shown({ own: false, gerrit_unavailable: { ...refused, reason: "no-answer" } }) }));
+  assert.equal(away?.label, "Ask Gerrit again");
+});
+
+test("on an abandoned or merged change under review Next goes on, never to the vote (N5)", () => {
+  const abandoned = shown({ own: false, change_status: "ABANDONED" });
+  assert.deepEqual(nextAction(reviewing({ shown: abandoned, files: [], yourTurn: true, above: false }))?.label, "Leave review");
+  assert.deepEqual(nextAction(reviewing({ shown: abandoned, files: [], yourTurn: true, above: true }))?.label, "Next change");
+  assert.match(nextAction(reviewing({ shown: { ...abandoned, change_status: "MERGED" }, files: [] }))?.title ?? "", /merged: nothing can be voted on/);
+});
+
+test("the Change view says unknown, with why, where Gerrit could not be asked: never 'not on Gerrit' or 'none' (W2, W4)", () => {
+  const away = { code: "GERRIT", message: "Gerrit unreachable at g:8099 (connection refused)", reason: "unreachable" };
+  const vm = changeVm(fixtureState({ shown: shown({ pushed: false, patchset_status: "unknown", attention_reasons: ["gerrit-unknown"], gerrit_unavailable: away }) }));
+  assert.equal(vm.head?.detail, "");
+  assert.equal(vm.comments?.summary, "unknown: Gerrit could not be asked");
+  const note = vm.notes?.find((n) => n.raw === away.message);
+  assert.ok(note, "the reason is said once, under the head");
+  assert.deepEqual(note?.actions?.map((a) => [a.label, a.primary ?? false]), [["Retry", false], ["Check the Gerrit Address (ger setup)…", false], ["Show Log", false]]);
+});
+
+test("an abandoned change says so, and what becomes of the draft stranded on it (N5)", () => {
+  const draft = chain("d", [comment("my draft", { state: "draft", comment_id: "d1", author: "you" })]);
+  const vm = changeVm(fixtureState({ shown: shown({ own: false, change_status: "ABANDONED" }), chains: [draft] }));
+  const note = vm.notes?.find((n) => n.text.startsWith("This change is abandoned"));
+  assert.equal(note?.detail, "your draft stays a draft: publishable once the change is restored, or delete it");
+});
+
+test("a change under review in its own window offers to go there, not to review it again (W8, N6)", () => {
+  const next = nextAction({ ...reviewing(), reviewing: false, local: false, shown: shown({ own: false, pushed: true, number: 2137 }), reviewElsewhere: "/w/repo-review" });
+  assert.deepEqual([next?.kind, next?.label], ["reviewWindow", "Go to Review Window"]);
+  assert.match(next?.title ?? "", /open in \/w\/repo-review, in its own window/);
+});
+
+test("a comment written on an earlier patchset says so, and where it is placed (W10)", () => {
+  const old = chain("o", [comment("Who still uses LEGACY_FACTOR?", { patch_set: 1 })], { line: 5 });
+  assert.equal(placeWords(old, false, 2), " · written on patchset 1, line 5: outdated, that line may be gone or moved");
+  assert.equal(placeWords({ ...old, worktree: { start_line: 7, line: 7, outdated: false } }, false, 2), " · written on patchset 1, line 5, placed where those lines are now");
+  assert.equal(placeWords(old, false, 1), "");
+  const vm = changeVm(fixtureState({ chains: [old], patchset: 2 }));
+  assert.ok(vm.comments?.threads[0].notes.includes("a.py:5 (patchset 1)"));
+});
+
+test("the Comments count and Next say one count with one word, and it moves as comments are gone to (W12, S2)", () => {
+  const open = [1, 2, 3].map((n) => chain(`c${n}`, [comment(`open ${n}`)]));
+  const theirs = shown({ own: false, comments_unresolved: 3 });
+  assert.equal(changeVm(fixtureState({ shown: theirs, chains: open })).comments?.summary, "3 to answer");
+  assert.equal(changeVm(fixtureState({ shown: theirs, chains: open, visited: new Set(["c1"]) })).comments?.summary, "3 to answer, 1 gone to");
+  const next = nextAction(reviewing({ shown: theirs, chains: open, visited: new Set(["c1"]) }));
+  assert.equal(next?.title, "2 of 3 to answer not gone to yet (Alt+Enter)");
 });

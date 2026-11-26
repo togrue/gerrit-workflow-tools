@@ -16,12 +16,12 @@ from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_log import main as log_main
 from gerrit_workflow_tools.cli_push import main as push_main
 from gerrit_workflow_tools.cli_show import main as show_main
-from gerrit_workflow_tools.core.annotated_stack import resolve_rev_range
 from gerrit_workflow_tools.core.attention import determine_attention
 from gerrit_workflow_tools.core.config import ConfigError
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import git, git_out
 from gerrit_workflow_tools.core.ready_calc import compute_ready
+from gerrit_workflow_tools.core.rev_range import resolve_rev_range
 from gerrit_workflow_tools.core.reviewer import ReviewerAccount
 from gerrit_workflow_tools.core.stack import commits_in_range
 from gerrit_workflow_tools.render.style import (

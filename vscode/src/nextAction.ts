@@ -8,7 +8,7 @@ import { draftsIn, toAnswer } from "./changeRows";
 import { WALK_WORDS, workOnNext } from "./stackRows";
 
 /** What Next does; extension.ts maps each to its command. */
-export type NextKind = "comment" | "file" | "seen" | "vote" | "nextChange" | "leave" | "update" | "conflict" | "continue" | "workOnNext" | "push" | "review";
+export type NextKind = "comment" | "file" | "seen" | "vote" | "nextChange" | "leave" | "update" | "conflict" | "continue" | "workOnNext" | "push" | "review" | "gerrit" | "reviewWindow";
 
 export interface NextAction {
   kind: NextKind;
@@ -40,6 +40,8 @@ export interface NextState {
   above?: boolean;
   /** Gerrit's current patchset of the change shown, once the patchsets are known. */
   newest?: number | null;
+  /** The change shown is under review in the review worktree's own window: its path. */
+  reviewElsewhere?: string;
 }
 
 const KEY = "Alt+Enter";
@@ -54,19 +56,29 @@ export function pushable(stack: Stack): boolean {
 }
 
 /**
- * Reviewing: the comments yours to read you have not looked at (not those waiting on the author's
+ * Reviewing: the comments yours to answer you have not gone to (not those waiting on the author's
  * reply to you, nor those your draft answers), the files not seen (all at once while the combined
  * diff is in front, where they are read), then the vote (while it is your
  * turn, or drafts of yours wait), then the next change of the chain, at its top leaving the review.
  */
 function reviewNext(state: NextState): NextAction {
+  const closed = state.shown?.change_status;
+  if (closed === "ABANDONED" || closed === "MERGED") {
+    // Nothing can be voted on or published on a closed change: on to the next one, or out.
+    const word = closed === "ABANDONED" ? "abandoned" : "merged";
+    return state.above === false || state.above === undefined
+      ? action("leave", "Leave review", `the change is ${word}: nothing can be voted on or published on it`)
+      : action("nextChange", "Next change", `the change is ${word}: nothing can be voted on or published on it`);
+  }
   if (state.shown?.patchset_status === "outdated") {
     // The author pushed since the checkout: what is read and voted on here is not what Gerrit has.
     return action("update", state.newest ? `Update to patchset ${state.newest}` : "Update to the newest patchset", "Gerrit has a newer patchset than the one checked out: check it out for review in its place");
   }
-  const unread = state.chains.filter((chain) => toAnswer(chain) && !state.visited.has(chain.root_id)).length;
+  const left = state.chains.filter(toAnswer);
+  const unread = left.filter((chain) => !state.visited.has(chain.root_id)).length;
   if (unread) {
-    return action("comment", "Next comment", `${unread} open comment${unread === 1 ? "" : "s"} not looked at yet`);
+    // The Comments section's count, and how many of them are left to go to: one count, one word.
+    return action("comment", "Next comment", `${unread} of ${left.length} to answer not gone to yet`);
   }
   const unseen = state.files.filter((file) => !state.seenFiles.has(file)).length;
   if (unseen && state.combinedActive) {
@@ -127,12 +139,24 @@ export function nextAction(state: NextState): NextAction | undefined {
   if (!shown || !stack) {
     return undefined;
   }
+  const away = shown.gerrit_unavailable;
+  if (away && (state.reviewing || !state.local)) {
+    // What Gerrit says of the change is unknown: no vote, no comment walk on an empty list. The fix first.
+    const credentials = away.reason === "credentials";
+    return action("gerrit", credentials ? "Check credentials" : "Ask Gerrit again", `${credentials ? "Gerrit refuses your credentials" : "Gerrit cannot be asked"}: what it says of this change is unknown`);
+  }
   if (state.reviewing) {
     return reviewNext(state);
   }
   if (state.local && shown.own !== false && !stack.staged_review) {
     return reworkNext(state, stack);
   }
-  // Somebody's change you are only looking at: reviewing it is next.
-  return !state.local && shown.own === false && shown.pushed ? action("review", "Review change", "check it out for review, staged, with all its files") : undefined;
+  if (state.reviewElsewhere) {
+    // Checked out for review in its own window already: that is where the review goes on.
+    return action("reviewWindow", "Go to Review Window", `the review of ${shown.number} is open in ${state.reviewElsewhere}, in its own window`);
+  }
+  // Somebody's change you are only looking at: reviewing it is next. Said before the press when your edits are in the way here.
+  const blocked = stack.review_blocked?.files;
+  const why = blocked?.length ? `check it out for review: ${blocked.join(", ")} ${blocked.length === 1 ? "has" : "have"} uncommitted changes here, so it offers the review worktree instead` : "check it out for review, staged, with all its files";
+  return !state.local && shown.own === false && shown.pushed ? action("review", "Review change", why) : undefined;
 }

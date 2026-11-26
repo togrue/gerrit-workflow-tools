@@ -8,13 +8,14 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { Comment, CommentChain, NewCommentState, ShownCommit } from "./api";
-import { NOT_FILES, answeredByDraft, ownComment, replyName } from "./changeRows";
+import { NOT_FILES, answeredByDraft, ownComment, placeWords, replyName } from "./changeRows";
 import { ChangeView } from "./changeView";
 import { FILE_SCHEME, filePath, repoPath } from "./diffTabs";
 import { commentLocation } from "./format";
 import { Model, describeError } from "./model";
 import { APPLY_WORDS, Place, applyPlan, latestSuggestion, suggestionMarkdown } from "./suggestions";
-import { ui } from "./ui";
+import { offerWaysOn, ui } from "./ui";
+import { failureWays } from "./problemRows";
 
 const FILE_PROMPT: Record<NewCommentState, string> = {
   draft: "About the whole file. Saved as a draft on Gerrit, visible only to you until it is published.",
@@ -108,12 +109,12 @@ export async function closeComment(): Promise<void> {
  * Set a thread's Resolved toggle (in its header) and its label to match: `resolved` or
  * `unresolved`, whether the reply saved next resolves the chain.
  */
-function mark(thread: vscode.CommentThread, chain: CommentChain, resolved: boolean, outdated = false): void {
+function mark(thread: vscode.CommentThread, chain: CommentChain, resolved: boolean, outdated = false, shownPatchset?: number): void {
   thread.contextValue = resolved ? "resolved" : "unresolved";
   const label = !resolved ? "Gerrit — unresolved" : chain.resolved_after_publish ? "Gerrit — your draft resolves this" : "Gerrit — your reply will resolve this";
-  // Its lines changed in your file since the version it was written on: drawn where they were.
-  thread.label = outdated ? `${label} · outdated: line ${chain.line} has changed since` : label;
+  thread.label = `${label}${placeWords(chain, outdated, shownPatchset)}`;
 }
+
 
 /** Your unpublished reply in `chain`: a chain holds at most one. */
 function yourDraft(chain: CommentChain): Comment | undefined {
@@ -283,7 +284,7 @@ export class CommentThreads implements vscode.Disposable {
       this.saved(state, "Draft saved on Gerrit");
       await this.view.open();
     } catch (error) {
-      void ui().message("error", `Comment not saved: ${describeError(error)}`, {}, []);
+      void offerWaysOn("error", `Comment not saved: ${describeError(error)}`, failureWays(error));
     }
   }
 
@@ -307,7 +308,7 @@ export class CommentThreads implements vscode.Disposable {
       await this.view.open();
     } catch (error) {
       // The box stays open with the text, to try again or save it another way.
-      void ui().message("error", `Comment not saved: ${describeError(error)}`, {}, []);
+      void offerWaysOn("error", `Comment not saved: ${describeError(error)}`, failureWays(error));
     }
   }
 
@@ -349,7 +350,7 @@ export class CommentThreads implements vscode.Disposable {
       comments.forEach((comment) => (comment.thread = thread));
       const root = chain.comments[0]?.state;
       if (root === "published") {
-        mark(thread, chain, chain.resolved_after_publish, place.outdated);
+        mark(thread, chain, chain.resolved_after_publish, place.outdated, this.view.shownPatchset());
       } else {
         thread.label = root === "note" ? "Your private note" : "Your new comment (not published yet)";
         thread.contextValue = "yours";
@@ -364,13 +365,15 @@ export class CommentThreads implements vscode.Disposable {
   /** The chain of the thread whose lines hold `editor`'s cursor; none when it is in no thread. */
   private threadAt(editor: vscode.TextEditor): CommentChain | undefined {
     const [uri, line] = [editor.document.uri.toString(), editor.selection.active.line];
-    for (const [thread, anchor] of this.anchors) {
-      if (thread.uri.toString() === uri && thread.range && line >= thread.range.start.line && line <= thread.range.end.line) {
-        return anchor.chain;
-      }
-    }
-    return undefined;
+    const here = [...this.anchors]
+      .filter(([thread]) => thread.uri.toString() === uri && thread.range && line >= thread.range.start.line && line <= thread.range.end.line)
+      .map(([, anchor]) => anchor.chain);
+    // Several threads on one line (one written on an earlier patchset): the one just gone to is the one meant.
+    return here.find((chain) => chain.root_id === this.goneTo?.root_id) ?? here[0];
   }
+
+  /** The chain last gone to (Next comment, a click): the reply box names whom it answers. */
+  private goneTo: CommentChain | undefined;
 
   /**
    * Say in the reply box whom it answers (`replyName`): the chain `at`, else the one person every
@@ -380,7 +383,12 @@ export class CommentThreads implements vscode.Disposable {
     if (this.boxes.size) {
       return;
     }
-    const options = BOX.reply(replyName([...this.anchors.values()].map((anchor) => anchor.chain), at));
+    // VS Code fixes a reply box's text when its editor draws the threads, not when one is opened: a
+    // name is said only where every thread of that file answers the same person (W10: Bob's thread
+    // read "Reply to Alice" beside hers), else nobody is named.
+    const chains = [...this.anchors.values()].map((anchor) => anchor.chain);
+    const sameFile = at ? chains.filter((chain) => chain.path === at.path) : chains;
+    const options = BOX.reply(replyName(sameFile));
     if (options.prompt !== this.controller.options?.prompt) {
       this.controller.options = options;
     }
@@ -455,6 +463,7 @@ export class CommentThreads implements vscode.Disposable {
    */
   async show(chain: CommentChain): Promise<void> {
     // The reply box of the thread it opens answers the last of them who spoke.
+    this.goneTo = chain;
     this.nameReplies(chain);
     this.seen(chain);
     const editor = await this.view.openLocation({ path: chain.path, line: this.view.placeOf(chain).line });
@@ -462,9 +471,31 @@ export class CommentThreads implements vscode.Disposable {
       const here = anchor.chain.root_id === chain.root_id;
       thread.collapsibleState = here ? vscode.CommentThreadCollapsibleState.Expanded : vscode.CommentThreadCollapsibleState.Collapsed;
     }
+    this.showResolved(chain);
     if (editor) {
       this.aim(editor, chain);
     }
+  }
+
+  /** The resolved chain gone to, drawn while it is the one gone to: the editor draws no thread for resolved chains otherwise (S4). */
+  private resolvedThread: vscode.CommentThread | undefined;
+
+  /** Draw `chain`'s thread at its line when it is resolved (read only: there is nothing to answer), and no other resolved one. */
+  private showResolved(chain: CommentChain): void {
+    this.resolvedThread?.dispose();
+    this.resolvedThread = undefined;
+    if (!chain.resolved || NOT_FILES.includes(chain.path) || chain.path.startsWith("/")) {
+      return;
+    }
+    const place = this.view.placeOf(chain);
+    const line = Math.max(0, (place.line ?? 1) - 1);
+    const first = place.start ? Math.max(0, place.start - 1) : line;
+    const thread = this.controller.createCommentThread(this.view.locationUri(chain.path), new vscode.Range(first, 0, line, 0), chain.comments.map((comment) => new ThreadComment(comment)));
+    thread.label = `Gerrit — resolved${placeWords(chain, place.outdated, this.view.shownPatchset())}`;
+    thread.contextValue = "resolved-shown";
+    thread.canReply = false;
+    thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
+    this.resolvedThread = thread;
   }
 
   /** The chains gone to on each change this session (by Change-Id): what Next has shown already. */
@@ -557,7 +588,7 @@ export class CommentThreads implements vscode.Disposable {
   cancelReply(reply: vscode.CommentReply): void {
     const anchor = this.anchors.get(reply.thread);
     if (anchor) {
-      mark(reply.thread, anchor.chain, anchor.chain.resolved_after_publish, anchor.outdated);
+      mark(reply.thread, anchor.chain, anchor.chain.resolved_after_publish, anchor.outdated, this.view.shownPatchset());
     }
     reply.thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
   }
@@ -572,7 +603,7 @@ export class CommentThreads implements vscode.Disposable {
     if (!anchor) {
       return;
     }
-    mark(thread, anchor.chain, resolved, anchor.outdated);
+    mark(thread, anchor.chain, resolved, anchor.outdated, this.view.shownPatchset());
     if (yourDraft(anchor.chain)) {
       await this.replyWith(anchor.chain, "", resolved);
     }
@@ -636,7 +667,7 @@ export class CommentThreads implements vscode.Disposable {
       await this.view.open();
       return true;
     } catch (error) {
-      void ui().message("error", `Draft not saved: ${describeError(error)}`, {}, []);
+      void offerWaysOn("error", `Draft not saved: ${describeError(error)}`, failureWays(error));
       return false;
     }
   }
@@ -772,7 +803,7 @@ export class CommentThreads implements vscode.Disposable {
       this.saved(state, "Draft with a suggested edit saved on Gerrit");
       await this.view.open();
     } catch (error) {
-      void ui().message("error", `Comment not saved: ${describeError(error)}`, {}, []);
+      void offerWaysOn("error", `Comment not saved: ${describeError(error)}`, failureWays(error));
     }
   }
 
@@ -843,7 +874,7 @@ export class CommentThreads implements vscode.Disposable {
       await this.view.open();
       return true;
     } catch (error) {
-      void ui().message("error", `Comment not saved: ${describeError(error)}`, {}, []);
+      void offerWaysOn("error", `Comment not saved: ${describeError(error)}`, failureWays(error));
       return false;
     }
   }
@@ -870,7 +901,7 @@ export class CommentThreads implements vscode.Disposable {
       await this.view.open();
       return true;
     } catch (error) {
-      void ui().message("error", `Comment not deleted: ${describeError(error)}`, {}, []);
+      void offerWaysOn("error", `Comment not deleted: ${describeError(error)}`, failureWays(error));
       return false;
     }
   }

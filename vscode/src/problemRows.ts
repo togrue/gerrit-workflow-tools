@@ -4,6 +4,7 @@
 // the user is told the state and the options). Every error state of the Local stack and Change
 // views is built here, so none is left with a message and nothing to do. Pure: no `vscode`, no I/O.
 
+import { ApiError, GerApiError } from "./api";
 import type { StackAction } from "./stackRows";
 
 export interface Problem {
@@ -23,13 +24,40 @@ export const PROBLEM_ACTIONS = {
   reload: { label: "Reload", title: "Read the local stack and Gerrit's state again (Refresh from Gerrit)", command: { id: "ger.refresh", args: [] } },
   upstream: { label: "Choose an Upstream Branch…", title: "Pick the branch your stack is built on: the stack is the commits above it", command: { id: "ger.setUpstream", args: [] } },
   log: { label: "Show Log", title: "What ger serve said, in the extension's log", command: { id: "ger.showLog", args: [] } },
+  retry: { label: "Retry", title: "Ask Gerrit again (Refresh from Gerrit)", command: { id: "ger.refresh", args: [] } },
+  restart: { label: "Restart ger serve", title: "Start ger serve again and read everything afresh", command: { id: "ger.refresh", args: [] } },
+  credentials: { label: "Check Credentials (ger setup)…", title: "ger setup asks for your Gerrit user and HTTP password and stores them for this Gerrit", command: { id: "ger.setup", args: [] } },
+  address: { label: "Check the Gerrit Address (ger setup)…", title: "ger setup asks for Gerrit's web address (ger.webUrl) and your credentials", command: { id: "ger.setup", args: [] } },
 } satisfies Record<string, StackAction>;
 
 /** The sentences, in ger's words. */
 export const PROBLEM_WORDS = {
   change: "This change could not be shown: nothing of it is drawn here.",
   stack: "Your local stack could not be read, so it is not shown.",
+  /** What still works while Gerrit cannot be asked: said once, beside the reason. */
+  localGoesOn: "Your local stack, its files and git work without Gerrit; what Gerrit says about them is unknown until it answers.",
+  credentials: "Gerrit refused your credentials: nothing can be read from it or sent to it.",
+  away: "Gerrit cannot be asked: what it says is unknown, not none.",
 };
+
+/** Whether `error` says Gerrit could not be asked at all, as `ger serve` serves it: then {@link gerritProblem} says it. */
+export function gerritAway(error: ApiError | undefined): boolean {
+  return error?.code === "GERRIT" && ["credentials", "unreachable", "no-answer"].includes(error.reason ?? "");
+}
+
+/**
+ * Gerrit could not be asked at all (`GERRIT`, served with a `reason`): what is known is said as
+ * unknown, with the reason as core words it, and the ways on. A refusal of the credentials is
+ * fixed by `ger setup`; a host that does not answer, or is not there, may be back on Retry, else
+ * its address is wrong.
+ */
+export function gerritProblem(error: ApiError): Problem {
+  const { retry, credentials, address, log } = PROBLEM_ACTIONS;
+  if (error.reason === "credentials") {
+    return { text: PROBLEM_WORDS.credentials, raw: error.message, actions: [{ ...credentials, primary: true }, retry, log] };
+  }
+  return { text: PROBLEM_WORDS.away, raw: error.message, actions: [{ ...retry, primary: true }, address, log] };
+}
 
 /**
  * The Change view when the change selected could not be read. Show Again asks once more (Gerrit
@@ -54,4 +82,15 @@ export function stackProblem(raw: string): Problem {
 export function problemLines(problem: Problem): string[] {
   const buttons = problem.actions.map((action) => (action.primary ? `[**${action.label}**]` : `[${action.label}]`)).join(" ");
   return [problem.text, ...problem.raw.split("\n").filter(Boolean).map((line) => `  ${line}`), ...(buttons ? [`  ${buttons}`] : [])];
+}
+
+/** The served error of a failed request, when ger serve answered with one. */
+export function servedError(error: unknown): ApiError | undefined {
+  return error instanceof GerApiError ? { code: error.code, message: error.message, reason: error.reason } : undefined;
+}
+
+/** What a failed write to Gerrit offers: Gerrit away, its fixes (ger setup, Retry); anything else, the log. */
+export function failureWays(error: unknown): StackAction[] {
+  const served = servedError(error);
+  return served && gerritAway(served) ? gerritProblem(served).actions : [PROBLEM_ACTIONS.log];
 }

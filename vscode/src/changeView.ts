@@ -7,7 +7,7 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 
-import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
+import { CommentChain, Diff, FileChange, GerApiError, GerClient, Patchsets, ShownCommit } from "./api";
 import { ChangeDetail, ciRevs, notAmendedHere, sameChange, stoppedHere } from "./changeLoad";
 import { ChainCounts, ChangeState, ChangeVm, SeenWhere, chainCounts, seenWhere, CiView, NOTHING_SHOWN, NOT_FILES, READ_ONLY, changeHeading, changeLines, changeVm, isYours, toAnswer } from "./changeRows";
 import { From, MODES, Mode, Sides, Version, fitSides, modeSides } from "./compareRows";
@@ -18,10 +18,10 @@ import { openConflict } from "./rebase";
 import { waitingFor } from "./state";
 import { NextAction, nextAction } from "./nextAction";
 import { changeScreen } from "./changeScreen";
-import { changeProblem } from "./problemRows";
+import { PROBLEM_ACTIONS, changeProblem, gerritAway, gerritProblem } from "./problemRows";
 import { focusedMember, reviewFocus } from "./reviewFocus";
 import { markOf } from "./staleDiffs";
-import { feedback, ui } from "./ui";
+import { feedback, offerWaysOn, ui } from "./ui";
 import { TaskMode, TaskVm, taskLines } from "./taskRows";
 import { Message, WebView } from "./webview";
 
@@ -116,7 +116,8 @@ export class ChangeView extends WebView<ChangeVm> {
       combinedActive: this.combinedActive(),
       yourTurn: member?.your_turn,
       above: focus ? above : undefined,
-      newest: this.patchsets?.current ?? null,
+      newest: this.knownPatchsets()?.current ?? this.shown?.current_patch_set ?? null,
+      reviewElsewhere: this.model.reviewElsewhere(this.target?.number),
     });
   }
 
@@ -155,8 +156,17 @@ export class ChangeView extends WebView<ChangeVm> {
     if (where) {
       const seen = this.seenHere();
       const left = this.seenable().filter((file) => !seen.has(file));
-      await this.filesSeen.markAll(where, left);
-      feedback(`${left.length === 1 ? "1 file" : `${left.length} files`} marked seen`, { icon: "pass-filled" });
+      const files = left.length === 1 ? "1 file" : `${left.length} files`;
+      // On Gerrit it is sent, and said as sending until Gerrit answered; a refusal is said as one.
+      const onGerrit = Boolean(where.number && where.patchSet);
+      const failed = onGerrit
+        ? await ui().progress(vscode.ProgressLocation.Window, `Marking ${files} seen on Gerrit`, () => this.filesSeen.markAll(where, left))
+        : await this.filesSeen.markAll(where, left);
+      if (failed) {
+        void offerWaysOn("error", `Not marked seen: ${failed.message}`, gerritAway(failed) ? gerritProblem(failed).actions : [PROBLEM_ACTIONS.log]);
+      } else {
+        feedback(`${files} marked seen${onGerrit ? " on Gerrit" : " here"}`, { icon: "pass-filled" });
+      }
     }
   }
 
@@ -208,6 +218,14 @@ export class ChangeView extends WebView<ChangeVm> {
     super(extensionUri, "change");
     this.filesSeen = new FilesSeen(() => model.client(), (uri) => this.fileOf(uri));
     this.filesSeen.onDidChange(() => this.render());
+    // A tick Gerrit refused stays off, and is said once, with the ways on.
+    let said = "";
+    this.filesSeen.refused = (why) => {
+      if (why.message !== said) {
+        said = why.message; // not once per file scrolled through: once per reason
+        void offerWaysOn("error", `Not marked seen on Gerrit: ${why.message}`, gerritAway(why) ? gerritProblem(why).actions : [PROBLEM_ACTIONS.log]);
+      }
+    };
     // Next names Mark seen while the combined diff of the change shown is in front: drawn again when that flips.
     let combined = false;
     vscode.window.tabGroups.onDidChangeTabs(() => {
@@ -338,7 +356,8 @@ export class ChangeView extends WebView<ChangeVm> {
       return undefined;
     }
     const shown = this.detail.commit();
-    return { behind: shown?.patchset_status === "outdated", newest: this.patchsets?.current ?? null };
+    // Gerrit's newest as /show says it, when the patchsets asked before are older than that.
+    return { behind: shown?.patchset_status === "outdated", newest: this.knownPatchsets()?.current ?? shown?.current_patch_set ?? null };
   }
 
   /**
@@ -351,7 +370,7 @@ export class ChangeView extends WebView<ChangeVm> {
     if (!target || !change || !this.holdsReview(target) || this.from !== "base") {
       return;
     }
-    const patchsets = this.patchsets ?? (await (await this.model.client()).patchsets(change).catch(() => undefined));
+    const patchsets = this.knownPatchsets() ?? (await (await this.model.client()).patchsets(change).catch(() => undefined));
     const review = this.model.stack?.staged_review;
     if (patchsets && this.target === target) {
       this.patchsets = patchsets;
@@ -436,7 +455,8 @@ export class ChangeView extends WebView<ChangeVm> {
 
   /** The change cannot be shown: say why, with no save button for a new comment. Only for the change selected now. */
   private fail(token: number, error: unknown): void {
-    if (this.detail.fail(token, describeError(error))) {
+    const served = error instanceof GerApiError ? { code: error.code, message: error.message, reason: error.reason } : undefined;
+    if (this.detail.fail(token, describeError(error), served)) {
       void vscode.commands.executeCommand("setContext", "ger.newComment", "none");
       this.render();
     }
@@ -470,7 +490,7 @@ export class ChangeView extends WebView<ChangeVm> {
     let version = this.version;
     if (version === "current" && target.local && change) {
       // Your commit carries the change, so the change alone would name your commit: ask which patchset is current.
-      const patchsets = this.patchsets ?? (await client.patchsets(change, signal));
+      const patchsets = this.knownPatchsets() ?? (await client.patchsets(change, signal));
       version = patchsets.current ?? "local";
       if (this.detail.current(token)) {
         [this.patchsets, this.version] = [patchsets, version]; // a load dropped meanwhile leaves the next change's choice alone
@@ -494,15 +514,25 @@ export class ChangeView extends WebView<ChangeVm> {
     return target.local && !this.holdsReview(target) ? undefined : client.diff(change, { since: "reviewed", patchset, local }, signal);
   }
 
+  /**
+   * The patchsets asked for the change shown, while they still agree with it: a reload of the same
+   * change keeps them, but once `/show` names another current patchset (one pushed since, an update
+   * checked out) they are old, and asked again (W6: "Update to patchset 2" when Gerrit had 3).
+   */
+  private knownPatchsets(): Patchsets | undefined {
+    const current = this.shown?.current_patch_set;
+    return this.patchsets && (current == null || this.patchsets.current === current) ? this.patchsets : undefined;
+  }
+
   /** The patchsets to choose from. After the change itself, and only once it has stayed a moment: walking the stack with the arrow keys asks nothing. */
   private async loadPatchsets(token: number, signal: AbortSignal): Promise<void> {
     const change = this.target && this.change(this.target);
-    if (!change || !this.shown?.pushed || this.patchsets) {
+    if (!change || !this.shown?.pushed || this.knownPatchsets()) {
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 400));
     // Asked meanwhile (a staged review's re-review asks at once): not twice.
-    if (!this.detail.current(token) || this.patchsets) {
+    if (!this.detail.current(token) || this.knownPatchsets()) {
       return;
     }
     try {
@@ -580,16 +610,19 @@ export class ChangeView extends WebView<ChangeVm> {
   }
 
   vm(): ChangeVm {
-    const waiting = this.model.overview ? undefined : waitingFor(this.model.state, "A change", this.model.incompatible, this.model.failure);
+    const waiting = this.model.overview ? undefined : waitingFor(this.model.state, "A change", this.model.incompatible, this.model.failure, this.model.gerritWait);
     if (waiting) {
       return { waiting };
     }
     if (this.detail.problem) {
-      return { problem: changeProblem(this.detail.problem, Boolean(this.target?.local)), task: this.task() };
+      const away = this.detail.problemError;
+      // Gerrit away: its ways on (Retry, ger setup), not Show Again; the task header and its exit stay either way.
+      const problem = away && gerritAway(away) ? gerritProblem(away) : changeProblem(this.detail.problem, Boolean(this.target?.local));
+      return { problem, task: this.task() };
     }
     const state = this.detail.state({
       chains: this.chains(),
-      patchsets: this.patchsets,
+      patchsets: this.knownPatchsets(),
       version: this.version,
       from: this.from,
       mode: this.mode,
@@ -600,6 +633,10 @@ export class ChangeView extends WebView<ChangeVm> {
       notAmended: this.target ? notAmendedHere(this.target, this.model.stack) : [],
       reviewing: this.reviewing(),
       seen: this.seenHere(),
+      elsewhere: this.model.reviewElsewhere(this.target?.number),
+      blocked: this.model.stack?.review_blocked?.files,
+      patchset: this.shownPatchset(),
+      visited: this.visited(),
     });
     if (!state) {
       const nothing = this.closedWhy ? `${this.closedWhy} ${NOTHING_SHOWN}` : NOTHING_SHOWN;
@@ -889,6 +926,22 @@ export class ChangeView extends WebView<ChangeVm> {
    * Where `chain` is drawn: in your file, where its lines are now (core's `worktree`) when core could
    * tell, `outdated` when they changed there; else at its lines as Gerrit has them.
    */
+  /**
+   * The patchset whose lines the editor shows for the change shown: the one a staged review holds
+   * here, the one chosen in To, else Gerrit's current. Undefined for your own commit (its files are
+   * yours, and comments are mapped onto them) and while it is not known.
+   */
+  shownPatchset(): number | undefined {
+    const staged = this.model.stack?.staged_review;
+    if (staged && staged.number === this.target?.number) {
+      return staged.patch_set;
+    }
+    if (this.target?.local) {
+      return undefined;
+    }
+    return typeof this.version === "number" ? this.version : (this.shown?.current_patch_set ?? undefined);
+  }
+
   placeOf(chain: CommentChain): { start: number | null; line: number | null; outdated: boolean } {
     const now = this.locationUri(chain.path).scheme === "file" ? chain.worktree : undefined;
     return now ? { start: now.start_line, line: now.line, outdated: now.outdated } : { start: chain.start_line, line: chain.line, outdated: false };
@@ -902,7 +955,8 @@ export class ChangeView extends WebView<ChangeVm> {
     const uri = this.locationUri(location.path);
     const line = Math.max(0, (location.line ?? 1) - 1);
     try {
-      return await vscode.window.showTextDocument(uri, { selection: new vscode.Range(line, 0, line, 0), preview: true });
+      // The review's combined diff in front stays open in its tab: the file opens in a tab of its own beside it (S3).
+      return await vscode.window.showTextDocument(uri, { selection: new vscode.Range(line, 0, line, 0), preview: !this.combinedActive() });
     } catch (error) {
       void ui().message("warning", `Cannot open ${location.path}: ${describeError(error)}`, {}, []);
       return undefined;

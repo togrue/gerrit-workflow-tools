@@ -279,3 +279,21 @@ export const FEEDBACK_MS = 4000;
 export function feedback(text: string, options: { icon?: string; milliseconds?: number } = {}): void {
   ui().status(`$(${options.icon ?? "check"}) ${text}`, options.milliseconds ?? FEEDBACK_MS);
 }
+
+/** A way on a failure offers: its button's words and the command it runs (a `StackAction` of stackRows.ts). */
+export interface WayOn {
+  label: string;
+  command: { id: string; args: unknown[] };
+}
+
+/**
+ * Say that something did not happen, with the ways on as the notification's buttons; the one pressed
+ * runs. P10 and Q8: the state is said as a failure, with its own icon and words, and the options.
+ */
+export async function offerWaysOn(level: Level, text: string, ways: readonly WayOn[]): Promise<void> {
+  const pressed = await ui().message(level, text, {}, ways.map((way) => way.label));
+  const way = ways.find((candidate) => candidate.label === pressed);
+  if (way) {
+    await vscode.commands.executeCommand(way.command.id, ...way.command.args);
+  }
+}
