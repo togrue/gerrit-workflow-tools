@@ -354,7 +354,7 @@
       });
     }
 
-    return { attributes, keep, wire, select, selectedRows, rowOf, has: (key) => selected.has(key), focusedKey: () => focused };
+    return { attributes, keep, wire, select, selectedRows, rowOf, has: (key) => selected.has(key), focusedKey: () => focused, activeId: () => (focused === null ? "" : rowId(focused)) };
   }
 
   // --- The task header (src/taskRows.ts) ---------------------------------------------------

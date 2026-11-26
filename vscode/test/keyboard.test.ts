@@ -76,6 +76,9 @@ test("Local stack: Tab reaches the focused row's badges, named by their words, a
   assert.equal(stops().length, 1);
   assert.match(stops()[0].getAttribute("aria-label") ?? "", /2 of 3 comment chains open/);
   assert.equal(list.getAttribute("aria-activedescendant"), row.getAttribute("id"));
+  // A redraw (a refresh) keeps it.
+  page.send({ type: "render", vm: stackVm(stack(commits), undefined, never) });
+  assert.equal((page.root.querySelector(".list") as FakeElement).getAttribute("aria-activedescendant"), row.getAttribute("id"));
   stops()[0].dispatch("keydown", { key: "Enter" });
   page.flush();
   assert.ok(page.posted.some((message) => message.type === "comments"), "Enter asks for the comments, as hovering the ring does");

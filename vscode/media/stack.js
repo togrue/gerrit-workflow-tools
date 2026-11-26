@@ -192,6 +192,8 @@
         tabindex: "0",
         "aria-multiselectable": "true",
         "aria-label": "Local stack, newest first",
+        // The focused row is the one read out, across a redraw too.
+        "aria-activedescendant": selection.activeId() || undefined,
       },
       vm.rows.map((row) => (vm.boundary && row.key === vm.boundary.under ? [rowElement(row, slots), boundaryLine(vm.boundary)] : rowElement(row, slots))),
       line,

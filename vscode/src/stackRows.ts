@@ -713,7 +713,7 @@ export function stackLines(vm: StackVm): string[] {
   if (vm.waiting) {
     return [vm.waiting.text];
   }
-  const said = (badge: Badge | null) => (badge ? `${badge.stale ? "last pushed " : ""}${badge.kind}${badge.text ? ` ${badge.text}` : ` ${badge.tone}`}` : "");
+  const said = (badge: Badge | null) => (badge ? `${badge.stale ? "last pushed " : ""}${badge.kind}${badge.text && badge.text !== "?" ? ` ${badge.text}` : ` ${badge.tone}${badge.text}`}` : "");
   return [
     ...vm.info.map((info) => {
       const buttons = actionsText(info.actions);
