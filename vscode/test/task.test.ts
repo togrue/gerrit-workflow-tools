@@ -135,7 +135,7 @@ test("reworking, the header says which change of how many, what is left over the
   const shown = { key: commits[1].sha, counts: { comments_unresolved: 2, comments_to_answer: 1, comments_drafted: 1, comments_awaiting_reply: 0, comments_total: 3 } };
   const counted = taskVm(undefined, stack(commits, { rebase_in_progress: true, rebase }), { all: false, shown })!;
   assert.equal(taskLines(counted)[1], "Left: 1 comment to answer · CI failed on 1 commit · 2 commits need edits · 2 commits to replay");
-  assert.equal(taskLines(counted)[3], "▸ 2. stop — stopped here · 1 to answer · needs edits");
+  assert.equal(taskLines(counted)[3], "▸ 2. stop — stopped here · 1 to answer · your drafts · needs edits");
   // A step running in the terminal: the header says so, and its buttons wait for it.
   const busy = taskVm(undefined, stack(commits, { rebase_in_progress: true, rebase }), { all: false, busy: "Continuing the rebase in the ger terminal…" })!;
   assert.deepEqual(taskLines(busy).filter((line) => line.startsWith("…") || line.startsWith("[")), [

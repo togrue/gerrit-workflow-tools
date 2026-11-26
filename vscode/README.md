@@ -105,10 +105,14 @@ The commits above your upstream, newest first. One row per commit:
 - The **comment badge** on the right (here, in the Change view and in the task header) draws the
   state so it cannot be misread: the number is how many chains are **open**, a **ring** around it
   is filled by their share of all chains, and the ring's shape says the state besides its colour:
-  **thick** and yellow while something waits for your answer, **dashed** and blue while drafts of
-  yours wait to be published, **thin** while they wait on the other side, a full ring with a
-  **tick** once all are resolved. The tooltip says it in words (*3 of 5 comment chains open · 1 to
-  answer · 2 answered by your drafts*). Hover it
+  **dashed** and blue while drafts of yours wait to be published (they lead: what is left to answer
+  besides is in the tooltip and in the task header's *1 to answer · your drafts*), **thick** and
+  yellow while something waits for your answer, **thin** while they wait on the other side, a full
+  ring with a **tick** once all are resolved. The tooltip says it in words (*3 of 5 comment chains
+  open · 1 to answer · 2 answered by your drafts*). Drafts are known from core's count of those
+  that answer an open chain, and for the change the Change view shows, all of them: a draft that
+  answers nothing on a commit not shown is not seen until it is shown (asking Gerrit for drafts on
+  every load would cost a request a warm `ger log` does not make). Hover it
   a moment for the comments, with *Go there*, *Reply Done* and *Apply*.
 - An **icon** in front says how the commit relates to Gerrit: a **full circle** when it is the
   same as on Gerrit; a **yellow arrow up** in a circle when it is only rebased since the last push

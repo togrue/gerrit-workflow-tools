@@ -133,7 +133,7 @@ function commentMark(item: Parameters<typeof commentState>[0]): TaskMark | undef
   if (!state || state.tone === "resolved") {
     return undefined;
   }
-  const words: Record<string, string> = { open: `${state.toAnswer} to answer`, draft: "your drafts", waiting: "waits on a reply" };
+  const words: Record<string, string> = { open: `${state.toAnswer} to answer`, draft: state.toAnswer ? `${state.toAnswer} to answer · your drafts` : "your drafts", waiting: "waits on a reply" };
   return { icon: "comment", text: words[state.tone] ?? state.label, tone: state.tone === "open" ? "warn" : state.tone === "draft" ? "info" : "plain", ring: { share: state.share, shape: state.shape } };
 }
 

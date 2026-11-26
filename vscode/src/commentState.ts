@@ -6,9 +6,9 @@
 
 
 /**
- * `draft`: drafts of yours not published yet (blue); `open`: unresolved comments wait for your
- * answer (yellow); `waiting`: the unresolved ones wait on the other side; `resolved`: all resolved
- * (both plain).
+ * `draft`: drafts of yours not published yet (blue), whatever else is open; `open`: unresolved
+ * comments wait for your answer (yellow); `waiting`: the unresolved ones wait on the other side;
+ * `resolved`: all resolved (both plain).
  */
 export type CommentTone = "draft" | "open" | "waiting" | "resolved";
 
@@ -67,8 +67,9 @@ export function commentState(item: Commented, drafts = 0): CommentState | undefi
   if (!count && !yours && (total === 0 || item.comments_total === undefined)) {
     return undefined;
   }
-  // What waits for your answer leads: drafts of yours are blue once nothing is left to answer.
-  const tone: CommentTone = left > 0 ? "open" : yours ? "draft" : count > 0 ? "waiting" : "resolved";
+  // Drafts of yours lead (the owner's call, 2026-11-26): a change holding one is blue with a dashed
+  // ring, whatever is left to answer besides; that count stays in the words and in the badge's text.
+  const tone: CommentTone = yours ? "draft" : left > 0 ? "open" : count > 0 ? "waiting" : "resolved";
   // Gerrit's own count wins over a total that is behind it; a total of none says nothing of its own.
   const all = total !== null && total > 0 && total >= count ? total : null;
   const resolved = all === 1 ? "the comment chain resolved" : all !== null ? `all ${chains(all)} resolved` : total === null ? "every comment chain resolved" : "";
