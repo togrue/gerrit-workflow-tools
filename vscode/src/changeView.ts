@@ -466,7 +466,7 @@ export class ChangeView extends WebView<ChangeVm> {
   /** The change cannot be shown: say why, with no save button for a new comment. Only for the change selected now. */
   private fail(token: number, error: unknown): void {
     const served = error instanceof GerApiError ? { code: error.code, message: error.message, reason: error.reason } : undefined;
-    if (this.detail.fail(token, describeError(error), served)) {
+    if (this.detail.fail(token, describeError(error), served, gerritAway(served))) {
       void vscode.commands.executeCommand("setContext", "ger.newComment", "none");
       this.render();
     }

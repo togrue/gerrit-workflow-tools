@@ -207,6 +207,12 @@ export class Model implements vscode.Disposable {
    * once, before `/stack` confirms the rest. Local state the checkout has already made true.
    */
   adoptReview(review: ReviewState): void {
+    // The review moved here: it is the review now, with the chain the step walked (served with it). A
+    // refresh Gerrit then refuses keeps that chain, as it is the same review (F4: "change 1 of 1").
+    if (review.chain?.length) {
+      this.reviewChain = review.chain;
+    }
+    this.review = review;
     const stack = this.stack;
     if (stack?.staged_review && this.overview) {
       this.overview = { ...this.overview, local: { ...stack, staged_review: { ...stack.staged_review, ...review } } };

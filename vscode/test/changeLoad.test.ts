@@ -213,6 +213,24 @@ test("a /show failure stays shown when a late answer of another part comes", () 
   assert.equal(detail.problem, "change 7 is gone");
 });
 
+test("F4: Gerrit refusing a reload leaves what is local of the change drawn, marked as not asked of Gerrit", () => {
+  const commit = row("Extract routing");
+  const detail = new ChangeDetail();
+  const token = detail.select(target(commit), false);
+  assert.ok(detail.arrive(token, "commit", answer(commit)));
+  assert.ok(detail.arrive(token, "base", files("Extract routing")));
+  const again = detail.select(target(commit), true); // the reload after a refused publish
+  const refused = { code: "GERRIT", message: "Gerrit at g rejected the credentials (HTTP 401)", reason: "credentials" };
+  assert.ok(detail.fail(again, refused.message, refused, true));
+  assert.equal(detail.problem, undefined, "the message and the files stay");
+  assert.deepEqual(detail.shown?.gerrit_unavailable, refused);
+  assert.ok(detail.diff, "its files too");
+  // Nothing drawn yet: the refusal is the view, as before.
+  const fresh = new ChangeDetail();
+  assert.ok(fresh.fail(fresh.select(target(commit), false), refused.message, refused, true));
+  assert.equal(fresh.problem, refused.message);
+});
+
 test("answers out of order: the review delta before the commit fills in its hint, the rest still loading", () => {
   const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], severity: "ok", url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
   const detail = new ChangeDetail();

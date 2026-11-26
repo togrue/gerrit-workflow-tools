@@ -209,10 +209,19 @@ export class ChangeDetail {
     return true;
   }
 
-  /** The change cannot be shown: why. Taken, as an answer is, only for the change selected now. */
-  fail(token: number, problem: string, error?: ApiError): boolean {
+  /**
+   * The change cannot be shown: why. Taken, as an answer is, only for the change selected now. Gerrit
+   * away (`away`) on a reload of what is drawn: what is local of it stays (its message, its files),
+   * marked as not asked of Gerrit, instead of the whole view giving way to the refusal (F4).
+   */
+  fail(token: number, problem: string, error?: ApiError, away = false): boolean {
     if (!this.current(token)) {
       return false;
+    }
+    if (away && this.shown && error) {
+      this.shown = { ...this.shown, gerrit_unavailable: error };
+      this.waiting.clear();
+      return true;
     }
     this.problem = problem;
     this.problemError = error;
