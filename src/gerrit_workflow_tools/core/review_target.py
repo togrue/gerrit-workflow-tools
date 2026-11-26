@@ -29,7 +29,7 @@ from gerrit_workflow_tools.core.review_checkout import (
     neighbour,
 )
 from gerrit_workflow_tools.core.usage import Refusal, UsageError
-from gerrit_workflow_tools.core.votes import DEFAULT_LABEL, votes_ruled_out
+from gerrit_workflow_tools.core.votes import DEFAULT_LABEL, votes_ruled_out, your_votes
 
 
 def related_chain_numbers(service: GerritService, key: str, patch_set: int | str = "current") -> list[int]:
@@ -42,14 +42,16 @@ def related_chain_numbers(service: GerritService, key: str, patch_set: int | str
 
 def review_neighbour(
     service: GerritService, cwd: Path | str, state: ReviewState, step: int
-) -> tuple[GerritPatchset, str | None]:
+) -> tuple[GerritPatchset, str | None, list[int]]:
     """The change *step* places up (``+1``) or down (``-1``) the review chain of *state*, at its
-    current patchset, and its URL: what ``ger review --next`` / ``--prev`` checks out.
+    current patchset, its URL, and the chain it was found in (base first): what ``ger review
+    --next`` / ``--prev`` checks out, and the chain it moves along, so nobody asks Gerrit for it again.
 
     Raises :class:`~gerrit_workflow_tools.core.review_checkout.ReviewChainEndError` at the end of the chain.
     """
-    number = neighbour(related_chain_numbers(service, state.key, state.patch_set), state.number, step)
-    return resolve_patchset(service, cwd, f"change:{number}", None)
+    chain = related_chain_numbers(service, state.key, state.patch_set)
+    target, url = resolve_patchset(service, cwd, f"change:{neighbour(chain, state.number, step)}", None)
+    return target, url, chain
 
 
 DraftsPublishedBy = Literal["push", "vote"]
@@ -119,15 +121,6 @@ def vote_targets(
         )
         for change in changes
     ]
-
-
-def your_votes(change: ChangeView, me: int | None) -> dict[str, int]:
-    """Your non-zero votes on *change*'s current patch set, by label; none without *me*."""
-    if me is None:
-        return {}
-    return {
-        label: v.value for label, votes in change.label_votes.items() for v in votes if v.account_id == me and v.value
-    }
 
 
 def vote_changes(

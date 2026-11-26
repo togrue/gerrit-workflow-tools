@@ -1,4 +1,4 @@
-"""The vote grammar: ``+1``, ``CR+1``, ``V=-1``, ``Code-Review=+2``. Pure syntax, no I/O.
+"""The vote grammar: ``+1``, ``CR+1``, ``V=-1``, ``Code-Review=+2``, and whose votes a change holds. No I/O.
 
 One reading for every command that votes (``ger review --vote``, ``ger reply --publish --vote``).
 """
@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 
+from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.usage import UsageError
 
 
@@ -61,3 +62,12 @@ def votes_ruled_out(votes: Mapping[str, int], permitted: Mapping[str, tuple[int,
                 f"{format_vote(label, value)} (you may give {may})" if may else f"{label} (not yours to vote)"
             )
     return ruled_out
+
+
+def your_votes(change: ChangeView, me: int | None) -> dict[str, int]:
+    """Your non-zero votes on *change*'s current patch set, by label; none without *me*."""
+    if me is None:
+        return {}
+    return {
+        label: v.value for label, votes in change.label_votes.items() for v in votes if v.account_id == me and v.value
+    }

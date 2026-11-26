@@ -229,6 +229,7 @@ class ChangeStore:
         self._groups = {name.casefold(): list(members) for name, members in (groups or {}).items()}
         self._comments: dict[str, dict[str, list[dict[str, Any]]]] = dict(comments or {})
         self._drafts: dict[str, dict[str, list[dict[str, Any]]]] = {}
+        self._reviewed: dict[tuple[str, str], set[str]] = {}
         self._related: dict[str, list[dict[str, Any]]] = {}
         self._checks: dict[str, list[dict[str, Any]]] = dict(checks or {})
         self._messages: dict[str, list[dict[str, Any]]] = dict(messages or {})
@@ -547,6 +548,17 @@ class ChangeStore:
             path: [{k: v for k, v in row.items() if k not in drop} for row in rows]
             for path, rows in self._drafts.get(self._require_unique_change_ref(change_id), {}).items()
         }
+
+    def list_reviewed_files(self, change_id: str, revision: int | str) -> list[str]:
+        """The paths marked reviewed on *revision*, sorted, as ``files?reviewed`` lists them."""
+        self._record("list_reviewed_files", change_id, revision)
+        return sorted(self._reviewed.get((self._require_unique_change_ref(change_id), str(revision)), set()))
+
+    def set_file_reviewed(self, change_id: str, revision: int | str, path: str, reviewed: bool) -> None:
+        """Mark *path* reviewed on *revision*, or clear it; Gerrit takes any path."""
+        self._record("set_file_reviewed", change_id, revision, path, reviewed)
+        marked = self._reviewed.setdefault((self._require_unique_change_ref(change_id), str(revision)), set())
+        (marked.add if reviewed else marked.discard)(path)
 
     def put_draft(
         self, change_id: str, revision: int | str, comment: dict[str, Any], *, draft_id: str | None = None

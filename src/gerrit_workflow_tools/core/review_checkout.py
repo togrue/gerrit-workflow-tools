@@ -248,11 +248,13 @@ def _commits_not_in(worktree: Path | str, tip: str, *bases: str) -> list[str]:
     return git_out("rev-list", tip, "--not", *bases, cwd=worktree).split()
 
 
-def _unstage(worktree: Path | str, state: ReviewState) -> ReviewState:
+def _unstage(worktree: Path | str, state: ReviewState, *, leaving: bool = False) -> ReviewState:
+    """HEAD back on the reviewed change, its branch checked out; *leaving* (another change is checked
+    out next) stays detached on it: switching to the branch only to switch away costs two git calls."""
     if not state.staged:
         return state
     git("reset", "-q", "--soft", state.commit, cwd=worktree)
-    if commit_sha_or_none(worktree, f"refs/heads/{state.branch}") == state.commit:
+    if not leaving and commit_sha_or_none(worktree, f"refs/heads/{state.branch}") == state.commit:
         git("switch", "-q", state.branch, cwd=worktree)
     return replace(state, staged=False)
 
@@ -302,7 +304,7 @@ def open_review(
     moved_from = _claim_branch(worktree, branch, target.commit, created, force=options.force)
     return_to = previous.return_to if previous else _here(worktree) if mode == "branch" else None
     if previous is not None:
-        _unstage(worktree, previous)
+        _unstage(worktree, previous, leaving=True)
     git("switch", "-q", "-C", branch, target.commit, cwd=worktree)
     track_remote_branch(worktree, branch, remote, target.target_branch)
     state = ReviewState(

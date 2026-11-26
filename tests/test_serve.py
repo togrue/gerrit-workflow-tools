@@ -103,7 +103,8 @@ def _gerrit(repo: Path, overrides: list[dict[str, Any]] | None = None) -> tuple[
 
 def _get(api: GerApi, endpoint: str, /, **query: str | list[str]) -> dict[str, Any]:
     params = {name: value if isinstance(value, list) else [value] for name, value in query.items()}
-    return api.handle("GET", f"{V1}{endpoint}", params)
+    unlocked = api.handle_unlocked("GET", f"{V1}{endpoint}", params)
+    return unlocked if unlocked is not None else api.handle("GET", f"{V1}{endpoint}", params)
 
 
 def _post(api: GerApi, path: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -308,6 +309,43 @@ def test_your_own_push_or_vote_is_the_chains_last_activity_and_no_news(stack_rep
     assert not last_activity_yours({"updated": "2026-11-10 11:00:00.000000000"}), (
         "a comment by anyone: Gerrit does not say whose"
     )
+
+
+def test_a_chain_member_carries_your_own_votes_on_its_current_patchset(stack_repo: Path) -> None:
+    """What the task header marks *voted by you*: your votes only, not a reviewer's."""
+    store, keys, _rows = _gerrit(stack_repo)
+    bob = {"_account_id": 2000, "value": -1}
+    you = {"_account_id": 1000, "value": 1}
+    store._changes[keys[2]]["labels"] = {"Code-Review": {"value": -1, "all": [bob, you]}}  # pylint: disable=protected-access
+    store._changes[keys[3]]["labels"] = {"Code-Review": {"value": -1, "all": [bob]}}  # pylint: disable=protected-access
+    [chain] = _get(GerApi(stack_repo, gerrit=store), "/overview", refresh="1")["sections"][1]["chains"]
+    assert [m["your_votes"] for m in chain["members"]] == [{}, {}, {"Code-Review": 1}, {}]
+
+
+def test_reviewed_files_are_gerrits_flag_one_request_each_way(stack_repo: Path) -> None:
+    """Files seen in the Change view: Gerrit's per-file flag of one patchset, read and set by number."""
+    store, _keys, _rows = _gerrit(stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+    assert _get(api, "/reviewed", change="101", patchset="1") == {"change": 101, "patch_set": 1, "reviewed": []}
+    marked = _post(api, "/reviewed", {"change": 101, "patchset": 1, "path": "b.txt"})
+    assert marked == {"change": 101, "patch_set": 1, "path": "b.txt", "reviewed": True}
+    _post(api, "/reviewed", {"change": 101, "patchset": 1, "path": "a.txt", "reviewed": True})
+    _post(api, "/reviewed", {"change": 101, "patchset": 1, "path": "b.txt", "reviewed": False})
+    store.calls.clear()
+    assert _get(api, "/reviewed", change="101", patchset="1")["reviewed"] == ["a.txt"]
+    assert [call.method for call in store.calls] == ["list_reviewed_files"], "nothing resolved: one request"
+    with pytest.raises(BadRequest):
+        _get(api, "/reviewed", change="101")
+
+
+def test_file_reads_an_object_beside_the_request_being_served(stack_repo: Path) -> None:
+    """`/file` is not serialised: a checkout cannot change what a commit id names."""
+    store, _keys, rows = _gerrit(stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+    answer = api.handle_unlocked("GET", f"{V1}/file", {"rev": [rows[0].sha], "path": ["a.txt"]})
+    assert answer is not None and answer["content"] == "file a.txt\n"
+    with pytest.raises(NoRoute):
+        api.handle("GET", f"{V1}/file", {"rev": [rows[0].sha], "path": ["a.txt"]})
 
 
 def test_failed_ci_is_the_headline_only_on_the_local_stacks_chain(stack_repo: Path) -> None:
@@ -1069,7 +1107,7 @@ def _http(
 def test_http_answers_only_with_the_token_on_a_loopback_host(served: GerHttpServer) -> None:
     status, body = _http(served, f"{V1}/health")
     assert status == 200
-    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.5.0", "feature", "g.example")
+    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.6.0", "feature", "g.example")
     assert _http(served, f"{V1}/health", token=None)[0] == 401
     assert _http(served, f"{V1}/health", token="wrong")[0] == 401
     # A page that rebinds its own name to 127.0.0.1 still sends its name as Host.

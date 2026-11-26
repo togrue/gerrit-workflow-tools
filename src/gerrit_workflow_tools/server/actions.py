@@ -55,13 +55,14 @@ def review_open(ctx: Context, req: Request) -> dict[str, Any]:
     """
     step = req.body_field("step", int)
     stage = req.body_field("stage", bool)
+    chain: list[int] = []
     if step is not None:
         if step not in (1, -1) or req.body_field("change", (str, int)) is not None:
             raise BadRequest("step is 1 or -1, and names no change")
         state = find_review(ctx.cwd, ctx.settings)
         if state is None:
             raise ReviewUsageError("no review going on here: name a change first")
-        target, url = review_neighbour(ctx.service, ctx.cwd, state, step)
+        target, url, chain = review_neighbour(ctx.service, ctx.cwd, state, step)
         mode: str = state.mode
     else:
         change = req.body_field("change", (str, int), required=True)
@@ -77,7 +78,8 @@ def review_open(ctx: Context, req: Request) -> dict[str, Any]:
         force=bool(req.body_field("force", bool)),
     )
     state, moved_from = open_review(ctx.cwd, target, settings=ctx.settings, options=options)
-    chain = related_chain_numbers(ctx.service, state.key, state.patch_set)
+    # A step moves along the chain it found the change in: Gerrit is not asked for it again.
+    chain = chain or related_chain_numbers(ctx.service, state.key, state.patch_set)
     return {"review": review_state_json(state, chain=chain, url=url), "moved_from": moved_from}
 
 
