@@ -539,8 +539,13 @@ button.twist:hover {
   opacity: 0.6;
 }
 
-/* Explanations (change.js explain) wrap instead of ending in "…": the words flow, the icon stays on the first line. */
-.head.explain {
+/*
+ * A message that says what went wrong or what state things are in (common.js words): drawn whole,
+ * wrapping under itself in a narrow view, never cut off. The icon stays on the first line; what it
+ * means goes under it, quieter, as a list row's description. Ordinary rows (a subject, a file
+ * name, a comment's first line) stay one line and may be cut.
+ */
+.wraps {
   align-items: flex-start;
   height: auto;
   min-height: 22px;
@@ -550,29 +555,43 @@ button.twist:hover {
   white-space: normal;
 }
 
-.head.explain > .codicon {
+.wraps > .codicon {
   flex: none;
   margin-top: 1px;
 }
 
-.head.explain .words {
+.wraps .words {
   flex: 1 1 auto;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.head.explain .words .label,
-.head.explain .words .detail {
+.wraps .words .label,
+.wraps .words .detail {
   overflow: visible;
 }
 
-/* What the explanation means, under it: quieter, as a list row's description. */
-.head.explain .words .detail {
+.wraps .words .detail {
   display: block;
 }
 
-.head.explain .link {
+.wraps .link {
   line-height: 18px;
+}
+
+.wraps .badges {
+  flex: none;
+}
+
+/* Raw words of git or Gerrit under a sentence of ger's: kept as they came, in the editor's font. */
+.words .raw {
+  display: block;
+  margin-top: 2px;
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family);
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  user-select: text;
 }
 
 select {
@@ -593,8 +612,35 @@ select:focus {
 }
 
 .section-head {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: 22px;
+  row-gap: 0;
   padding-left: 4px;
+  white-space: normal;
   border-top: 1px solid var(--vscode-sideBarSectionHeader-border, var(--vscode-widget-border, transparent));
+}
+
+/* A long title wraps rather than push its counts out of the view: they move under it, at the right. */
+.section-head .label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.section-summary {
+  display: flex;
+  flex: 1 0 auto;
+  max-width: 100%;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.section-summary .detail {
+  flex: 0 1 auto;
+  white-space: normal;
 }
 
 .file,

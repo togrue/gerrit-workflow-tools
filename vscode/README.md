@@ -660,6 +660,12 @@ draw it and send back what you did. They use VS Code's icon font, which `npm ins
 from `@vscode/codicons` into `media/` (a webview cannot reach the editor's own copy), together
 with its two licences ([Third-party notices](#third-party-notices)).
 
+A line that says what state things are in or what went wrong (a view's status headline, Local
+stack's banner and its other lines, why CI has nothing to read, why a log could not be read) is
+drawn whole: it wraps in a narrow side bar and is never cut off. Ordinary rows (a subject, a file
+name, a comment's first line) stay one line and may end in "…". A section's counts stay beside its
+title; when both do not fit, the counts move under it, at the right.
+
 The suite presses every button in turn. For the two webview views it calls what their pages
 send (a drop at a line, a button on a comment) and prints their view models as text; how the
 pages look and feel is not covered by it. Everything the extension says or does outside its
@@ -705,7 +711,7 @@ is listed under the frame.
 - `npm run gallery -- --png <dir>` also writes a picture of each frame,
   `<scenario>.<view>.<theme>.<width>.png`, at twice the size. It runs an installed Edge, Chrome or
   Chromium headless (`GER_GALLERY_BROWSER` names another one), once per picture: all of them take
-  a few minutes, so `--only <words>` keeps the scenarios with those words in their name. This is
+  a few minutes, so `--only <words>` keeps the scenarios with those words in their name (several: `--only "conflict|ci findings"`). This is
   how a coding agent looks at a layout change it made.
 
 Open the `vscode` folder in VS Code and press `F5` to start an Extension Development Host;

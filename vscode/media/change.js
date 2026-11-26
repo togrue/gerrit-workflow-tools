@@ -4,7 +4,7 @@
 // chains and CI findings are rows that open what they name.
 
 (function () {
-  const { h, icon, badge, actions, info, post, panel, listen, getState, setState, task } = window.ger;
+  const { h, icon, badge, actions, info, words, post, panel, listen, getState, setState, task } = window.ger;
   const root = document.getElementById("root");
 
   let vm = {};
@@ -203,7 +203,7 @@
       },
       icon(isOpen ? "chevron-down" : "chevron-right"),
       h("span", { class: "label" }, title),
-      summary,
+      h("span", { class: "section-summary" }, summary),
     );
     return h("div", { class: "section" }, header, isOpen ? body() : null);
   }
@@ -314,22 +314,19 @@
     if (ci.state === "closed" || ci.state === "loading") {
       return h("div", { class: "reply" }, h("span", { class: "codicon codicon-loading codicon-modifier-spin" }), h("span", { class: "detail" }, "Fetching the findings…"));
     }
+    // Why there is nothing to read is said whole: it is the state the findings are in.
     if (ci.state === "error") {
-      return h("div", { class: "reply" }, icon("error", "bad"), h("span", { class: "label" }, ci.error));
+      return h("div", { class: "reply wraps" }, icon("error", "bad"), words(ci.error));
     }
     if (!ci.links.length) {
-      return h("div", { class: "reply" }, ci.noLinks ? h("span", { class: "label" }, ci.noLinks) : null, h("span", { class: "detail" }, ci.summary));
+      return h("div", { class: "reply wraps" }, ci.noLinks ? words(ci.noLinks, ci.summary) : h("span", { class: "detail" }, ci.summary));
     }
     return h(
       "div",
       {},
       ci.links.map((link) => [
-        item(
-          { class: "thread", title: link.tooltip, onclick: () => post("url", { url: link.url }) },
-          icon(link.icon, link.tone),
-          h("span", { class: "label" }, link.text),
-          h("span", { class: "detail" }, link.detail),
-        ),
+        // A build's row says what became of its log ("could not be read: …"): whole, wrapping.
+        item({ class: "thread wraps", title: link.tooltip, onclick: () => post("url", { url: link.url }) }, icon(link.icon, link.tone), words(link.text, link.detail)),
         link.findings.map((finding) => findingRow(finding, "finding")),
         warningRows(link),
       ]),
@@ -406,13 +403,7 @@
 
   /** An explanation: an icon and words that wrap under each other in a narrow view, never cut off. */
   function explain(iconId, tone, text, detail, ...rest) {
-    return h(
-      "div",
-      { class: "head note explain" },
-      icon(iconId, tone),
-      h("span", { class: "words" }, h("span", { class: "label" }, text), detail ? [" ", h("span", { class: "detail" }, detail)] : null),
-      ...rest,
-    );
+    return h("div", { class: "head note wraps" }, icon(iconId, tone), words(text, detail), ...rest);
   }
 
   // --- The page ---------------------------------------------------------------------
@@ -441,7 +432,8 @@
       const head = vm.head;
       // Votes and comments as badges, drawn as the Local stack draws them; words only when there are none.
       const right = head.badges.length ? h("span", { class: "badges" }, head.badges.map((item) => badge(item))) : h("span", { class: "detail" }, head.detail);
-      parts.push(h("div", { class: "head", title: `${head.text} — ${head.detail}` }, icon(head.icon, head.tone), h("span", { class: "label" }, head.text), right));
+      // What state the change is in: said whole, wrapping under itself in a narrow view.
+      parts.push(h("div", { class: "head wraps", title: `${head.text} — ${head.detail}` }, icon(head.icon, head.tone), words(head.text), right));
       // A rebase stopped here: the way on, as Local stack's banner offers it.
       if (head.actions && head.actions.length) {
         parts.push(actions(head.actions));

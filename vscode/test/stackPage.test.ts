@@ -187,3 +187,13 @@ test("Enter on a row's button is the button's, and Enter or Escape with no row f
   assert.equal(enter.defaultPrevented, false, "the browser presses the button");
   assert.deepEqual(page.opened(), [["Third", true]], "Enter on First's button does not show Third again");
 });
+
+test("Local stack's lines that say what state the stack is in wrap; a conflicted file is a row, cut when long", () => {
+  const page = fakePage("stack", stackVm({ error: { code: "GIT", message: "fatal: no upstream configured for branch 'change-48211'" }, needs_upstream: true }, { branch: "change-48211", upstream: null, suggested: null, why: null, candidates: [] }, never));
+  const lines = page.root.querySelectorAll(".info");
+  assert.ok(lines.length >= 2);
+  assert.ok(lines.every((element) => element.classList.contains("wraps")), "the state and the ways out of it");
+  const conflict = { ...stack([commit("First", { rebase: "current" })]), rebase_in_progress: true, rebase: { branch: "main", onto: null, orig_head: null, stop: "conflict" as const, applied: false, current: null, unmerged: ["src/a.ts"], as_before: false, actions: ["abort" as const], refused: {} } };
+  const rows = fakePage("stack", stackVm(conflict, undefined, never)).root.querySelectorAll(".info");
+  assert.deepEqual(rows.map((element) => element.classList.contains("wraps")), [true, false], "the banner wraps, the file does not");
+});

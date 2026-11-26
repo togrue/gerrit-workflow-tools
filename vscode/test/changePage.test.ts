@@ -7,7 +7,7 @@ import { test } from "node:test";
 
 import { ChangeVm, READ_ONLY, changeVm } from "../src/changeRows";
 import { FakeElement, fakePage } from "./fakePage";
-import { chain, comment, state } from "./fixtures";
+import { chain, comment, shown, state } from "./fixtures";
 
 /** The Change view's page, drawn for `view`: its root, what it posted, and how to send it a message. */
 const changePage = (view: ChangeVm) => fakePage("change", view);
@@ -137,4 +137,20 @@ test("Alt+F9 in the Change view walks the comments: VS Code's key binding does n
   const count = posted.length;
   text.dispatch("keydown", { key: "F9" });
   assert.equal(posted.length, count, "F9 alone is not the walk");
+});
+
+test("what says the state, or what went wrong, is drawn whole (wrapping); a section's counts stay beside a long title", () => {
+  const stopped = { stop: "conflict" as const, unmerged: ["src/a.ts", "src/b.ts"], actions: ["abort" as const, "skip" as const] };
+  const failing = { ci_failures: ["Verified"], verified: -1, attention_reasons: ["ci-failed"] };
+  const wraps = (root: FakeElement, text: string) => root.all(byClass("wraps")).some((element) => element.textContent.includes(text));
+  const conflicted = changePage(changeVm(state({ stopped })));
+  assert.ok(wraps(conflicted.root, "Conflicts in 2 files — resolve them, then Continue"), "the head");
+  assert.ok(!wraps(conflicted.root, "src/a.ts"), "a conflicted file is a row like a file's");
+  const unreachable = changePage(changeVm(state({ shown: shown({ ...failing }), ci: { state: "error", error: "Gerrit unreachable: connection refused (gerrit.example.org:443)" } })));
+  assert.ok(wraps(unreachable.root, "Gerrit unreachable: connection refused (gerrit.example.org:443)"));
+  const noLink = changePage(changeVm(state({ shown: shown({ ...failing }), ci: { state: "loaded", contents: [], introduced: null } })));
+  assert.ok(wraps(noLink.root, "No CI link was found for the failed build"));
+  const files = changePage(changeVm(state({})));
+  const head = files.root.all(byClass("section-head"))[0];
+  assert.equal(head.all(byClass("section-summary"))[0].all(byClass("counts")).length, 1, "the counts sit in the summary, which wraps under the title as a whole");
 });

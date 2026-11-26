@@ -3,7 +3,7 @@
 // Writes the gallery to out/gallery and prints the path of its page. Snapshot files (a user's
 // report) are added as scenarios, in front of the built-in ones. With --png, a picture of every
 // frame at every width goes into <dir>, so layout can be looked at without a browser window.
-// --only keeps the scenarios whose name has the words in it: fewer pictures, sooner.
+// --only keeps the scenarios whose name has the words in it (several: `a|b`): fewer pictures, sooner.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -80,7 +80,8 @@ async function pictures(browser: string, index: string, all: readonly Scenario[]
 
 async function main(): Promise<number> {
   const args = parse(process.argv.slice(2));
-  const all = [...args.files.map(fromFile), ...scenarios()].filter((scenario) => scenario.name.toLowerCase().includes(args.only));
+  const wanted = args.only.split("|");
+  const all = [...args.files.map(fromFile), ...scenarios()].filter((scenario) => wanted.some((words) => scenario.name.toLowerCase().includes(words)));
   if (!all.length) {
     throw new Error(`no scenario has "${args.only}" in its name`);
   }

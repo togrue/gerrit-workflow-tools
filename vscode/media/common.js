@@ -117,8 +117,24 @@
   }
 
   /**
+   * The words of a message that must be read whole (views.css `.wraps`): `text`, then what it means
+   * under it, then the raw words of git or Gerrit it rests on, as they came.
+   */
+  function words(text, detail, raw) {
+    return h(
+      "span",
+      { class: "words" },
+      h("span", { class: "label" }, text),
+      detail ? [" ", h("span", { class: "detail" }, detail)] : null,
+      raw ? h("span", { class: "raw" }, raw) : null,
+    );
+  }
+
+  /**
    * An info row (a `StackInfo` of src/stackRows.ts): Local stack's banner and its lines, a
    * conflicted file in either view. A conflicted file opens to resolve it; its buttons go under it.
+   * A conflicted file is a row like a file's, cut when long; every other line says what state
+   * things are in, or what to do about it, and wraps.
    */
   function info(row) {
     const run = row.conflict
@@ -129,10 +145,9 @@
     const keys = run ? (event) => (event.key === "Enter" || event.key === " ") && (event.preventDefault(), run()) : undefined;
     const element = h(
       "div",
-      { class: `info${run ? " clickable" : ""}${row.conflict ? " conflict" : ""}`, title: row.tooltip, role: run ? "button" : undefined, tabindex: run ? "0" : undefined, onclick: run, onkeydown: keys },
+      { class: `info${run ? " clickable" : ""}${row.conflict ? " conflict" : " wraps"}`, title: row.tooltip, role: run ? "button" : undefined, tabindex: run ? "0" : undefined, onclick: run, onkeydown: keys },
       row.icon ? icon(row.icon, row.tone) : h("span", { class: "codicon" }),
-      h("span", { class: "label" }, row.text),
-      h("span", { class: "detail" }, row.detail || ""),
+      row.conflict ? [h("span", { class: "label" }, row.text), h("span", { class: "detail" }, row.detail || "")] : words(row.text, row.detail, row.raw),
     );
     return row.actions && row.actions.length ? [element, actions(row.actions)] : element;
   }
@@ -388,6 +403,7 @@
     ring,
     actions,
     info,
+    words,
     post,
     panel,
     listen,
