@@ -46,6 +46,34 @@
     return h("span", { class: `${cls} tone-${item.tone}${item.stale ? " stale" : ""}`, title: item.title }, mark, item.text);
   }
 
+  /** What a row's badges say, in words: each one's tooltip, for a screen reader and the keyboard (they are icons on screen). */
+  function badgeWords(items) {
+    return items
+      .filter(Boolean)
+      .map((item) => (item.title || item.text || "").split("\n")[0])
+      .filter(Boolean)
+      .join("; ");
+  }
+
+  /**
+   * A row's badges as one stop for the keyboard (Q4, state 23): a group named by their words, so Tab
+   * reaches them and a screen reader says what the icons do not. `focusable`: in the tab order now
+   * (a list's rows rove: only the focused row's group is). `open`: what Enter or Space does there.
+   */
+  function badgeGroup(items, children, { focusable = true, open } = {}) {
+    const words = badgeWords(items);
+    const keys = open
+      ? (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            event.stopPropagation();
+            open();
+          }
+        }
+      : undefined;
+    return h("span", { class: "badges", role: words ? "group" : undefined, "aria-label": words || undefined, tabindex: words ? (focusable ? "0" : "-1") : undefined, onkeydown: keys }, children);
+  }
+
   const SVG = "http://www.w3.org/2000/svg";
   let masks = 0;
 
@@ -176,7 +204,7 @@
    * `context(row, rows)` is its `data-vscode-context`, `rows` being what a command on it acts on.
    * The page draws the list; `wire(list)` makes its `.row` elements (with `data-key`) answer.
    */
-  function rowSelection({ rows, open, context }) {
+  function rowSelection({ rows, open, context, changed }) {
     let selected = new Set();
     let focused = null;
     let anchor = null;
@@ -190,10 +218,14 @@
     /** What a command from the context menu gets: the row, and every selected row when it is one of several. */
     const contextOf = (row) => JSON.stringify(context(row, selected.has(row.key) && selected.size > 1 ? selectedRows() : [row]));
 
+    /** A row element's id, for the list's `aria-activedescendant`: the focused row is the one read out. */
+    const rowId = (key) => `row-${String(key).replace(/[^\w-]/g, "_")}`;
+
     /** What a row element needs from the selection: its classes, and its attributes. */
     function attributes(row) {
       return {
         classes: [selected.has(row.key) ? "selected" : "", focused === row.key ? "focused" : ""],
+        id: rowId(row.key),
         role: "option",
         "aria-selected": selected.has(row.key) ? "true" : "false",
         "data-key": row.key,
@@ -221,6 +253,10 @@
         element.classList.toggle("focused", focused === row.key);
         element.setAttribute("aria-selected", on ? "true" : "false");
         element.setAttribute("data-vscode-context", contextOf(row));
+      }
+      list.setAttribute("aria-activedescendant", focused === null ? "" : rowId(focused));
+      if (changed) {
+        changed();
       }
     }
 
@@ -318,7 +354,7 @@
       });
     }
 
-    return { attributes, keep, wire, select, selectedRows, rowOf, has: (key) => selected.has(key) };
+    return { attributes, keep, wire, select, selectedRows, rowOf, has: (key) => selected.has(key), focusedKey: () => focused };
   }
 
   // --- The task header (src/taskRows.ts) ---------------------------------------------------
@@ -461,6 +497,8 @@
     h,
     icon,
     badge,
+    badgeGroup,
+    badgeWords,
     ring,
     actions,
     info,

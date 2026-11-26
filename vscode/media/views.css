@@ -119,6 +119,22 @@ body[data-vscode-theme-kind="vscode-high-contrast"] {
   background: var(--vscode-list-hoverBackground);
 }
 
+/*
+ * Everything the keyboard reaches shows where it is (state 23): a button, a link, a row, a step, a
+ * badge group. The focus border (measured in test/contrast.test.ts); the list itself shows its
+ * focused row instead.
+ */
+button:focus-visible,
+a:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+[tabindex="0"]:not(.list):focus-visible,
+.badges[tabindex]:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
 .item:focus-visible,
 .info.clickable:focus-visible {
   outline: 1px solid var(--vscode-focusBorder);

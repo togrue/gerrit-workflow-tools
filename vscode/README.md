@@ -113,7 +113,11 @@ The commits above your upstream, newest first. One row per commit:
   that answer an open chain, and for the change the Change view shows, all of them: a draft that
   answers nothing on a commit not shown is not seen until it is shown (asking Gerrit for drafts on
   every load would cost a request a warm `ger log` does not make). Hover it
-  a moment for the comments, with *Go there*, *Reply Done* and *Apply*.
+  a moment for the comments, with *Go there*, *Reply Done* and *Apply*. From the keyboard: the
+  list walks its rows with the arrow keys (each row read out with its notes, Gerrit's state and its
+  badges' words); **Tab** then reaches the focused row's badges, one stop named by their words, and
+  **Enter** there shows the comments. The Change view's head badges are one stop too, and every
+  button, row and step of both views shows the focus ring.
 - An **icon** in front says how the commit relates to Gerrit: a **full circle** when it is the
   same as on Gerrit; a **yellow arrow up** in a circle when it is only rebased since the last push
   (the same code by patch-id, whitespace and message aside: Gerrit usually keeps the votes); a **yellow diff** square when its code changed since (push it, and

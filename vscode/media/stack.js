@@ -4,7 +4,7 @@
 // (`webview/context` in package.json).
 
 (function () {
-  const { h, icon, info, post, panel, listen, rowSelection } = window.ger;
+  const { h, icon, info, post, panel, listen, rowSelection, badgeGroup, badgeWords } = window.ger;
   const root = document.getElementById("root");
 
   let vm = { info: [], rows: [], frozen: null, movable: 0 };
@@ -27,7 +27,25 @@
       gerMulti: rows.length > 1,
       gerReview: Boolean(vm.review),
     }),
+    // The focused row's badges are the one stop Tab reaches after the list: they follow the focus.
+    changed: () => rove(),
   });
+
+  /** The row whose badges Tab reaches: the focused one, else the first. */
+  const badgeStop = () => selection.focusedKey() ?? (vm.rows[0] && vm.rows[0].key);
+
+  function rove() {
+    if (!list) {
+      return;
+    }
+    const stop = badgeStop();
+    for (const element of list.querySelectorAll(".badges")) {
+      if (element.getAttribute("tabindex") === null) {
+        continue; // nothing to say there
+      }
+      element.setAttribute("tabindex", element.closest(".row").dataset.key === stop ? "0" : "-1");
+    }
+  }
 
   const BADGE_KINDS = ["comments", "review", "ci"];
 
@@ -54,6 +72,8 @@
         ...attributes,
         draggable: "true",
         title: row.tooltip,
+        // Read out as a whole when the list's focus is on it: the subject, its notes, Gerrit's state, the badges' words.
+        "aria-label": [row.summary, row.notes.join(", "), row.syncTitle, badgeWords(row.badges)].filter(Boolean).join(". "),
       },
       h("span", { class: "marker" }, marker),
       h("span", { class: `codicon codicon-${row.syncIcon} sync sync-${row.sync}`, title: row.syncTitle }),
@@ -67,7 +87,12 @@
         vm.frozen ? null : h("button", { class: "codicon codicon-edit", title: "Edit Commit Here", "data-command": "ger.stack.edit" }),
         row.url ? h("button", { class: "codicon codicon-link-external", title: "Open in Gerrit", "data-command": "ger.openInGerrit" }) : null,
       ),
-      h("span", { class: "badges" }, slots.map((slot) => (slot === 0 && row.badges[0] ? commentBadge(row) : badge(row.badges[slot], slot)))),
+      badgeGroup(
+        row.badges,
+        slots.map((slot) => (slot === 0 && row.badges[0] ? commentBadge(row) : badge(row.badges[slot], slot))),
+        // Enter on them: the comments, as hovering the ring shows them.
+        { focusable: row.key === badgeStop(), open: row.badges[0] ? () => post("comments", { sha: row.sha }) : undefined },
+      ),
     );
   }
 

@@ -4,7 +4,7 @@
 // chains and CI findings are rows that open what they name.
 
 (function () {
-  const { h, icon, badge, actions, info, words, post, panel, listen, getState, setState, task } = window.ger;
+  const { h, icon, badge, badgeGroup, actions, info, words, post, panel, listen, getState, setState, task } = window.ger;
   const root = document.getElementById("root");
 
   let vm = {};
@@ -521,7 +521,8 @@
     if (vm.head) {
       const head = vm.head;
       // Votes and comments as badges, drawn as the Local stack draws them; words only when there are none.
-      const right = head.badges.length ? h("span", { class: "badges" }, head.badges.map((item) => badge(item))) : h("span", { class: "detail" }, head.detail);
+      // One keyboard stop that says the badges' words (state 23: icons only, mouse only).
+      const right = head.badges.length ? badgeGroup(head.badges, head.badges.map((item) => badge(item))) : h("span", { class: "detail" }, head.detail);
       // What state the change is in: said whole, wrapping under itself in a narrow view.
       parts.push(h("div", { class: "head wraps", title: `${head.text} — ${head.detail}` }, icon(head.icon, head.tone), words(head.text), right));
       // A rebase stopped here: the way on, as Local stack's banner offers it.
