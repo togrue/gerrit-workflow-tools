@@ -18,8 +18,9 @@ from gerrit_workflow_tools.cli_terminal import stdin_is_terminal
 from gerrit_workflow_tools.core.fixups import UNSQUASHED_FIXUP_ADVICE
 from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.rebase_abort import abort_loss, keep_uncommitted
 from gerrit_workflow_tools.core.rebase_next_step import ABORT, go_on_refusal, stop_next_step, where_head_is
-from gerrit_workflow_tools.core.rebase_state import RebaseAction, RebaseStop
+from gerrit_workflow_tools.core.rebase_state import RebaseAction, RebaseProgress, RebaseStop
 from gerrit_workflow_tools.core.rebasing_stack import stopped_rebase
 from gerrit_workflow_tools.core.rewrite_outcome import (
     DroppedCommit,
@@ -142,11 +143,9 @@ def go_on_with_rebase(run: RunContext, action: RebaseAction, *, walk_on: str | N
     assert progress is not None  # go_on_refusal refuses without one
     before = stack_before(run, progress.orig_head) if progress.orig_head else None
     env = None if stdin_is_terminal() or "GIT_EDITOR" in os.environ else {"GIT_EDITOR": "true"}
-    code = _git_rebase(cwd, f"--{action.value}", env=env)
     if action is RebaseAction.ABORT:
-        if code == 0:
-            print(f"rebase aborted: {where_head_is(cwd)}, as before the rebase", file=sys.stderr)
-        return code
+        return _abort(cwd, progress, env)
+    code = _git_rebase(cwd, f"--{action.value}", env=env)
     now = stopped_rebase(cwd)
     if now is not None:
         skipped = action is RebaseAction.SKIP and progress.current and now.current != progress.current
@@ -155,6 +154,30 @@ def go_on_with_rebase(run: RunContext, action: RebaseAction, *, walk_on: str | N
         print_stop(cwd, walk_on)
     elif code == 0 and before is not None:
         print_outcome(rewrite_outcome(run, before), walk_on=walk_on, undo="cherry-pick")
+    return code
+
+
+def _abort(cwd: Path, progress: RebaseProgress, env: dict[str, str] | None) -> int:
+    """``git rebase --abort``, the uncommitted changes stashed first; then what it kept and threw away."""
+    loss = abort_loss(cwd, progress)
+    stopped_at = git_out("log", "-1", "--format=%h %s", "HEAD", cwd=cwd)
+    stash = keep_uncommitted(cwd, loss, stopped_at)
+    code = _git_rebase(cwd, "--abort", env=env)
+    if code != 0:
+        return code
+    say(f"rebase aborted: {where_head_is(cwd)}, as before the rebase")
+    if stash:
+        say(
+            f"kept: your changes to {', '.join(loss.uncommitted)}, not amended, in {stash}; "
+            "`git stash apply` brings them back"
+        )
+    for commit in loss.rewritten:
+        say(
+            f"gone from the branch: {commit.short_sha} {commit.subject}, made in this rebase; "
+            f"`git show {commit.short_sha}`"
+        )
+    if loss.resolution:
+        say("gone: the conflict resolution of the commit it stopped at")
     return code
 
 

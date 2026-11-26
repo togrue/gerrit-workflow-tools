@@ -27,6 +27,7 @@ from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_s
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.inbox import RebaseHeadline, load_inbox, pick_headline, project_scope
 from gerrit_workflow_tools.core.push_checks import push_blocked
+from gerrit_workflow_tools.core.rebase_abort import abort_loss
 from gerrit_workflow_tools.core.rebase_next_step import go_on_refusal
 from gerrit_workflow_tools.core.rebase_state import RebaseAction, rebase_underway
 from gerrit_workflow_tools.core.rebasing_stack import stopped_rebase
@@ -102,7 +103,17 @@ def rebase_refusal(ctx: Context, req: Request) -> dict[str, Any]:
         action = RebaseAction(req.one("action", RebaseAction.CONTINUE.value))
     except ValueError as exc:
         raise BadRequest(f"action must be one of {', '.join(a.value for a in RebaseAction)}") from exc
-    return {"action": action.value, "refused": go_on_refusal(ctx.cwd, action, stopped_rebase(ctx.cwd))}
+    progress = stopped_rebase(ctx.cwd)
+    answer: dict[str, Any] = {"action": action.value, "refused": go_on_refusal(ctx.cwd, action, progress)}
+    if action is RebaseAction.ABORT and progress is not None:
+        loss = abort_loss(ctx.cwd, progress)
+        answer["discards"] = {
+            "uncommitted": list(loss.uncommitted),
+            "rewritten": [{"sha": c.sha, "short_sha": c.short_sha, "summary": c.subject} for c in loss.rewritten],
+            "resolution": loss.resolution,
+            "asks": loss.asks,
+        }
+    return answer
 
 
 def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline | None]:

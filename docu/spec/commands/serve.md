@@ -434,6 +434,14 @@ client asks it just before it starts the step in a terminal, so a refusal is sai
 client is, not only in the terminal. Cost: two git calls (`update-index --refresh`, `diff-files`)
 beyond reading the stop.
 
+With `action=abort` and a rebase underway it also says what the abort would throw away, as
+`discards` ([rebase](rebase.md#what---abort-keeps-and-what-it-names)): `uncommitted` (files changed
+and not committed at a stop with the commit applied: `ger rebase --abort` keeps them in a stash),
+`rewritten` (`[{sha, short_sha, summary}]`, the commits made in this rebase that the branch before
+it does not have: gone from the branch), `resolution` (`true` at a conflict resolved and added),
+and `asks`: `true` when `rewritten` or `resolution` hold something, which no stash keeps, so a client
+asks before it aborts. Cost: four git calls more.
+
 ### `GET /chains/<number>`
 
 The **review chain** an open change sits in, base to top, in the `ger inbox --json` chain shape.
