@@ -177,5 +177,43 @@ def test_a_short_terminal_gets_the_bare_prompt_and_is_told_where_the_preview_is(
     assert (full.menu, full.toolbar, full.note) == (8, True, None)
     short = pip.prompt_room(2)
     assert (short.menu, short.toolbar) == (0, False)
-    assert short.note == "(the terminal is 2 rows high: the preview is above, scroll up or make it taller)"
-    assert pip.prompt_room(1).note == "(the terminal is 1 row high: the preview is above, scroll up or make it taller)"
+    note = "too low to show what is pushed: make it taller and Enter pushes; Ctrl-C cancels)"
+    assert short.note == f"(the terminal is 2 rows high, {note}"
+    assert pip.prompt_room(1).note == f"(the terminal is 1 row high, {note}"
+    # Enter pushes only once the preview is on screen (state 19: a 2-row panel showed only the line).
+    assert not pip.preview_fits(2) and pip.preview_fits(12)
+
+
+def test_enter_does_not_push_while_the_terminal_is_too_low_to_show_the_preview(
+    history_cache: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """State 19: in a 2-row panel only the options line was on screen, and Enter would have pushed unseen."""
+    import threading
+    import time
+
+    from prompt_toolkit.application import create_app_session
+    from prompt_toolkit.data_structures import Size
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+
+    from gerrit_workflow_tools.core.config import Settings
+
+    rows = [2]
+
+    class Sized(DummyOutput):
+        def get_size(self) -> Size:
+            return Size(rows=rows[0], columns=80)
+
+    monkeypatch.setattr(pip.shutil, "get_terminal_size", lambda _fallback=None: __import__("os").terminal_size((80, 2)))
+    with create_pipe_input() as keys, create_app_session(input=keys, output=Sized()):
+
+        def press() -> None:
+            keys.send_text("\r")  # too low: Enter waits
+            time.sleep(0.3)
+            rows[0] = 24  # the panel made taller
+            keys.send_text("\r")
+
+        threading.Thread(target=press, daemon=True).start()
+        res = pip.prompt_push_options_line(default="", settings=Settings.from_map({}))
+    assert res.valid_for_apply and res.state.answer is None, "the empty line, accepted once the panel was taller"
+    assert capsys.readouterr().err.count("too low to show what is pushed") == 2, "said before, and at the refused Enter"

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
-from prompt_toolkit.application import get_app
+from prompt_toolkit.application import get_app, run_in_terminal
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.completion import CompleteEvent, Completer, Completion
 from prompt_toolkit.document import Document
@@ -278,6 +278,13 @@ def prompt_push_options_line(
     room = prompt_room(shutil.get_terminal_size((80, 24)).lines)
     if room.note:
         print(room.note, file=sys.stderr)
+    bindings = _history_bindings(HistoryCursor(display_history, initial))
+
+    @bindings.add("enter", filter=Condition(lambda: not preview_fits(get_app().output.get_size().rows)))
+    def _too_low(_event):  # type: ignore[no-untyped-def]
+        # Enter would send what is not on screen: said above the line, until the terminal is taller.
+        run_in_terminal(lambda: print(prompt_room(get_app().output.get_size().rows).note, file=sys.stderr))
+
     session: PromptSession[str] = PromptSession(
         message=message,
         lexer=PushOptionsLexer(),
@@ -285,7 +292,7 @@ def prompt_push_options_line(
         validate_while_typing=False,
         completer=PushOptionsCompleter(completion_candidates, catalog=catalog),
         complete_while_typing=True,
-        key_bindings=_history_bindings(HistoryCursor(display_history, initial)),
+        key_bindings=bindings,
         bottom_toolbar=(lambda: _bottom_toolbar(session.default_buffer.text, catalog)) if room.toolbar else None,
         reserve_space_for_menu=room.menu,
     )
@@ -311,16 +318,22 @@ _FULL_ROOM = 12
 """Rows the prompt takes with its completion menu (8) and the toolbar, and a few of the preview above it."""
 
 
+def preview_fits(rows: int) -> bool:
+    """Whether a terminal *rows* high shows the preview above the prompt: only then does Enter push."""
+    return rows >= _FULL_ROOM
+
+
 def prompt_room(rows: int) -> PromptRoom:
     """The prompt as a terminal *rows* high takes it: in full, or one line without menu and toolbar.
 
     prompt_toolkit draws only "Window too small..." when its layout does not fit, so a short
-    terminal (a panel dragged low) gets the bare line, and is told where the preview is.
+    terminal (a panel dragged low) gets the bare line, and is told that Enter waits for room to
+    show the preview: a push is never confirmed unseen (state 19).
     """
-    if rows >= _FULL_ROOM:
+    if preview_fits(rows):
         return PromptRoom(menu=8, toolbar=True)
     high = f"{rows} row{'' if rows == 1 else 's'} high"
-    note = f"(the terminal is {high}: the preview is above, scroll up or make it taller)"
+    note = f"(the terminal is {high}, too low to show what is pushed: make it taller and Enter pushes; Ctrl-C cancels)"
     return PromptRoom(menu=0, toolbar=False, note=note)
 
 
