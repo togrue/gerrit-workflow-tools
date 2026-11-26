@@ -67,3 +67,24 @@ def test_abort_at_a_conflict_on_a_replay_loses_nothing(stack_repo: Path) -> None
     assert progress is not None
     loss = abort_loss(stack_repo, progress)
     assert (loss.uncommitted, loss.rewritten, loss.asks) == ((), (), False)
+
+
+def test_the_step_outcome_is_served_after_an_abort_and_a_refusal(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The views ran the step in a terminal: GET /stack says it ended, and how, in ger's words."""
+    api = GerApi(stack_repo, gerrit=_store(stack_repo))
+    _stop_to_edit(stack_repo)
+    (stack_repo / "c.txt").write_text("a fix saved, not amended\n", encoding="utf-8")
+
+    code, _err = _rebase(stack_repo, ["--continue"], monkeypatch)
+    refused = _get(api, "/stack")["last_outcome"]
+    assert code != 0 and (refused["command"], refused["ok"]) == ("rebase --continue", False)
+    assert refused["text"].startswith("refused: you have unstaged changes to c.txt")
+
+    code, _err = _rebase(stack_repo, ["--abort"], monkeypatch)
+    aborted = _get(api, "/stack")["last_outcome"]
+    assert code == 0 and (aborted["command"], aborted["ok"]) == ("rebase --abort", True)
+    assert aborted["text"].startswith("rebase aborted: feature is at ")
+    assert aborted["more"][0].startswith("kept: your changes to c.txt, not amended, in stash@{0}")
+    assert aborted["at"] >= refused["at"] and aborted["head"] == git_out("rev-parse", "HEAD", cwd=stack_repo)

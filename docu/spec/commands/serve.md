@@ -385,6 +385,15 @@ with it as a `next:` line.
 `git am` underway), and `message` is the refusal `ger push` prints. A client asks it before it
 starts `ger push`, so it can offer to finish the rebase instead.
 
+`last_outcome` is the **step outcome** the last `ger rebase --continue|--skip|--abort`, `ger edit -n`
+or `ger push` left in this worktree, or `null`: `command` (`rebase --abort`, `push`), `ok` (`false` for
+a refusal, a failure or a cancel), `text` (the one line of what happened, in the command's words:
+`rebase aborted: s14 is at d66fc18 …, as before the rebase`, `refused: you have unstaged changes …`,
+`push cancelled: nothing sent`), `more` (the lines after it: what was kept and where, the `next:`
+step), `at` (seconds since the epoch) and `head` (`HEAD` then). A client that ran the step in a
+terminal takes a newer `at` as the step's end and shows `text`; once `HEAD` is not `head` any
+more, the outcome is history. It is written to the file ger-outcome.json in the worktree's git dir.
+
 `staged_review` is the **staged review** in this checkout, or `null`: the **review state** as
 [`GET /review`](#get-review) has it (`chain` and `url` `null`), while HEAD still sits at the
 change's parent and its `change-<number>` branch on the change. The stack is then somebody

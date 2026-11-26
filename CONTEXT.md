@@ -18,6 +18,10 @@ _Avoid_: chain, series, branch commits
 The **local stack** while a rebase is underway: the commits on `HEAD` above the upstream as they are now, then the commit the rebase stopped at while it is not applied, then the todo, as they were. Each commit carries its **rebase step** — `done`, `current` or `todo`, none for one below the rebase's `onto` — and the stack carries why the rebase stopped (`edit`, `split`, `conflict`, `resolved`, `paused`), the paths still unmerged and, stopped on a fixup, the commit it folds into. Not a second stack: the **Gerrit overlay** finds each commit by its Change-Id as for any other.
 _Avoid_: live stack, stack as it was, rebase view
 
+**Step outcome**:
+What the last `ger rebase --continue/--skip/--abort`, `ger edit -n` or `ger push` said at its end — the one line of what happened (`rebase aborted: …`, `refused: …`, `push cancelled: …`) and the lines after it — left in the worktree's git dir for `ger serve` to serve. A client that ran the step in a terminal learns from it that the step is over and how it ended. One record, the newest; it is history once `HEAD` moves on.
+_Avoid_: last result, status message
+
 **Ready boundary**:
 The first commit in the **local stack** that a ready-boundary strategy (or the configured stop pattern) marks as blocking. Everything below it is pushable; it and everything above are held back.
 _Avoid_: cutoff, watermark, stop commit
