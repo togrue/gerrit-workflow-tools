@@ -242,8 +242,11 @@ export async function run(): Promise<void> {
       if (!(await input.click(box, what))) {
         return attempt > 0;
       }
-      await wait(1500);
-      box = await dialogButton(label);
+      // Gone once it took the click: look every 100 ms, not a fixed pause the step's time would count.
+      for (let i = 0; i < 15 && box; i++) {
+        await wait(100);
+        box = await dialogButton(label);
+      }
     }
     return Boolean(box) === false;
   };
@@ -318,7 +321,11 @@ export async function run(): Promise<void> {
       const inBox = () => window.evaluate<boolean>(`return !!document.activeElement?.closest(".review-widget, .comment-form, .comment-thread-widget");`);
       for (let i = 0; i < 60 && !(await inBox()); i++) await wait(50);
       if (!(await inBox())) {
-        await input.click(await window.boxOf(`return document.querySelector(".review-widget .comment-form .monaco-editor, .review-widget textarea");`), "into the comment box");
+        // The new thread's box: the one with Save Draft, not the reply box of a thread already there.
+        await input.click(
+          await window.boxOf(`const w = [...document.querySelectorAll(".review-widget")].reverse().find((w) => w.textContent.includes("Save Draft")); return w && w.querySelector(".comment-form .monaco-editor, textarea");`),
+          "into the comment box",
+        );
         await wait(200);
       }
       if (!(await inBox())) {

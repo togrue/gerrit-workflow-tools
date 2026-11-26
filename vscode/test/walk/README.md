@@ -74,8 +74,9 @@ change and publishes its draft comment there, and Reply Done saves drafts. After
 `gerritReset.ts` undoes what it can, so the next run starts where this one did: the vote is
 removed, the change put back in the user's attention set, and drafts that did not exist before
 the run are deleted (a draft that existed and was only changed stays). The published comment
-stays: only an administrator can delete one. `GER_WALK_RESET=0` leaves everything as the walk
-left it. Compare scorecards of runs against the same playground state.
+cannot be deleted (only an administrator can): it is resolved with a reply, so the change does
+not wait on its author, and each run leaves one resolved thread there. `GER_WALK_RESET=0` leaves
+everything as the walk left it. Compare scorecards of runs against the same playground state.
 
 The window is set up, not measured: the side bar widened, the Explorer in front, and
 `ger.reviewCheckout` set to `branch` in the copy (a review worktree opens in a window of its
