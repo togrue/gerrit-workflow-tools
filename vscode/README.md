@@ -629,6 +629,14 @@ the Review chains tree and the prompts are measured from the next start of the w
   started with it: `argv`, `exit`, `ms` and its git and Gerrit calls, the same shape
   ([SPEC.md](../docu/SPEC.md)). It has no action id: it joins by time.
 
+**The walk and its scorecard.** `npm run walk` drives a real VS Code through the review loop
+and the rework loop on a copy of the playground checkout, with clicks and keys as a user gives
+them and tracing on, and writes the trace, a picture per step and a scorecard (`scorecard.md`,
+`scorecard.json`): per step the user actions (clicks, keys, typed texts), the context switches,
+the time to the first response and to settled, the requests and subprocesses, a Windows
+estimate, the totals per loop and the steps over budget. See
+[test/walk/README.md](test/walk/README.md).
+
 ## Layout
 
 | File | Role |
@@ -663,6 +671,7 @@ the Review chains tree and the prompts are measured from the next start of the w
 | `src/report.ts` | The report of an issue: the anonymized views and the versions, as a snapshot file; the link to a new issue. No `vscode` import, unit-tested. |
 | `src/reportIssue.ts` | ger: Report Issue…: shows the report, then copies it for a GitHub issue or saves it. |
 | `test/fixtures.ts` | API-shaped commits, diffs, comment chains and CI logs: shared by the unit tests and the gallery's scenarios. |
+| `test/walk/` | The walk (`npm run walk`): the review and rework loops in a real VS Code against the playground Gerrit, real input through the DevTools protocol, and the scorecard of its trace. Not in the `.vsix`. |
 | `test/gallery/` | The webview gallery (`npm run gallery`): scenarios, the stand-in for VS Code (theme, `acquireVsCodeApi()`), the page around the frames, pictures. Not in the `.vsix`. |
 
 When the API grows a field, add it to `src/api.ts` first: the types there are the extension's

@@ -113,7 +113,8 @@ export function tracedUi(ui: Ui): Ui {
     reply: (options) => waitingOnUser("reply", () => ui.reply(options)),
     status: (text, milliseconds) => showing("status", () => ui.status(text, milliseconds)),
     progress: (location, title, task) => showing("progress", () => ui.progress(location, title, task)),
-    terminal: (options, text) => showing("terminal", () => ui.terminal(options, text)),
+    // A ger command run there writes its own record to the same file (`cli`).
+    terminal: (options, text) => showing("terminal", () => ui.terminal(activeTracer() && traceFile() ? { ...options, env: { ...options.env, GER_TRACE: traceFile() } } : options, text)),
     copy: (text) => showing("copy", () => ui.copy(text)),
     openExternal: (uri) => showing("browser", () => ui.openExternal(uri)),
     openFolder: (uri) => ui.openFolder(uri),

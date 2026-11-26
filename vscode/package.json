@@ -30,6 +30,7 @@
     "test": "tsc -p . && node --test \"out/test/**/*.test.js\"",
     "e2e": "tsc -p . && node out/test/e2e/run.js",
     "gallery": "tsc -p . && node out/test/gallery/run.js",
+    "walk": "tsc -p . && node out/test/walk/run.js",
     "package": "npx --yes @vscode/vsce package --no-dependencies"
   },
   "devDependencies": {
