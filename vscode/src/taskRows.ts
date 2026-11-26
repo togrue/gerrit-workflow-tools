@@ -14,6 +14,13 @@ import { REBASE_ACTIONS, Tone } from "./stackRows";
 
 export type TaskMode = "review" | "rework";
 
+/** A change of the chain under review, as Gerrit's related changes have it: closed ones too. */
+export interface ChainMemberStatus {
+  number: number;
+  subject: string;
+  status: "NEW" | "MERGED" | "ABANDONED";
+}
+
 /** One state of a change: an icon and a word, never the colour alone. */
 export interface TaskMark {
   icon: string;
@@ -66,6 +73,8 @@ export interface TaskVm {
   busy?: string;
   /** How the last step ended, in ger's words, until the next action (core's step outcome, or a refusal said here). */
   outcome?: Outcome;
+  /** What the change shown stands on that the user must know, in words: its base is an abandoned change. */
+  notice?: string;
   /**
    * A long chain in a narrow side bar: the steps from `from` to `to` (around the current one) are
    * shown, those before and after fold into one line each that says how many and what they are
@@ -141,6 +150,12 @@ export interface TaskOptions {
    * chain) stays in the header, marked so, instead of dropping out without a word.
    */
   chain?: number[];
+  /**
+   * Every change of that chain, base first, closed ones in their place with Gerrit's status
+   * (`/review?chain=1`'s `members`, API 1.10): an abandoned or merged one stays as a row marked in
+   * words, is no work left, and a change built on an abandoned one says so.
+   */
+  members?: ChainMemberStatus[];
   /** The inbox could not be read (Gerrit away): what is left is unknown, never "not in your inbox". */
   inboxUnknown?: boolean;
   /** Subjects of changes as the inbox last listed them: a change it does not list now keeps its name. */
@@ -305,6 +320,7 @@ export function taskLines(vm: TaskVm | undefined): string[] {
     `Left: ${vm.left}`,
     ...(vm.busy ? [`… ${vm.busy}`] : []),
     ...(vm.outcome ? [`${vm.outcome.ok ? "✓" : "⚠"} ${vm.outcome.text}`, ...vm.outcome.more.map((line) => `  ${line}`)] : []),
+    ...(vm.notice ? [`⚠ ${vm.notice}`] : []),
     ...vm.steps.map((step) => `${step.current ? "▸" : " "} ${step.position}. ${step.title} — ${step.marks.map((mark) => mark.text).join(" · ")}`),
     ...vm.actions.map((action) => `${action.primary ? `[**${action.label}**]` : `[${action.label}]`} ${action.notNow ? `(not now: ${action.notNow})` : action.detail}`),
   ];

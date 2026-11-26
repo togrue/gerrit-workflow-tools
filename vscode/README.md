@@ -494,7 +494,11 @@ The commits above your upstream, newest first. One row per commit:
   else marked outdated; going to a resolved comment draws its thread (read only) at its line; and
   going to a comment while the review's combined diff is in front opens the file in a tab of its own
   beside it. When the inbox no longer lists a change of the chain under review (a new patchset
-  dropped its Verified vote), the task header keeps it, marked *not in your inbox now*.
+  dropped its Verified vote), the task header keeps it, marked *not in your inbox now*. An abandoned
+  or merged change of the chain keeps its row too, marked *abandoned* or *merged*, and is not counted
+  in what is left (*1 closed*); reviewing the change above an abandoned one, the header says so in a
+  line of its own (*builds on 2306 "…", which is abandoned: its code is the base this change is
+  reviewed on*). On a closed change the Files list offers no *Mark all seen*: nothing is left to read there.
 - **Review Next Change in Chain** (arrow in the Change view's title bar, `Ctrl+Alt+PageDown`) and
   **Review Previous Change in Chain** (the `…` menu, `Ctrl+Alt+PageUp`), while a staged review sits
   in this checkout: `ger review --next` / `--prev`. The review moves to the change above (below) in

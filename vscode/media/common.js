@@ -486,6 +486,7 @@
       h("div", { class: "task-left" }, h("span", { class: "task-label" }, "Left: "), vm.left),
       vm.busy ? h("div", { class: "task-busy" }, icon("loading"), h("span", {}, vm.busy)) : null,
       !vm.busy && vm.outcome ? outcome(vm.outcome) : null,
+      vm.notice ? h("div", { class: "task-outcome task-notice", role: "note" }, icon("warning", "warn"), h("span", {}, vm.notice)) : null,
       vm.steps.length ? steps(vm) : null,
       vm.actions.length ? h("div", { class: "task-actions" }, vm.actions.map(taskAction)) : null,
     );

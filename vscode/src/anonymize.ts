@@ -247,6 +247,8 @@ const TASK: Shape = {
       new RegExp(`CI failed on ${COUNT} commits?`),
       new RegExp(`${COUNT} commits? needs? edits`),
       "its chain is not in your inbox",
+      "nothing: Gerrit takes no vote on a closed change",
+      new RegExp(`${COUNT} closed`),
       "nothing left to answer or fix",
       new RegExp(`${COUNT} conflicts? to resolve`),
       new RegExp(`${COUNT} commits? to replay`),
@@ -262,7 +264,7 @@ const TASK: Shape = {
       marks: [
         {
           icon: ICON,
-          text: ours([NOT_LISTED, NOT_KNOWN, "reviewing", "to review", "CI failed", "your drafts", "waits on a reply", "replayed", "stopped here", "to come", "needs edits", new RegExp(`you voted [+-]${COUNT}`), new RegExp(`${COUNT} to answer`)], around(/not ready: (.+)/, (names, why) => `not ready: ${names.text(why)}`)),
+          text: ours([NOT_LISTED, NOT_KNOWN, "reviewing", "to review", "abandoned", "merged", "CI failed", "your drafts", "waits on a reply", "replayed", "stopped here", "to come", "needs edits", new RegExp(`you voted [+-]${COUNT}`), new RegExp(`${COUNT} to answer`)], around(/not ready: (.+)/, (names, why) => `not ready: ${names.text(why)}`)),
           tone: TONE,
           ring: { share: KEEP, shape: ours(["solid", "dashed", "thin", "tick"]) },
         },
@@ -286,6 +288,7 @@ const TASK: Shape = {
   busy: ours([/(Continuing the rebase|Aborting the rebase|Skipping the commit) in the ger terminal…/], CHECKING_OUT),
   /** ger's closing words about this repository (commits, branches, files): filler. */
   outcome: { text: TEXT, ok: KEEP, more: [TEXT] },
+  notice: TEXT,
 };
 
 const STACK: Shape = {

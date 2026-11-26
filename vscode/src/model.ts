@@ -125,6 +125,8 @@ export class Model implements vscode.Disposable {
 
   /** The chain of the staged review here at its patchset, base first (`/review?chain=1`); undefined without one. */
   reviewChain: number[] | undefined;
+  /** Every change of that chain, closed ones too with Gerrit's status (`/review?chain=1`'s `members`, API 1.10). */
+  reviewMembers: ReviewState["members"];
   /** Subjects of the changes the inbox listed this session: the task header names a change it no longer lists. */
   readonly subjects = new Map<number, string>();
   /** When the last overview that Gerrit answered came; undefined before the first. */
@@ -263,6 +265,7 @@ export class Model implements vscode.Disposable {
       const same = review && this.review?.number === review.number && this.review.patch_set === review.patch_set;
       // `[]` is core's "Gerrit cannot say": not known, so not a chain of none.
       this.reviewChain = review?.chain?.length ? review.chain : same ? this.reviewChain : undefined;
+      this.reviewMembers = review?.members?.length ? review.members : same ? this.reviewMembers : undefined;
       this.review = review ?? undefined;
       void vscode.commands.executeCommand("setContext", "ger.reviewOpen", Boolean(review));
       this.stackContext();

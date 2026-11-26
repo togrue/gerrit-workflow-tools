@@ -388,7 +388,9 @@ function files(state: ChangeState): NonNullable<ChangeVm["files"]> {
   const [added, deleted] = [sum((row) => row.added), sum((row) => row.deleted)];
   const seen = rows.filter((row) => row.seen).length;
   // How much is left on somebody's change: `2 of 4 files seen`; on yours only once you tick one.
-  const tracked = rows.length > 0 && (seen > 0 || state.shown?.own === false);
+  // Not on a closed change: nothing is left to read on it (state 11 offered Mark all seen on an abandoned one).
+  const open = state.shown?.change_status !== "ABANDONED" && state.shown?.change_status !== "MERGED";
+  const tracked = open && rows.length > 0 && (seen > 0 || state.shown?.own === false);
   const summary = note || (tracked ? `${seen} of ${plural(rows.length, "file")} seen` : plural(rows.length, "file"));
   // Read in the combined diff, which ticks none: the header ticks the rest in one go.
   const markAll = !note && tracked && seen < rows.length ? MARK_ALL_SEEN : undefined;
