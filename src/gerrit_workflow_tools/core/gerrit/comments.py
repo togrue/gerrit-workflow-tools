@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Any, Literal
 
+from gerrit_workflow_tools.core.comment_chain import CommentChain, InlineComment
 from gerrit_workflow_tools.core.comment_chains import (
     ChainRef,
     ChainTurns,
@@ -23,7 +24,6 @@ from gerrit_workflow_tools.core.gerrit.cache_rows import comments_context_key, d
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.rest import LIGHT_QUERY_OPTIONS, GerritApiError, parallel_map, printable_path
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
 
 
 if TYPE_CHECKING:

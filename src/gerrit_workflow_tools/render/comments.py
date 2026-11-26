@@ -7,14 +7,9 @@ from datetime import datetime, timezone
 
 from gerrit_workflow_tools.core.changeish import change_label
 from gerrit_workflow_tools.core.comment_anchor import SPECIAL_PATHS
+from gerrit_workflow_tools.core.comment_chain import ChainTurn, CommentChain, ContextLine, InlineComment
 from gerrit_workflow_tools.core.comment_chains import CommentSelection, gerrit_inline_comment_url
 from gerrit_workflow_tools.core.gerrit.rest import printable_path
-from gerrit_workflow_tools.core.gerrit_change_status import (
-    ChainTurn,
-    CommentChain,
-    ContextLine,
-    InlineComment,
-)
 from gerrit_workflow_tools.core.review_chain import format_age
 from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.style import (

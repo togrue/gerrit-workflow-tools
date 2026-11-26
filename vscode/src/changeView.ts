@@ -14,6 +14,8 @@ import { fileUri, openDiff } from "./diffTabs";
 import { ChangeTarget, Model, describeError } from "./model";
 import { openConflict } from "./rebase";
 import { waitingFor } from "./state";
+import { NextAction, nextAction } from "./nextAction";
+import { focusedMember, reviewFocus } from "./reviewFocus";
 import { markOf } from "./staleDiffs";
 import { ui } from "./ui";
 import { Message, WebView } from "./webview";
@@ -53,12 +55,51 @@ export class ChangeView extends WebView<ChangeVm> {
   /** Gives a stack commit a new message; `applied` runs once it has it. Set by the extension. */
   reword: (sha: string, message: string, applied: () => void) => Promise<boolean> = () => Promise.resolve(false);
   /** Opens a chain where it sits, its editor thread expanded. Set by the extension. */
-  showThread: (chain: CommentChain) => Promise<void> = (chain) => this.openLocation({ path: chain.path, line: chain.line });
-  /** Saves `text` as your draft reply in `chain`; whether it was saved. Set by the extension. */
-  replyWith: (chain: CommentChain, text: string, resolved: boolean | undefined) => Promise<boolean> = () => Promise.resolve(false);
+  showThread: (chain: CommentChain) => Promise<void> = async (chain) => void (await this.openLocation({ path: chain.path, line: chain.line }));
+
+  /** The chains already gone to on the change shown (CommentThreads keeps them). Set by the extension. */
+  visited: () => ReadonlySet<string> = () => new Set();
+  /** The files opened of each change this session, by its Change-Id (else its commit): what Next file has left. */
+  private readonly opened = new Map<string, Set<string>>();
 
   get target(): ChangeTarget | undefined {
     return this.detail.target;
+  }
+
+  private openedHere(): Set<string> {
+    const key = this.target?.changeId ?? this.target?.rev ?? "";
+    const files = this.opened.get(key) ?? new Set<string>();
+    this.opened.set(key, files);
+    return files;
+  }
+
+  /** Next on the change shown: what its button names and `ger.next` does. Asks nothing of ger serve. */
+  next(): NextAction | undefined {
+    const stack = this.model.stack;
+    const focus = this.holdsReview() ? reviewFocus(this.model.overview, stack) : undefined;
+    const { member, above } = focus ? focusedMember(focus) : { member: undefined, above: undefined };
+    return nextAction({
+      stack,
+      shown: this.detail.loading() ? undefined : this.shown,
+      chains: this.chains(),
+      local: Boolean(this.target?.local),
+      reviewing: this.holdsReview(),
+      visited: this.visited(),
+      files: (this.shownDiff()?.files ?? []).map((file) => file.path),
+      seenFiles: this.openedHere(),
+      yourTurn: member?.your_turn,
+      above: focus ? above : undefined,
+    });
+  }
+
+  /** Next file: the first file of the comparison shown that was not opened yet, in the Files list's order. */
+  async openNextFile(): Promise<void> {
+    const diff = this.shownDiff();
+    const seen = this.openedHere();
+    const file = diff?.files.find((f) => !seen.has(f.path));
+    if (file) {
+      await this.openDiff(file, diff);
+    }
   }
 
   /** `/show`'s answer for the change selected; undefined until it has come. */
@@ -346,7 +387,8 @@ export class ChangeView extends WebView<ChangeVm> {
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 400));
-    if (!this.detail.current(token)) {
+    // Asked meanwhile (a staged review's re-review asks at once): not twice.
+    if (!this.detail.current(token) || this.patchsets) {
       return;
     }
     try {
@@ -441,7 +483,8 @@ export class ChangeView extends WebView<ChangeVm> {
     if (!state) {
       return { empty: this.target && this.detail.loading() ? `Loading ${this.target.title}…` : NOTHING_SHOWN };
     }
-    return changeVm(state);
+    const next = this.next();
+    return { ...changeVm(state), next: next && { label: next.label, title: next.title } };
   }
 
   /** The view as text, with the CI findings fetched: for the end-to-end suite. */
@@ -456,6 +499,8 @@ export class ChangeView extends WebView<ChangeVm> {
     const commit = this.detail.commit();
     this.heading = changeHeading(commit?.number ?? this.target?.number);
     view.title = this.heading;
+    // Alt+Enter does what the button names, while there is one.
+    void vscode.commands.executeCommand("setContext", "ger.nextAction", Boolean(this.target && this.next()));
   }
 
   /** Scroll to a comment chain and mark it, without taking the keyboard. */
@@ -466,7 +511,7 @@ export class ChangeView extends WebView<ChangeVm> {
 
   /**
    * Show a chain with no line in a file (about the whole change) where it is answered: here, its
-   * text whole, the keyboard in its reply box (on the row, when there is nothing to reply to).
+   * text whole, the keyboard on its row, whose buttons reply (in a box at the top of the window).
    */
   async focusThread(chain: CommentChain): Promise<void> {
     await vscode.commands.executeCommand("ger.change.focus");
@@ -492,12 +537,6 @@ export class ChangeView extends WebView<ChangeVm> {
         const arg: ThreadArg = { kind: "thread", chain };
         if (message.action === "open") {
           return this.showThread(chain);
-        }
-        if (message.action === "replyText") {
-          return this.replyInView(chain, String(message.text ?? ""), typeof message.resolved === "boolean" ? message.resolved : undefined);
-        }
-        if (message.action === "discard") {
-          return this.discardInView(arg);
         }
         return vscode.commands.executeCommand(`ger.${String(message.action)}`, arg);
       }
@@ -546,21 +585,6 @@ export class ChangeView extends WebView<ChangeVm> {
       this.startOn(this.target);
     }
     return this.open();
-  }
-
-  /** A reply typed in the view's own box (a chain with no line in a file); the page clears the box once it is saved. */
-  private async replyInView(chain: CommentChain, text: string, resolved: boolean | undefined): Promise<void> {
-    const saved = await this.replyWith(chain, text, resolved);
-    this.post({ type: "replied", id: chain.root_id, saved });
-  }
-
-  /**
-   * Discard in the view's reply box: the row's trash (ger.chain.delete), asking the same. The page
-   * empties the box only once your draft reply is deleted; dismissed, what you typed stays.
-   */
-  private async discardInView(arg: ThreadArg): Promise<void> {
-    const deleted = await vscode.commands.executeCommand<boolean | undefined>("ger.chain.delete", arg);
-    this.post({ type: "discarded", id: arg.chain.root_id, deleted: deleted === true });
   }
 
   /** Apply in the message box: `text` as the box holds it, without the Change-Id, which core keeps. */
@@ -660,6 +684,8 @@ export class ChangeView extends WebView<ChangeVm> {
       return;
     }
     const title = `${path.posix.basename(file.path)} (${ChangeView.range(diff)})`;
+    this.openedHere().add(file.path);
+    this.render(); // Next moves on from it
     await openDiff(left, right, title, markOf(diff, this.model.stack, own));
   }
 
@@ -689,6 +715,9 @@ export class ChangeView extends WebView<ChangeVm> {
     if (this.worktreeHolds(diff.commit)) {
       this.combined.add(title);
     }
+    // All of them are in front of you now: Next has no file left to open.
+    diff.files.forEach((file) => this.openedHere().add(file.path));
+    this.render();
     await vscode.commands.executeCommand("vscode.changes", title, resources);
   }
 
@@ -726,17 +755,18 @@ export class ChangeView extends WebView<ChangeVm> {
     return now ? { start: now.start_line, line: now.line, outdated: now.outdated } : { start: chain.start_line, line: chain.line, outdated: false };
   }
 
-  /** Open where a comment or a CI finding points. */
-  async openLocation(location: Location): Promise<void> {
+  /** Open where a comment or a CI finding points; the editor it opened in, if it could. */
+  async openLocation(location: Location): Promise<vscode.TextEditor | undefined> {
     if (NOT_FILES.includes(location.path)) {
-      return;
+      return undefined;
     }
     const uri = this.locationUri(location.path);
     const line = Math.max(0, (location.line ?? 1) - 1);
     try {
-      await vscode.window.showTextDocument(uri, { selection: new vscode.Range(line, 0, line, 0), preview: true });
+      return await vscode.window.showTextDocument(uri, { selection: new vscode.Range(line, 0, line, 0), preview: true });
     } catch (error) {
       void ui().message("warning", `Cannot open ${location.path}: ${describeError(error)}`, {}, []);
+      return undefined;
     }
   }
 }

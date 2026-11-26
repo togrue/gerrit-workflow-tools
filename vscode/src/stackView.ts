@@ -4,6 +4,8 @@
 import * as vscode from "vscode";
 
 import { GerApiError, GerClient, Rewritten, StackCommit, StackStep } from "./api";
+import { COMMENT_LINKS, ChangeComments } from "./commentHover";
+import { commentEntries } from "./commentEntries";
 import { blockedMove, movedTo, sentence } from "./format";
 import { ChangeTarget, Model, describeError } from "./model";
 import { openConflict } from "./rebase";
@@ -24,6 +26,10 @@ export type CommitArg = { sha?: unknown; shas?: unknown } | string | undefined;
 export class StackView extends WebView<StackVm> {
   /** Runs when a row is chosen: `preserveFocus` while you walk the list with the arrow keys. */
   onOpen: (target: ChangeTarget, preserveFocus: boolean) => unknown = () => undefined;
+  /** Where the hover of a comment badge gets the comments. Set by the extension. */
+  comments: ChangeComments | undefined;
+  /** Unpublished comments of yours on a commit beyond core's counts: known for the change the Change view shows. Set by the extension. */
+  drafts: (sha: string) => number = () => 0;
 
   constructor(
     extensionUri: vscode.Uri,
@@ -40,7 +46,7 @@ export class StackView extends WebView<StackVm> {
 
   vm(): StackVm {
     const waiting = this.model.overview ? undefined : waitingFor(this.model.state, "Your local stack", this.model.incompatible, this.model.failure);
-    const vm = stackVm(this.model.overview?.local, this.model.upstreamChoice, (lower, upper) => this.model.swapConflict(lower, upper));
+    const vm = stackVm(this.model.overview?.local, this.model.upstreamChoice, (lower, upper) => this.model.swapConflict(lower, upper), this.drafts);
     return waiting ? { ...vm, waiting } : vm;
   }
 
@@ -89,9 +95,28 @@ export class StackView extends WebView<StackVm> {
         return openConflict(this.model, message.path as string);
       case "command":
         return vscode.commands.executeCommand(message.command as string, ...((message.args as unknown[] | undefined) ?? []));
+      case "comments":
+        return this.hoverComments(String(message.sha));
+      case "commentLink": {
+        const target = this.target(String(message.sha));
+        const command = COMMENT_LINKS[message.action as keyof typeof COMMENT_LINKS];
+        return target && command ? vscode.commands.executeCommand(command, { target: { ...target, known: undefined }, root: String(message.root) }) : undefined;
+      }
       default:
         return undefined;
     }
+  }
+
+  /** A comment badge is hovered: its comments for the page's hover, with Go there, Reply Done and Apply. */
+  private async hoverComments(sha: string): Promise<void> {
+    const target = this.target(sha);
+    const chains = target && (await this.comments?.chains(target).catch(() => undefined));
+    if (!chains) {
+      return;
+    }
+    // Apply writes into your file: your own commit, not a change a staged review holds.
+    const entries = commentEntries(chains, !this.model.stack?.staged_review);
+    this.post({ type: "comments", sha, entries, more: chains.length - entries.length });
   }
 
   private explainFrozen(): boolean {

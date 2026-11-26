@@ -255,6 +255,8 @@ export interface ChangeVm {
   conflicts?: { summary: string; rows: StackInfo[] };
   files?: { title: string; summary: string; added: number; deleted: number; note: string; tooltip: string; rows: FileRow[] };
   comments?: { summary: string; open: boolean; threads: ThreadRow[] };
+  /** Next: the one thing to do now, its button's text and why (nextAction.ts). */
+  next?: { label: string; title: string };
   /** `noLinks`: what to say when no build log was found; empty when that is not to be said. */
   ci?: { summary: string; state: CiView["state"]; error: string; noLinks: string; links: CiLinkRow[] };
 }
@@ -328,6 +330,11 @@ export function toAnswer(chain: CommentChain): boolean {
 export function ownComment(chain: CommentChain): Comment | undefined {
   const own = isYours(chain) ? chain.comments[0] : chain.comments.slice(1).find((comment) => comment.state === "draft");
   return own?.comment_id ? own : undefined;
+}
+
+/** How many chains hold an unpublished comment of yours: chains you started, and your draft replies. */
+export function draftsIn(chains: readonly CommentChain[]): number {
+  return chains.filter((chain) => ownComment(chain) !== undefined).length;
 }
 
 export const DISCARD: Record<string, string> = { note: "Delete Your Private Note…", "local-draft": "Delete Your Local Draft…", draft: "Delete Your Draft…" };
@@ -633,7 +640,7 @@ export function changeVm(state: ChangeState): ChangeVm {
       ...(unsure ? { icon: "loading" } : headIcon(commit)),
       text: words || (commit.submittable ? "Ready to submit" : unsure ? "Loading…" : "Nothing to do"),
       detail: commit.pushed ? commitVotes(commit) : "not on Gerrit",
-      badges: commit.pushed ? badges(commit).filter((badge): badge is Badge => badge !== null) : [],
+      badges: commit.pushed ? badges(commit, loading?.commit ? 0 : draftsIn(chains)).filter((badge): badge is Badge => badge !== null) : [],
       ...(stopped ? stoppedHead(stopped) : {}),
     },
     conflicts: stopped?.unmerged.length ? { summary: plural(stopped.unmerged.length, "file"), rows: stopped.unmerged.map(conflictRow) } : undefined,
@@ -694,6 +701,9 @@ export function changeLines(vm: ChangeVm): string[] {
   if (vm.head) {
     const buttons = actionsText(vm.head.actions);
     add(0, vm.head.text, `${vm.head.detail}${buttons ? `  ${buttons}` : ""}`);
+  }
+  if (vm.next) {
+    add(0, `[${vm.next.label}]`, vm.next.title);
   }
   vm.notes?.forEach((note) => {
     const buttons = actionsText(note.actions);

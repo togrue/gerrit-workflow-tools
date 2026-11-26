@@ -18,6 +18,7 @@ from gerrit_workflow_tools.cli_args import (
 from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.core.changeish import change_label
 from gerrit_workflow_tools.core.comment_anchor import PATCHSET_LEVEL, CommentLocation, LocationError
+from gerrit_workflow_tools.core.comment_chain import CommentState
 from gerrit_workflow_tools.core.comment_chains import ChainRefError, parse_chain_ref
 from gerrit_workflow_tools.core.comment_target import (
     CommentTarget,
@@ -36,7 +37,6 @@ from gerrit_workflow_tools.core.comment_write import (
 )
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit_change_status import CommentState
 from gerrit_workflow_tools.core.review_checkout import ReviewState, find_review, load_state
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.render.comments import first_line

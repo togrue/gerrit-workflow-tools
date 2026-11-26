@@ -468,9 +468,10 @@ export async function run(): Promise<void> {
       exec("ger.replyDone", await threadRow(/^Please rename this/)),
     );
     await press(
-      "Expand \"Looks good overall.\" (about the whole change) in the Change view, type a reply, Resolved left ticked › Save",
-      "The comment has no line in a file, so it is answered in the view: the reply is saved as a draft, as a reply in an editor thread is, and shows under it; the status bar says it was saved, the comment staying resolved.",
-      () => page.receive({ type: "thread", id: chain(/^Looks good overall/).root_id, action: "replyText", text: "Added a test for the parser.", resolved: true }),
+      "Reply as Draft… on \"Looks good overall.\" (about the whole change) in the Change view: type a reply, Resolved left on › Enter",
+      "The comment has no line in a file, so its row answers it: the reply box opens at the top of the window (the side bar has no box), the reply is saved as a draft, as a reply in an editor thread is, and shows under it; the status bar says it was saved, the comment staying resolved.",
+      () => page.receive({ type: "thread", id: chain(/^Looks good overall/).root_id, action: "reply" }),
+      [{ type: "Added a test for the parser." }],
     );
     await press(
       "Click \"Please rename this.\" in the Change view again",

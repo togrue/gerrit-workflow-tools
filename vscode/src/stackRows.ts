@@ -3,7 +3,8 @@
 // it, the end-to-end suite prints it. Pure: no `vscode`, no I/O.
 
 import { CodeChange, CommitStatus, MoveConflict, Overview, Rebase, RebaseAction, Reviewer, Stack, StackCommit, UpstreamChoice, UpstreamStop } from "./api";
-import { blockedMove, commentTurns, reasonWords, sentence, wouldConflict } from "./format";
+import { CommentTone, commentState } from "./commentState";
+import { blockedMove, reasonWords, sentence, wouldConflict } from "./format";
 import { Waiting } from "./state";
 
 /** How a commit relates to what Gerrit has: its icon and its colour. */
@@ -58,7 +59,8 @@ export function sync(commit: CommitStatus & { diverged?: boolean }): Sync {
   }
 }
 
-export type Tone = "good" | "bad" | "warn" | "plain";
+/** `info`: blue, for drafts of yours not published yet. */
+export type Tone = "good" | "bad" | "warn" | "info" | "plain";
 
 /** One icon on the right of a row. `stale`: it is about the last pushed patchset, not this code. */
 export interface Badge {
@@ -84,35 +86,15 @@ export function reviewerWords(reviewers: readonly Reviewer[] | undefined): strin
   return `Reviewers: ${[assigned || "none", copied ? `(cc: ${copied})` : ""].filter(Boolean).join(" ")}`;
 }
 
+/** The badge colour of each comment state (commentState.ts). */
+const COMMENT_TONES: Record<CommentTone, Tone> = { draft: "info", open: "warn", waiting: "plain", resolved: "plain" };
+
 /**
  * Comments, review vote, CI vote, in that order; a slot with nothing to say is null. The Change view shows them too.
  * The review slot without a vote says when nobody is assigned to review (core's `no-reviewers`).
+ * `drafts`: unpublished comments of yours on it beside core's counts (the Change view knows them for the change shown).
  */
-/** `2 unresolved comments`; `1 of 2 comments to answer`; `2 answered by your drafts: push publishes them`; `2 comments wait on a reply`. */
-function commentsTitle(count: number, awaiting: number, drafted: number): string {
-  if (!awaiting && !drafted) {
-    return `${count} unresolved comment${count === 1 ? "" : "s"}`;
-  }
-  const left = count - awaiting - drafted;
-  const parts = left > 0 ? [`${left} of ${count} comments to answer`] : [];
-  if (drafted) {
-    parts.push(`${drafted} answered by your draft${drafted === 1 ? "" : "s"}: push publishes ${drafted === 1 ? "it" : "them"}`);
-  }
-  if (left <= 0 && awaiting) {
-    parts.push(`${awaiting} comment${awaiting === 1 ? "" : "s"} ${awaiting === 1 ? "waits" : "wait"} on a reply`);
-  }
-  return parts.join("; ");
-}
-
-/** A comment badge's text: what is left to answer, with a small mark for the drafts that wait on your push. */
-function commentsText(left: number, drafted: number, count: number): string {
-  if (left > 0) {
-    return drafted ? `${left} · draft` : String(left);
-  }
-  return drafted ? "draft" : String(count);
-}
-
-export function badges(commit: CommitStatus): (Badge | null)[] {
+export function badges(commit: CommitStatus, drafts = 0): (Badge | null)[] {
   const last = commit.last_pushed_votes;
   const stale = Boolean(last && (last.verified !== null || last.code_review !== null));
   const note = stale ? " on the last pushed patchset; Gerrit may not keep it for this code" : "";
@@ -122,18 +104,17 @@ export function badges(commit: CommitStatus): (Badge | null)[] {
   // Every build that failed only marked itself unstable (core's verdict per CI link): a warning, still CI to look at.
   const verdicts = commit.ci_links.map((link) => link.verdict).filter(Boolean);
   const unstable = verdicts.length > 0 && verdicts.every((verdict) => verdict === "unstable");
-  const { count, left, drafted, awaiting } = commentTurns(commit);
+  const comments = commentState(commit, drafts);
   const who = reviewerWords(commit.reviewers);
   return [
-    count > 0
+    comments
       ? {
           kind: "comments",
-          // None left to answer (core's `drafts-to-publish`, `awaiting-reply`): a plain bubble, nothing to answer.
-          // Answered only by your drafts: the pen the Change view gives a thread your draft answers.
-          icon: left > 0 ? "comment-unresolved" : drafted > 0 ? "edit" : "comment",
-          tone: left > 0 ? "warn" : "plain",
-          text: commentsText(left, drafted, count),
-          title: commentsTitle(count, awaiting, drafted),
+          // Blue while drafts of yours wait to be published, yellow while a comment waits for your answer, else plain.
+          icon: comments.tone === "open" ? "comment-unresolved" : "comment",
+          tone: COMMENT_TONES[comments.tone],
+          text: comments.text,
+          title: sentence(comments.words),
           stale: false,
         }
       : null,
@@ -473,7 +454,7 @@ export function pinnedWhy(stack: Stack): string {
   return `"${merge?.summary ?? "The merge"}" is a merge commit, which git rebase cannot replay: it and the commits below it stay where they are. Rewrite them by hand with ger rebase.`;
 }
 
-function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: number, conflicts: Conflicts): StackRow {
+function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: number, conflicts: Conflicts, drafts: (sha: string) => number = () => 0): StackRow {
   const [below, above] = [stack.commits[index - 1], stack.commits[index + 1]];
   const isPinned = index < pinnedBelow;
   const state = sync(commit);
@@ -517,7 +498,7 @@ function row(commit: StackCommit, stack: Stack, index: number, pinnedBelow: numb
     merge: Boolean(commit.merge),
     pinned: isPinned,
     notes: notes.filter(Boolean),
-    badges: badges(commit),
+    badges: badges(commit, drafts(commit.sha)),
     tooltip: tooltip.filter(Boolean).join("\n"),
     squash: !review && below !== undefined && index - 1 >= pinnedBelow,
   };
@@ -548,7 +529,7 @@ export function frozen(stack: Stack): string | null {
 }
 
 /** The view for `local` (the overview's local stack, or why there is none). */
-export function stackVm(local: Overview["local"] | undefined, choice: UpstreamChoice | undefined, conflicts: Conflicts): StackVm {
+export function stackVm(local: Overview["local"] | undefined, choice: UpstreamChoice | undefined, conflicts: Conflicts, drafts: (sha: string) => number = () => 0): StackVm {
   if (!local) {
     return { info: [], rows: [], frozen: null, movable: 0 };
   }
@@ -594,7 +575,7 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
   }
   const commits = local.commits;
   const fixed = pinned(local);
-  const rows = commits.map((commit, index) => row(commit, local, index, fixed, conflicts)).reverse();
+  const rows = commits.map((commit, index) => row(commit, local, index, fixed, conflicts, drafts)).reverse();
   const review = Boolean(local.staged_review);
   return { info, rows, frozen: frozen(local), movable: review ? 0 : commits.length - fixed, review };
 }

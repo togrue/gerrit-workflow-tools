@@ -280,6 +280,8 @@ class ChangeView:  # pylint: disable=too-many-instance-attributes
     """What you may vote, per label (``permitted_labels``); empty when Gerrit did not say."""
     label_meanings: Mapping[str, Mapping[int, str]] = field(default_factory=dict)
     """What each vote of a label means, as the project words it; empty when Gerrit did not say."""
+    comments_total: int | None = 0
+    """``None`` when Gerrit counts comments on the change (its chains are not counted here); else ``0``."""
 
     def contradicts(self, parsed: Changeish) -> str | None:
         """Why this change is not the one *parsed* addressed, or ``None`` when it is."""
@@ -322,6 +324,7 @@ class ChangeView:  # pylint: disable=too-many-instance-attributes
             code_review=_label_value(labels, "Code-Review"),
             submittable=bool(payload.get("submittable")),
             unresolved_comments=comments if isinstance(comments, int) else None,
+            comments_total=None if isinstance(total := payload.get("total_comment_count"), int) and total > 0 else 0,
             reviewers=tuple(reviewer_accounts_from_change_info(payload)) if "reviewers" in payload else None,
             current_revision=current,
             revisions=revisions,

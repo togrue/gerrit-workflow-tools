@@ -5,12 +5,10 @@ from __future__ import annotations
 from gerrit_workflow_tools.core.annotated_stack import AnnotatedStack, NextStepKind, StackOverview
 from gerrit_workflow_tools.core.attention import attention_severity, blocking_reason
 from gerrit_workflow_tools.core.ci_content import CiContent
+from gerrit_workflow_tools.core.comment_chain import CommentChain
 from gerrit_workflow_tools.core.comment_chains import gerrit_inline_comment_url
 from gerrit_workflow_tools.core.comment_write import ChangedComment, WrittenComment
-from gerrit_workflow_tools.core.gerrit_change_status import (
-    CommentChain,
-    LogCommit,
-)
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.rebase_next_step import stop_refusal
 from gerrit_workflow_tools.core.rebase_state import RebaseAction, RebaseProgress
 from gerrit_workflow_tools.core.upstream_moved import UpstreamMoved
@@ -54,6 +52,7 @@ def comment_json_payload(
                 "path": chain.path,
                 "line": chain.line,
                 "start_line": chain.start_line,
+                "range": chain.comment_range.as_gerrit() if chain.comment_range else None,
                 "url": None if chain.local else gerrit_inline_comment_url(gerrit_url, chain.root_id),
                 "resolved": chain.resolved,
                 "anchor_moved": chain.anchor_moved,
@@ -92,6 +91,7 @@ def log_commit_json(commit: LogCommit) -> dict[str, object]:
         "comments_awaiting_reply": commit.comments_awaiting_reply,
         "comments_drafted": commit.comments_drafted,
         "comments_to_answer": commit.comments_to_answer,
+        "comments_total": commit.comments_total,
         "ci_failures": commit.ci_failures,
         "ci_links": [
             {

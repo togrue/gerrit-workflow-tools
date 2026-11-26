@@ -7,7 +7,7 @@ from dataclasses import asdict
 from datetime import datetime
 
 from gerrit_workflow_tools.core.attention import Attention, attention_severity
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment
+from gerrit_workflow_tools.core.comment_chain import CommentChain, InlineComment
 from gerrit_workflow_tools.core.inbox import (
     TO_REVIEW,
     Headline,
@@ -42,6 +42,7 @@ def member_json(member: ChainMember, *, to_review: bool = False) -> dict[str, ob
         "comments_awaiting_reply": member.comments_awaiting_reply,
         "comments_drafted": member.comments_drafted,
         "comments_to_answer": member.comments_to_answer,
+        "comments_total": member.comments_total,
         "attention_reasons": list(member.attention_reasons),
         "severity": attention_severity(member.attention_reasons).value,
         "url": member.url,

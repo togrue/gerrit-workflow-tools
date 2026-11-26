@@ -179,9 +179,11 @@ test("stepping through comments is a command and a key, not an icon in the Chang
   }
 });
 
-test("a reply in an editor thread is Save or Cancel, with Gerrit's Resolved checkbox as a toggle in the thread's header", () => {
+test("a reply in an editor thread is Save, Done or Cancel, with Gerrit's Resolved checkbox as a toggle in the thread's header", () => {
   const reply = menus["comments/commentThread/context"].filter((entry) => !(entry.when ?? "").includes("&& commentThreadIsEmpty"));
-  assert.deepEqual(reply.map((entry) => entry.command), ["ger.thread.reply", "ger.thread.cancel"]);
+  assert.deepEqual(reply.map((entry) => entry.command), ["ger.thread.reply", "ger.thread.done", "ger.thread.cancel"]);
+  // Done resolves somebody's chain; your own new comment has nobody to answer.
+  assert.match(reply[1].when ?? "", /commentThread != yours/);
   // VS Code empties the reply box when any button by it runs: a toggle there would lose what you typed.
   const header = menus["comments/commentThread/title"];
   assert.deepEqual(
@@ -212,8 +214,6 @@ test("the box of a comment you are editing is Save, Cancel and Discard, as on Ge
   const handler = (command: string) => source("extension.ts").match(new RegExp(`"${command.replace(/\./g, "\\.")}": \\(([^)]*)\\) => ([^\\n]*)`))?.slice(1);
   assert.ok(handler("ger.comment.delete"), "ger.comment.delete is not registered");
   assert.deepEqual(handler("ger.comment.discard"), handler("ger.comment.delete"));
-  // The Change view's Discard runs the row's trash too (test/changePage.test.ts presses it).
-  assert.match(source("changeView.ts"), /executeCommand<[^>]*>\("ger\.chain\.delete", arg\)/);
 });
 
 test("Esc in a ger comment box first leaves the box, then closes the thread; edit boxes and new comments keep VS Code's Esc", () => {

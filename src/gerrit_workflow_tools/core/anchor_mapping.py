@@ -19,7 +19,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from gerrit_workflow_tools.core.comment_anchor import Anchor, CommentLocation, CommentRange, blob_of
-from gerrit_workflow_tools.core.gerrit_change_status import ContextLine
+from gerrit_workflow_tools.core.comment_chain import ContextLine
 from gerrit_workflow_tools.core.git_run import git
 from gerrit_workflow_tools.core.git_state import repo_toplevel
 

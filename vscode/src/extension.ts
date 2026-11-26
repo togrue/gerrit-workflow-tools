@@ -6,7 +6,10 @@ import * as vscode from "vscode";
 import { handToAgent, runAgent } from "./agent";
 import { CommentChain, Diff, FileChange, Health } from "./api";
 import { sameChange } from "./changeLoad";
+import { NextKind } from "./nextAction";
 import { ChangeView, Location, ThreadArg } from "./changeView";
+import { draftsIn } from "./changeRows";
+import { CommentLink, commentDecorations } from "./commentHover";
 import { DiffTabs, FILE_SCHEME, filePath } from "./diffTabs";
 import { CommentThreads, ThreadComment, closeComment, leaveCommentBox } from "./comments";
 import { setting } from "./config";
@@ -190,7 +193,35 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   });
   changeView.reword = (sha, message, applied) => stackView.reword(sha, message, applied);
   changeView.showThread = (chain) => threads.show(chain);
-  changeView.replyWith = (chain, text, resolved) => threads.replyWith(chain, text, resolved);
+  changeView.visited = () => threads.visitedHere();
+  /** The change shown, when `target` is it and its `/show` has come: what hovers read instead of asking again. */
+  const shownAs = (target: ChangeTarget) => (changeView.target && changeView.shown && sameChange(changeView.target, target) ? changeView : undefined);
+  overviewView.comments = stackView.comments = {
+    chains: async (target) => shownAs(target)?.chains() ?? (await (await model.client()).show([target.rev], { comments: "all" }))[0]?.comment_chains,
+    drafts: (target) => {
+      const shown = shownAs(target);
+      return shown ? draftsIn(shown.chains()) : 0;
+    },
+  };
+  // What the Change view learns of the change shown (your drafts on it) colours its Review chains row.
+  context.subscriptions.push(
+    changeView.onDidLoad(() => {
+      overviewView.refocus();
+      stackView.render();
+    }),
+  );
+  stackView.drafts = (sha) => {
+    const shown = changeView.shown?.sha === sha || changeView.target?.rev === sha ? changeView : undefined;
+    return shown?.shown ? draftsIn(shown.chains()) : 0;
+  };
+  /** The chain a hover's link names, the change shown first (the keyboard stays where it is). */
+  const chainOf = async ({ target, root }: CommentLink) => {
+    if (!shownAs(target)) {
+      await openChange(target, true);
+    }
+    await changeView.idle();
+    return changeView.chains().find((chain) => chain.root_id === root);
+  };
 
   /** Copy the Change-Ids or the SHAs of what a command was invoked on: one per line, newest first. */
   const copyIds = async (arg: unknown, what: "changeId" | "sha") => {
@@ -289,6 +320,18 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     }
   };
 
+  /** What Next does, by what the Change view's button names. */
+  const next: Record<NextKind, () => unknown> = {
+    comment: () => threads.stepUnread(),
+    file: () => changeView.openNextFile(),
+    vote: () => vscode.commands.executeCommand("ger.vote"),
+    nextChange: () => stepReview(model, 1, reviewWalk),
+    leave: () => leaveReview(model),
+    workOnNext: () => walk.next(),
+    push: () => push(model),
+    review: () => review(model, changeView.target, reviewWalk),
+  };
+
   const commands: Record<string, (...args: never[]) => unknown> = {
     "ger.refresh": async () => {
       const retried = Boolean(model.failure || model.stale);
@@ -384,6 +427,24 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       await changeView.openAll();
     },
     "ger.openLocation": (location: Location) => changeView.openLocation(location),
+    "ger.next": () => {
+      const action = changeView.next();
+      return action ? next[action.kind]() : undefined;
+    },
+    "ger.showAllChains": () => overviewView.showAll(),
+    "ger.focusReview": () => overviewView.focusReview(),
+    "ger.comment.goto": async (link: CommentLink) => {
+      const chain = await chainOf(link);
+      return chain ? threads.goTo(chain) : undefined;
+    },
+    "ger.comment.done": async (link: CommentLink) => {
+      const chain = await chainOf(link);
+      return chain ? threads.replyToChain(chain, true) : undefined;
+    },
+    "ger.comment.apply": async (link: CommentLink) => {
+      const chain = await chainOf(link);
+      return chain ? threads.applySuggestion(chain) : undefined;
+    },
     "ger.nextComment": () => threads.step(1),
     "ger.prevComment": () => threads.step(-1),
     "ger.reply": (arg: unknown) => {
@@ -424,6 +485,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       return chain ? threads.discardChain(chain) : undefined;
     },
     "ger.thread.reply": (reply: vscode.CommentReply) => threads.replyInThread(reply),
+    "ger.thread.done": (reply: vscode.CommentReply) => threads.doneInThread(reply),
     "ger.thread.cancel": (reply: vscode.CommentReply) => threads.cancelReply(reply),
     "ger.thread.markResolved": (thread: vscode.CommentThread) => threads.setResolved(thread, true),
     "ger.thread.markUnresolved": (thread: vscode.CommentThread) => threads.setResolved(thread, false),
@@ -465,6 +527,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     diffTabs,
     statusItem,
     vscode.workspace.registerTextDocumentContentProvider(FILE_SCHEME, files),
+    vscode.window.registerFileDecorationProvider(commentDecorations()),
     // Nothing starts in Restricted Mode (see Model.load): trusting the folder starts it.
     vscode.workspace.onDidGrantWorkspaceTrust(() => void model.refresh()),
     events,

@@ -13,6 +13,7 @@ from typing import Any
 from gerrit_workflow_tools.core.agent_runbook import set_hold
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.comment_anchor import LocationError
+from gerrit_workflow_tools.core.comment_chain import CommentState
 from gerrit_workflow_tools.core.comment_target import resolve_comment_target, target_at_commit
 from gerrit_workflow_tools.core.comment_write import (
     default_state,
@@ -22,7 +23,6 @@ from gerrit_workflow_tools.core.comment_write import (
     write_comment,
 )
 from gerrit_workflow_tools.core.gerrit.change_resolution import ChangeResolutionError
-from gerrit_workflow_tools.core.gerrit_change_status import CommentState
 from gerrit_workflow_tools.core.gerrit_patchset import resolve_patchset
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
 from gerrit_workflow_tools.core.reorder import STEP_ACTIONS, StackStep, rewrite_stack, undo_rewrite

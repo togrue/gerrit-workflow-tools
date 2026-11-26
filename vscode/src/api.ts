@@ -64,6 +64,8 @@ export interface Member {
   comments_drafted?: number;
   /** Of `comments_unresolved`, what is left to answer: neither waiting on the other side nor drafted (API 1.4). */
   comments_to_answer?: number;
+  /** Every comment chain, resolved or not: the share `comments_unresolved` is of; null when there are some, all resolved, not counted (API 1.5). */
+  comments_total?: number | null;
   attention_reasons: string[];
   severity: Severity;
   url: string | null;
@@ -185,6 +187,8 @@ export interface CommitStatus {
   comments_drafted?: number;
   /** Of `comments_unresolved`, what is left to answer: neither waiting on the other side nor drafted (API 1.4). */
   comments_to_answer?: number;
+  /** Every comment chain, resolved or not: the share `comments_unresolved` is of; null when there are some, all resolved, not counted (API 1.5). */
+  comments_total?: number | null;
   ci_failures: string[];
   ci_links: CiLink[];
   gerrit_url: string | null;
@@ -394,6 +398,8 @@ export interface CommentChain {
   path: string;
   line: number | null;
   start_line: number | null;
+  /** The characters the chain's first comment was aimed at, Gerrit's range (lines from 1, characters from 0); null for a line comment (API 1.5). */
+  range?: { start_line: number; start_character: number; end_line: number; end_character: number } | null;
   url: string | null;
   resolved: boolean;
   resolved_after_publish: boolean;

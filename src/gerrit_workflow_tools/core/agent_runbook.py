@@ -18,7 +18,8 @@ from pathlib import Path
 
 from gerrit_workflow_tools.core.attention import commit_needs_edit_attention
 from gerrit_workflow_tools.core.ci_content import CiContent, CiFinding, introduced_fingerprints
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit
+from gerrit_workflow_tools.core.comment_chain import CommentChain
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.core.gerrit_show import ShownCommit
 from gerrit_workflow_tools.core.git_run import GitError
 from gerrit_workflow_tools.core.git_state import git_dir

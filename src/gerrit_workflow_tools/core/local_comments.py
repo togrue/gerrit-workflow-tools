@@ -21,10 +21,10 @@ from urllib.parse import quote, unquote
 
 from gerrit_workflow_tools.core.anchor_mapping import place_anchor
 from gerrit_workflow_tools.core.comment_anchor import Anchor
+from gerrit_workflow_tools.core.comment_chain import CommentChain, InlineComment, LocalCommentState
 from gerrit_workflow_tools.core.comment_chains import CommentSelection, local_comment_chain, select_chains
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, InlineComment, LocalCommentState
 from gerrit_workflow_tools.core.git_run import GitError, git, git_out
 
 

@@ -58,12 +58,82 @@
         h("button", { class: "codicon codicon-edit", title: "Edit Commit Here", "data-command": "ger.stack.edit" }),
         row.url ? h("button", { class: "codicon codicon-link-external", title: "Open in Gerrit", "data-command": "ger.openInGerrit" }) : null,
       ),
-      h("span", { class: "badges" }, slots.map((slot) => badge(row.badges[slot], slot))),
+      h("span", { class: "badges" }, slots.map((slot) => (slot === 0 && row.badges[0] ? commentBadge(row) : badge(row.badges[slot], slot)))),
     );
   }
 
+  // --- The comments of a row, on hovering its comment badge --------------------------
+
+  let hover = null;
+  let hoverTimer = null;
+
+  function closeHover() {
+    clearTimeout(hoverTimer);
+    if (hover) {
+      hover.remove();
+      hover = null;
+    }
+  }
+
+  /** The comment badge: hovered a moment, it asks for the comments, which come as a "comments" message. */
+  function commentBadge(row) {
+    const element = badge(row.badges[0], 0);
+    element.addEventListener("mouseenter", () => {
+      clearTimeout(hoverTimer);
+      hoverTimer = setTimeout(() => post("comments", { sha: row.sha }), 350);
+    });
+    element.addEventListener("mouseleave", () => {
+      clearTimeout(hoverTimer);
+      hoverTimer = setTimeout(() => (hover && hover.matches(":hover") ? undefined : closeHover()), 300);
+    });
+    element.setAttribute("data-sha", row.sha);
+    return element;
+  }
+
+  /** The hover: who said what where, and Go there, Reply Done and Apply on each, as Review chains' hover has them. */
+  function showComments(message) {
+    closeHover();
+    const anchor = list && list.querySelector(`.badge[data-sha="${CSS.escape(message.sha)}"]`);
+    if (!anchor || !message.entries.length) {
+      return;
+    }
+    const link = (entry, action, label) =>
+      h("button", { class: "link", onclick: (event) => (event.stopPropagation(), closeHover(), post("commentLink", { sha: message.sha, root: entry.root, action })) }, label);
+    const entries = message.entries.map((entry) =>
+      h(
+        "div",
+        { class: "hover-entry" },
+        h("div", {}, icon(entry.tone === "open" ? "comment-unresolved" : entry.tone === "draft" ? "comment-draft" : entry.tone === "resolved" ? "pass" : "comment", entry.tone === "open" ? "warn" : entry.tone === "draft" ? "info" : undefined), h("span", { class: "label" }, entry.author), h("span", { class: "detail" }, `${entry.where} · ${entry.state}`)),
+        entry.text ? h("div", { class: "comment-text" }, entry.text) : null,
+        h("div", { class: "hover-links" }, link(entry, "goto", "Go there"), entry.done ? link(entry, "done", "Reply Done") : null, entry.apply ? link(entry, "apply", "Apply") : null),
+      ),
+    );
+    const more = message.more > 0 ? h("div", { class: "detail" }, `…and ${message.more} more: the Change view lists them all.`) : null;
+    hover = h("div", { class: "comment-hover", role: "dialog", "aria-label": "Comments" }, entries, more);
+    hover.addEventListener("mouseleave", () => {
+      hoverTimer = setTimeout(closeHover, 300);
+    });
+    hover.addEventListener("mouseenter", () => clearTimeout(hoverTimer));
+    hover.addEventListener("mousedown", (event) => event.stopPropagation());
+    document.body.appendChild(hover);
+    // Below the badge, or above it where there is more room: the view may be only a few rows high.
+    const box = anchor.getBoundingClientRect();
+    const [width, height] = [Math.min(360, document.documentElement.clientWidth - 16), document.documentElement.clientHeight];
+    const [below, above] = [height - box.bottom - 8, box.top - 8];
+    const down = below >= 160 || below >= above;
+    hover.style.width = `${width}px`;
+    hover.style.maxHeight = `${Math.max(80, down ? below : above)}px`;
+    hover.style.left = `${Math.max(8, Math.min(box.right - width, document.documentElement.clientWidth - width - 8))}px`;
+    const scroll = document.scrollingElement ? document.scrollingElement.scrollTop : 0;
+    hover.style.top = `${scroll + (down ? box.bottom + 4 : Math.max(4, box.top - 4 - hover.offsetHeight))}px`;
+  }
+
+  document.addEventListener("keydown", (event) => (event.key === "Escape" ? closeHover() : undefined));
+  document.addEventListener("mousedown", () => closeHover());
+
   function draw(next) {
     vm = next;
+    closeHover(); // its badge is drawn anew
     selection.keep();
     const hadFocus = list !== null && document.activeElement === list;
     const scroll = document.scrollingElement ? document.scrollingElement.scrollTop : 0;
@@ -218,5 +288,5 @@
   });
 
   document.body.setAttribute("data-vscode-context", JSON.stringify({ preventDefaultContextMenuItems: true }));
-  listen(draw);
+  listen(draw, (message) => (message.type === "comments" ? showComments(message) : undefined));
 })();

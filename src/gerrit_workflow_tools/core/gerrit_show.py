@@ -11,6 +11,7 @@ from gerrit_workflow_tools.core.attention import Attention, as_your_review
 from gerrit_workflow_tools.core.changeish import unresolved_change_message, unresolved_rev_message
 from gerrit_workflow_tools.core.ci_content import CiContent
 from gerrit_workflow_tools.core.ci_content_service import CiContentService
+from gerrit_workflow_tools.core.comment_chain import CommentChain
 from gerrit_workflow_tools.core.comment_chains import CommentSelection, merge_chains
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.change_resolution import (
@@ -22,7 +23,7 @@ from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.changes import ChangeApi
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest, GerritUnavailableError, norm_change_id
 from gerrit_workflow_tools.core.gerrit.service import GerritService
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit, PatchsetStatus
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.inbox import review_turns, to_review_needs_you_as_reviewer
 from gerrit_workflow_tools.core.local_comments import local_chains_of

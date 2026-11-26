@@ -12,8 +12,8 @@ from typing import Any
 
 from gerrit_workflow_tools.core.anchor_mapping import WorktreeMap
 from gerrit_workflow_tools.core.change_id import split_change_id_footer
+from gerrit_workflow_tools.core.comment_chain import CommentChain
 from gerrit_workflow_tools.core.commit_diff import EMPTY_TREE, file_text, show_commit_diff
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain
 from gerrit_workflow_tools.core.gerrit_patchset import fetch_patchset, resolve_change, resolve_patchset
 from gerrit_workflow_tools.core.gerrit_show import resolve_show_targets
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none

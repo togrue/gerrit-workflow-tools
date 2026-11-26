@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from gerrit_workflow_tools.core.attention import Attention
 from gerrit_workflow_tools.core.ci_content import CiContent
+from gerrit_workflow_tools.core.comment_chain import CommentChain
 from gerrit_workflow_tools.core.comment_chains import CommentSelection
-from gerrit_workflow_tools.core.gerrit_change_status import CommentChain, LogCommit
+from gerrit_workflow_tools.core.gerrit_change_status import LogCommit
 from gerrit_workflow_tools.render.ci_content import format_ci_section_markdown
 from gerrit_workflow_tools.render.comments_markdown import format_unresolved_section_markdown
 from gerrit_workflow_tools.render.commit_row import attention_summary, votes_text

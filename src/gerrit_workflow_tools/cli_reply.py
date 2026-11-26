@@ -22,6 +22,7 @@ from gerrit_workflow_tools.cli_args import (
 from gerrit_workflow_tools.cli_common import ExitCode, confirm_publish, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.core.annotated_stack import annotate
 from gerrit_workflow_tools.core.changeish import as_change_only
+from gerrit_workflow_tools.core.comment_chain import InlineComment
 from gerrit_workflow_tools.core.comment_chains import (
     ChainRef,
     ChainRefError,
@@ -34,7 +35,6 @@ from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, ChainM
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit.stack_context import ChangeResolutionError
-from gerrit_workflow_tools.core.gerrit_change_status import InlineComment
 from gerrit_workflow_tools.core.gerrit_show import gerrit_rest_key, resolve_show_targets
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.usage import UsageError

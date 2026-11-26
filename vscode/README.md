@@ -49,6 +49,20 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
   check when nothing does. A *To review* chain with nothing wrong shows an eye while it is your turn, a clock while it waits on its author. The status bar
   uses the same icons for the headline.
 - Changes that are commits of your local stack are marked *in your stack* and open as local commits.
+- **Comments at a glance**: a change's row shows its unresolved comment chains as a share of all
+  of them, *💬2/5* (*💬2* when ger has not counted the resolved ones), and is coloured by where
+  they stand: **yellow** while one waits for your answer, **blue** while drafts of yours wait to be
+  published (once nothing is left to answer), plain when they wait on the other side or are all
+  resolved. The badge at the right says how many are left to answer, or ✎ for drafts. **Hover** the
+  row for the comments themselves: who wrote what where and in which state, each with **Go there**
+  (the file at the comment, its thread open), **Reply Done** and, on your own commit's suggested
+  edit, **Apply**. The hover reads the comments once (or takes them from the Change view when it
+  shows that change); the row's colour needs nothing beyond what the list already has.
+- **While you review a chain** (a staged review here), the view shows only that chain: one row per
+  change, newest first, the one under review marked *reviewing* with an eye, the other chains,
+  *Outgoing* and the headline left out. **All chains** (the first row, or the title bar's list icon)
+  brings the full list back for the rest of this review; the eye in the title bar narrows it again.
+  When the review ends, the full list is back by itself.
 - Right-click a change (or a chain, for its top change) › **Copy Change-Id** or **Copy SHA**: the
   local commit for a change in your stack, else the commit of its current patch set.
 - **Sort Chains…** (title bar): *By chain state* — the order `ger inbox` gives, what needs you
@@ -67,6 +81,9 @@ The commits above your upstream, newest first. One row per commit:
   Stack with Agent, Edit Commit Here, squash, drop and rewording are not offered, as core refuses
   them there (`ger review --unstage` to work on the change, or *Leave Review Checkout*).
 
+- The **comment badge** on the right is the same as in *Review chains*: its share (*2/5*) and
+  colour (yellow: something to answer, blue: drafts of yours to publish, plain otherwise). Hover it
+  a moment for the comments, with *Go there*, *Reply Done* and *Apply*.
 - An **icon** in front says how the commit relates to Gerrit: a **full circle** when it is the
   same as on Gerrit; a **yellow arrow up** in a circle when it is only rebased since the last push
   (the same code by patch-id, whitespace and message aside: Gerrit usually keeps the votes); a **yellow diff** square when its code changed since (push it, and
@@ -216,6 +233,14 @@ The commits above your upstream, newest first. One row per commit:
   cannot be told: no Change view says it, and the banner lists the conflicts. Nor does it where
   core cannot tell why it stopped (a resolution committed by hand as another commit, with another
   subject and no Change-Id): Local stack marks the commit it stopped at as stopped, not conflicted.
+- **Next** (the primary button under the change's state, `Alt+Enter`): the one thing to do now,
+  named on it. Reviewing a change: *Next comment* while an open comment was not looked at yet,
+  *Next file* while a file was not opened (Open All Changes opens them all), *Vote and publish*
+  while it is your turn or drafts of yours wait, then *Next change* along the chain, *Leave review*
+  at its top. On your own commit: *Next comment* while one is left to answer and not gone to yet,
+  then *Work on next* (or *Finish the rebase*), then *Push* once nothing needs edits. On somebody's
+  change you only look at: *Review change*. It asks nothing of `ger serve` to decide; every other
+  action stays where it was, in the title bar and its `…` menu.
 - **Commit message**: the whole message, its `Change-Id:` trailer shown read-only on a quiet line
   under it (select it to copy). For a commit of your local stack it is a text box without the
   Change-Id: edit it and press **Apply** (`Ctrl+Enter`); *Revert* goes back to the commit's
@@ -263,13 +288,13 @@ The commits above your upstream, newest first. One row per commit:
 - **Comments**: unresolved first. On your own change the header says what is left for you:
   *2 to answer · 3 answered by your drafts (push publishes them) · 1 waiting on a reply* — a comment
   your draft answers is still unresolved on Gerrit until the draft is published, but it is no longer
-  yours to answer; on a change you review, how many are unresolved. Click one to open its file at the line, its thread expanded there. The chevron shows a chain whole: every comment in full; one about the whole change (no line in a file) opens that way on a click and has a box to reply right there. *Next / Previous Unresolved Comment* (command palette) step
+  yours to answer; on a change you review, how many are unresolved. The list is an **index**: click one to open its file at the comment, its editor thread expanded and what it was aimed at highlighted (the characters of a range comment, else its lines) until you move on. Reading, replying, resolving and applying happen in that thread; the row only keeps *Keep for Me* for the agent. The chevron shows a chain whole: every comment in full. A chain about the whole change (no line in a file) has no thread to go to: it opens that way on a click, and its row's buttons reply (*Reply as Draft…*, in a box at the top of the window), reply *Done*, edit or delete your draft. The extension never opens VS Code's *Comments* panel (`comments.openView` defaults to `never` with it installed). *Next / Previous Unresolved Comment* (command palette) step
   through what is left for you to answer, across files: not a comment your draft already answers,
   nor one whose last word is your published reply (it waits on a reply). The status bar counts what
   is left, *Comment 2 of 3 to answer*; saving a reply does not send the walk back to the first: it
   goes on from where it stood, by comment, not by position. With nothing left, it says so, and how
   many your drafts answer. One about the whole change (no line in a file) is shown in the Change view,
-  its text whole and the keyboard in its reply box. On a change you review (not yours), it walks every
+  its text whole and the keyboard on its row. On a change you review (not yours), it walks every
   open comment and your own drafts, local drafts and notes too, so you can read again what you are
   about to publish. `Alt+F9` / `Shift+Alt+F9` do it too while the Change view or a
   diff of the change has focus; anywhere else they stay VS Code's own next / previous comment thread, which only
@@ -281,21 +306,21 @@ The commits above your upstream, newest first. One row per commit:
   the Change view *outdated: changed since*; one that moved says *line 13 in your file*. Reply, or reply "Done" and resolve — saved as **drafts** on Gerrit, published later:
   on your own commit by your next `ger push`, anywhere else by *Vote and Publish…*. A reply box says whom it answers (*Reply to Bob…*: the last who
   spoke in the chain; in an editor thread once it is opened from the Change view or the walk, as VS Code has
-  one prompt for all of an extension's threads). It has **Save** and **Cancel**, and Gerrit's **Resolved**
-  checkbox: by the box in the Change view; in an editor thread a toggle in the thread's header
+  one prompt for all of an extension's threads). It has **Save**, **Done** (what you typed, or "Done",
+  saved as your draft resolving the comment) and **Cancel**, and Gerrit's **Resolved**
+  checkbox: in an editor thread a toggle in the thread's header
   (VS Code empties the reply box on any button beside it), its label saying what Save will do;
   in the *Reply as Draft…* box (a row's reply button) a toggle in the box's title bar, the line
   under the box saying what Enter saves, and `Ctrl+Shift+Enter` saves and resolves at once. It
   starts where the comment stands, and with your draft there already it changes that draft at once.
-  With your draft reply there, the Change view's box also has **Discard**, and so has the box of a
-  draft, local draft or note of yours you edit in an editor thread: it deletes it, asking first, as
+  The box of a draft, local draft or note of yours you edit in an editor thread has **Discard**: it deletes it, asking first, as
   the trash does; Save is bottom right, as on Gerrit. In a thread, Esc in the reply box steps back
   to its comments; Esc again (or Esc in the editor) closes it. A reviewer's suggested edit shows in
   the editor thread as **Suggested edit**, old → new as a small diff: a ```` ```suggestion ````
   block of the comment's text in its place, a Gerrit fix suggestion below the text with where it
   applies (the old lines where `ger serve` has them: on your own commits; elsewhere the new lines
   alone). The Change view's row says *suggested edit*. On your own commit, **Apply Suggested Edit to
-  Your File** (the lightbulb in the thread's title, and on the row) writes it into your file where
+  Your File** (the lightbulb in the thread's title, and *Apply* in a row's hover) writes it into your file where
   the lines are now (see *For a local commit* above), unsaved edits included, and offers **Reply
   Done**. It refuses, saying so, when those lines no longer say what the suggestion replaces, or
   ger cannot tell where they are: then apply it by hand. Nothing is saved or committed: undo it with

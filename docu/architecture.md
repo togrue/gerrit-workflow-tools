@@ -519,6 +519,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/change_checkout.py` | Checking a change out to work on it: the **local version** (`find_local_versions`), what to do with it (`plan_checkout`, `choose_action`), which commits above it take Gerrit's patchset (`gerrit_above`) |
 | `core/change_checkout_apply.py` | Doing what `ger checkout` decided (`apply_checkout`): moving the local version onto the patchset, taking the commits above as Gerrit has them or rebasing them, merging your edits into it; every outdated commit of the local stack (`update_stack`) |
 | `core/review_checkout.py` | Review checkout: the review worktree, `change-<number>` branches, staging, review state, walking a chain |
+| `core/comment_chain.py` | The comment chain as data: `CommentChain`, `InlineComment`, `ContextLine`, whose turn it is (`ChainTurn`) and a comment's state (`CommentState`) |
 | `core/comment_chains.py` | Inline comment threads, resolved and unresolved; whose **turn** each is (`chain_turn`, `chain_turns`: to answer, answered by your drafts, waiting on the other side); how a chain is named (`ChainRef`: id, id prefix, `PATH:LINE`, URL) |
 | `core/suggested_edits.py` | A comment's suggested edits: Gerrit fix suggestions and ```` ```suggestion ```` blocks of its text, in one shape |
 | `core/comment_anchor.py` | Where a new comment sits: the LOCATION grammar, its check against a commit, the anchored text |

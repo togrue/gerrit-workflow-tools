@@ -45,7 +45,7 @@ def turns(stack_repo: Path) -> tuple[Path, ChangeStore, list[Commit]]:
     """Four changes: the bottom one's comment you answered, the second's you have not, the third's
     you answered in a draft; the top has none."""
     commented = {"unresolved_comment_count": 1}
-    store, keys, rows = _gerrit(stack_repo, [commented, commented, commented, {}])
+    store, keys, rows = _gerrit(stack_repo, [commented, commented, commented, {"total_comment_count": 0}])
     store.set_comments(
         keys[0],
         {
@@ -87,6 +87,8 @@ def test_log_show_walk_and_serve_agree_on_whose_turn(
     assert [c["comments_drafted"] for c in logged] == [0, 0, 1, 0]
     assert [c["comments_to_answer"] for c in logged] == [0, 1, 0, 0]
     assert [c["comments_unresolved"] for c in logged] == [1, 1, 1, 0], "the count stays a fact"
+    # Every chain counts towards the share, resolved or not; Gerrit's zero needs no reading.
+    assert [c["comments_total"] for c in logged] == [1, 1, 1, 0]
 
     turn_of = {}
     for back, row in enumerate(reversed(rows)):
@@ -130,6 +132,8 @@ def test_the_inbox_counts_a_chain_waiting_on_the_reviewer_as_not_needing_you(
     assert [m["comments_awaiting_reply"] for m in served["members"]] == [1, 0, 0, 0]
     assert [m["comments_drafted"] for m in served["members"]] == [0, 0, 1, 0]
     assert (served["comments_to_answer"], served["comments_drafted"]) == (1, 1)
+    assert [m["comments_total"] for m in served["members"]] == [m["comments_total"] for m in listed["members"]]
+    assert [m["comments_total"] for m in served["members"]] == [1, 1, 1, 0]
     # The headline is the first comment that is yours to answer, not the one waiting on the reviewer.
     assert (overview["headline"]["reason"], overview["headline"]["number"]) == ("unresolved-comments", 101)
     code, out, _err = run_cli(repo, inbox_main, ["--color", "never"], monkeypatch, gerrit=store)

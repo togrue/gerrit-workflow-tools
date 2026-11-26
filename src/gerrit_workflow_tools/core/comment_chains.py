@@ -13,7 +13,8 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 from urllib.parse import quote, unquote
 
-from gerrit_workflow_tools.core.gerrit_change_status import ChainTurn, CommentChain, ContextLine, InlineComment
+from gerrit_workflow_tools.core.comment_anchor import CommentRange
+from gerrit_workflow_tools.core.comment_chain import ChainTurn, CommentChain, ContextLine, InlineComment
 from gerrit_workflow_tools.core.suggested_edits import suggested_edits_from_raw
 
 
@@ -49,6 +50,8 @@ class ChainTurns:
     """Your published comment is the last word: they wait on the other side."""
     drafted: int = 0
     """Somebody else spoke last and a draft of yours answers them: they wait on your push."""
+    total: int | None = None
+    """Every chain on Gerrit, resolved or not: the share :attr:`unresolved` is of."""
 
     @property
     def yours(self) -> int:
@@ -58,7 +61,7 @@ class ChainTurns:
     def within(self, unresolved: int) -> ChainTurns:
         """These turns under Gerrit's count *unresolved*: that count stands, the others never exceed it."""
         theirs = min(self.theirs, unresolved)
-        return ChainTurns(unresolved, theirs, min(self.drafted, unresolved - theirs))
+        return ChainTurns(unresolved, theirs, min(self.drafted, unresolved - theirs), self.total)
 
 
 def chain_turns(
@@ -72,11 +75,13 @@ def chain_turns(
     not on Gerrit yet, so not counted.
     """
     chains = build_comment_chains(file_map, drafts, me=me)
-    unresolved = [chain for chain in chains if not chain.resolved and any(not c.draft for c in chain.comments)]
+    published = [chain for chain in chains if any(not c.draft for c in chain.comments)]
+    unresolved = [chain for chain in published if not chain.resolved]
     return ChainTurns(
         len(unresolved),
         sum(1 for chain in unresolved if chain.turn is ChainTurn.THEIRS),
         sum(1 for chain in unresolved if chain.turn is ChainTurn.DRAFT),
+        len(published),
     )
 
 
@@ -96,6 +101,14 @@ def _comment_start_line(c: dict[str, Any]) -> int | None:
     rng = c.get("range")
     start_line = rng.get("start_line") if isinstance(rng, dict) else None
     return start_line if isinstance(start_line, int) else None
+
+
+def _comment_range(c: dict[str, Any]) -> CommentRange | None:
+    """Gerrit's ``range`` of a comment: the characters it was aimed at; ``None`` for a line comment."""
+    try:
+        return CommentRange(**{key: int(c["range"][key]) for key in CommentRange.__dataclass_fields__})
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def _comment_sort_key(c: dict[str, Any]) -> str:
@@ -221,6 +234,7 @@ def build_comment_chains(
             comments=tuple(_inline_comment_from_raw(p, c, draft=is_draft(c)) for p, c in items),
             resolved=_chain_resolved_from_raw(published or [c for _, c in items]),
             start_line=_comment_start_line(root_comment),
+            comment_range=_comment_range(root_comment),
             on_parent=root_comment.get("side") == "PARENT",
         )
         chains.append(replace(chain, turn=chain_turn(chain, me)))
