@@ -210,6 +210,10 @@ def _did_you_mean(cmd: str) -> str:
     return f"; did you mean {close[0]!r}?" if close else ""
 
 
+_UNTRACED = frozenset({"serve", "bash-completion"})
+"""Not traced with ``GER_TRACE``: ``ger serve`` traces each request instead, completion must stay fast."""
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry for ``ger``: dispatch ``ger <command>`` to the matching tool."""
     try:
@@ -243,6 +247,11 @@ def main(argv: list[str] | None = None) -> int:
         if handler is None:
             handler = _load_handler(import_path)
             _HANDLER_CACHE[cmd] = handler
+        trace_file = os.environ.get("GER_TRACE")
+        if trace_file and cmd not in _UNTRACED:
+            from gerrit_workflow_tools.core.call_trace import run_traced
+
+            return run_traced(trace_file, [cmd, *argv[1:]], lambda: handler(argv[1:]))
         return handler(argv[1:])
     except KeyboardInterrupt:
         return 130

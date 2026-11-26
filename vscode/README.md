@@ -624,6 +624,10 @@ the Review chains tree and the prompts are measured from the next start of the w
 - **`serve`**: what `ger serve` said that request cost, joined by `rid` and `action`: its
   `X-Ger-Trace` ([serve.md](../docu/spec/commands/serve.md#tracing-a-request)): run and queue
   time, git and Gerrit calls, the slowest of them.
+- **`cli`**: a ger command run in a terminal (Work on Next's `ger edit -n`, `ger push`) while
+  `GER_TRACE` is set in its environment, as it is in the integrated terminal when VS Code was
+  started with it: `argv`, `exit`, `ms` and its git and Gerrit calls, the same shape
+  ([SPEC.md](../docu/SPEC.md)). It has no action id: it joins by time.
 
 ## Layout
 

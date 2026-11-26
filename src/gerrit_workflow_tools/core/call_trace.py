@@ -8,8 +8,10 @@ thread's calls stay out of it.
 
 from __future__ import annotations
 
+import json
 import re
-from collections.abc import Iterator, Sequence
+import time
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -48,12 +50,12 @@ def reset_call_trace() -> None:
 
 
 def record_call(kind: str, label: str, seconds: float) -> None:
-    """Record one traced call: into the collection open in this context, else when tracing is enabled."""
+    """Record one traced call: into the collection open in this context, and when ``--debug-log`` traces."""
 
     collected = _collected.get()
     if collected is not None:
         collected.append((kind, label, seconds))
-    elif _ENABLED:
+    if _ENABLED:
         _records.append((kind, label, seconds))
 
 
@@ -137,6 +139,34 @@ def gerrit_request_label_from_url(method: str, url: str) -> str:
         for value in values:
             params.append((key, value))
     return gerrit_request_label(method, path, params=params)
+
+
+def run_traced(trace_file: str, argv: Sequence[str], run: Callable[[], int]) -> int:
+    """Run one command, then append how it went to *trace_file* as one JSON line (``kind: "cli"``).
+
+    For ``GER_TRACE``: a ger command a terminal runs is measured beside the VS Code extension's
+    records in the same file (``vscode/README.md#tracing``). Only a command that returns is written;
+    a file that cannot be written is skipped.
+    """
+    started = time.time()
+    began = time.perf_counter()
+    with collect_calls() as calls:
+        code = run()
+    took = time.perf_counter() - began
+    record = {
+        "kind": "cli",
+        "t": round(started * 1000, 1),
+        "argv": list(argv),
+        "exit": code,
+        "ms": round(took * 1000, 1),
+    }
+    record.update(call_trace_json(calls))
+    try:
+        with open(trace_file, "a", encoding="utf-8") as out:
+            out.write(json.dumps(record) + "\n")
+    except OSError:
+        pass
+    return code
 
 
 def _aggregate_label(kind: str, label: str) -> str:

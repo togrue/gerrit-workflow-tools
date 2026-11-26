@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import threading
+from pathlib import Path
 
+import pytest
+
+from gerrit_workflow_tools import cli_ger
 from gerrit_workflow_tools.core.call_trace import (
     CallTraceEntry,
     call_trace_json,
@@ -115,3 +120,26 @@ def test_call_trace_json_counts_all_and_lists_the_slowest_in_order() -> None:
     assert shaped["gerrit"] == {"count": 1, "ms": 100.0}
     assert shaped["calls"] == [["git", "git 5", 5.0], ["git", "git 9", 9.0], ["gerrit", "GET changes/", 100.0]]
     assert shaped["calls_left_out"] == 2
+
+
+def test_ger_trace_appends_one_record_per_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``GER_TRACE``: a ger command run in a terminal is measured beside the extension's records."""
+    trace = tmp_path / "trace.jsonl"
+    trace.write_text('{"kind": "action"}\n', encoding="utf-8")
+    monkeypatch.setenv("GER_TRACE", str(trace))
+
+    def handler(_argv: list[str]) -> int:
+        record_call("git", "git status", 0.004)
+        return 3
+
+    monkeypatch.setattr(cli_ger, "_load_handler", lambda _path: handler)
+    cli_ger._HANDLER_CACHE.clear()
+    try:
+        assert cli_ger.main(["log", "-v"]) == 3
+    finally:
+        cli_ger._HANDLER_CACHE.clear()
+    first, record = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    assert first == {"kind": "action"}, "appended"
+    assert (record["kind"], record["argv"], record["exit"]) == ("cli", ["log", "-v"], 3)
+    assert record["git"] == {"count": 1, "ms": 4.0}
+    assert record["t"] > 0 and record["ms"] >= 0
