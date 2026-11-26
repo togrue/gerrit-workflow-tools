@@ -133,6 +133,7 @@ the commits above it still replay. `ger fix` refuses a fixup that fails it and n
 | B has no place that shows the whole chain (44) | A chain overview in the editor area: one collapsible section per change that needs attention, its hunks with the comment chains and CI findings at their lines. Per hunk two actions: *Edit Commit Here* (A) and *Fix into this commit* (B, behind the fold check). Editing happens in the working file, never inside a rendered old hunk |
 | A comment whose fix belongs in a new commit on top | **Fix on top** as a reply, instead of comments that float in a local overlay: a draft "Fixed in {change}" on the original comment, a trailer on the new commit naming the comment, and `ger push` fills in the new change and resolves the chain. At the top of the chain the commit lists what it addresses. Gerrit holds the truth and nothing local can drift across machines, reorders or squashes |
 | Tests are run by hand at every stop | A `ger.testCommand` the views run at a stop, with its result on the row |
+| Nothing says a rewritten commit still compiles | A per-repository check command, **recommended, never forced**, where content changed and no check has seen it: before Continue at an edit stop, after a fix was folded into a commit below the top, after an applied suggested edit or a resolved conflict, and before a push. ger remembers the result by tree, so the same content is not checked twice and a check the user ran through ger counts. The push preview names the commits not checked since they changed |
 
 ## What was looked at elsewhere
 
