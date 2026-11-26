@@ -39,6 +39,8 @@ export interface StepRecord {
   fallbacks?: string[];
   error?: string;
   picture: string;
+  /** What the Change view's Next button named before the step and after it ("" for none). */
+  next?: [string, string];
 }
 
 type Rec = { kind: string; t?: number } & Record<string, unknown>;
@@ -102,6 +104,7 @@ export interface StepScore {
   actions: string[];
   error?: string;
   picture: string;
+  next?: [string, string];
 }
 
 export interface LoopTotals {
@@ -211,6 +214,7 @@ export function scorecard(records: Rec[], options: { processMs: number }): Score
       actions: own.map((a) => `${a.name}: first ${a.first_ms ?? "-"} ms (${a.first ?? "nothing"}), settled ${a.settled_ms} ms`),
       ...(step.error ? { error: step.error } : {}),
       picture: step.picture,
+      ...(step.next ? { next: step.next } : {}),
     };
     return score;
   });
@@ -305,6 +309,9 @@ export function renderScorecard(card: Scorecard): string {
     lines.push(`### ${s.loop} ${s.n}. ${escape(s.title)}`, "");
     lines.push(`- input (${s.input}): ${s.given.map(escape).join(", ") || "none"}${s.fallbacks.length ? `; commands instead: ${s.fallbacks.map(escape).join(", ")}` : ""}`);
     lines.push(`- actions: ${s.actions.map(escape).join("; ") || "none traced"}`);
+    if (s.next) {
+      lines.push(`- Next named: "${escape(s.next[0]) || "nothing"}" before, "${escape(s.next[1]) || "nothing"}" after`);
+    }
     if (s.causes.length) {
       lines.push(`- requests: ${s.causes.map(escape).join("; ")}`);
     }

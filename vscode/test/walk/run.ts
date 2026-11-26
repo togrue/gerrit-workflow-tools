@@ -109,6 +109,11 @@ async function main(): Promise<void> {
   if (!fs.existsSync(trace)) {
     throw new Error(`walk: no trace at ${trace}`);
   }
+  // A Python traceback from ger (ger serve's stderr goes to the "ger" output channel, whose log VS
+  // Code keeps in the profile; the terminal's text the suite saved): kept whole, with its file.
+  const tracebacks = findTracebacks([path.join(profile, "logs"), shots]);
+  fs.writeFileSync(path.join(out, "tracebacks.txt"), tracebacks.length ? tracebacks.join("\n\n") : "none\n");
+  console.log(`walk: ${tracebacks.length ? `${tracebacks.length} traceback(s), see tracebacks.txt` : "no traceback from ger"}`);
   const records = readTrace(fs.readFileSync(trace, "utf8"));
   if (process.env.GER_WALK_RESET !== "0") {
     const touched = records.filter((r) => r.kind === "touched").flatMap((r) => r.changes as number[]);
@@ -119,6 +124,28 @@ async function main(): Promise<void> {
   fs.writeFileSync(path.join(out, "scorecard.md"), renderScorecard(card));
   console.log(`walk: ${path.join(out, "scorecard.md")}`);
   process.exitCode = ran.status === 0 ? 0 : 1;
+}
+
+/** Every text file under `roots` that holds a Python traceback: its name and the lines from 20 before the first to its end. */
+function findTracebacks(roots: string[]): string[] {
+  const found: string[] = [];
+  const visit = (at: string) => {
+    for (const entry of fs.existsSync(at) ? fs.readdirSync(at, { withFileTypes: true }) : []) {
+      const file = path.join(at, entry.name);
+      if (entry.isDirectory()) {
+        visit(file);
+      } else if (/\.(log|txt)$/.test(entry.name)) {
+        const text = fs.readFileSync(file, "utf8");
+        const lines = text.split("\n");
+        const first = lines.findIndex((line) => line.includes("Traceback (most recent call last)"));
+        if (first >= 0) {
+          found.push(`== ${file}\n${lines.slice(Math.max(0, first - 20)).join("\n")}`);
+        }
+      }
+    }
+  };
+  roots.forEach(visit);
+  return found;
 }
 
 main().catch((error: unknown) => {
