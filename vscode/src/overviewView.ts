@@ -50,7 +50,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this.changed.event;
 
-  /** The review you asked to see all chains during (its chain key and change): its focus stays off until another review. */
+  /** The chain whose review you asked to see all chains during: its focus stays off, moving along it too, until another review. */
   private unfocused: string | undefined;
   /** Where hovers get the comments from. Set by the extension. */
   comments: ChangeComments = { chains: () => Promise.resolve(undefined), drafts: () => 0 };
@@ -340,8 +340,8 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
   }
 }
 
-/** Which review a focus is about: the chain and the change it holds. */
-const focusKey = (focus: ReviewFocus) => `${focus.chain.key}#${focus.number}`;
+/** Which review a focus is about: its chain, whichever change of it the review has moved to. */
+const focusKey = (focus: ReviewFocus) => focus.chain.key;
 
 /** The inbox section a row sits in. */
 function section(node: Node): string | undefined {
