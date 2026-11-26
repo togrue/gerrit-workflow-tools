@@ -88,3 +88,23 @@ def test_the_step_outcome_is_served_after_an_abort_and_a_refusal(
     assert aborted["text"].startswith("rebase aborted: feature is at ")
     assert aborted["more"][0].startswith("kept: your changes to c.txt, not amended, in stash@{0}")
     assert aborted["at"] >= refused["at"] and aborted["head"] == git_out("rev-parse", "HEAD", cwd=stack_repo)
+    assert (aborted["rebasing"], aborted["kept"]) == (False, ["c.txt"])
+
+
+def test_an_outcome_goes_once_what_it_says_is_no_longer_true(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Served only while it is the state: not during a new rebase, nor once the stashed changes are back."""
+    api = GerApi(stack_repo, gerrit=_store(stack_repo))
+    _stop_to_edit(stack_repo)
+    (stack_repo / "c.txt").write_text("a fix saved, not amended\n", encoding="utf-8")
+    _rebase(stack_repo, ["--abort"], monkeypatch)
+    assert _get(api, "/stack")["last_outcome"]["text"].startswith("rebase aborted:")
+    # `git stash apply`: the changes it kept are back, so "git stash apply brings them back" is history.
+    git("stash", "apply", "-q", cwd=stack_repo)
+    assert _get(api, "/stack")["last_outcome"] is None
+    git("checkout", "-q", "--", "c.txt", cwd=stack_repo)
+    assert _get(api, "/stack")["last_outcome"] is not None, "the tree clean again: the outcome is the state again"
+    # A new rebase at the same HEAD (ger edit of the top commit): the abort's line is no longer the state.
+    _stop_to_edit(stack_repo)
+    stack = _get(api, "/stack")
+    assert stack["rebase_in_progress"] and stack["last_outcome"] is None
+    assert stack["headline"]["section"] == "local", "the rebase underway is the stack's headline"

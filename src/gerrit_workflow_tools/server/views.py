@@ -6,7 +6,6 @@ Spec: docu/spec/commands/serve.md.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import asdict
 from datetime import datetime, timezone
 from functools import partial
 from typing import Any, TypeVar, cast
@@ -38,13 +37,14 @@ from gerrit_workflow_tools.core.review_checkout import find_review, staged_revie
 from gerrit_workflow_tools.core.review_target import drafts_published_by, related_chain, related_chain_numbers
 from gerrit_workflow_tools.core.rewrite_refusal import review_here_refusal
 from gerrit_workflow_tools.core.stack import merge_commits, pinned_below
-from gerrit_workflow_tools.core.step_outcome import StepOutcome, last_outcome
+from gerrit_workflow_tools.core.step_outcome import current_outcome
 from gerrit_workflow_tools.core.upstream import branch_has_upstream
 from gerrit_workflow_tools.render.agent_runbook import runbook_json
 from gerrit_workflow_tools.render.review_json import (
     chain_json,
     headline_json,
     iso_utc,
+    outcome_json,
     review_state_json,
     sections_json,
 )
@@ -167,8 +167,11 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
         "upstream": upstream_json(overview.moved),
         "push_blocked": _push_blocked_json(ctx),
         "staged_review": staged,
+        "headline": headline_json(rebase),
         "review_blocked": None if staged else _review_blocked_json(ctx),
-        "last_outcome": _outcome_json(last_outcome(ctx.run.worktree.repository_dir)),
+        "last_outcome": outcome_json(
+            current_outcome(cwd, ctx.run.worktree.repository_dir, head=head, rebasing=underway)
+        ),
         "stack": {
             "project": context.project,
             "target_branch": context.target_branch or None,
@@ -187,13 +190,6 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
         **({"local_only": True} if local_only else {}),
     }
     return answer, rebase
-
-
-def _outcome_json(outcome: StepOutcome | None) -> dict[str, object] | None:
-    """The **step outcome** the last rebase step or push left, or ``None``."""
-    if outcome is None:
-        return None
-    return {**asdict(outcome), "more": list(outcome.more)}
 
 
 def _staged_review_json(ctx: Context) -> dict[str, object] | None:

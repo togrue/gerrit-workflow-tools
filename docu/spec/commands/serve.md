@@ -401,9 +401,16 @@ or `ger push` left in this worktree, or `null`: `command` (`rebase --abort`, `pu
 a refusal, a failure or a cancel), `text` (the one line of what happened, in the command's words:
 `rebase aborted: s14 is at d66fc18 …, as before the rebase`, `refused: you have unstaged changes …`,
 `push cancelled: nothing sent`), `more` (the lines after it: what was kept and where, the `next:`
-step), `at` (seconds since the epoch) and `head` (`HEAD` then). A client that ran the step in a
-terminal takes a newer `at` as the step's end and shows `text`; once `HEAD` is not `head` any
-more, the outcome is history. It is written to the file ger-outcome.json in the worktree's git dir.
+step), `at` (seconds since the epoch), `head` (`HEAD` then), `rebasing` (a rebase was underway
+then) and `kept` (API 1.10: the files whose changes it put in a stash). A client that ran the step
+in a terminal takes a newer `at` as the step's end and shows `text`. It is served only while it is
+the state: `null` once `HEAD` is not `head` any more, once a rebase began or ended since, or once a
+file of `kept` has changes again (`git stash apply` brought them back; that check costs two `git
+diff` calls, and only then). It is written to the file ger-outcome.json in the worktree's git dir.
+
+`headline` (API 1.10) is the rebase underway as the **headline** `GET /overview` makes of it
+(`section` `local`), or `null` without one: a client that read only the stack after a step knows
+the rebase headline it shows has ended, or begun.
 
 `review_blocked` is why `ger review` would refuse to check a change out for review here now, or
 `null`: only where the review goes into this checkout (`ger.reviewCheckout` = `branch`) and no

@@ -199,7 +199,7 @@ def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monk
     assert list(log) == ["stack", "rebase", "upstream", "commits", "next"]
     assert list(stack) == [
         *("branch", "head", "rebase_in_progress", "rebase", "upstream", "push_blocked", "staged_review"),
-        *("review_blocked", "last_outcome", "stack"),
+        *("headline", "review_blocked", "last_outcome", "stack"),
         *("summary", "commits"),
         "next",
     ]
