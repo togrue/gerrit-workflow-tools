@@ -124,7 +124,7 @@ attention set: that, like anything else, still arrives with the next poll.
 |----------------|---------|
 | `off` | Not followed: `ger.eventStream` is `off`, no Gerrit host is known, or (tests) a Gerrit was injected without an event source. `reason` says which. |
 | `connecting` | ssh is starting. |
-| `live` | Following. A connection is live once it has stayed open 5 seconds or delivered an event. |
+| `live` | Following. A connection is live once it has delivered an event, or stayed open past ssh's connect timeout (10 seconds) by 2 seconds: a host that never answers is not called live. |
 | `retrying` | The stream dropped (or, with `on`, never came up); `reason` is the last thing ssh said. It reconnects after 1, 2, 4 … seconds, at most 60. |
 | `unavailable` | `auto` tried once and the stream never became live (no ssh, `Permission denied`, no capability, refused); not tried again until the service restarts. |
 
