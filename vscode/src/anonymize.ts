@@ -225,7 +225,12 @@ const CHANGE_OR_SHA = string((text, names) => (/^\d+$/.test(text) ? names.number
 const CHECKING_OUT = around(/Checking out (\d+)…(.*)/, (names, number, rest) => `Checking out ${names.number(number)}…${rest}`);
 
 /** The task header (taskRows.ts): our words around their names, subjects and numbers. */
+/** A fold of a long chain's steps: counts of our words (taskFold). */
+const FOLD_WORDS = each(" · ", ours([new RegExp(`(${COUNT} (replayed|stopped here|to come|earlier|later))?`)]));
+
 const TASK: Shape = {
+  /** Which steps a narrow side bar shows, and what the folded ones are. */
+  fold: { from: KEEP, to: KEEP, before: FOLD_WORDS, after: FOLD_WORDS },
   mode: ours(["review", "rework"]),
   heading: ours([/Reworking your chain/], around(/(Reviewing|Reworking your chain on) (.+?)('s chain)?/, (names, verb, who, tail) => `${verb} ${tail ? names.person(who) : names.text(who)}${tail ?? ""}`)),
   title: TEXT,

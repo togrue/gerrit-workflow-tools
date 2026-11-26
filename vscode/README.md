@@ -585,6 +585,14 @@ aside (their `when` clauses read `ger.task` and `ger.taskAll`) so the Change vie
   it reads **Only this task**. Something else that needs you stays on the status bar item, which
   opens it, the lists coming back when it is in one of them.
 
+In a narrow side bar (under 240 px; the gallery draws the task scenarios at 170 px too) the header
+keeps the mode, the next step and the way out on screen, with nothing wider than the view: a step
+is one line, its states as icons (their words in the tooltip, and read out by a screen reader); a
+chain longer than five folds to the steps around the current one, the others one line each before
+and after (*⋯ 2 replayed*, *⋯ 3 to come*; *2 earlier*, *3 later* while reviewing), which a click
+opens; the buttons sit in one row, what each does in its tooltip, and a *not now* reason stays under
+them. Wider, a button's words go beside it where they fit and under it where not.
+
 It is not a view of its own: VS Code gives a view that appears the room the others leave, and
 restores the Change view's stored height, so a separate header took two thirds of the side bar.
 
@@ -826,7 +834,7 @@ downloads that version instead, as CI does for pull requests. `GER_E2E_TIMEOUT_S
 
 **The gallery** is for how the two webview views look, without starting VS Code. `npm run gallery`
 writes `out/gallery/index.html` and prints its path: open it in a browser. It runs the pages of
-`media/` as they ship, each in an iframe 200, 300 and 450 pixels wide, in VS Code's Dark Modern and Light
+`media/` as they ship, each in an iframe 200, 300 and 450 pixels wide (the task scenarios 170 too), in VS Code's Dark Modern and Light
 Modern colours. What stands in for VS Code is in `test/gallery/`: `theme.ts` has the `--vscode-*`
 variables and a webview's default styles (a variable the pages use and it does not list fails
 `npm test`), and `frame.js` is `acquireVsCodeApi()`: it answers the page's `ready` with the view
@@ -850,7 +858,8 @@ is listed under the frame.
   `<scenario>.<view>.<theme>.<width>.png`, at twice the size. It runs an installed Edge, Chrome or
   Chromium headless (`GER_GALLERY_BROWSER` names another one), once per picture: all of them take
   a few minutes, so `--only <words>` keeps the scenarios with those words in their name (several: `--only "conflict|ci findings"`). This is
-  how a coding agent looks at a layout change it made.
+  how a coding agent looks at a layout change it made. It also lists every frame that would scroll
+  sideways, by how much and the first element that sticks out: a side bar never should.
 
 Open the `vscode` folder in VS Code and press `F5` to start an Extension Development Host;
 open your Gerrit repository in it. `npm run package` builds a `.vsix` to install elsewhere; a release (`python scripts/build_release.py` in the repository root) builds it into ger, for `ger vscode install`.

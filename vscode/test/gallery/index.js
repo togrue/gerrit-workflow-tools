@@ -30,6 +30,8 @@
     if (said.gallery === "height") {
       // Read by `npm run gallery -- --png`, which gives each picture the height of its frame.
       frame.dataset.height = String(said.height);
+      frame.dataset.wide = String(said.wide || 0);
+      frame.dataset.what = said.what || "";
       frame.style.height = `${Math.max(said.height, 44)}px`;
     } else {
       log(frame, said.gallery, said.message);

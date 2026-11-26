@@ -675,6 +675,18 @@ body[data-vscode-theme-kind="vscode-high-contrast-light"] .step.phase-todo .step
   flex: none;
 }
 
+/* The change's votes in words beside its state: on the same line where they fit, else whole under it at the right, never cut. */
+.head.wraps {
+  flex-wrap: wrap;
+}
+.head.wraps > .detail {
+  flex: 1 0 auto;
+  max-width: 100%;
+  overflow: visible;
+  white-space: normal;
+  text-align: right;
+}
+
 /* Raw words of git or Gerrit under a sentence of ger's: kept as they came, in the editor's font. */
 .words .raw {
   display: block;
@@ -722,6 +734,8 @@ select:focus {
 
 .section-summary {
   display: flex;
+  flex-wrap: wrap;
+  row-gap: 0;
   flex: 1 0 auto;
   max-width: 100%;
   align-items: center;
@@ -955,6 +969,7 @@ select:focus {
 .task-busy {
   color: var(--vscode-descriptionForeground);
   line-height: 20px;
+  overflow-wrap: anywhere;
 }
 
 .task-label {
@@ -1079,10 +1094,12 @@ select:focus {
   gap: 3px;
 }
 
+/* A way on and what it does: beside the button where there is room, under it where not (never a tall narrow column). */
 .task-action {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  column-gap: 8px;
 }
 
 .task-action .button {
@@ -1091,7 +1108,84 @@ select:focus {
 }
 
 .task-detail {
+  flex: 1 1 9em;
+  min-width: 0;
   color: var(--vscode-descriptionForeground);
+  overflow-wrap: anywhere;
+}
+
+/* The fold lines of a long chain: only in a narrow side bar (below). */
+.fold {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 4px 1px 6px;
+  margin-left: -4px;
+  line-height: 22px;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+.fold:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+.fold:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+/*
+ * A narrow side bar (170 px, state 22): the next step and the way out on screen without scrolling,
+ * nothing wider than the view. A step is one line, its states icons (their words in the tooltip,
+ * still read out); a long chain folds to the steps around the current one; the buttons sit in one
+ * row with what they do in their tooltip, a reason one would not run now said under them.
+ */
+@media (max-width: 240px) {
+  .task {
+    padding: 4px 6px 6px 10px;
+  }
+  .step {
+    flex-wrap: nowrap;
+    column-gap: 4px;
+  }
+  .step-title {
+    flex: 1 1 0;
+  }
+  .marks {
+    flex: none;
+    flex-wrap: nowrap;
+    column-gap: 2px;
+  }
+  .mark-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .steps.folds:not(.unfolded) .step.far {
+    display: none;
+  }
+  .steps.folds:not(.unfolded) .fold {
+    display: flex;
+  }
+  .task-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+  }
+  .task-action:not(.not-now) .task-detail {
+    display: none;
+  }
+  .task-action .button {
+    min-width: 0;
+  }
+  .next-bar .button {
+    min-width: 0;
+  }
+  .next-bar .info-buttons {
+    padding-left: 10px;
+  }
 }
 
 /* Change: a checkout under way, in place of Next. */

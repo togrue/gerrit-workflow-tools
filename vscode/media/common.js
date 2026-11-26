@@ -323,13 +323,43 @@
 
   // --- The task header (src/taskRows.ts) ---------------------------------------------------
 
+  /** A state of a step: its icon and its word; in a narrow side bar the word folds into the tooltip (views.css), still read out. */
   function mark(item) {
     const glyph = item.ring ? ring(item.ring.share, item.ring.shape) : icon(item.icon);
-    return h("span", { class: `mark${item.tone ? ` tone-${item.tone}` : ""}` }, glyph, h("span", { class: "mark-text" }, item.text));
+    return h("span", { class: `mark${item.tone ? ` tone-${item.tone}` : ""}`, title: item.text }, glyph, h("span", { class: "mark-text" }, item.text));
   }
 
-  function step(item) {
-    const classes = ["step", item.current ? "current" : "", item.phase ? `phase-${item.phase}` : ""].filter(Boolean).join(" ");
+  /** Whether the folded steps of a long chain are opened: kept across redraws, as a section's toggle is. */
+  let unfolded = false;
+
+  /** One line for the steps folded before or after the ones shown, in a narrow side bar: how many, and what they are. A click opens them. */
+  function foldRow(words, side) {
+    const open = (event) => {
+      event.stopPropagation();
+      unfolded = true;
+      const list = event.currentTarget.closest(".steps");
+      if (list) {
+        list.classList.add("unfolded");
+      }
+    };
+    return h(
+      "li",
+      {
+        class: `fold fold-${side}`,
+        tabindex: "0",
+        role: "button",
+        "aria-label": `${words}: show them`,
+        title: `${words}: click to show them`,
+        onclick: open,
+        onkeydown: (event) => (event.key === "Enter" || event.key === " ") && (event.preventDefault(), open(event)),
+      },
+      icon("ellipsis"),
+      h("span", { class: "fold-text" }, words),
+    );
+  }
+
+  function step(item, far) {
+    const classes = ["step", item.current ? "current" : "", item.phase ? `phase-${item.phase}` : "", far ? "far" : ""].filter(Boolean).join(" ");
     const go = () => post("taskStep", { key: item.key });
     return h(
       "li",
@@ -351,6 +381,22 @@
       h("span", { class: "step-title" }, item.title),
       h("span", { class: "marks" }, item.marks.map(mark)),
     );
+  }
+
+  /**
+   * The chain's steps, oldest first. A long one (`vm.fold`) marks the steps away from the current one
+   * `far` and puts a fold line where they are: a narrow side bar shows those lines instead (views.css),
+   * a wider one every step, and no fold line.
+   */
+  function steps(vm) {
+    const fold = vm.fold;
+    const far = (index) => Boolean(fold) && (index < fold.from || index > fold.to);
+    const rows = vm.steps.flatMap((item, index) => [
+      fold && index === 0 && fold.before ? foldRow(fold.before, "before") : null,
+      step(item, far(index)),
+      fold && index === fold.to && fold.after ? foldRow(fold.after, "after") : null,
+    ]);
+    return h("ol", { class: `steps${fold ? " folds" : ""}${unfolded ? " unfolded" : ""}`, "aria-label": `The chain, oldest first: ${vm.title}` }, rows);
   }
 
   /** How the last step ended, in ger's words: its line, the lines after it on hover; tone and icon, never the colour alone. */
@@ -404,7 +450,7 @@
       h("div", { class: "task-left" }, h("span", { class: "task-label" }, "Left: "), vm.left),
       vm.busy ? h("div", { class: "task-busy" }, icon("loading"), h("span", {}, vm.busy)) : null,
       !vm.busy && vm.outcome ? outcome(vm.outcome) : null,
-      vm.steps.length ? h("ol", { class: "steps", "aria-label": `The chain, oldest first: ${vm.title}` }, vm.steps.map(step)) : null,
+      vm.steps.length ? steps(vm) : null,
       vm.actions.length ? h("div", { class: "task-actions" }, vm.actions.map(taskAction)) : null,
     );
   }

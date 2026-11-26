@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Chain, Member, Overview, Rebase, ReviewState, Section } from "../src/api";
-import { taskKey, taskLines, taskMode, taskVm } from "../src/taskRows";
+import { taskFold, taskKey, taskLines, taskMode, taskVm } from "../src/taskRows";
 import { chainCounts, changeVm } from "../src/changeRows";
 import { chain, comment, commit, shown, stack, state as fixtureState } from "./fixtures";
 
@@ -215,4 +215,17 @@ test("the header and the Change view say one number of comments for the change s
   assert.match(taskLines(header)[3], /1 to answer/);
   // Without the view's count (it is loading), the served one.
   assert.match(taskLines(taskVm(overview(members), stack([], { staged_review: review }), { all: false })!)[1], /3 comments to answer/);
+});
+
+test("a long chain folds, in a narrow side bar, to the steps around the current one and what the rest are (state 22)", () => {
+  const step = (position: number, phase: "done" | "current" | "todo") => ({ key: String(position), position, title: `matrix demo: step ${position}`, current: phase === "current", phase, marks: [], tooltip: "" });
+  const eight = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => step(n, n < 4 ? "done" : n === 4 ? "current" : "todo"));
+  assert.deepEqual(taskFold(eight, "rework"), { from: 2, to: 4, before: "2 replayed", after: "3 to come" });
+  // A fold of one step saves no line: it is shown.
+  const six = eight.slice(0, 6).map((_s, i) => step(i + 1, i < 1 ? "done" : i === 1 ? "current" : "todo"));
+  assert.deepEqual(taskFold(six, "rework"), { from: 0, to: 2, before: "", after: "3 to come" });
+  // Reviewing: earlier and later changes; five or fewer: nothing folds.
+  const review = eight.map((s) => ({ ...s, phase: undefined }));
+  assert.deepEqual(taskFold(review, "review"), { from: 2, to: 4, before: "2 earlier", after: "3 later" });
+  assert.equal(taskFold(eight.slice(0, 5), "rework"), undefined);
 });

@@ -525,7 +525,7 @@ function reviewScreen(at: ReviewAt = {}, reading: Reading = {}, busy?: string): 
 }
 
 /** Your stack, its commits oldest first, with the rebase stopped at the third. */
-function reworkStack(stop: RebaseStop, nothingLeft = false, uncommitted: string[] = [], staged: string[] = []): Stack {
+function reworkStack(stop: RebaseStop, nothingLeft = false, uncommitted: string[] = [], staged: string[] = [], long = false): Stack {
   const applied = stop === "edit";
   const edits = !nothingLeft;
   const commits = [
@@ -534,6 +534,8 @@ function reworkStack(stop: RebaseStop, nothingLeft = false, uncommitted: string[
     pushed("Route by longest matching prefix", { rebase: "current", is_head: applied, ...(edits ? { comments_unresolved: 1, comments_total: 1, needs_edit: true } : {}) }),
     pushed("Cache resolved routes", { rebase: "todo", ...(edits ? { ci_failures: ["Verified"], verified: -1, needs_edit: true } : {}) }),
     unpushed("Evict stale routes", { rebase: "todo" }),
+    // State 22: a chain of eight, every subject starting alike.
+    ...(long ? ["matrix demo: Cache the route table", "matrix demo: Count the misses", "matrix demo: Count the hits"].map((subject) => unpushed(subject, { rebase: "todo" })) : []),
   ];
   const notAmended = `you have unstaged changes to ${uncommitted.join(", ")}; amend them in (\`git commit --amend -a\`) or \`git stash\` them, then \`ger rebase --continue\``;
   const refused = stop === "conflict" ? { continue: "the index has unresolved conflicts; resolve the conflicts in src/routes.ts, src/cache.ts, `git add` them, then `ger rebase --continue` to finish" } : uncommitted.length ? { continue: notAmended } : {};
@@ -548,8 +550,8 @@ function reworkStack(stop: RebaseStop, nothingLeft = false, uncommitted: string[
  * which shows the commit stopped at (Local stack steps aside; shown with All chains, without its
  * banner), Next under it, as the window draws them (changeScreen.ts).
  */
-function reworking(stop: RebaseStop, options: { busy?: string; nothingLeft?: boolean; chains?: CommentChain[]; uncommitted?: string[]; staged?: string[]; outcome?: Outcome } = {}): { stack: StackVm; change: ChangeVm } {
-  const stack = reworkStack(stop, options.nothingLeft, options.uncommitted, options.staged);
+function reworking(stop: RebaseStop, options: { busy?: string; nothingLeft?: boolean; chains?: CommentChain[]; uncommitted?: string[]; staged?: string[]; outcome?: Outcome; long?: boolean } = {}): { stack: StackVm; change: ChangeVm } {
+  const stack = reworkStack(stop, options.nothingLeft, options.uncommitted, options.staged, options.long);
   const commit = stack.commits[2];
   const task = taskVm(undefined, stack, { all: false, busy: options.busy, ...(options.outcome ? { outcome: options.outcome } : {}) });
   const stopped = stop === "conflict" || stop === "resolved" ? { stop, unmerged: stack.rebase?.unmerged ?? [], actions: WAYS_ON[stop] } : undefined;
@@ -581,6 +583,8 @@ function taskScenarios(): Scenario[] {
     scenario("Task: reviewing, all chains shown again", { change: reviewScreen({ all: true }, { seen: some }) }),
     scenario("Task: reviewing, the next change checking out", { change: reviewScreen({}, { seen: all }, "Checking out 48212… Go to Definition and edits in your files once it is checked out") }),
     scenario("Task: reworking, stopped to edit", { change: reworking("edit").change }),
+    scenario("Task: reworking a chain of eight: narrow, it folds around the stop", { change: reworking("edit", { long: true }).change }),
+    scenario("Task: reworking a chain of eight, the fold opened", { change: reworking("edit", { long: true }).change, click: [".fold-after"] }),
     scenario("Task: reworking, stopped to edit, a comment to answer", { change: reworking("edit", { chains: [answer] }).change }),
     scenario("Task: reworking, stopped on a conflict", { change: reworking("conflict").change }),
     scenario("Task: reworking, the conflicts resolved", { change: reworking("resolved").change }),

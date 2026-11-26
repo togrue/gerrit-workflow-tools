@@ -150,7 +150,7 @@ test("the scenarios show the states of Change that matter for layout", () => {
   assert.ok(links.some((link) => link.warnings.length) && links.some((link) => link.detail.startsWith("could not be read")));
   // What a page only shows once opened is pressed open, so a picture has it.
   const opened = scenarios().flatMap((scenario) => scenario.click ?? []);
-  assert.deepEqual(opened.sort(), [".finding[aria-expanded]", ".thread .twist"]);
+  assert.deepEqual(opened.sort(), [".finding[aria-expanded]", ".fold-after", ".thread .twist"]);
 });
 
 // --- Pictures -------------------------------------------------------------------------
