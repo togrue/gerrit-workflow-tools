@@ -33,7 +33,7 @@ Prompts, each with a short description; a value saved before is the default, and
 empty keeps the one you have. For the URL entered, the user defaults to `ger.<webUrl>.user`, else
 `ger.user`, and the token kept is `ger.<webUrl>.token`, else the unscoped `ger.token`; a value still
 under its old name (`gerrit.webUrl`, `gerrit.user`, `gerrit.token`) is offered too. An empty answer
-stops with nothing saved, exit `1`.
+stops with nothing saved and a non-zero exit.
 
 - **An answer that will not do is asked again**, with the reason: a URL without a scheme
   (`lenovo-pc:8081`) says so and offers `https://lenovo-pc:8081` as the next default; one with a
@@ -67,11 +67,11 @@ ger.webUrl named.`
 ## Without a terminal
 
 Nothing is asked. The values come from the flags, else from what the scope already has (so
-`ger setup --token-file - <new-token` replaces only the token). A value still missing refuses with
-exit `2`, naming the flags: `no terminal to ask in: give --url, --user, --token-file (e.g. ger setup
+`ger setup --token-file - <new-token` replaces only the token). A value still missing refuses,
+naming the flags: `no terminal to ask in: give --url, --user, --token-file (e.g. ger setup
 --url https://gerrit.example.com --user YOU --token-file - <token.txt)`. An `http://` URL refuses
 the same way unless `--allow-insecure-http` is given. Credentials Gerrit refuses, or a Gerrit it
-cannot reach, exit `5` with nothing saved, naming `--no-check`.
+cannot reach, save nothing and exit non-zero, naming `--no-check`.
 
 ## Once saved
 
