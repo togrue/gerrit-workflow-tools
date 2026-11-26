@@ -104,8 +104,14 @@ export async function run(): Promise<void> {
   }
   // VS Code answers every modal dialog as cancelled while it runs extension tests, which the walk
   // is: a modal question is asked as a notification with the same buttons instead, clicked there.
+  // What the status bar said last, and when: an answer too (Next Unresolved Comment says where it is, or that none is left).
+  let said = { text: "", at: 0 };
   api.useUi({
     ...vscodeUi,
+    status: (text, milliseconds) => {
+      said = { text, at: now() };
+      vscodeUi.status(text, milliseconds);
+    },
     message: (level, text, options, buttons) =>
       options.modal ? vscodeUi.message(level, options.detail ? `${text} ${options.detail}` : text, {}, buttons) : vscodeUi.message(level, text, options, buttons),
   });
@@ -394,7 +400,9 @@ export async function run(): Promise<void> {
       const focus = await window.evaluate<string>(`const a = document.activeElement; return a ? (a.tagName + "." + a.className).slice(0, 80) + (a.closest(".pane") ? " in " + (a.closest(".pane").querySelector(".pane-header")?.textContent || "").slice(0, 30) : "") : "none";`);
     const inPage = await window.inView<string>("change", `window.__walkKeys = []; document.addEventListener("keydown", (e) => window.__walkKeys.push((e.altKey ? "alt+" : "") + e.key), true); const a = document.activeElement; return document.hasFocus() + " " + (a ? a.tagName + "." + a.className : "none");`);
     note(`rework: before the ${which} Alt+F9 the keyboard is at ${focus} (Change view page: focus ${inPage}); editor ${position()}`);
-    await step({ loop: "rework", title: `Next comment (${which})`, budget: "walk", where: ["editor"], until: () => position() !== at, timeoutMs: 5000 }, (input) => input.key("alt+f9"));
+    const pressed = now();
+    await step({ loop: "rework", title: `Next comment (${which})`, budget: "walk", where: ["editor"], until: () => position() !== at || said.at > pressed, timeoutMs: 5000 }, (input) => input.key("alt+f9"));
+    note(`rework: after Alt+F9 the editor is at ${position()}${said.at > pressed ? `; the status bar says "${said.text}"` : ""}`);
     note(`rework: the Change view page saw the keys ${await window.inView<string>("change", `return JSON.stringify(window.__walkKeys || null);`)}`);
     }
     const suggestion = api.changeView.chains().find((c) => /```suggestion/.test(c.comments.map((m) => m.message).join("\n")) && !c.resolved);
