@@ -9,13 +9,16 @@ import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
 import { ChangeDetail, ciRevs, sameChange, stoppedHere } from "./changeLoad";
-import { ChainCounts, ChangeState, ChangeVm, SeenWhere, chainCounts, seenWhere, CiView, From, MODES, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Sides, Version, changeHeading, changeLines, changeVm, fitSides, isYours, modeSides, toAnswer } from "./changeRows";
+import { ChainCounts, ChangeState, ChangeVm, SeenWhere, chainCounts, seenWhere, CiView, NOTHING_SHOWN, NOT_FILES, READ_ONLY, changeHeading, changeLines, changeVm, isYours, toAnswer } from "./changeRows";
+import { From, MODES, Mode, Sides, Version, fitSides, modeSides } from "./compareRows";
 import { FILE_SCHEME, filePath, fileUri, openDiff } from "./diffTabs";
 import { FilesSeen } from "./filesSeen";
 import { ChangeTarget, Model, describeError } from "./model";
 import { openConflict } from "./rebase";
 import { waitingFor } from "./state";
 import { NextAction, nextAction } from "./nextAction";
+import { changeScreen } from "./changeScreen";
+import { changeProblem } from "./problemRows";
 import { focusedMember, reviewFocus } from "./reviewFocus";
 import { markOf } from "./staleDiffs";
 import { feedback, ui } from "./ui";
@@ -94,7 +97,8 @@ export class ChangeView extends WebView<ChangeVm> {
 
   /** Next on the change shown: what its button names and `ger.next` does. Asks nothing of ger serve. */
   next(): NextAction | undefined {
-    if (this.busyText) {
+    // A step under way, here or in the terminal (the task header says it): Alt+Enter must not start another.
+    if (this.busyText || this.task()?.busy) {
       return undefined;
     }
     const stack = this.model.stack;
@@ -112,6 +116,7 @@ export class ChangeView extends WebView<ChangeVm> {
       combinedActive: this.combinedActive(),
       yourTurn: member?.your_turn,
       above: focus ? above : undefined,
+      newest: this.patchsets?.current ?? null,
     });
   }
 
@@ -574,7 +579,7 @@ export class ChangeView extends WebView<ChangeVm> {
       return { waiting };
     }
     if (this.detail.problem) {
-      return { problem: this.detail.problem };
+      return { problem: changeProblem(this.detail.problem, Boolean(this.target?.local)), task: this.task() };
     }
     const state = this.detail.state({
       chains: this.chains(),
@@ -592,12 +597,8 @@ export class ChangeView extends WebView<ChangeVm> {
     if (!state) {
       return { empty: this.target && this.detail.loading() ? `Loading ${this.target.title}…` : NOTHING_SHOWN, task: this.task() };
     }
-    const next = this.busyText ? undefined : this.next();
     const task = this.task();
-    const vm = changeVm(state);
-    // Reworking, the header holds Continue, Abort and Skip: the head of a commit stopped at says what is left, not the buttons again.
-    const head = vm.head && task?.mode === "rework" ? { ...vm.head, actions: undefined } : vm.head;
-    return { ...vm, head, next: next && { label: next.label, title: next.title }, busy: this.busyText, task };
+    return changeScreen(changeVm({ ...state, task: task?.mode }), { task, next: this.busyText ? undefined : this.next(), busy: this.busyText });
   }
 
   /** The view as text, with the CI findings fetched: for the end-to-end suite. */
@@ -726,8 +727,9 @@ export class ChangeView extends WebView<ChangeVm> {
   // --- CI ---------------------------------------------------------------------------
 
   /** CI content is fetched only when the CI section is opened: it means downloading build logs. */
+  /** Fetch the CI findings: when the section is opened, or once more after they could not be fetched. */
   async openCi(): Promise<void> {
-    if (this.ci.state !== "closed") {
+    if (this.ci.state !== "closed" && this.ci.state !== "error") {
       return;
     }
     const token = this.detail.selection();

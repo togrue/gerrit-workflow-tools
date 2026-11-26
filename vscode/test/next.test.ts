@@ -75,20 +75,22 @@ function reviewing(extra: Partial<NextState> = {}): NextState {
 }
 
 // The rules of vscode/README.md, "Next: what it names, and when", one row each, in order.
-test("reviewing, Next goes through the comments not read, the files not seen, the vote, then the next change or out", () => {
+test("reviewing, Next updates to Gerrit's newest patchset, then goes through the comments not read, the files not seen, the vote, then the next change or out", () => {
   const open = chain("open", [comment("Why?")], { turn: "yours" });
   const seen = { seenFiles: new Set(["a.py", "b.py"]) };
   const draft = chain("mine", [comment("Typo", { state: "draft", comment_id: "d", author: undefined })]);
   const rows: [string, Partial<NextState>, string | undefined][] = [
-    ["1 an open comment yours to read, not looked at", { chains: [open] }, "Next comment"],
-    ["2 files not seen, read in the combined diff in front", { chains: [open], visited: new Set(["open"]), combinedActive: true }, "Mark 2 files seen"],
-    ["2 a file not seen, read in the combined diff in front", { seenFiles: new Set(["a.py"]), combinedActive: true }, "Mark 1 file seen"],
-    ["3 a file of the comparison not seen", { chains: [open], visited: new Set(["open"]) }, "Next file"],
-    ["4 your turn on Gerrit", seen, "Vote and publish"],
-    ["4 all seen, the combined diff still in front", { ...seen, combinedActive: true }, "Vote and publish"],
-    ["4 not your turn, but a draft of yours waits", { ...seen, yourTurn: false, chains: [{ ...draft, resolved: true }] }, "Vote and publish"],
-    ["5 voted, the chain goes on above", { ...seen, yourTurn: false }, "Next change"],
-    ["6 voted, the top of the chain", { ...seen, yourTurn: false, above: false }, "Leave review"],
+    ["1 Gerrit has a newer patchset than the one checked out", { chains: [open], shown: shown({ own: false, patchset_status: "outdated" }), newest: 6 }, "Update to patchset 6"],
+    ["1 the newest not known yet", { shown: shown({ own: false, patchset_status: "outdated" }) }, "Update to the newest patchset"],
+    ["2 an open comment yours to read, not looked at", { chains: [open] }, "Next comment"],
+    ["3 files not seen, read in the combined diff in front", { chains: [open], visited: new Set(["open"]), combinedActive: true }, "Mark 2 files seen"],
+    ["3 a file not seen, read in the combined diff in front", { seenFiles: new Set(["a.py"]), combinedActive: true }, "Mark 1 file seen"],
+    ["4 a file of the comparison not seen", { chains: [open], visited: new Set(["open"]) }, "Next file"],
+    ["5 your turn on Gerrit", seen, "Vote and publish"],
+    ["5 all seen, the combined diff still in front", { ...seen, combinedActive: true }, "Vote and publish"],
+    ["5 not your turn, but a draft of yours waits", { ...seen, yourTurn: false, chains: [{ ...draft, resolved: true }] }, "Vote and publish"],
+    ["6 voted, the chain goes on above", { ...seen, yourTurn: false }, "Next change"],
+    ["7 voted, the top of the chain", { ...seen, yourTurn: false, above: false }, "Leave review"],
     ["- nothing loaded yet", { shown: undefined }, undefined],
   ];
   for (const [rule, state, label] of rows) {
@@ -105,26 +107,30 @@ test("reviewing a change you voted on that waits on the author, your own publish
   assert.equal(nextAction(voted)?.label, "Next change");
 });
 
-test("reworking your commit, Next goes through a conflict, what is left to answer, the attention walk, then the push", () => {
+test("reworking your commit, Next goes through each conflicted file by name, Continue, what is left to answer, the attention walk, then the push", () => {
   const top = commit("top", { patchset_status: "newer", needs_edit: true });
   const needs = stack([top], { summary: { commits: 1, ready: 0, attention: 1, needs_edit: 1, not_on_gerrit: 0 } });
   const rework = (extra: Partial<NextState>): NextState => ({ ...reviewing(), stack: needs, shown: shown({ own: true }), reviewing: false, ...extra });
   const ask = chain("ask", [comment("Rename this.")], { turn: "yours" });
   const done = stack([{ ...top, needs_edit: false }], { summary: { commits: 1, ready: 1, attention: 0, needs_edit: 0, not_on_gerrit: 0 } });
-  const conflict = { ...needs, rebase_in_progress: true, rebase: { unmerged: ["a.py"] } as unknown as Rebase };
+  const conflict = { ...needs, rebase_in_progress: true, rebase: { stop: "conflict", actions: ["abort", "skip"], unmerged: ["a.py", "b.py"] } as unknown as Rebase };
+  const second = { ...needs, rebase_in_progress: true, rebase: { stop: "conflict", actions: ["abort", "skip"], unmerged: ["b.py"] } as unknown as Rebase };
+  const resolved = { ...needs, rebase_in_progress: true, rebase: { stop: "resolved", actions: ["continue", "abort", "skip"], unmerged: [] } as unknown as Rebase };
   const rows: [string, Partial<NextState>, string | undefined][] = [
-    ["1 a conflict stop", { stack: conflict, chains: [ask] }, "Resolve the conflict"],
-    ["2 a comment left to answer, not gone to", { chains: [ask] }, "Next comment"],
+    ["1 a conflict stop: the first file still conflicted, by name", { stack: conflict, chains: [ask] }, "Resolve a.py"],
+    ["1 that one resolved and staged: the next one", { stack: second, chains: [ask] }, "Resolve b.py"],
+    ["2 none left: Continue", { stack: resolved, chains: [ask] }, "Continue"],
+    ["3 a comment left to answer, not gone to", { chains: [ask] }, "Next comment"],
     // 11-focus, 4d: gone to, a reply typed into its box but not saved: still left to answer.
-    ["2 a comment gone to, not answered", { chains: [ask], visited: new Set(["ask"]) }, "Next comment"],
-    ["3 a commit needs edits", {}, "Work on next"],
-    ["5 nothing needs edits, new code to send", { stack: done }, "Push"],
-    ["6 a push would be refused", { stack: { ...done, push_blocked: { reason: "rebase", message: "x" } } }, undefined],
+    ["3 a comment gone to, not answered", { chains: [ask], visited: new Set(["ask"]) }, "Next comment"],
+    ["4 a commit needs edits", {}, "Work on next"],
+    ["6 nothing needs edits, new code to send", { stack: done }, "Push"],
+    ["- a push would be refused", { stack: { ...done, push_blocked: { reason: "rebase", message: "x" } } }, undefined],
   ];
   for (const [rule, state, label] of rows) {
     assert.equal(nextAction(rework(state))?.label, label, rule);
   }
-  // Rule 4: a rebase underway, no commit above the stop needs edits.
+  // Rule 5: a rebase underway, no commit above the stop needs edits.
   const stopped = stack([{ ...top, rebase: "current", needs_edit: false }], { rebase_in_progress: true, rebase: { unmerged: [] } as unknown as Rebase });
   assert.equal(nextAction(rework({ stack: stopped }))?.label, "Finish the rebase");
   // Somebody's change you only look at: review it.

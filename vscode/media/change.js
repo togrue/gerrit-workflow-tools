@@ -4,7 +4,7 @@
 // chains and CI findings are rows that open what they name.
 
 (function () {
-  const { h, icon, badge, actions, info, post, panel, listen, getState, setState, task } = window.ger;
+  const { h, icon, badge, actions, info, words, post, panel, listen, getState, setState, task } = window.ger;
   const root = document.getElementById("root");
 
   let vm = {};
@@ -26,17 +26,21 @@
 
   function buildEditor(key) {
     const box = h("textarea", { class: "message", spellcheck: "false", "aria-label": "Commit message" });
-    const apply = h("button", { class: "button", title: "Rewrite the commit with this message (Ctrl+Enter)" }, "Apply");
+    const apply = h("button", { class: "button apply", title: "Rewrite the commit with this message (Ctrl+Enter)" }, "Apply");
     const revert = h("button", { class: "button secondary", title: "Back to the commit's message" }, "Revert");
     const note = h("span", { class: "detail" });
     const author = h("span", { class: "detail" });
     const bar = h("div", { class: "message-bar" }, apply, revert, note);
     const changeId = h("div", { class: "change-id" });
     const block = h("div", { class: "message-block" }, h("div", { class: "heading" }, h("span", { class: "label" }, "Commit message"), author), box, changeId, bar);
-    const state = { key, base: "", block, box, author, changeId };
+    const state = { key, base: "", block, box, author, changeId, compact: false };
+    // Reworking, the message is not what you came for: two lines until the box has the keyboard.
     const fit = () => {
-      box.rows = Math.max(3, Math.min(16, box.value.split("\n").length + 1));
+      const whole = Math.max(3, Math.min(16, box.value.split("\n").length + 1));
+      box.rows = state.compact && document.activeElement !== box ? 2 : whole;
     };
+    box.addEventListener("focus", fit);
+    box.addEventListener("blur", fit);
     state.sync = () => {
       const changed = box.value !== state.base;
       if (changed && !box.readOnly) {
@@ -48,6 +52,7 @@
       apply.hidden = revert.hidden = !changed || box.readOnly;
       note.textContent = box.readOnly ? box.title : changed ? "not applied yet" : "";
       fit();
+      primaryOnce();
     };
     const send = () => {
       if (box.value !== state.base && !box.readOnly) {
@@ -156,6 +161,7 @@
       editor.box.value = message.text;
     }
     editor.base = message.text;
+    editor.compact = Boolean(vm.task && vm.task.mode === "rework");
     editor.box.readOnly = Boolean(message.readOnly);
     editor.box.title = message.readOnly || "";
     editor.author.textContent = message.author;
@@ -203,7 +209,7 @@
       },
       icon(isOpen ? "chevron-down" : "chevron-right"),
       h("span", { class: "label" }, title),
-      summary,
+      h("span", { class: "section-summary" }, summary),
     );
     return h("div", { class: "section" }, header, isOpen ? body() : null);
   }
@@ -314,22 +320,21 @@
     if (ci.state === "closed" || ci.state === "loading") {
       return h("div", { class: "reply" }, h("span", { class: "codicon codicon-loading codicon-modifier-spin" }), h("span", { class: "detail" }, "Fetching the findings…"));
     }
+    // Why there is nothing to read is said whole, with what can be done about it.
     if (ci.state === "error") {
-      return h("div", { class: "reply" }, icon("error", "bad"), h("span", { class: "label" }, ci.error));
+      const again = h("button", { class: "link", title: "Fetch the CI findings again", onclick: () => post("ci") }, "Try Again");
+      return h("div", { class: "reply wraps" }, icon("error", "bad"), words("The CI findings could not be fetched.", "", ci.error), again);
     }
     if (!ci.links.length) {
-      return h("div", { class: "reply" }, ci.noLinks ? h("span", { class: "label" }, ci.noLinks) : null, h("span", { class: "detail" }, ci.summary));
+      const gerrit = ci.noLinks ? h("button", { class: "link", title: "The change's messages on Gerrit say what CI reported", onclick: () => post("command", { command: "ger.openInGerrit" }) }, "Open in Gerrit") : null;
+      return h("div", { class: "reply wraps" }, ci.noLinks ? words(ci.noLinks, ci.summary) : h("span", { class: "detail" }, ci.summary), gerrit);
     }
     return h(
       "div",
       {},
       ci.links.map((link) => [
-        item(
-          { class: "thread", title: link.tooltip, onclick: () => post("url", { url: link.url }) },
-          icon(link.icon, link.tone),
-          h("span", { class: "label" }, link.text),
-          h("span", { class: "detail" }, link.detail),
-        ),
+        // A build's row says what became of its log ("could not be read: …"): whole, wrapping.
+        item({ class: "thread wraps", title: link.tooltip, onclick: () => post("url", { url: link.url }) }, icon(link.icon, link.tone), words(link.text, link.detail)),
         link.findings.map((finding) => findingRow(finding, "finding")),
         warningRows(link),
       ]),
@@ -404,22 +409,50 @@
     return h("div", { class: "compare" }, ...picker("From", compare.from, "from"), toggle, ...picker("To", compare.to, "to"));
   }
 
+  /**
+   * In a task, From and To at the default mode's sides are one line that says what is compared, in
+   * its words: "Base commit → Local commit 464bd89". "Change" opens the pickers; picked by hand
+   * (the default no longer holds) they stay open.
+   */
+  function compareLine(compare) {
+    const label = (side) => (side.options.find((option) => option.value === side.selected) || { label: side.selected }).label;
+    const open = h("button", { class: "link", title: "Choose From and To, and the default comparison", onclick: () => ((toggled.compare = true), draw(vm)) }, "Change");
+    return h("div", { class: "head note wraps compare-line", title: compare.mode.title }, icon(compare.mode.icon), words(`${label(compare.from)} → ${label(compare.to)}`), open);
+  }
+
   /** An explanation: an icon and words that wrap under each other in a narrow view, never cut off. */
   function explain(iconId, tone, text, detail, ...rest) {
-    return h(
-      "div",
-      { class: "head note explain" },
-      icon(iconId, tone),
-      h("span", { class: "words" }, h("span", { class: "label" }, text), detail ? [" ", h("span", { class: "detail" }, detail)] : null),
-      ...rest,
-    );
+    return h("div", { class: "head note wraps" }, icon(iconId, tone), words(text, detail), ...rest);
   }
 
   // --- The page ---------------------------------------------------------------------
 
+  /**
+   * One primary button on screen (src/changeScreen.ts): while the message has edits not applied,
+   * Apply is the next step, and Next is drawn plain until they are applied or reverted.
+   */
+  function primaryOnce() {
+    const bar = document.querySelector(".next-bar");
+    const next = bar && bar.querySelector(".button");
+    const apply = editor && !editor.block.querySelector(".apply").hidden && root.contains(editor.block);
+    if (next) {
+      next.classList.toggle("secondary", Boolean(apply));
+    }
+  }
+
+  /** The change could not be read (src/problemRows.ts): the state in ger's words, git's or Gerrit's under it, the ways on. */
+  function problemBlock(problem) {
+    return [h("div", { class: "head note wraps" }, icon("error", "bad"), words(problem.text, "", problem.raw)), actions(problem.actions)];
+  }
+
   function draw(next) {
     vm = next;
     const scroll = document.scrollingElement ? document.scrollingElement.scrollTop : 0;
+    if (vm.problem && typeof vm.problem === "object") {
+      root.replaceChildren(...(vm.task ? [task(vm.task)] : []), ...problemBlock(vm.problem));
+      return;
+    }
+    // A problem as a string is a snapshot from before it said its options.
     const plain = vm.waiting || (vm.problem ? { text: vm.problem } : vm.empty ? { text: vm.empty } : null);
     if (plain) {
       root.replaceChildren(...(vm.task ? [task(vm.task)] : []), panel(plain.text, plain.link));
@@ -429,6 +462,7 @@
     if (key !== shownKey) {
       shownKey = key;
       delete toggled.ci;
+      delete toggled.compare;
       expanded.clear();
       revealed = null;
     }
@@ -437,21 +471,33 @@
     if (vm.task) {
       parts.push(task(vm.task));
     }
+    // Next: the one thing to do now, named on the button; Alt+Enter does the same.
+    const nextBar = vm.busy
+      ? h("div", { class: "next-bar busy" }, icon("loading"), h("span", { class: "busy-text" }, vm.busy))
+      : vm.next
+        ? h("div", { class: "next-bar" }, actions([{ label: vm.next.label, title: vm.next.title, command: { id: "ger.next", args: [] }, primary: true }]))
+        : null;
+    // The files still conflicted, as under Local stack's banner: a click opens one to resolve.
+    const conflicts = vm.conflicts
+      ? section("conflicts", "Conflicts", h("span", { class: "detail" }, vm.conflicts.summary), true, () => h("div", {}, vm.conflicts.rows.map(info)))
+      : null;
+    // In a task, what to do now comes right under its header: Next, and the conflicts it walks.
+    if (vm.task) {
+      parts.push(nextBar, conflicts);
+    }
     if (vm.head) {
       const head = vm.head;
       // Votes and comments as badges, drawn as the Local stack draws them; words only when there are none.
       const right = head.badges.length ? h("span", { class: "badges" }, head.badges.map((item) => badge(item))) : h("span", { class: "detail" }, head.detail);
-      parts.push(h("div", { class: "head", title: `${head.text} — ${head.detail}` }, icon(head.icon, head.tone), h("span", { class: "label" }, head.text), right));
+      // What state the change is in: said whole, wrapping under itself in a narrow view.
+      parts.push(h("div", { class: "head wraps", title: `${head.text} — ${head.detail}` }, icon(head.icon, head.tone), words(head.text), right));
       // A rebase stopped here: the way on, as Local stack's banner offers it.
       if (head.actions && head.actions.length) {
         parts.push(actions(head.actions));
       }
     }
-    // Next: the one thing to do now, named on the button; Alt+Enter does the same.
-    if (vm.busy) {
-      parts.push(h("div", { class: "next-bar busy" }, icon("loading"), h("span", { class: "busy-text" }, vm.busy)));
-    } else if (vm.next) {
-      parts.push(h("div", { class: "next-bar" }, actions([{ label: vm.next.label, title: vm.next.title, command: { id: "ger.next", args: [] }, primary: true }])));
+    if (!vm.task) {
+      parts.push(nextBar, conflicts);
     }
     for (const note of vm.notes || []) {
       parts.push(explain(note.icon, note.tone, note.text, note.detail));
@@ -465,17 +511,12 @@
       parts.push(messagePlace(vm.loading.readOnly, vm.loading.plain));
     }
     if (vm.compare) {
-      parts.push(compareBlock(vm.compare));
+      parts.push(vm.task && vm.compare.mode.active && !toggled.compare ? compareLine(vm.compare) : compareBlock(vm.compare));
     }
     if (vm.hint) {
       const to = vm.compare ? vm.compare.to.selected : "current";
       const show = vm.hint.show ? h("button", { class: "link", onclick: () => post("compare", { from: "reviewed", to }) }, "Show") : null;
       parts.push(explain(vm.hint.show ? "git-compare" : "pass", vm.hint.show ? undefined : "good", vm.hint.text, "", show));
-    }
-    if (vm.conflicts) {
-      // The files still conflicted, as under Local stack's banner: a click opens one to resolve.
-      const conflicts = vm.conflicts;
-      parts.push(section("conflicts", "Conflicts", h("span", { class: "detail" }, conflicts.summary), true, () => h("div", {}, conflicts.rows.map(info))));
     }
     if (vm.files) {
       const files = vm.files;
@@ -506,7 +547,8 @@
       const summary = [icon("error", "bad"), h("span", { class: "detail" }, ci.state === "closed" ? [ci.summary, "open to fetch the findings"].filter(Boolean).join(" — ") : ci.summary)];
       parts.push(section("ci", "CI", summary, ci.state !== "closed", () => ciBody(ci), () => post("ci")));
     }
-    root.replaceChildren(...parts);
+    root.replaceChildren(...parts.filter(Boolean));
+    primaryOnce();
     if (document.scrollingElement) {
       document.scrollingElement.scrollTop = scroll;
     }

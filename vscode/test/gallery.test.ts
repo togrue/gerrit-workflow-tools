@@ -99,8 +99,8 @@ test("a scenario's views each get a frame per theme; two scenarios of one name g
     ],
   );
   const shots = [...indexHtml([one]).matchAll(/data-shot="([^"]+)" width="(\d+)"/g)].map((match) => `${match[1]} ${match[2]}`);
-  assert.deepEqual(shots.slice(0, 4), ["from-a-report.stack.dark.300 300", "from-a-report.stack.dark.450 450", "from-a-report.stack.light.300 300", "from-a-report.stack.light.450 450"]);
-  assert.equal(shots.length, 8);
+  assert.deepEqual(shots.slice(0, 6), ["from-a-report.stack.dark.200 200", "from-a-report.stack.dark.300 300", "from-a-report.stack.dark.450 450", "from-a-report.stack.light.200 200", "from-a-report.stack.light.300 300", "from-a-report.stack.light.450 450"]);
+  assert.equal(shots.length, 12);
 });
 
 test("the scenarios show the states of Local stack that matter for layout", () => {

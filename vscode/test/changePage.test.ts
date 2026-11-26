@@ -6,8 +6,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { ChangeVm, READ_ONLY, changeVm } from "../src/changeRows";
+import { PROBLEM_WORDS, changeProblem } from "../src/problemRows";
 import { FakeElement, fakePage } from "./fakePage";
-import { chain, comment, state } from "./fixtures";
+import { chain, comment, shown, state } from "./fixtures";
 
 /** The Change view's page, drawn for `view`: its root, what it posted, and how to send it a message. */
 const changePage = (view: ChangeVm) => fakePage("change", view);
@@ -137,4 +138,56 @@ test("Alt+F9 in the Change view walks the comments: VS Code's key binding does n
   const count = posted.length;
   text.dispatch("keydown", { key: "F9" });
   assert.equal(posted.length, count, "F9 alone is not the walk");
+});
+
+test("what says the state, or what went wrong, is drawn whole (wrapping); a section's counts stay beside a long title", () => {
+  const stopped = { stop: "conflict" as const, unmerged: ["src/a.ts", "src/b.ts"], actions: ["abort" as const, "skip" as const] };
+  const failing = { ci_failures: ["Verified"], verified: -1, attention_reasons: ["ci-failed"] };
+  const wraps = (root: FakeElement, text: string) => root.all(byClass("wraps")).some((element) => element.textContent.includes(text));
+  const conflicted = changePage(changeVm(state({ stopped })));
+  assert.ok(wraps(conflicted.root, "Conflicts in 2 files — resolve them, then Continue"), "the head");
+  assert.ok(!wraps(conflicted.root, "src/a.ts"), "a conflicted file is a row like a file's");
+  const unreachable = changePage(changeVm(state({ shown: shown({ ...failing }), ci: { state: "error", error: "Gerrit unreachable: connection refused (gerrit.example.org:443)" } })));
+  assert.ok(wraps(unreachable.root, "Gerrit unreachable: connection refused (gerrit.example.org:443)"));
+  const noLink = changePage(changeVm(state({ shown: shown({ ...failing }), ci: { state: "loaded", contents: [], introduced: null } })));
+  assert.ok(wraps(noLink.root, "No CI link was found for the failed build"));
+  const files = changePage(changeVm(state({})));
+  const head = files.root.all(byClass("section-head"))[0];
+  assert.equal(head.all(byClass("section-summary"))[0].all(byClass("counts")).length, 1, "the counts sit in the summary, which wraps under the title as a whole");
+});
+
+test("a change that could not be shown says the state in ger's words, git's words under it, and offers the ways on", () => {
+  const { root, posted } = changePage({ problem: changeProblem("fatal: bad object 3f9a2c1", true) });
+  assert.ok(root.textContent.includes(PROBLEM_WORDS.change));
+  assert.equal(root.all(byClass("raw"))[0].textContent, "fatal: bad object 3f9a2c1");
+  const labels = root.all((element) => element.tagName === "BUTTON").map((element) => element.textContent);
+  assert.deepEqual(labels, ["Show Again", "Show Local Stack", "Show Log"]);
+  button(root, "Show Again").click();
+  assert.deepEqual(posted.at(-1), { type: "command", command: "ger.change.reload", args: [] });
+  const theirs = changePage({ problem: changeProblem("Gerrit unreachable", false) });
+  assert.ok(button(theirs.root, "Show Review Chains"), "somebody's change is picked again from Review chains");
+});
+
+test("CI that could not be fetched offers Try Again; a failed build without a log, Open in Gerrit", () => {
+  const failing = { ci_failures: ["Verified"], verified: -1, attention_reasons: ["ci-failed"] };
+  const unreachable = changePage(changeVm(state({ shown: shown({ ...failing }), ci: { state: "error", error: "Gerrit unreachable" } })));
+  button(unreachable.root, "Try Again").click();
+  assert.deepEqual(unreachable.posted.at(-1), { type: "ci" });
+  const noLink = changePage(changeVm(state({ shown: shown({ ...failing }), ci: { state: "loaded", contents: [], introduced: null } })));
+  button(noLink.root, "Open in Gerrit").click();
+  assert.deepEqual(noLink.posted.at(-1), { type: "command", command: "ger.openInGerrit" });
+});
+
+test("in a task, From and To at their default are one line that says what is compared; Change opens the pickers", () => {
+  const task = { mode: "rework", heading: "Reworking your chain", title: "t", position: "change 1 of 1", left: "", steps: [], actions: [], views: { label: "All chains", detail: "", command: "ger.showAllChains" } } as const;
+  const view = { ...changeVm(state({})), task: { ...task, steps: [], actions: [] } };
+  const { root } = changePage(view);
+  assert.equal(root.all((element) => element.tagName === "SELECT").length, 0, "folded");
+  const line = root.all(byClass("compare-line"))[0];
+  assert.match(line.textContent, /→/);
+  button(root, "Change").click();
+  assert.equal(root.all((element) => element.tagName === "SELECT").length, 2, "opened");
+  const byHand = changePage({ ...view, compare: { ...view.compare!, mode: { ...view.compare!.mode, active: false } } });
+  assert.equal(byHand.root.all((element) => element.tagName === "SELECT").length, 2, "picked by hand: they stay open");
+  assert.equal(changePage(changeVm(state({}))).root.all((element) => element.tagName === "SELECT").length, 2, "outside a task: as before");
 });

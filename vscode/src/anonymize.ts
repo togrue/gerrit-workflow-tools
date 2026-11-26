@@ -15,11 +15,13 @@
 import { randomInt } from "node:crypto";
 
 import { commentPhrases } from "./commentState";
-import { DISCARD, LOADING, MODES, MODE_ICONS, SIDE_WORDS, NOTHING_SHOWN, NOT_FILES, NO_CI_LINK, READ_ONLY, REVIEW_UPDATE, STOPPED_WORDS, YOURS } from "./changeRows";
+import { DISCARD, LOADING, NOTHING_FROM_GERRIT, NOTHING_SHOWN, NOT_FILES, NO_CI_LINK, READ_ONLY, REVIEW_UPDATE, STOPPED_WORDS, YOURS } from "./changeRows";
+import { MODES, MODE_ICONS, SIDE_WORDS } from "./compareRows";
 import { Names, Random } from "./fakes";
 import { ATTENTION_ICONS, FILE_STATES, REASON_WORDS } from "./format";
 import { SECTION_TITLES, TREE_WORDS, allRowContexts } from "./rows";
 import { MARKER_WORDS, MERGE_WORDS, REBASE_ACTIONS, REBASE_WORDS, REVIEW_FROZEN, SYNC_ICONS, SYNC_WORDS } from "./stackRows";
+import { PROBLEM_ACTIONS, PROBLEM_WORDS } from "./problemRows";
 
 type Json = Record<string, unknown>;
 const isObject = (value: unknown): value is Json => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -187,14 +189,14 @@ const BADGE: Shape = {
 const ROW_KEY = string((text, names, row) => (text === row.changeId ? names.changeId(text) : names.key(text)));
 
 /** A banner's words, or a line about the upstream ("<branch> has no upstream…", "Track <branch>", an error of git's: filler). */
-const INFO_TEXT = ours([REBASE_WORDS.conflict, REBASE_WORDS.resolved, REBASE_WORDS.split, REBASE_WORDS.progress, "No local commits", "Choose another upstream branch…", "Choose an upstream branch…"]);
+const INFO_TEXT = ours([PROBLEM_WORDS.stack, REBASE_WORDS.conflict, REBASE_WORDS.resolved, REBASE_WORDS.split, REBASE_WORDS.progress, "No local commits", "Choose another upstream branch…", "Choose an upstream branch…"]);
 
-/** A rebase's buttons: Continue, Abort, Skip. */
+/** A rebase's buttons: Continue, Abort, Skip; and the ways on from an error state (problemRows.ts). */
 const ACTIONS: Shape = [
   {
-    label: ours(Object.values(REBASE_ACTIONS).map((action) => action.label)),
-    title: ours(Object.values(REBASE_ACTIONS).map((action) => action.title)),
-    command: { id: ours(Object.values(REBASE_ACTIONS).map((action) => action.command)), args: [TEXT] },
+    label: ours([...Object.values(REBASE_ACTIONS), ...Object.values(PROBLEM_ACTIONS)].map((action) => action.label)),
+    title: ours([...Object.values(REBASE_ACTIONS), ...Object.values(PROBLEM_ACTIONS)].map((action) => action.title)),
+    command: { id: ours([...Object.values(REBASE_ACTIONS).map((action) => action.command), ...Object.values(PROBLEM_ACTIONS).map((action) => action.command.id)]), args: [TEXT] },
     primary: KEEP,
   },
 ];
@@ -208,6 +210,8 @@ const CONFLICT_ROW = {
   tone: TONE,
   tooltip: TOOLTIP,
   conflict: PATH,
+  /** An error of git's, under the sentence that says what state the view is in: filler. */
+  raw: TEXT,
 };
 
 /** A change number or a commit id: what it became. */
@@ -259,6 +263,7 @@ const TASK: Shape = {
       command: ours(["ger.reviewDone", "ger.rebase.continue", "ger.rebase.abort", "ger.rebase.skip"]),
       /** Core's words about this repository: filler. */
       notNow: TEXT,
+      primary: KEEP,
     },
   ],
   views: { label: ours(["All chains", "Only this task"]), detail: ours([/keep going; show the inbox and Local stack too/, /hide the inbox and Local stack again/]), command: ours(["ger.showAllChains", "ger.focusReview"]) },
@@ -337,15 +342,15 @@ const CHANGE: Shape = {
   waiting: WAITING,
   /** `Loading <subject>…` has the subject in it: filler. */
   empty: ours([NOTHING_SHOWN]),
-  /** An error as git or Gerrit worded it. */
-  problem: TEXT,
+  /** Our sentence, the error as git or Gerrit worded it (filler), the ways on. */
+  problem: { text: ours([PROBLEM_WORDS.change]), raw: TEXT, actions: ACTIONS },
   key: KEY,
   loading: { message: KEEP, readOnly: READ_ONLY_WORDS, plain: KEEP },
   head: {
     icon: ICON,
     tone: TONE,
     text: ours(
-      [reasons, "Ready to submit", "Loading…", "Nothing to do", STOPPED_WORDS.resolved, new RegExp(STOPPED_WORDS.conflicts(0).replace("0", COUNT))],
+      [reasons, "Ready to submit", "Loading…", "Nothing to do", NOTHING_FROM_GERRIT, STOPPED_WORDS.resolved, new RegExp(STOPPED_WORDS.conflicts(0).replace("0", COUNT))],
       around(/Conflict in (.+) — resolve it, then Continue/, (names, file) => STOPPED_WORDS.conflict(names.path(file))),
     ),
     detail: ours([VOTES, "not on Gerrit"]),
@@ -353,6 +358,28 @@ const CHANGE: Shape = {
     actions: ACTIONS,
   },
   conflicts: { summary: ours([new RegExp(`${COUNT} files?`)]), rows: [CONFLICT_ROW] },
+  /** Next (nextAction.ts): our names for it, a conflicted file's path made up; why, with subjects and paths in it: filler. */
+  next: {
+    label: ours(
+      [
+        "Next comment",
+        "Next file",
+        new RegExp(`Mark ${COUNT} files? seen`),
+        "Vote and publish",
+        "Next change",
+        "Leave review",
+        new RegExp(`Update to patchset ${PATCHSET}`),
+        "Update to the newest patchset",
+        "Continue",
+        "Work on next",
+        "Finish the rebase",
+        "Push",
+        "Review change",
+      ],
+      around(/Resolve (.+)/, (names, file) => `Resolve ${names.path(file)}`),
+    ),
+    title: TEXT,
+  },
   notes: [
     {
       icon: ICON,
@@ -383,7 +410,7 @@ const CHANGE: Shape = {
     },
   },
   hint: {
-    text: ours([new RegExp(`Nothing new since your review of patchset ${PATCHSET}`), new RegExp(`Since your review: patchset ${PATCHSET} → ${PATCHSET} · ${COUNT} files?( · rebased)?`)]),
+    text: ours([new RegExp(`Since your review: patchset ${PATCHSET} → ${PATCHSET} · ${COUNT} files?( · rebased)?`)]),
     show: KEEP,
   },
   files: {

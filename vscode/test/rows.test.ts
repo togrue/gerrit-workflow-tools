@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { CommentChain, Rebase, RebaseAction, StackCommit } from "../src/api";
-import { ChangeState, READ_ONLY, answeredByDraft, changeHeading, changeLines, changeVm, fitSides, modeSides, modesFor, toAnswer } from "../src/changeRows";
+import { ChangeState, READ_ONLY, answeredByDraft, changeHeading, changeLines, changeVm, replyName, toAnswer } from "../src/changeRows";
+import { fitSides, modeSides, modesFor } from "../src/compareRows";
 import { attentionIcon, reasonWords, votes } from "../src/format";
 import { commentState } from "../src/commentState";
 import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, workOnNext, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, rebaseNotNowFresh, reviewerWords, skipQuestion, stackLines, stoppedAt, sync, stackVm, stackWhere } from "../src/stackRows";
@@ -144,8 +145,8 @@ test("a resolution committed by hand as another commit is no conflict: core serv
   assert.deepEqual([vm.info[0].text, vm.info.length], ["A rebase is in progress", 1], "no conflict words, no conflicted files");
   assert.deepEqual(
     (vm.info[0].actions ?? []).map((action) => `${action.label}${action.primary ? "!" : ""}`),
-    ["Continue", "Abort"],
-    "the ways on core serves, none pressed as the one after a resolution",
+    ["Continue!", "Abort"],
+    "the ways on core serves, Continue the one to press, as wherever core allows it",
   );
 });
 
@@ -154,9 +155,9 @@ test("the rebase banner offers the ways on core allows from where it stopped, an
   const at = (rebase: Partial<Rebase>) => stackVm(stack(commits, { rebase_in_progress: true, rebase: { ...REBASE, ...rebase } }), undefined, never);
   const buttons = (vm: StackVm) => (vm.info[0].actions ?? []).map((action) => `${action.label}${action.primary ? "!" : ""} ${action.command.id}`);
   // Applied whole (an edit, a split): core offers nothing to skip, only to go on or go back.
-  assert.deepEqual(buttons(at({ stop: "edit" })), ["Continue ger.rebase.continue", "Abort ger.rebase.abort"]);
+  assert.deepEqual(buttons(at({ stop: "edit" })), ["Continue! ger.rebase.continue", "Abort ger.rebase.abort"]);
   const split = at({ stop: "split", current: null });
-  assert.deepEqual(buttons(split), ["Continue ger.rebase.continue", "Abort ger.rebase.abort"]);
+  assert.deepEqual(buttons(split), ["Continue! ger.rebase.continue", "Abort ger.rebase.abort"]);
   assert.deepEqual([split.info[0].text, split.info[0].detail], ["A rebase stopped while you split a commit", "Continue replays the rest on top of HEAD"]);
   // Still conflicted: no Continue until it is resolved; the commit can be left out. Resolved, Continue is the one to press.
   const conflict = at({ stop: "conflict", applied: false, unmerged: ["src/e.txt", "f.txt"], actions: ON_CONFLICT });
@@ -470,6 +471,13 @@ test("a change checked out for review reads as theirs: behind Gerrit, Update to 
   assert.equal(unknown.notes?.[0].actions?.[0].label, "Update to the newest patchset");
   const current = changeVm(state({ reviewing: { behind: false, newest: 3 }, delta: diff({ since }) }));
   assert.deepEqual(current.hint, { text: "Since your review: patchset 2 → 3 · 2 files", show: true });
+  // Nothing differs since the review: no line. A staged review compares your checkout, where core's up_to_date is false.
+  const one = changeVm(state({ reviewing: { behind: false, newest: 1 }, delta: diff({ since: { ...since, patch_set: 1, current_patch_set: 1 }, files: [] }) }));
+  assert.equal(one.hint, undefined, "patchset 1 → 1 · 0 files says nothing");
+  const sameFiles = changeVm(state({ local: false, version: "current", delta: diff({ since: { ...since, to_patch_set: 3 }, files: [] }) }));
+  assert.equal(sameFiles.hint, undefined, "no file differs");
+  const upToDate = changeVm(state({ local: false, version: "current", delta: diff({ since: { ...since, patch_set: 3, to_patch_set: 3, up_to_date: true } }) }));
+  assert.equal(upToDate.hint, undefined, "you reviewed the current patchset");
 });
 
 test("the message box holds what core serves without the Change-Id footer; the Change-Id is said beside it", () => {
@@ -489,7 +497,7 @@ test("a message that cannot be reworded here is plain text; one held by a rebase
 });
 
 test("the commit message is read-only with the reason, and comment chains say what can be done with them", () => {
-  assert.equal(changeVm(state({ readOnly: "A rebase is in progress: finish or abort it first." })).message?.readOnly, "A rebase is in progress: finish or abort it first.");
+  assert.equal(changeVm(state({ readOnly: READ_ONLY.rebase })).message?.readOnly, "The message cannot be edited during a rebase: reword it once the rebase is finished or aborted.");
   const vm = changeVm(
     state({
       chains: [
@@ -732,4 +740,16 @@ test("a fixup row names the commit it folds into, and that commit how many wait 
     [fix.short_sha, "→ 2168"],
   ]);
   assert.deepEqual(notes("Other"), [[commit("Other").short_sha]]);
+});
+
+test("the reply box names whom it answers only where that is sure: the chain gone to, else the one person all answer", () => {
+  // Change 2176 in the playground: one comment, by Alice. A box left saying Bob from another change named the wrong person.
+  const alice = chain("a", [comment("Population or sample standard deviation?", { author: "pg-alice" })]);
+  const bob = chain("b", [comment("Why?", { author: "pg-alice" }), comment("Because.", { author: "pg-bob" })]);
+  const mine = chain("m", [comment("A note", { state: "note", author: undefined, comment_id: "n" })]);
+  assert.equal(replyName([alice, mine]), "pg-alice", "every chain that can be answered answers Alice");
+  assert.equal(replyName([alice, bob]), undefined, "two people: no name, rather than the wrong one");
+  assert.equal(replyName([alice, bob], bob), "pg-bob", "the chain gone to, or the cursor is in: its last word on Gerrit");
+  assert.equal(replyName([bob], { ...bob, comments: [...bob.comments, comment("Draft", { state: "draft", author: undefined, comment_id: "d" })] }), "pg-bob", "your draft is not who it answers");
+  assert.equal(replyName([]), undefined);
 });

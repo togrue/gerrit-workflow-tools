@@ -8,7 +8,7 @@ import { draftsIn, toAnswer } from "./changeRows";
 import { WALK_WORDS, workOnNext } from "./stackRows";
 
 /** What Next does; extension.ts maps each to its command. */
-export type NextKind = "comment" | "file" | "seen" | "vote" | "nextChange" | "leave" | "conflict" | "workOnNext" | "push" | "review";
+export type NextKind = "comment" | "file" | "seen" | "vote" | "nextChange" | "leave" | "update" | "conflict" | "continue" | "workOnNext" | "push" | "review";
 
 export interface NextAction {
   kind: NextKind;
@@ -38,6 +38,8 @@ export interface NextState {
   yourTurn?: boolean;
   /** Under review: the chain goes on above it; undefined when not known. */
   above?: boolean;
+  /** Gerrit's current patchset of the change shown, once the patchsets are known. */
+  newest?: number | null;
 }
 
 const KEY = "Alt+Enter";
@@ -58,6 +60,10 @@ function pushable(stack: Stack): boolean {
  * turn, or drafts of yours wait), then the next change of the chain, at its top leaving the review.
  */
 function reviewNext(state: NextState): NextAction {
+  if (state.shown?.patchset_status === "outdated") {
+    // The author pushed since the checkout: what is read and voted on here is not what Gerrit has.
+    return action("update", state.newest ? `Update to patchset ${state.newest}` : "Update to the newest patchset", "Gerrit has a newer patchset than the one checked out: check it out for review in its place");
+  }
   const unread = state.chains.filter((chain) => toAnswer(chain) && !state.visited.has(chain.root_id)).length;
   if (unread) {
     return action("comment", "Next comment", `${unread} open comment${unread === 1 ? "" : "s"} not looked at yet`);
@@ -80,14 +86,19 @@ function reviewNext(state: NextState): NextAction {
 }
 
 /**
- * Reworking your own commit: a conflict first, then every comment left to answer (one you went to
- * and typed a reply into without saving it is still left), then the attention walk (Work on Next),
- * then the push once nothing needs edits.
+ * Reworking your own commit: a conflict first, the first file still conflicted named (resolved and
+ * staged, the next one); once none is left, Continue; then every comment left to answer (one you
+ * went to and typed a reply into without saving it is still left), then the attention walk (Work
+ * on Next), then the push once nothing needs edits.
  */
 function reworkNext(state: NextState, stack: Stack): NextAction | undefined {
-  const conflicted = stack.rebase?.unmerged.length ?? 0;
-  if (conflicted) {
-    return action("conflict", "Resolve the conflict", `${conflicted} file${conflicted === 1 ? " is" : "s are"} still conflicted: open the first`);
+  const [first, ...more] = stack.rebase?.unmerged ?? [];
+  if (first !== undefined) {
+    const which = more.length ? `${more.length + 1} files are still conflicted` : "it is still conflicted";
+    return action("conflict", `Resolve ${first}`, `${which}: open ${first} with its conflict markers, resolve them, then stage it (git add) so the rebase can go on`);
+  }
+  if (stack.rebase?.stop === "resolved" && stack.rebase.actions.includes("continue")) {
+    return action("continue", "Continue", "the conflicts are resolved: commit this stop and go on with the rebase");
   }
   const left = state.chains.filter(toAnswer);
   if (left.length) {

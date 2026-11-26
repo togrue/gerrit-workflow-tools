@@ -4,79 +4,16 @@
 
 import * as path from "node:path";
 
-import { Attended, CiContent, CiFinding, Comment, CommentChain, Diff, Patchsets, RebaseAction, Severity, ShownCommit } from "./api";
+import { Attended, CiContent, CiFinding, Comment, CommentChain, Diff, RebaseAction, Severity, ShownCommit } from "./api";
 import { attentionIcon, commitVotes, fileState, plural, reasonWords, sentence } from "./format";
 import type { Commented } from "./commentState";
 import { Badge, SYNC_WORDS, StackAction, StackInfo, Tone, actionsText, badges, sync, conflictRow, rebaseButtons } from "./stackRows";
 import { Waiting } from "./state";
 import { latestSuggestion } from "./suggestions";
-import type { TaskVm } from "./taskRows";
+import { Problem, problemLines } from "./problemRows";
+import { CompareState, CompareVm, MODES, Option, compareVm, deltaTitle } from "./compareRows";
+import type { TaskMode, TaskVm } from "./taskRows";
 
-/** The newer side, the version looked at ("To"): your commit, Gerrit's current patchset, or patchset `n`. */
-export type Version = "local" | "current" | number;
-/** The older side, what it is compared with ("From"): its base commit, the patchset you last reviewed, Gerrit's current one, or patchset `n`. */
-export type From = "base" | "reviewed" | "current" | number;
-/** The default comparison, remembered across changes: what a change opened next starts on. */
-export type Mode = "base" | "reviewed" | "gerrit";
-
-export const MODES: Record<Mode, string> = {
-  base: "Against its base commit",
-  reviewed: "Since my last review",
-  gerrit: "Gerrit vs. local",
-};
-
-/** The codicon the default-mode toggle wears for each mode. */
-export const MODE_ICONS: Record<Mode, string> = { base: "git-commit", reviewed: "eye", gerrit: "cloud-upload" };
-
-/** What a change allows: patchsets to compare once it is on Gerrit, your commit when it is in your stack. */
-export interface Sides {
-  pushed: boolean;
-  local: boolean;
-}
-
-/** The default modes `sides` allows, in the toggle's order: Gerrit vs. local needs your commit and a patchset, Since my last review a patchset. */
-export function modesFor(sides: Sides): Mode[] {
-  return (["base", "reviewed", "gerrit"] as Mode[]).filter((mode) => mode === "base" || (sides.pushed && (mode === "reviewed" || sides.local)));
-}
-
-/**
- * From and To of `mode` for a change: base → your commit (else Gerrit's current patchset); your
- * last review → Gerrit's current patchset; Gerrit's current patchset → your commit. A mode the
- * change does not allow is its base comparison.
- */
-export function modeSides(mode: Mode, sides: Sides): { from: From; to: Version } {
-  const allowed = modesFor(sides).includes(mode) ? mode : "base";
-  if (allowed === "reviewed") {
-    return { from: "reviewed", to: "current" };
-  }
-  if (allowed === "gerrit") {
-    return { from: "current", to: "local" };
-  }
-  return { from: "base", to: sides.local ? "local" : "current" };
-}
-
-/** A patchset number for `side`, once the patchsets are known: "current" and "reviewed" resolved. Else the side itself. */
-export function resolveSide<T extends From | Version>(side: T, patchsets: Patchsets | undefined): T | number {
-  if (side === "current" && patchsets?.current) {
-    return patchsets.current;
-  }
-  if (side === "reviewed" && patchsets?.reviewed) {
-    return patchsets.reviewed;
-  }
-  return side;
-}
-
-/**
- * A comparison as asked for, made one core can answer: From older than To. Picking To at or
- * below the patchset From names sets From back to the base commit; once the patchsets are
- * known, a From that names one at or above To does the same. Before they are known, From and
- * To naming the same patchset ("current" both) does too: nothing refits the pick later.
- */
-export function fitSides(from: From, to: Version, patchsets: Patchsets | undefined): { from: From; to: Version } {
-  const [older, newer] = [resolveSide(from, patchsets), resolveSide(to, patchsets)];
-  const notOlder = older === newer || (typeof older === "number" && typeof newer === "number" && older >= newer);
-  return notOlder ? { from: "base", to } : { from, to };
-}
 
 export const NOT_FILES = ["/COMMIT_MSG", "/PATCHSET_LEVEL", "/MERGE_LIST"];
 
@@ -105,25 +42,14 @@ export interface Stopped {
   actions: RebaseAction[];
 }
 
-/** Everything the view is built from. */
-export interface ChangeState {
-  /** A commit of your local stack. */
-  local: boolean;
-  /** As `/show` answered, or (while `loading.commit`) as the clicked row said. */
-  shown: ShownCommit;
+/** Everything the view is built from. `shown`: as `/show` answered, or (while `loading.commit`) as the clicked row said. */
+export interface ChangeState extends CompareState {
   /** Comment chains, in the order shown. */
   chains: CommentChain[];
   /** The version looked at against its parent; it carries the commit message. */
   base: Diff | undefined;
   /** The review delta: From against To, or (someone's change, From its base) since your review. */
   delta: Diff | undefined;
-  patchsets: Patchsets | undefined;
-  /** The newer side ("To"). */
-  version: Version;
-  /** The older side ("From"). */
-  from: From;
-  /** The default mode, remembered; From and To are its sides unless picked by hand. */
-  mode: Mode;
   /** Why the commit message cannot be edited; empty when it can. */
   readOnly: string;
   ci: CiView;
@@ -142,6 +68,11 @@ export interface ChangeState {
   seen?: ReadonlySet<string>;
   /** What has not come yet; absent once everything has. */
   loading?: Loading;
+  /**
+   * The task header drawn above the change (taskRows.ts). Reworking, it says where the rebase
+   * stands and holds its buttons: the change does not say it again (P4).
+   */
+  task?: TaskMode;
 }
 
 /** The way on from a staged review behind Gerrit: `ger review` checks the newest patchset out. */
@@ -222,17 +153,13 @@ export interface CiLinkRow extends Icon {
   warnings: FindingRow[];
 }
 
-export interface Option {
-  value: string;
-  label: string;
-  disabled?: boolean;
-}
 
 export interface ChangeVm {
   waiting?: Waiting;
   /** Nothing is shown: what to do to see a change. */
   empty?: string;
-  problem?: string;
+  /** The change could not be read: what state the view is in, git's or Gerrit's words, the ways on (problemRows.ts). */
+  problem?: Problem;
   /** Which change is drawn (its Change-Id, else its commit): the page keeps what you opened and typed per change. */
   key?: string;
   /** What is on its way: the page holds the commit message's place, its read-only note and plainness (as `message` will say) included. */
@@ -246,15 +173,8 @@ export interface ChangeVm {
    * that cannot be reworded here at all (someone's change, a patchset on Gerrit), drawn as text, not a box.
    */
   message?: { key: string; text: string; changeId: string; author: string; readOnly: string; plain: boolean };
-  /**
-   * The From and To pickers, and the toggle of the default mode: `mode` is the default, `next` the
-   * one a click makes it, `active` whether From and To are the default's (else picked by hand).
-   */
-  compare?: {
-    from: { options: Option[]; selected: string };
-    to: { options: Option[]; selected: string };
-    mode: { mode: Mode; icon: string; next: Mode; active: boolean; title: string };
-  };
+  /** The From and To pickers, and the toggle of the default mode (compareRows.ts). */
+  compare?: CompareVm;
   /** Someone's change you reviewed before: what is new, one click away. */
   hint?: { text: string; show: boolean };
   /** A rebase stopped here on a conflict: the files still conflicted, as Local stack lists them under its banner. */
@@ -281,11 +201,14 @@ export const NOTHING_SHOWN = "Select a change in Review chains or a commit in Lo
 export const READ_ONLY = {
   remote: "Only a commit of your local stack can be reworded here.",
   patchset: "This is a patchset on Gerrit: choose the local commit to edit its message.",
-  rebase: "A rebase is in progress: finish or abort it first.",
+  rebase: "The message cannot be edited during a rebase: reword it once the rebase is finished or aborted.",
   review: "Somebody else's change, checked out for review: its message is theirs.",
 };
 
 export const LOADING = "loading…";
+
+/** The head of the commit a rebase stopped at, reworking, when Gerrit has nothing for you on it. */
+export const NOTHING_FROM_GERRIT = "Nothing from Gerrit to answer";
 
 /** Never reworded here: a box would only say so. A rebase underway passes; the message stays a box. */
 function isPlain(readOnly: string): boolean {
@@ -342,6 +265,24 @@ export function ownComment(chain: CommentChain): Comment | undefined {
   return own?.comment_id ? own : undefined;
 }
 
+/** Whom a reply in `chain` answers: the last who spoke in it on Gerrit. */
+export function answers(chain: CommentChain): string | undefined {
+  return chain.comments.filter((comment) => comment.state === "published").at(-1)?.author;
+}
+
+/**
+ * Whom the reply box of an editor thread names. VS Code has one box text for all of an extension's
+ * threads, so a name is said only where it is sure: `at`, the chain gone to or the cursor is in;
+ * else the one person every chain that can be answered answers; else none ("Reply…").
+ */
+export function replyName(chains: readonly CommentChain[], at?: CommentChain): string | undefined {
+  if (at) {
+    return answers(at);
+  }
+  const names = new Set(chains.filter((chain) => !isYours(chain)).map(answers));
+  return names.size === 1 ? [...names][0] : undefined;
+}
+
 /** How many chains hold an unpublished comment of yours: chains you started, and your draft replies. */
 export function draftsIn(chains: readonly CommentChain[]): number {
   return chains.filter((chain) => ownComment(chain) !== undefined).length;
@@ -349,86 +290,6 @@ export function draftsIn(chains: readonly CommentChain[]): number {
 
 export const DISCARD: Record<string, string> = { note: "Delete Your Private Note…", "local-draft": "Delete Your Local Draft…", draft: "Delete Your Draft…" };
 
-/** `Patchset 3 (current, you reviewed it)`: a patchset as both pickers list it. */
-function patchsetLabel(number: number, patchsets: Patchsets): string {
-  const marks = [number === patchsets.current ? "current" : "", number === patchsets.reviewed ? "you reviewed it" : ""].filter(Boolean);
-  return `Patchset ${number}${marks.length ? ` (${marks.join(", ")})` : ""}`;
-}
-
-/** What each picker says while the patchsets are not known yet, for the sides that name one. */
-export const SIDE_WORDS = {
-  base: "Base commit",
-  current: "Gerrit's current patchset",
-  /** Gerrit's current patchset by its number, as the commit's status names it: the list need not have come. */
-  currentNumbered: (number: number) => `Gerrit's patchset ${number} (current)`,
-  reviewed: "Patchset you last reviewed",
-  notReviewed: "Patchset you last reviewed (none)",
-};
-
-/** Gerrit's current patchset before the list has come: by its number when the commit's status says it. */
-function currentLabel(shown: ShownCommit): string {
-  return shown.current_patch_set ? SIDE_WORDS.currentNumbered(shown.current_patch_set) : SIDE_WORDS.current;
-}
-
-/** The patchsets newest first: both pickers list the versions as a timeline, the newest on top. */
-function newestFirst(patchsets: Patchsets): number[] {
-  return patchsets.patchsets.map((patchset) => patchset.number).reverse();
-}
-
-/** The To picker: your commit (in your stack), then every patchset on Gerrit. */
-function toPicker(state: ChangeState): { options: Option[]; selected: string } {
-  const { shown, patchsets } = state;
-  const options: Option[] = [];
-  if (state.local) {
-    options.push({ value: "local", label: `Local commit ${shown.short_sha}` });
-  }
-  if (shown.pushed && patchsets) {
-    options.push(...newestFirst(patchsets).map((number) => ({ value: String(number), label: patchsetLabel(number, patchsets) })));
-  } else if (shown.pushed) {
-    options.push({ value: "current", label: currentLabel(shown) });
-  }
-  const wanted = String(resolveSide(state.version, patchsets));
-  return { options, selected: options.some((option) => option.value === wanted) ? wanted : (options[0]?.value ?? "") };
-}
-
-/** The From picker: every patchset on Gerrit older than To, then the base commit. */
-function fromPicker(state: ChangeState): { options: Option[]; selected: string } {
-  const { shown, patchsets } = state;
-  const to = resolveSide(state.version, patchsets);
-  const options: Option[] = [];
-  if (shown.pushed && patchsets) {
-    options.push(...newestFirst(patchsets).map((number) => ({ value: String(number), label: patchsetLabel(number, patchsets), disabled: typeof to === "number" && number >= to })));
-    if (state.from === "reviewed" && patchsets.reviewed === null) {
-      options.push({ value: "reviewed", label: SIDE_WORDS.notReviewed, disabled: true });
-    }
-  } else if (shown.pushed) {
-    options.push({ value: "current", label: currentLabel(shown), disabled: to === "current" }, { value: "reviewed", label: SIDE_WORDS.reviewed });
-  }
-  options.push({ value: "base", label: SIDE_WORDS.base });
-  const wanted = String(resolveSide(state.from, patchsets));
-  return { options, selected: options.some((option) => option.value === wanted) ? wanted : "base" };
-}
-
-/** The toggle of the default mode: which it is, the next a click makes it, whether From and To are its sides. */
-function modeToggle(state: ChangeState): NonNullable<ChangeVm["compare"]>["mode"] {
-  const sides = { pushed: state.shown.pushed, local: state.local };
-  const allowed = modesFor(sides);
-  const next = allowed[(allowed.indexOf(state.mode) + 1) % allowed.length] ?? "base";
-  const own = modeSides(state.mode, sides);
-  const same = (a: From | Version, b: From | Version) => resolveSide(a, state.patchsets) === resolveSide(b, state.patchsets);
-  const active = same(own.from, state.from) && same(own.to, state.version);
-  const here = !allowed.includes(state.mode) ? " — not possible for this change" : active ? "" : " — From and To picked by hand for this change";
-  return { mode: state.mode, icon: MODE_ICONS[state.mode], next, active, title: `Default comparison: ${MODES[state.mode]}${here}. Click for ${MODES[next]}.` };
-}
-
-/** What the files compared are called: by what From and To are, whether picked by hand or by the default mode. */
-function deltaTitle(state: ChangeState): "Gerrit vs. local" | "Since your review" | "Compared" {
-  const from = resolveSide(state.from, state.patchsets);
-  if (state.version === "local" && (state.from === "current" || from === state.patchsets?.current)) {
-    return "Gerrit vs. local";
-  }
-  return state.from === "reviewed" || from === state.patchsets?.reviewed ? "Since your review" : "Compared";
-}
 
 /** The Files header's way to tick every file not seen yet (the combined diff ticks none on its own). */
 export const MARK_ALL_SEEN = "Mark all seen";
@@ -582,7 +443,7 @@ function ciLinks(ci: CiView): CiLinkRow[] {
       text: content.provenance.build ?? content.label,
       detail: [
         content.patch_set ? `from patchset ${content.patch_set}, before your local changes` : "",
-        ...(failed ? [`could not be read: ${content.provenance.error}`] : [unstable ? "unstable" : "", ...counted]),
+        ...(failed ? [`could not be read: ${content.provenance.error} — click to open it in the browser`] : [unstable ? "unstable" : "", ...counted]),
       ]
         .filter(Boolean)
         .join(" · "),
@@ -638,7 +499,9 @@ export function changeVm(state: ChangeState): ChangeVm {
   // Gerrit" and what its votes would do are not said. That Gerrit has a newer patchset still holds.
   const stopped = state.stopped;
   const status = commit.patchset_status;
-  if (status === "newer" && !stopped) {
+  // Reworking, every commit replayed is ahead of Gerrit: the push says what it sends, not each stop.
+  const reworking = state.task === "rework";
+  if (status === "newer" && !stopped && !reworking) {
     notes.push({
       icon: "history",
       tone: "warn",
@@ -663,14 +526,22 @@ export function changeVm(state: ChangeState): ChangeVm {
   const since = state.delta?.since;
   // Someone's change, also one checked out for review (unless it is behind: the update says it).
   const theirs = !state.local || (state.reviewing !== undefined && !state.reviewing.behind);
+  // What is new since your review, when something is (P4: no line that says nothing). Core's
+  // `up_to_date` holds only when a patchset is compared; a staged review compares your checkout,
+  // so the patchset you reviewed being the current one, or no file differing, says it too.
   const reviewed = theirs && state.from === "base" && since && since.patch_set !== null;
+  const somethingNew = reviewed && !since.up_to_date && !since.identical && since.patch_set! < since.current_patch_set && (state.delta?.files.length ?? 0) > 0;
   const left = chainCounts(chains);
   const [open, fromGerrit] = [left.comments_unresolved, left.comments_total];
   const yours = chains.length - fromGerrit;
   const counts = [fromGerrit ? commentCounts(commit, left) : "", yours ? `${yours} of yours, not published` : ""];
   const hasCi = commit.ci_failures.length > 0 || commit.ci_links.length > 0 || commit.attention_reasons.includes("ci-failed");
   const loading = state.loading;
-  const words = sentence(reasonWords(commit.attention_reasons));
+  // Stopped before it is applied, what a push of it would do is not known yet. Reworking, the task
+  // header and the Conflicts list say where the rebase stands: the head says what Gerrit has to say.
+  const known = stopped ? commit.attention_reasons.filter((reason) => reason !== "ahead-of-gerrit") : commit.attention_reasons;
+  const words = sentence(reasonWords(known));
+  const quietStop = stopped && reworking;
   // Nothing calls for attention, and whether it is ready to submit is not known yet: no green check meanwhile.
   const unsure = !words && !commit.submittable && loading?.commit && !loading.ready;
   return {
@@ -678,10 +549,10 @@ export function changeVm(state: ChangeState): ChangeVm {
     loading: loading?.base && !state.base ? { message: true, readOnly: state.readOnly, plain: isPlain(state.readOnly) } : undefined,
     head: {
       ...(unsure ? { icon: "loading" } : headIcon(commit)),
-      text: words || (commit.submittable ? "Ready to submit" : unsure ? "Loading…" : "Nothing to do"),
+      text: words || (commit.submittable ? "Ready to submit" : unsure ? "Loading…" : quietStop ? NOTHING_FROM_GERRIT : "Nothing to do"),
       detail: commit.pushed ? commitVotes(commit) : "not on Gerrit",
       badges: commit.pushed ? badges(commit, loading?.commit ? 0 : draftsIn(chains)).filter((badge): badge is Badge => badge !== null) : [],
-      ...(stopped ? stoppedHead(stopped) : {}),
+      ...(stopped && !quietStop ? stoppedHead(stopped) : {}),
     },
     conflicts: stopped?.unmerged.length ? { summary: plural(stopped.unmerged.length, "file"), rows: stopped.unmerged.map(conflictRow) } : undefined,
     notes,
@@ -696,14 +567,9 @@ export function changeVm(state: ChangeState): ChangeVm {
           plain: isPlain(state.readOnly),
         }
       : undefined,
-    compare: { from: fromPicker(state), to: toPicker(state), mode: modeToggle(state) },
-    hint: reviewed
-      ? {
-          text: since.up_to_date
-            ? `Nothing new since your review of patchset ${since.patch_set}`
-            : `Since your review: patchset ${since.patch_set} → ${since.current_patch_set} · ${plural(state.delta?.files.length ?? 0, "file")}${since.rebased ? " · rebased" : ""}`,
-          show: !since.up_to_date,
-        }
+    compare: compareVm(state),
+    hint: somethingNew
+      ? { text: `Since your review: patchset ${since.patch_set} → ${since.current_patch_set} · ${plural(state.delta?.files.length ?? 0, "file")}${since.rebased ? " · rebased" : ""}`, show: true }
       : undefined,
     files: files(state),
     comments: loading?.commit
@@ -733,8 +599,11 @@ export function changeHeading(number: number | null | undefined): string {
 
 /** The view as text, one line per row: what the end-to-end transcript shows of it. */
 export function changeLines(vm: ChangeVm): string[] {
-  if (vm.waiting || vm.empty || vm.problem) {
-    return [vm.waiting?.text ?? vm.problem ?? vm.empty ?? ""];
+  if (vm.problem) {
+    return problemLines(vm.problem);
+  }
+  if (vm.waiting || vm.empty) {
+    return [vm.waiting?.text ?? vm.empty ?? ""];
   }
   const lines: string[] = [];
   const add = (depth: number, text: string, detail = "") => lines.push(`${"  ".repeat(depth)}${text}${detail ? ` — ${detail}` : ""}`);

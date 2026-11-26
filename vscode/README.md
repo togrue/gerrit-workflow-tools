@@ -131,7 +131,7 @@ The commits above your upstream, newest first. One row per commit:
   commit it stopped at; the commits still to be replayed **dimmed**, as they were. The header
   names the branch being rebased (`feature (rebasing) → origin/main`). The banner above the
   stack says why it stopped and has the ways on `ger serve` allows from there (`rebase.actions`):
-  **Continue** once nothing is conflicted, **Abort**, and **Skip** where it stopped on a conflict
+  **Continue** once nothing is conflicted (the one to press: the primary button), **Abort**, and **Skip** where it stopped on a conflict
   (`ger rebase --continue`, `--abort`, `--skip`, in the *ger* terminal, also in the palette while a
   rebase is underway, Skip only where it is offered). Skip asks first, and says what it throws
   away: the commit and the conflict resolution done so far, staged or not; Abort brings back the
@@ -221,16 +221,31 @@ The commits above your upstream, newest first. One row per commit:
   checkout` and *Check Out to Work On* set it): the view says so and offers **Track origin/…** in one click — the branch it was created from, else
   the remote branch nearest to it — or **Choose another upstream branch…**. Later changes:
   *Set Upstream Branch…* in the view's `…` menu.
+- **The stack could not be read** (git refused, an upstream branch that is gone): the view says so
+  in ger's words, git's message under it as it came, and offers **Reload**, **Choose an Upstream
+  Branch…** and **Show Log**. Which of them helps is not known (core does not say what kind of
+  failure it was), so none is drawn as the one to press.
 
 **Change** — select any change or commit
 
 - The title bar names the change number. The subject is not repeated there: the commit message
   says it.
+- **When the change cannot be shown** (git or Gerrit refused, the commit is gone after a rebase),
+  the view says so in ger's words with their message under it, and offers **Show Again** (the one
+  to press: *Show the Change Again* in the palette), **Show Local Stack** for a commit of yours (pick
+  it as it is now) or **Show Review Chains** for somebody's change, and **Show Log**. Every error
+  state of the two views is built in `src/problemRows.ts`, so none says what went wrong and offers
+  nothing. Under **CI**, findings that could not be fetched offer **Try Again**; a failed build
+  with no log to read offers **Open in Gerrit**, where the change's messages say what CI reported;
+  a log that could not be read opens in the browser from its row.
 - What it needs, in words, with its votes.
 - **The commit a rebase stopped at on a conflict** says so instead: *Conflict in d.txt — resolve it,
   then Continue* (several files: how many), with the buttons of Local stack's banner: the same ways
-  on, Abort and Skip while files are still conflicted. **Conflicts**, above Files, lists the files
-  still conflicted; a click opens one with its conflict markers, as under the banner. Files is the commit
+  on, Abort and Skip while files are still conflicted. **Conflicts**, above the commit message (in a
+  rework right under the task header and Next), lists the files still conflicted; a click opens one
+  with its conflict markers, as under the banner. While the task header is shown, the head does not
+  say the conflict again (the header's Continue says why it waits, Conflicts lists the files, Next
+  opens the first): it says what Gerrit has for you on the change, or *Nothing from Gerrit to answer*. Files is the commit
   as it was before the rebase, and says so: the rebase has not applied it yet. What a push of it
   would do (*ahead of Gerrit*, whether the votes stay) is not said until it has: that is not known
   yet. What Gerrit has still is: that it has a newer patchset, and under CI the failed builds of the
@@ -241,9 +256,9 @@ The commits above your upstream, newest first. One row per commit:
   core cannot tell why it stopped (a resolution committed by hand as another commit, with another
   subject and no Change-Id): Local stack marks the commit it stopped at as stopped, not conflicted.
 - **Next** (the primary button under the change's state, `Alt+Enter`): the one thing to do now,
-  named on it: *Next comment*, *Next file*, *Vote and publish*, *Next change*, *Leave review* while
-  you review; *Resolve the conflict*, *Next comment*, *Work on next*, *Finish the rebase*, *Push*
-  on your own commit; *Review change* on somebody's change you only look at. Which one, when, is
+  named on it: *Update to patchset N*, *Next comment*, *Next file*, *Vote and publish*, *Next change*,
+  *Leave review* while you review; *Resolve src/routes.ts* (the first file still conflicted, then
+  the next), *Continue*, *Next comment*, *Work on next*, *Finish the rebase*, *Push* on your own commit; *Review change* on somebody's change you only look at. Which one, when, is
   the table under [Next: what it names, and when](#next-what-it-names-and-when). It asks nothing of
   `ger serve` to decide; every other action stays where it was, in the title bar and its `…` menu.
 - **Commit message**: the whole message, its `Change-Id:` trailer shown read-only on a quiet line
@@ -258,7 +273,10 @@ The commits above your upstream, newest first. One row per commit:
   paragraphs and list items hard-wrapped at 72 joined again, so they wrap once, where the view
   does; indented and fenced blocks kept line for line in the editor font (they scroll sideways when
   wide); the trailers (`Bug:`, `Signed-off-by:`) small and dim, as the Change-Id is.
-- **From / To**: what is compared. *To* is the version you look at: your **local commit** (when
+- **From / To**: what is compared. In a task (reviewing, reworking), while they are the default
+  mode's sides, they are one line that says it (*Base commit → Local commit 464bd89*) with
+  **Change** to open the pickers; picked by hand, they stay open. Reworking, the commit message box
+  is two lines high until it has the keyboard: the comments and files you came for come up. *To* is the version you look at: your **local commit** (when
   the change is in your stack) or any patchset on Gerrit. *From* is what it is compared with:
   the **base commit** (what the change does) or any patchset older than *To*. Both lists run
   newest first and mark the current patchset and the one you reviewed. Picking *To* at or below
@@ -271,7 +289,8 @@ The commits above your upstream, newest first. One row per commit:
   The default is remembered and every change you open starts on it; picking *From* or *To* by
   hand overrides it for that change only, until you open it again, and the icon dims meanwhile.
   On someone else's change you reviewed before, a line says what is new since, with **Show** to
-  switch to it.
+  switch to it. When nothing is (you reviewed the current patchset, or no file differs), there is
+  no such line.
 - **Files**: added and removed lines per file, in the colours git gives them, and a **tick** per
   file: a filled check once it is **seen**, an empty circle until then. A file is seen when its
   diff, or the file, was shown to its last line, or when you click its tick (a click again takes
@@ -321,8 +340,12 @@ The commits above your upstream, newest first. One row per commit:
   is drawn where they were, its thread saying *outdated: line 11 has changed since*, and its row in
   the Change view *outdated: changed since*; one that moved says *line 13 in your file*. Reply, or reply "Done" and resolve — saved as **drafts** on Gerrit, published later:
   on your own commit by your next `ger push`, anywhere else by *Vote and Publish…*. A reply box says whom it answers (*Reply to Bob…*: the last who
-  spoke in the chain; in an editor thread once it is opened from the Change view or the walk, as VS Code has
-  one prompt for all of an extension's threads). It has **Save**, **Done** (what you typed, or "Done",
+  spoke in the chain). VS Code has one prompt for all of an extension's threads, so in an editor
+  thread the name is said only where it is sure: the thread opened from the Change view or the walk,
+  or the one the cursor is in; else the one person every thread of the change shown answers; else
+  just *Reply…*. A name from the change shown before never stays (it named Bob under a thread of
+  Alice's alone). A thread opened by clicking its gutter mark, the cursor elsewhere, keeps the name
+  of where the cursor is. It has **Save**, **Done** (what you typed, or "Done",
   saved as your draft resolving the comment) and **Cancel**, and Gerrit's **Resolved**
   checkbox: in an editor thread a toggle in the thread's header
   (VS Code empties the reply box on any button beside it), its label saying what Save will do;
@@ -393,8 +416,8 @@ The commits above your upstream, newest first. One row per commit:
   It answers at once: while you read a change, the one above it is asked for ahead (one request,
   while ger serve is idle), so *Review Next Change* draws it straight away, its message, files and
   comments in the Change view and its diff in one editor read from git, titled *checking out…*.
-  The Change view and the header say *Checking out 2156…* in place of Next until the checkout is
-  done; then the diff opens again on your files, where Go to Definition and edits work, and the
+  The Change view says *Checking out 2156…* in place of Next until the checkout is
+  done (once: the header does not say it again); then the diff opens again on your files, where Go to Definition and edits work, and the
   *checking out…* tab closes. In between, comments and the diff are there to read; language
   features are not. Without an answer asked ahead (*Previous*, a jump), it waits for the checkout,
   as before. Only the local stack is read again afterwards: nothing moved on Gerrit.
@@ -460,11 +483,17 @@ aside (their `when` clauses read `ger.task` and `ger.taskAll`) so the Change vie
   (dimmed), with its comment ring, *needs edits* and *CI failed*; a click shows that commit. Then
   **Continue** (*commit this stop as it is, then replay the 3 commits above*) and **Abort** (*put
   the branch back as it was before the rebase*), **Skip** at a conflict, each with what it does
-  beside it, or why it does not run now in core's words. They are shown only here: the Change
-  view's head of a commit stopped on a conflict says what is left without them, and *Local stack*,
+  beside it, or why it does not run now in core's words: a button refused now is drawn disabled
+  (dimmed, it does nothing), *not now: …* beside it, also while the step before it still runs.
+  Continue is the primary button once it is the next step (the conflicts resolved); otherwise Next,
+  under the header, is. They are shown only here: the Change
+  view's head of a commit stopped on a conflict says what Gerrit has without them, no note says the
+  commit is *ahead of Gerrit* (every commit a rebase replays is: the push says what it sends), and the
+  message box says only why it cannot be edited now, and *Local stack*,
   when *All chains* shows it, leaves out its rebase banner (the conflicted files stay there). They
   run in the ger terminal; from the click until the stack moves on (another stop, or the rebase
-  over) the header says *Continuing the rebase in the ger terminal…* and its buttons wait.
+  over) the header says *Continuing the rebase in the ger terminal…*, its buttons wait, and Next is
+  not offered (nor `Alt+Enter`), so nothing starts over the step that runs.
 - **All chains** (top right of the header) brings the lists back for the rest of the task; there
   it reads **Only this task**. Something else that needs you stays on the status bar item, which
   opens it, the lists coming back when it is in one of them.
@@ -480,21 +509,33 @@ Gerrit whose last published word is not yours and that no draft of yours answers
 
 | You are | # | When | Next |
 |---|---|---|---|
-| reviewing (a staged review holds the change shown) | 1 | a chain yours to read you have not gone to | *Next comment* |
-| | 2 | files of the comparison shown are not seen, and its combined diff is the editor in front (where they were read) | *Mark N files seen* (all of them, one request) |
-| | 3 | a file of the comparison shown is not seen (its tick: shown to its end, or clicked) | *Next file* (the first not seen) |
-| | 4 | drafts of yours wait, or Gerrit's attention set holds you (or ger cannot tell) | *Vote and publish* |
-| | 5 | the chain goes on above the change (or ger cannot tell) | *Next change* |
-| | 6 | the top of the chain | *Leave review* |
-| on your own commit, no staged review | 1 | a rebase stopped on a conflict, files still conflicted | *Resolve the conflict* (the first file) |
-| | 2 | a chain left to answer here, gone to or not (a reply typed into its box but not saved does not answer it) | *Next comment* |
-| | 3 | a commit above the stop needs edits, or (no rebase) any commit does | *Work on next* |
-| | 4 | a rebase underway, nothing above the stop needs edits | *Finish the rebase* |
-| | 5 | something to send (new code, a commit not on Gerrit, drafts of yours) and the push is not refused | *Push* |
+| reviewing (a staged review holds the change shown) | 1 | Gerrit has a newer patchset than the one checked out | *Update to patchset N* |
+| | 2 | a chain yours to read you have not gone to | *Next comment* |
+| | 3 | files of the comparison shown are not seen, and its combined diff is the editor in front (where they were read) | *Mark N files seen* (all of them, one request) |
+| | 4 | a file of the comparison shown is not seen (its tick: shown to its end, or clicked) | *Next file* (the first not seen) |
+| | 5 | drafts of yours wait, or Gerrit's attention set holds you (or ger cannot tell) | *Vote and publish* |
+| | 6 | the chain goes on above the change (or ger cannot tell) | *Next change* |
+| | 7 | the top of the chain | *Leave review* |
+| on your own commit, no staged review | 1 | a rebase stopped on a conflict, files still conflicted | *Resolve src/routes.ts*: the first file still conflicted, opened with its markers; once it is resolved and staged (`git add`, or **+** in Source Control: the extension does not stage), the next |
+| | 2 | stopped on a conflict, none left | *Continue* |
+| | 3 | a chain left to answer here, gone to or not (a reply typed into its box but not saved does not answer it) | *Next comment* |
+| | 4 | a commit above the stop needs edits, or (no rebase) any commit does | *Work on next* |
+| | 5 | a rebase underway, nothing above the stop needs edits | *Finish the rebase* |
+| | 6 | something to send (new code, a commit not on Gerrit, drafts of yours) and the push is not refused | *Push* |
 | looking at somebody's change on Gerrit | 1 | always | *Review change* |
 
 Your own published comments waiting on the author never make *Next comment*: a change you voted
 on that waits on its author offers *Next change*.
+
+**One primary button, and it is the next step.** A screen draws at most one filled (primary)
+button, and it is the one this table names: Next. Where the next step is a button the screen
+already has (*Continue* in the task header, *Update to patchset N* under the change's state), that
+button is the primary one and Next is not drawn a second time; every other button is drawn plain,
+its alternatives listed beside it in words. While the commit message has edits not applied, *Apply*
+is the next step and Next is drawn plain until they are applied or reverted. Local stack's banner
+draws *Continue* primary wherever core allows it. `src/changeScreen.ts` puts the Change view
+together by this rule; `test/screen.test.ts` draws every gallery scenario and fails on a view with
+two primary buttons.
 
 ## Settings
 
@@ -646,7 +687,7 @@ npm install
 npm run compile     # or: npm run watch
 npm test            # unit tests of the pure parts (formatting, activity, reorder math, the view models of the two webview views) and of package.json against the code (menus, row contexts, commands)
 npm run e2e         # the extension inside a real VS Code, against a fixture repo and a fake Gerrit
-npm run gallery     # the two webview views in a browser page: every layout state, dark and light, two widths
+npm run gallery     # the two webview views in a browser page: every layout state, dark and light, three widths
 ```
 
 `npm run e2e` starts your installed VS Code (or `VSCODE_EXE`) with a throwaway profile, opens
@@ -659,6 +700,12 @@ what they show as plain data, the pages in `media/` (`stack.js`, `change.js`, `v
 draw it and send back what you did. They use VS Code's icon font, which `npm install` copies
 from `@vscode/codicons` into `media/` (a webview cannot reach the editor's own copy), together
 with its two licences ([Third-party notices](#third-party-notices)).
+
+A line that says what state things are in or what went wrong (a view's status headline, Local
+stack's banner and its other lines, why CI has nothing to read, why a log could not be read) is
+drawn whole: it wraps in a narrow side bar and is never cut off. Ordinary rows (a subject, a file
+name, a comment's first line) stay one line and may end in "…". A section's counts stay beside its
+title; when both do not fit, the counts move under it, at the right.
 
 The suite presses every button in turn. For the two webview views it calls what their pages
 send (a drop at a line, a button on a comment) and prints their view models as text; how the
@@ -688,7 +735,7 @@ downloads that version instead, as CI does for pull requests. `GER_E2E_TIMEOUT_S
 
 **The gallery** is for how the two webview views look, without starting VS Code. `npm run gallery`
 writes `out/gallery/index.html` and prints its path: open it in a browser. It runs the pages of
-`media/` as they ship, each in an iframe 300 and 450 pixels wide, in VS Code's Dark Modern and Light
+`media/` as they ship, each in an iframe 200, 300 and 450 pixels wide, in VS Code's Dark Modern and Light
 Modern colours. What stands in for VS Code is in `test/gallery/`: `theme.ts` has the `--vscode-*`
 variables and a webview's default styles (a variable the pages use and it does not list fails
 `npm test`), and `frame.js` is `acquireVsCodeApi()`: it answers the page's `ready` with the view
@@ -696,8 +743,9 @@ model, and what the page posts (a click, a drop, the context a right-click would
 is listed under the frame.
 
 - The scenarios (`test/gallery/scenarios.ts`) call `stackVm()` and `changeVm()` on what `ger serve`
-  would answer, built from the fixtures the unit tests use (`test/fixtures.ts`). A new state of a
-  view gets a scenario there.
+  would answer, built from the fixtures the unit tests use (`test/fixtures.ts`); the task scenarios
+  put the Change view together as the window does (`changeScreen()` with `nextAction()`), so Next and
+  the one primary button are what a user sees. A new state of a view gets a scenario there.
 - `npm run gallery -- report.json` adds snapshot files as scenarios, in front of the built-in
   ones. A snapshot is `{ "format": 1, "name": "…", "stack": <StackVm or null>, "change": <ChangeVm or null> }`,
   other keys ignored (`src/snapshot.ts`). The report of **ger: Report Issue…** is one: this is how a
@@ -705,7 +753,7 @@ is listed under the frame.
 - `npm run gallery -- --png <dir>` also writes a picture of each frame,
   `<scenario>.<view>.<theme>.<width>.png`, at twice the size. It runs an installed Edge, Chrome or
   Chromium headless (`GER_GALLERY_BROWSER` names another one), once per picture: all of them take
-  a few minutes, so `--only <words>` keeps the scenarios with those words in their name. This is
+  a few minutes, so `--only <words>` keeps the scenarios with those words in their name (several: `--only "conflict|ci findings"`). This is
   how a coding agent looks at a layout change it made.
 
 Open the `vscode` folder in VS Code and press `F5` to start an Extension Development Host;
@@ -768,10 +816,13 @@ estimate, the totals per loop and the steps over budget. See
 | `src/statusBar.ts` | The status bar item: the headline (a rebase underway, when core says so) and the activity bell. |
 | `src/follow.ts` | The Change view following its commit through rewrites and amends. |
 | `src/diffTabs.ts`, `src/staleDiffs.ts` | `ger-file:` documents and the diff tabs of them: opening one, knowing it again, marking it stale or closing it once its right side is no longer the commit its title names, unmarking it once it is again (the rule is pure, unit-tested); your files' repository paths; saving before a rebase continues. |
+| `src/compareRows.ts` | What the Change view compares: the From and To pickers, the default mode and its toggle, what the files compared are called. Pure, unit-tested. |
+| `src/problemRows.ts` | An error state of the two webview views: a sentence in ger's words, git's or Gerrit's under it, the options as buttons. Pure, unit-tested. |
 | `src/changeLoad.ts` | Which change the Change view shows and what of it has come: drawn at once from the clicked row, filled in answer by answer, a stale answer dropped. Pure, unit-tested. |
 | `src/review.ts` | Review Change, Check Out to Work On, Leave Review Checkout, Edit Commit Here; moving a review along its chain. |
 | `src/reviewWalk.ts`, `src/reviewAhead.ts` | The review walk as the views do it: the change under review shown with all its files; the next one asked ahead and drawn from it before the checkout, its diff from git, then your files. |
 | `src/task.ts`, `src/taskRows.ts` | The task you are in (a review, a rework): its header (pure, unit-tested), and the context keys the lists step aside by. |
+| `src/changeScreen.ts` | The Change view as a screen: the change, the task header and Next put together, one primary button that is the next step. Pure, unit-tested. |
 | `src/nextAction.ts` | Next: the one thing to do now on the change shown. Pure, the rules are the table above, unit-tested row by row. |
 | `src/commentState.ts` | A change's comments at a glance: the state, the open count, the share for the ring, the words. Pure, unit-tested. |
 | `src/walk.ts` | Work on Next: the attention walk (`ger edit -n`) from the views, and what follows once it has stopped or the rebase is finished. |
