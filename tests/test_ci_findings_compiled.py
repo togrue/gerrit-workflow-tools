@@ -23,7 +23,7 @@ def _findings(name: str) -> list[CiFinding]:
 def test_gcc_error_is_the_only_finding_of_a_make_build() -> None:
     [finding] = _findings("cpp-cmake-make.txt")
     assert (finding.tool, finding.location) == ("cc", "src/csv.cpp:28:19")
-    assert finding.message.startswith("‘parse_amount’ was not declared in this scope")
+    assert "parse_amount" in finding.message and finding.message.endswith("did you mean ‘parse_money’?")  # noqa: RUF001
 
 
 def test_make_alone_is_one_finding_the_innermost_failed_target() -> None:
@@ -116,3 +116,36 @@ org.opentest4j.AssertionFailedError: boom
         ("FooTest.a", "FooTest.java"),
         ("FooTest.b: org.opentest4j.AssertionFailedError: boom", "FooTest.java:9"),
     ]
+
+
+def test_javac_keeps_the_symbol_and_location_lines_through_maven() -> None:
+    log = """\
+[ERROR] COMPILATION ERROR :
+[INFO] -------------------------------------------------------------
+[ERROR] /ws/ledger-core/src/main/java/org/example/ledger/Csv.java:[28,19] cannot find symbol
+  symbol:   method parseAmount(java.lang.String)
+  location: class org.example.ledger.Csv
+[ERROR] /ws/ledger-core/src/main/java/org/example/ledger/Csv.java:[30,9] incompatible types
+  required: int
+  found:    java.lang.String
+[INFO] 2 errors
+"""
+    first, second = [f for f in find_ci_findings(log) if f.tool == "javac"]
+    assert first.location == "/ws/ledger-core/src/main/java/org/example/ledger/Csv.java:28:19"
+    assert first.detail == "symbol:   method parseAmount(java.lang.String)\nlocation: class org.example.ledger.Csv"
+    assert second.detail == "required: int\nfound:    java.lang.String"
+
+
+def test_javac_plain_keeps_source_caret_symbol_and_location() -> None:
+    log = """\
+src/Csv.java:28: error: cannot find symbol
+        parseAmount(x);
+        ^
+  symbol:   method parseAmount(String)
+  location: class Csv
+1 error
+"""
+    [finding] = find_ci_findings(log)
+    assert finding.message == "cannot find symbol"
+    # the rows keep their relative indentation: the caret stays under the source it points at
+    assert finding.detail == "      parseAmount(x);\n      ^\nsymbol:   method parseAmount(String)\nlocation: class Csv"

@@ -8,6 +8,7 @@ rule in :data:`_RULES`: a pattern, and how its match becomes a finding.
 from __future__ import annotations
 
 import re
+import textwrap
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 
@@ -137,6 +138,7 @@ _SCALA3 = re.compile(
     rf"^(?:.*?{LEVEL} )?-- (?:\[(?P<code>E\d+)\] )?(?P<title>[^:\[\]]*): "
     rf"(?P<path>.+?\.(?:scala|sc)):(?P<line>\d+):(?P<col>\d+)[\s-]*$"
 )
+_JAVAC_NOTE = re.compile(r"^\s+(?:symbol|location|required|found|reason):")
 _JVM_TOOLS = {"java": "javac", "scala": "scalac", "sc": "scalac", "kt": "kotlinc"}
 
 
@@ -212,6 +214,24 @@ def _scala3_excerpt(lines: Sequence[str], start: int, claimed: set[int]) -> str 
     return "\n".join(excerpt[:DETAIL_LINES]) or None
 
 
+def _javac_notes(lines: Sequence[str], start: int, claimed: set[int]) -> str | None:
+    """What javac adds under a diagnostic: its source line and caret (plain), ``symbol:`` / ``location:`` and so on.
+
+    Through Maven each row has its level tag, which is dropped; the rows stay as indented as javac wrote them.
+    """
+    notes: list[str] = []
+    for j in range(start + 1, len(lines)):
+        text = _LEVEL_LINE.match(lines[j])
+        row = text.group("text") if text else lines[j]
+        # a source line is told by its caret under it, ahead of the first label
+        caret = not notes and j + 1 < len(lines) and re.match(r"^\s*\^\s*$", lines[j + 1]) is not None
+        if not (_JAVAC_NOTE.match(row) or caret or (notes and re.match(r"^\s*\^\s*$", row))):
+            break
+        claimed.add(j)
+        notes.append(row.rstrip())
+    return textwrap.dedent("\n".join(notes[:DETAIL_LINES])) or None
+
+
 def find_located(lines: Sequence[str], claimed: set[int]) -> list[CiFinding]:
     """Every one-line located diagnostic, in log order."""
     findings: list[CiFinding] = []
@@ -230,6 +250,8 @@ def find_located(lines: Sequence[str], claimed: set[int]) -> list[CiFinding]:
                 # mypy --pretty wraps: the message is on the line below its position.
                 claimed.add(i + 1)
                 finding = replace(finding, message=lines[i + 1].strip(), fingerprint="")
+            elif pattern in (_JAVAC, _MAVEN) and finding.tool == "javac":
+                finding = replace(finding, detail=_javac_notes(lines, i, claimed))
             elif pattern is _SCALA3:
                 finding = replace(finding, detail=_scala3_excerpt(lines, i, claimed))
             findings.append(finding)
