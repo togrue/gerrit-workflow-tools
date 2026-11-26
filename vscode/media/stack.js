@@ -63,6 +63,11 @@
     );
   }
 
+  /** The ready boundary between the commits held back (above) and those a push sends (below), as ger log draws it. */
+  function boundaryLine(boundary) {
+    return h("div", { class: "boundary", role: "separator", "aria-label": boundary.text, title: boundary.tooltip }, h("span", {}, boundary.text));
+  }
+
   // --- The comments of a row, on hovering its comment badge --------------------------
 
   let hover = null;
@@ -155,11 +160,13 @@
         "aria-multiselectable": "true",
         "aria-label": "Local stack, newest first",
       },
-      vm.rows.map((row) => rowElement(row, slots)),
+      vm.rows.map((row) => (vm.boundary && row.key === vm.boundary.under ? [rowElement(row, slots), boundaryLine(vm.boundary)] : rowElement(row, slots))),
       line,
     );
     wire(list);
-    root.replaceChildren(h("div", { class: "infos" }, vm.info.map(info)), list);
+    // How much of the stack is where, in ger log's words: one line above the rows.
+    const summary = vm.summary ? h("div", { class: "stack-summary", role: "status" }, vm.summary) : null;
+    root.replaceChildren(...[h("div", { class: "infos" }, vm.info.map(info)), summary, list].filter(Boolean));
     if (document.scrollingElement) {
       document.scrollingElement.scrollTop = scroll;
     }

@@ -20,6 +20,7 @@ import { MODES, MODE_ICONS, SIDE_WORDS } from "./compareRows";
 import { Names, Random } from "./fakes";
 import { ATTENTION_ICONS, FILE_STATES, REASON_WORDS } from "./format";
 import { SECTION_TITLES, TREE_WORDS, allRowContexts } from "./rows";
+import { BOUNDARY_WORDS } from "./stackSummary";
 import { MARKER_WORDS, MERGE_WORDS, REBASE_ACTIONS, REBASE_WORDS, REVIEW_FROZEN, STACK_GERRIT_WORDS, SYNC_ICONS, SYNC_WORDS } from "./stackRows";
 import { PROBLEM_ACTIONS, PROBLEM_WORDS } from "./problemRows";
 import { NOT_KNOWN, NOT_LISTED } from "./taskRows";
@@ -190,6 +191,8 @@ const BADGE: Shape = {
 
 /** A row's key is its Change-Id or its commit: it becomes what that field becomes. */
 const ROW_KEY = string((text, names, row) => (text === row.changeId ? names.changeId(text) : names.key(text)));
+/** A row's key named from outside the row (the ready boundary's `under`): a Change-Id by its shape, else a key, as the row's own becomes. */
+const ROW_KEY_OF_STACK = string((text, names) => (/^I[0-9a-f]{40}$/.test(text) ? names.changeId(text) : names.key(text)));
 
 /** A banner's words, or a line about the upstream ("<branch> has no upstream…", "Track <branch>", an error of git's: filler). */
 const INFO_TEXT = ours([PROBLEM_WORDS.stack, STACK_GERRIT_WORDS.asking, STACK_GERRIT_WORDS.unknown, REBASE_WORDS.conflict, REBASE_WORDS.resolved, REBASE_WORDS.split, REBASE_WORDS.progress, "No local commits", "Choose another upstream branch…", "Choose an upstream branch…"]);
@@ -318,6 +321,10 @@ const STACK: Shape = {
   movable: KEEP,
   /** A staged review: whether the rows are somebody else's. */
   review: KEEP,
+  /** Counts in ger log's words (stackSummary.ts): no words of anybody's. */
+  summary: ours([new RegExp(`${COUNT} (on Gerrit|to upload|held back|merged|abandoned|failed CI|commits? with comments|commits? with drafts to publish)( · ${COUNT} (on Gerrit|to upload|held back|merged|abandoned|failed CI|commits? with comments|commits? with drafts to publish))*`)]),
+  /** The ready boundary: under a row (its key, made up as the row's is), in our words. */
+  boundary: { under: ROW_KEY_OF_STACK, text: ours([BOUNDARY_WORDS.text]), tooltip: ours([BOUNDARY_WORDS.tooltip]) },
 };
 
 /** `Local commit 1a2b3c4`, `Patchset 3 (current)`, `Base commit`: a side From or To names. A patchset's number says how many there were, as a count does. */

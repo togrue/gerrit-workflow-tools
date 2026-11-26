@@ -129,7 +129,10 @@ The commits above your upstream, newest first. One row per commit:
   reviewers (and who is CC'd). A pushed change with nobody to review it shows a **person +** icon
   where the review vote goes.
 - `HEAD`, the short commit id, *code changed* (see above), and *held back* where `ger push` would
-  stop at the ready boundary. A `fixup!` commit (`ger fix`) names the commit it folds into, *→ 2168*
+  stop at the ready boundary. The boundary itself is a dashed line, *ready boundary*, under the
+  oldest commit held back (Push sends what is below it), and one quiet line above the rows says
+  how much of the stack is where, in `ger log`'s summary words: *6 on Gerrit · 1 to upload · 2 held
+  back · 1 failed CI*. A `fixup!` commit (`ger fix`) names the commit it folds into, *→ 2168*
   (its change number, else its short id), and that commit says *1 fixup pending* until
   `ger rebase --autosquash` folds it in. They stay in commit order: a row's place is where the commit is.
 - Click a row, or walk the list with **↑ / ↓**: the *Change* view follows, with the commit
@@ -905,6 +908,7 @@ estimate, the totals per loop and the steps over budget. See
 | `src/task.ts`, `src/taskRows.ts` | The task you are in (a review, a rework): its header (pure, unit-tested), and the context keys the lists step aside by. |
 | `src/changeScreen.ts` | The Change view as a screen: the change, the task header and Next put together, one primary button that is the next step. Pure, unit-tested. |
 | `src/nextAction.ts` | Next: the one thing to do now on the change shown. Pure, the rules are the table above, unit-tested row by row. |
+| `src/stackSummary.ts` | Local stack at a glance: `ger log`'s summary line, and the row the ready boundary is drawn under. Pure, unit-tested. |
 | `src/commentState.ts` | A change's comments at a glance: the state, the open count, the share for the ring, the words. Pure, unit-tested. |
 | `src/walk.ts` | Work on Next: the attention walk (`ger edit -n`) from the views, and what follows once it has stopped or the rebase is finished. |
 | `src/vote.ts`, `src/voteText.ts` | Vote and Publish, Publish Drafts: the questions, around `GET /vote` and `POST /vote`; their words (pure, unit-tested). |

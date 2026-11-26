@@ -62,14 +62,26 @@ test("the review slot says when nobody is assigned, and the vote names who is on
   assert.match(vm.rows[0].tooltip, /^Reviewers: alice, bob \(cc: carol\)$/m, "the row's tooltip names them too");
 });
 
-test("the stack shows newest first, with HEAD and what push would hold back", () => {
-  const vm = stackVm(stack([commit("One"), commit("Two", { held_back: true }), commit("Three", { is_head: true, patchset_status: "absent", pushed: false, change_id: null })]), undefined, never);
+test("the stack shows newest first, with HEAD, what push would hold back, the ready boundary and a summary", () => {
+  const vm = stackVm(stack([commit("One"), commit("Two", { held_back: true }), commit("Three", { is_head: true, patchset_status: "absent", pushed: false, change_id: null, held_back: true })]), undefined, never);
   assert.deepEqual(vm.rows.map((row) => row.summary), ["Three", "Two", "One"]);
-  assert.deepEqual(vm.rows[0].notes, ["HEAD", "three00"]);
+  assert.deepEqual(vm.rows[0].notes, ["HEAD", "three00", "held back"]);
   assert.equal(vm.rows[0].key, vm.rows[0].sha, "without a Change-Id the commit id names the row");
   assert.deepEqual(vm.rows.map((row) => row.squash), [true, true, false], "the oldest has nothing below to squash into");
   assert.equal(vm.frozen, null);
-  assert.deepEqual(stackLines(vm), ["Three — HEAD · three00 · not on Gerrit", "Two — two0000 · held back · the same as on Gerrit", "One — one0000 · the same as on Gerrit"]);
+  // As ger log draws it (state 14, finding 26): the boundary under the oldest commit held back, the summary in its words.
+  assert.deepEqual(stackLines(vm), [
+    "summary: 2 on Gerrit · 2 held back",
+    "Three — HEAD · three00 · held back · not on Gerrit",
+    "Two — two0000 · held back · the same as on Gerrit",
+    "---- ready boundary ----",
+    "One — one0000 · the same as on Gerrit",
+  ]);
+  assert.deepEqual(vm.boundary?.under, vm.rows[1].key);
+  // Nothing held back: no line; the summary counts what a push sends.
+  const ready = stackVm(stack([commit("One"), commit("Two", { patchset_status: "absent", pushed: false })]), undefined, never);
+  assert.equal(ready.boundary, undefined);
+  assert.equal(ready.summary, "1 on Gerrit · 1 to upload");
 });
 
 test("ahead of Gerrit, a row tells new code from only rebased, by core's verdict", () => {
@@ -108,12 +120,12 @@ test("mid-rebase the stack marks where it stands and dims only what is still to 
   assert.deepEqual(stopped.rows.map((row) => [row.summary, row.marker, row.dim]), [["Three", null, true], ["Two", "rebase", false], ["One", null, false]]);
   assert.match(stopped.frozen ?? "", /rebase is in progress/);
   assert.deepEqual([stopped.info[0].text, stopped.info[0].detail], ["A rebase is in progress", undefined], "the stack is the live one: nothing is as it was");
-  assert.equal(stackLines(stopped)[2], "▶ Two — HEAD · two0000 · the same as on Gerrit");
+  assert.equal(stackLines(stopped)[3], "▶ Two — HEAD · two0000 · the same as on Gerrit");
   // On a conflict the commit it stopped at is what wants you: a conflict marker, not dimmed; what is still to come stays dim.
   const conflict = stackVm(stack(commits, { rebase_in_progress: true, rebase: { ...REBASE, stop: "conflict", applied: false, unmerged: ["e.txt"], actions: ON_CONFLICT } }), undefined, never);
   assert.deepEqual(conflict.rows.map((row) => [row.marker, row.dim]), [[null, true], ["conflict", false], [null, false]]);
   assert.equal(conflict.info[0].text, "A rebase stopped on a conflict");
-  assert.equal(stackLines(conflict)[3], "⚠ Two — HEAD · two0000 · the same as on Gerrit");
+  assert.equal(stackLines(conflict)[4], "⚠ Two — HEAD · two0000 · the same as on Gerrit");
   // Resolved and added: no conflict any more, ready to continue.
   const resolved = stackVm(stack(commits, { rebase_in_progress: true, rebase: { ...REBASE, stop: "resolved", applied: false, actions: RESOLVED } }), undefined, never);
   assert.deepEqual([resolved.rows[1].marker, resolved.rows[1].dim], ["rebase", false]);

@@ -225,6 +225,39 @@ button.twist:hover {
   background: var(--vscode-sideBar-background, var(--vscode-editor-background));
 }
 
+/* How much of the stack is where (stackSummary.ts), one quiet line above the rows; it wraps rather than cuts. */
+.stack-summary {
+  padding: 2px 8px 2px 12px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+/* The ready boundary, as ger log draws it: a dashed rule with its words, between held back and sent. */
+.boundary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 12px;
+  height: 16px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.85em;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.boundary::before,
+.boundary::after {
+  content: "";
+  flex: 1 1 8px;
+  border-top: 1px dashed currentColor;
+}
+.boundary span {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* The sync icon says how the commit relates to Gerrit. */
 .sync-same {
   color: inherit;

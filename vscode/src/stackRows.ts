@@ -2,6 +2,7 @@
 // relates to Gerrit, where a rebase underway stands, and its votes as badges. The webview draws
 // it, the end-to-end suite prints it. Pure: no `vscode`, no I/O.
 
+import { BOUNDARY_WORDS, boundaryUnder, stackSummary } from "./stackSummary";
 import { AbortDiscards, CodeChange, CommitStatus, MoveConflict, Overview, Rebase, RebaseAction, Reviewer, Stack, StackCommit, UpstreamChoice, UpstreamStop } from "./api";
 import { CommentShape, CommentTone, commentState } from "./commentState";
 import { blockedMove, plural, reasonWords, sentence, wouldConflict } from "./format";
@@ -219,6 +220,10 @@ export interface StackVm {
   movable: number;
   /** A staged review: the rows are somebody else's commits, and offer review actions only. */
   review?: boolean;
+  /** How much of the stack is where, in `ger log`'s summary words (stackSummary.ts): above the rows. */
+  summary?: string;
+  /** The ready boundary: drawn under the row keyed `under` (the oldest commit held back), with its words. */
+  boundary?: { under: string; text: string; tooltip: string };
 }
 
 /** Where a rebase stopped, in the row's tooltip: why, by core's verdict. */
@@ -671,8 +676,12 @@ export function stackVm(
   const fixed = pinned(local);
   const rows = commits.map((commit, index) => row(commit, local, index, fixed, conflicts, drafts)).reverse();
   const review = Boolean(local.staged_review);
-  return { info, rows, frozen: frozen(local), movable: review ? 0 : commits.length - fixed, review };
+  // Somebody else's commits under review: neither a summary of your stack nor a boundary of your push.
+  const glance = review || !commits.length ? {} : { summary: stackSummary(commits), ...boundaryOf(boundaryUnder(commits, rows.map((r) => r.key))) };
+  return { info, rows, frozen: frozen(local), movable: review ? 0 : commits.length - fixed, review, ...glance };
 }
+
+const boundaryOf = (under: string | undefined) => (under ? { boundary: { under, ...BOUNDARY_WORDS } } : {});
 
 /** What Local stack says about Gerrit when it could not ask it, or has not yet: once, above the commits. */
 export const STACK_GERRIT_WORDS = {
@@ -710,11 +719,13 @@ export function stackLines(vm: StackVm): string[] {
       const raw = info.raw ? `  (${info.raw.split("\n").join(" / ")})` : "";
       return `${info.conflict ? "  ⚠ " : ""}${info.text}${info.detail ? ` — ${info.detail}` : ""}${raw}${buttons ? `  ${buttons}` : ""}`;
     }),
-    ...vm.rows.map((r) => {
+    ...(vm.summary ? [`summary: ${vm.summary}`] : []),
+    ...vm.rows.flatMap((r) => {
       // The conflict is drawn as a red warning; the commit it stopped at otherwise as a marker.
       const marker = r.marker ? (r.marker === "conflict" ? "⚠ " : "▶ ") : "";
       const right = r.badges.map(said).filter(Boolean).join(", ");
-      return `${marker}${r.summary} — ${[...r.notes, r.syncTitle.split(":")[0]].join(" · ")}${right ? `  [${right}]` : ""}${r.dim ? "  (dim)" : ""}`;
+      const line = `${marker}${r.summary} — ${[...r.notes, r.syncTitle.split(":")[0]].join(" · ")}${right ? `  [${right}]` : ""}${r.dim ? "  (dim)" : ""}`;
+      return r.key === vm.boundary?.under ? [line, `---- ${vm.boundary.text} ----`] : [line];
     }),
   ];
 }
