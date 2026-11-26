@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -287,14 +288,17 @@ def test_inbox_colorizes_identity_status_wait_and_context(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Relative to now: the two ages must read differently whatever the day ("waiting 2d, active 1h");
+    # fixed dates read the same once both round to one age, and "active" is then left out.
+    gerrit_time = lambda ago: (datetime.now(timezone.utc) - ago).strftime("%Y-%m-%d %H:%M:%S.000000000")  # noqa: E731
     top = _change(
         number=4400,
         sha="ccc",
         parent="origin",
         subject="fix: retry backoff",
         owner="bob",
-        updated="2026-08-18 08:00:00.000000000",
-        attention_since="2026-08-17 12:00:00.000000000",
+        updated=gerrit_time(timedelta(hours=1)),
+        attention_since=gerrit_time(timedelta(days=2)),
         comments=2,
         cr=1,
     )
