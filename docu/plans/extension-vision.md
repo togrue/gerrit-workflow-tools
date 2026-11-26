@@ -42,6 +42,10 @@ needed to finish a review.
 8. **Every action answers.** After a click the user sees what happened and what is next, as each
    command now ends with its outcome and a `next:` line.
 9. **The agent prepares, the human decides and sends.**
+10. **A limit shows only in the uncommon case.** What git, the editor or Gerrit cannot do sits
+    behind one fallback, so the common case stays simple. When the user does hit a limit, they
+    are told what happened, what state things are in now and what their options are. Nobody is
+    left guessing the state.
 
 ## Roadmap
 
