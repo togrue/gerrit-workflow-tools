@@ -6,9 +6,10 @@ import * as vscode from "vscode";
 
 import { GerApiError, ReviewState } from "./api";
 import { runInTerminal } from "./launch";
-import { reviewOpened } from "./format";
+import { leftReview, reviewOpened } from "./format";
 import { ChangeTarget, Model, describeError } from "./model";
-import { feedback, ui } from "./ui";
+import { failureWays } from "./problemRows";
+import { feedback, offerWaysOn, ui } from "./ui";
 
 /** Your own stack commit: `ger edit` stops an interactive rebase on it, here, to amend it in place. */
 export function editCommit(model: Model, target: ChangeTarget | undefined): void {
@@ -38,14 +39,14 @@ export function checkout(model: Model, target: ChangeTarget | undefined): void {
 }
 
 /** Someone's change on Gerrit: `ger review` checks it out for review: in the review worktree, or here when `ger.reviewCheckout` says `branch`. */
-export async function review(model: Model, target: ChangeTarget | undefined, walk?: ReviewWalk): Promise<void> {
+export async function review(model: Model, target: ChangeTarget | undefined, walk?: ReviewWalk, mode?: ReviewState["mode"]): Promise<void> {
   if (!target) {
     return;
   }
   try {
     const client = await model.client();
     const opened = await ui().progress(vscode.ProgressLocation.Notification, `Checking out ${target.title}`, () =>
-      client.reviewOpen(target.number ?? target.rev),
+      client.reviewOpen(target.number ?? target.rev, mode),
     );
     const where = vscode.Uri.file(opened.worktree);
     if (path.resolve(opened.worktree) === path.resolve(model.repo)) {
@@ -66,13 +67,32 @@ export async function review(model: Model, target: ChangeTarget | undefined, wal
       await ui().openFolder(where);
     }
   } catch (error) {
-    void ui().message("warning", `Not checked out for review: ${describeError(error)}`, {}, []);
     void model.refresh(); // a checkout that failed half-way may have left a review, or none: the menus follow
+    if (error instanceof GerApiError && error.reason === "uncommitted-changes" && mode !== "worktree") {
+      // Your edits are in the way of a checkout here: the review worktree is not in their way.
+      const files = model.stack?.review_blocked?.files ?? [];
+      const what = files.length ? `${files.join(", ")} ${files.length === 1 ? "has" : "have"} uncommitted changes` : "your working tree has uncommitted changes";
+      const picked = await ui().message("warning", `Not checked out for review here: ${what}. Nothing was changed.`, {}, [OVER_EDITS.worktree, OVER_EDITS.scm]);
+      if (picked === OVER_EDITS.worktree) {
+        await review(model, target, walk, "worktree");
+      } else if (picked === OVER_EDITS.scm) {
+        await vscode.commands.executeCommand("workbench.view.scm");
+      }
+      return;
+    }
+    void offerWaysOn("warning", `Not checked out for review: ${describeError(error)}`, failureWays(error));
   }
 }
 
-/** `ger review --done`: leave the review checkout, when there is one. */
-export async function leaveReview(model: Model): Promise<void> {
+/** What a review over uncommitted changes here offers: the review worktree, or the changes to commit or stash. */
+export const OVER_EDITS = { worktree: "Review in a Worktree Instead", scm: "Commit or Stash Them…" };
+
+/**
+ * `ger review --done`: leave the review checkout, when there is one. What belonged to the review
+ * closes (its diff tabs: their right side was the review's files), and the answer says where the
+ * checkout is now and what is next: the headline, once the views have caught up.
+ */
+export async function leaveReview(model: Model, walk?: Pick<ReviewWalk, "leave">): Promise<void> {
   try {
     const client = await model.client();
     if (!(await client.review())) {
@@ -80,13 +100,19 @@ export async function leaveReview(model: Model): Promise<void> {
       void model.refresh(); // what offered it was out of date: the menus follow what is there now
       return;
     }
-    const done = await client.reviewDone();
-    void ui().message("info", `Left the review of change ${done.done}.`, {}, []);
-    void model.refresh();
+    const done = await ui().progress(vscode.ProgressLocation.Window, "Leaving the review", () => client.reviewDone());
+    await walk?.leave();
+    await model.refresh();
+    const headline = model.overview?.headline;
+    const text = `${leftReview(done, model.repo)} ${headline ? `Next: ${headline.text}.` : "Nothing else waits on you now."}`;
+    void ui().message("info", text, {}, headline ? [OPEN_NEXT] : []).then((picked) => (picked ? vscode.commands.executeCommand("ger.openHeadline") : undefined));
   } catch (error) {
-    void ui().message("warning", describeError(error), {}, []);
+    void ui().message("warning", `Still in the review: ${describeError(error)}`, {}, []);
   }
 }
+
+const OPEN_NEXT = "Open It";
+
 
 /** What moving a staged review along its chain needs from the rest of the extension. */
 export interface ReviewWalk {
@@ -146,7 +172,7 @@ export async function stepReview(model: Model, step: 1 | -1, walk: ReviewWalk): 
       if (picked === VOTE_CHAIN) {
         await walk.voteChain(here.number);
       } else if (picked === LEAVE) {
-        await leaveReview(model);
+        await leaveReview(model, walk);
       }
       return;
     }

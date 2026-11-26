@@ -2,7 +2,7 @@
 // from what the clicked row knows; each answer of ger serve fills in its part as it comes, and an
 // answer for a change selected before is dropped. Pure: no `vscode`, no I/O.
 
-import type { Chain, CommitStatus, Diff, Member, ShownCommit, Stack } from "./api";
+import type { ApiError, Chain, CommitStatus, Diff, Member, ShownCommit, Stack } from "./api";
 import type { ChangeState, Loading, Stopped } from "./changeRows";
 import type { ChangeTarget } from "./model";
 import { stoppedAt } from "./stackRows";
@@ -132,6 +132,8 @@ export class ChangeDetail {
   /** The review delta: for the mode chosen, or (someone's change) what is new since your review. */
   delta: Diff | undefined;
   problem: string | undefined;
+  /** The served error behind `problem`, when ger serve answered with one: Gerrit away is said with its own ways on. */
+  problemError: ApiError | undefined;
   /** Asked for, not answered yet, and nothing shown in their place. */
   private readonly waiting = new Set<Part>();
   /** The selection token: each select and clear takes a new one, and an answer carries the one it was asked under. */
@@ -188,11 +190,12 @@ export class ChangeDetail {
   }
 
   /** The change cannot be shown: why. Taken, as an answer is, only for the change selected now. */
-  fail(token: number, problem: string): boolean {
+  fail(token: number, problem: string, error?: ApiError): boolean {
     if (!this.current(token)) {
       return false;
     }
     this.problem = problem;
+    this.problemError = error;
     this.waiting.clear();
     return true;
   }

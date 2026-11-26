@@ -421,8 +421,9 @@
   }
 
   /** An explanation: an icon and words that wrap under each other in a narrow view, never cut off. */
-  function explain(iconId, tone, text, detail, ...rest) {
-    return h("div", { class: "head note wraps" }, icon(iconId, tone), words(text, detail), ...rest);
+  /** A note: our words, what they mean, and the words of git or Gerrit they rest on (`raw`), as they came. */
+  function explain(iconId, tone, text, detail, raw, ...rest) {
+    return h("div", { class: "head note wraps" }, icon(iconId, tone), words(text, detail, raw), ...rest);
   }
 
   // --- The page ---------------------------------------------------------------------
@@ -500,7 +501,7 @@
       parts.push(nextBar, conflicts);
     }
     for (const note of vm.notes || []) {
-      parts.push(explain(note.icon, note.tone, note.text, note.detail));
+      parts.push(explain(note.icon, note.tone, note.text, note.detail, note.raw));
       if (note.actions && note.actions.length) {
         parts.push(actions(note.actions));
       }
@@ -516,7 +517,7 @@
     if (vm.hint) {
       const to = vm.compare ? vm.compare.to.selected : "current";
       const show = vm.hint.show ? h("button", { class: "link", onclick: () => post("compare", { from: "reviewed", to }) }, "Show") : null;
-      parts.push(explain(vm.hint.show ? "git-compare" : "pass", vm.hint.show ? undefined : "good", vm.hint.text, "", show));
+      parts.push(explain(vm.hint.show ? "git-compare" : "pass", vm.hint.show ? undefined : "good", vm.hint.text, "", undefined, show));
     }
     if (vm.files) {
       const files = vm.files;

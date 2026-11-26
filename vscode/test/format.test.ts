@@ -259,10 +259,13 @@ test("the tooltip says whether events or the poll keep the views current, and wh
     refreshMode(status("live"), 900),
     `Following Gerrit's event stream (ssh://me@g:29418): review activity refreshes the views, and a poll every 15m is the safety net.${local}`,
   );
-  assert.equal(refreshMode(undefined, 120), `Refreshing every 2m.${local}`);
-  assert.equal(refreshMode(status("connecting"), 120), `Refreshing every 2m.${local}`);
-  assert.equal(refreshMode(status("unavailable", "Permission denied (publickey)."), 120), `Refreshing every 2m; no Gerrit event stream: Permission denied (publickey).${local}`);
-  assert.equal(refreshMode(status("retrying", "Connection closed"), 120), `Refreshing every 2m while Gerrit's event stream is down: Connection closed.${local}`);
+  assert.equal(refreshMode(undefined, 120), `Refreshing every 2m, and when this window gets the focus again.${local}`);
+  assert.equal(refreshMode(status("connecting"), 120), `Refreshing every 2m, and when this window gets the focus again.${local}`);
+  assert.equal(refreshMode(status("unavailable", "Permission denied (publickey)."), 120), `Refreshing every 2m, and when this window gets the focus again; no Gerrit event stream: Permission denied (publickey).${local}`);
+  assert.equal(refreshMode(status("retrying", "Connection closed"), 120), `Refreshing every 2m while Gerrit's event stream is down: Connection closed, and when this window gets the focus again.${local}`);
+  // Not following Gerrit live, the views say how fresh they are (state 11, 12).
+  assert.match(refreshMode(status("unavailable", "Host key verification failed."), 120, new Date(2026, 10, 26, 8, 51)), /^Last read from Gerrit at 08:51\. Refreshing every 2m/);
+  assert.doesNotMatch(refreshMode(status("live"), 900, new Date(2026, 10, 26, 8, 51)), /Last read/);
   assert.deepEqual(
     (["off", "connecting", "live", "retrying", "unavailable"] as const).map((state) => eventsMayCome(status(state))),
     [false, true, true, true, false],

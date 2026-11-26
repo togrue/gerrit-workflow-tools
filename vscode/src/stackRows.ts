@@ -5,7 +5,7 @@
 import { CodeChange, CommitStatus, MoveConflict, Overview, Rebase, RebaseAction, Reviewer, Stack, StackCommit, UpstreamChoice, UpstreamStop } from "./api";
 import { CommentShape, CommentTone, commentState } from "./commentState";
 import { blockedMove, reasonWords, sentence, wouldConflict } from "./format";
-import { stackProblem } from "./problemRows";
+import { PROBLEM_ACTIONS, PROBLEM_WORDS, gerritProblem, stackProblem } from "./problemRows";
 import { Waiting } from "./state";
 
 
@@ -576,6 +576,10 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
     // The task header says what the banner does, and more: only the conflicted files stay under it.
     info.push(...(headerShown ? (local.rebase?.unmerged ?? []).map(conflictRow) : rebaseBanner(local.rebase)));
   }
+  const gerrit = gerritRow(local);
+  if (gerrit) {
+    info.push(gerrit);
+  }
   const upstream = upstreamRow(local);
   if (upstream) {
     info.push(upstream);
@@ -589,6 +593,25 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
   const rows = commits.map((commit, index) => row(commit, local, index, fixed, conflicts, drafts)).reverse();
   const review = Boolean(local.staged_review);
   return { info, rows, frozen: frozen(local), movable: review ? 0 : commits.length - fixed, review };
+}
+
+/** What Local stack says about Gerrit when it could not ask it, or has not yet: once, above the commits. */
+export const STACK_GERRIT_WORDS = {
+  asking: "Asking Gerrit: what it says of each commit shows once it answers",
+  unknown: "Gerrit state unknown",
+};
+
+/** The line above the commits while their Gerrit state is unknown: why, and Retry (Review chains has the other ways on). */
+function gerritRow(local: Stack): StackInfo | undefined {
+  if (local.local_only) {
+    return { text: STACK_GERRIT_WORDS.asking, icon: "sync" };
+  }
+  const away = local.gerrit_unavailable;
+  if (!away) {
+    return undefined;
+  }
+  const problem = gerritProblem(away);
+  return { text: STACK_GERRIT_WORDS.unknown, raw: away.message, tooltip: `${problem.text}\n\n${PROBLEM_WORDS.localGoesOn}`, icon: "warning", tone: "warn", actions: [PROBLEM_ACTIONS.retry] };
 }
 
 /** Buttons as the transcript shows them: `[Continue] [Abort]`, the one to press now in bold. */

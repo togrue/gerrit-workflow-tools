@@ -105,7 +105,7 @@ export class Task implements vscode.Disposable {
 
   /** The header for the mode the checkout is in. */
   vm(): TaskVm | undefined {
-    return this.mode ? taskVm(this.model.overview, this.model.stack, { all: this.all, busy: this.busyText, shown: this.shown() }) : undefined;
+    return this.mode ? taskVm(this.model.overview, this.model.stack, { all: this.all, busy: this.busyText, shown: this.shown(), chain: this.model.reviewChain, inboxUnknown: Boolean(this.model.overview?.error), subjects: this.model.subjects }) : undefined;
   }
 
   /** The header as text: for the end-to-end transcript. */

@@ -314,6 +314,8 @@ function changeScenarios(): Scenario[] {
   const fromRow = { commit: true, base: true, delta: false, ready: false };
   return [
     scenario("Change: a commit of your stack, its message editable", { change: change({ shown: theChange(voted) }) }),
+    scenario("Change: somebody's change under review in its own window", { change: changeScreen(change({ shown: theChange({ own: false }), local: false, elsewhere: "/home/dana/widget-review" }), { next: nextAction({ stack: local([]), shown: theChange({ own: false }), chains: [], local: false, reviewing: false, visited: new Set(), files: [], seenFiles: new Set(), reviewElsewhere: "/home/dana/widget-review" }) }) }),
+    scenario("Change: somebody's change, uncommitted changes here in the way of a review", { change: changeScreen(change({ shown: theChange({ own: false }), local: false, blocked: ["README.md"] }), { next: nextAction({ stack: local([], { review_blocked: { reason: "uncommitted-changes", message: "", files: ["README.md"] } }), shown: theChange({ own: false }), chains: [], local: false, reviewing: false, visited: new Set(), files: [], seenFiles: new Set() }) }) }),
     scenario("Change: not on Gerrit yet", { change: change({ shown: shown(unpushed(SUBJECT)), patchsets: undefined }) }),
     scenario("Change: ahead of Gerrit, compared with it", {
       change: change({ shown: theChange({ patchset_status: "newer", code_change: "changed", last_pushed_votes: { verified: 1, code_review: 2 }, attention_reasons: ["ahead-of-gerrit"] }), from: "current", mode: "gerrit", delta: itsDiff({ files: FILES.slice(3, 6), since: { ...since, patch_set: 5 } }) }),
@@ -362,6 +364,18 @@ function changeScenarios(): Scenario[] {
 
 // --- Both views ----------------------------------------------------------------------
 
+const NO_ANSWER = { code: "GERRIT", message: "Gerrit at 10.255.255.1:8081 does not answer (waited 10 s)", reason: "no-answer" };
+const REFUSED = { code: "GERRIT", message: "Gerrit at gerrit.example.org rejected the credentials (HTTP 401); check ger.user and ger.token, or run `ger setup`", reason: "credentials" };
+
+/** Gerrit could not be asked: Local stack says it once, the Change view says unknown with the ways on, and Next names the fix. */
+function gerritAway(away: typeof NO_ANSWER): { stack: StackVm; change: ChangeVm } {
+  const unknown = { patchset_status: "unknown" as const, pushed: false, attention_reasons: ["gerrit-unknown"] };
+  const stack = local([pushed("Add the prefix tree", unknown), pushed("Route by longest prefix", { ...unknown, is_head: true })], { gerrit_unavailable: away });
+  const shownCommit = theChange({ ...unknown, own: false, gerrit_unavailable: away });
+  const next = nextAction({ stack, shown: shownCommit, chains: [], local: false, reviewing: false, visited: new Set(), files: [], seenFiles: new Set() });
+  return { stack: stackVm(stack, undefined, never), change: changeScreen(change({ shown: shownCommit, local: false }), { next }) };
+}
+
 function bothScenarios(): Scenario[] {
   const nothing = "Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.";
   // As the two views say it while there is no overview (stackView.ts, changeView.ts).
@@ -369,6 +383,9 @@ function bothScenarios(): Scenario[] {
   return [
     scenario("Both: a stack and its selected commit", { stack: syncStates(), change: commented() }),
     scenario("Both: ger serve is starting", { stack: { ...noStack, waiting: waitingFor("starting", "Your local stack") }, change: { waiting: waitingFor("starting", "A change") } }),
+    scenario("Both: Gerrit is being asked; Local stack from git meanwhile", { stack: stackVm(local([pushed("Add the prefix tree", { patchset_status: "unknown", pushed: false, attention_reasons: ["gerrit-unknown"] })], { local_only: true }), undefined, never), change: { waiting: waitingFor("asking", "A change", undefined, undefined, 10) } }),
+    scenario("Both: Gerrit does not answer", gerritAway(NO_ANSWER)),
+    scenario("Both: Gerrit refuses the credentials", gerritAway(REFUSED)),
     scenario("Both: ger is not set up", { stack: { ...noStack, waiting: waitingFor("setup", "Your local stack") }, change: { waiting: waitingFor("setup", "A change") } }),
     scenario("Both: nothing to show", { stack: noStack, change: { empty: nothing } }),
   ];
@@ -448,6 +465,8 @@ interface Reading {
   combinedActive?: boolean;
   /** Gerrit has a newer patchset than the one checked out. */
   behind?: boolean;
+  /** The change was abandoned while under review. */
+  abandoned?: boolean;
 }
 
 /**
@@ -460,9 +479,9 @@ function reviewScreen(at: ReviewAt = {}, reading: Reading = {}, busy?: string): 
   const index = members.findIndex((m) => m.number === number);
   const member = members[index];
   const seen = reading.seen ?? new Set<string>();
-  const shownCommit = theChange({ own: false, number, ...(reading.behind ? { patchset_status: "outdated" as const, attention_reasons: ["outdated-patchset"] } : {}) });
+  const shownCommit = theChange({ own: false, number, ...(reading.behind ? { patchset_status: "outdated" as const, attention_reasons: ["outdated-patchset"] } : {}), ...(reading.abandoned ? { change_status: "ABANDONED", attention_reasons: ["abandoned"] } : {}) });
   const chainsShown = reading.chains ?? [];
-  const vm = change({ shown: shownCommit, seen, chains: chainsShown, reviewing: { behind: Boolean(reading.behind), newest: reading.behind ? 6 : 5 } });
+  const vm = change({ shown: shownCommit, seen, chains: chainsShown, reviewing: { behind: Boolean(reading.behind), newest: reading.behind ? 6 : 5 }, patchset: 5, visited: reading.visited });
   const next = nextAction({
     stack,
     shown: shownCommit,
@@ -520,6 +539,8 @@ function taskScenarios(): Scenario[] {
   const some = new Set(FILES.slice(0, 2).map((file) => file.path));
   const open = chain("q1", [comment("Should this be a node per path segment rather than per character?", { ...on(42), author: "Bob Becker" })], { ...on(42), turn: "yours" });
   const answer = chain("a1", [comment("Rename this to longest_prefix: first-match is gone.", { ...on(12), author: "Bob Becker" })], { ...on(12), turn: "yours" });
+  const draft = chain("d1", [comment("Nit: name the constant.", { ...on(30), state: "draft", comment_id: "d1", author: "you" })], on(30));
+  const older = chain("p1", [comment("Who still uses LEGACY_FACTOR? If nobody, drop it.", { ...on(5), author: "Bob Becker", patch_set: 1 })], { ...on(5), turn: "yours" });
   return [
     scenario("Task: reviewing a chain, the header on the Change view", { change: reviewScreen({}, { chains: [open], seen: some }) }),
     scenario("Task: reviewing, Next is Update to patchset 6", { change: reviewScreen({}, { chains: [open], seen: some, behind: true }) }),
@@ -528,6 +549,8 @@ function taskScenarios(): Scenario[] {
     scenario("Task: reviewing, Next is Vote and publish", { change: reviewScreen({}, { seen: all }) }),
     scenario("Task: reviewing, Next is Next change", { change: reviewScreen({ voted: [48211] }, { seen: all }) }),
     scenario("Task: reviewing, the last change of the chain after the vote", { change: reviewScreen({ at: 48213, voted: [48211, 48212, 48213] }, { seen: all }) }),
+    scenario("Task: reviewing an abandoned change, a draft stranded on it", { change: reviewScreen({}, { seen: all, abandoned: true, chains: [draft] }) }),
+    scenario("Task: reviewing, a comment written on an earlier patchset", { change: reviewScreen({}, { chains: [older], seen: some }) }),
     scenario("Task: reviewing, all chains shown again", { change: reviewScreen({ all: true }, { seen: some }) }),
     scenario("Task: reviewing, the next change checking out", { change: reviewScreen({}, { seen: all }, "Checking out 48212… Go to Definition and edits in your files once it is checked out") }),
     scenario("Task: reworking, stopped to edit", { change: reworking("edit").change }),

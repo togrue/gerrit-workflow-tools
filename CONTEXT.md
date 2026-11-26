@@ -195,7 +195,8 @@ _Avoid_: agent prompt, brief (for the whole walk), task list
 **Turn**:
 Whose move an unresolved comment chain waits on, decided by its last *published* comment: somebody else's makes it **yours** (a **draft to publish** when your answer is a Gerrit draft), yours makes it **theirs**. "You" is the account `ger` runs as. A commit whose unresolved chains are all theirs is *awaiting a reply*: still unresolved for Gerrit, but no attention of yours.
 Of somebody else's change you review, Gerrit's attention set decides: yours while it holds you, the author's once it took you out (your reply); with neither (the attention set switched off), yours while its current patch set came after your last Code-Review vote (`your_turn_since`, the one place). A *to review* chain is yours while any member is; otherwise it *waits on the author*.
-_Avoid_: needs reply, pending comment, answered (for a chain still unresolved)
+An unresolved chain whose turn is yours is **to answer**: the one word for it in every view and count (the change's Comments section, its ring, the task header, Next), on your own change and on one you review alike; how many of those you have gone to already is said beside it ("10 to answer, 3 gone to"), never as a second count.
+_Avoid_: needs reply, pending comment, answered (for a chain still unresolved); "to read" for a chain to answer
 
 **Hold**:
 A comment chain you keep for yourself because it needs a decision, not a fix. The **agent runbook** lists it as left for a human. Local to the repository; not a **comment state** and not Gerrit state.

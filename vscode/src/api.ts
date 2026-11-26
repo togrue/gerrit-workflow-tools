@@ -18,6 +18,8 @@ export type Health = {
   api: string | number;
   repo: string | null;
   branch: string | null;
+  /** Seconds Gerrit is given to answer a connection before ger says it does not answer (API 1.8). */
+  gerrit_wait?: number;
   /** What ger warns about in this repository's configuration (old key names), and the ger command that fixes it (`ger` left out). */
   warnings?: { message: string; argv: string[] | null }[];
 } & Activity;
@@ -289,12 +291,21 @@ export interface Stack {
    * refuse over): somebody else's change, its content in the working files. Null when there is none.
    */
   staged_review?: ReviewState | null;
+  /**
+   * Why `ger review` would refuse to check a change out here now (core's verdict, API 1.8): tracked
+   * files with uncommitted changes, while the review goes into this checkout. Null when it would not.
+   */
+  review_blocked?: { reason: string; message: string; files: string[] } | null;
   /** How far the upstream moved on past the stack, and the rebase onto it previewed; null without one, and during a rebase. */
   upstream?: UpstreamMoved | null;
   /** The branches are null without a working branch (a detached HEAD's rebase). */
   stack: { project: string; target_branch: string | null; push_branch: string | null };
   summary: { commits: number; ready: number; attention: number; needs_edit: number; not_on_gerrit: number };
   commits: StackCommit[];
+  /** Why Gerrit could not be asked at all (its `reason`: `credentials`, `unreachable`, `no-answer`): every commit's Gerrit state is unknown. */
+  gerrit_unavailable?: ApiError;
+  /** Answered from git alone (`local=1`): Gerrit was not asked yet, and the full answer follows. */
+  local_only?: boolean;
 }
 
 /** Why two neighbours of the local stack cannot swap places. */
@@ -475,6 +486,8 @@ export interface ShownCommit extends CommitStatus {
   own?: boolean | null;
   /** What publishes your drafts on it: your next push (your own commit of the local stack), or a vote; null off Gerrit. */
   drafts_published_by?: "push" | "vote" | null;
+  /** Gerrit could not be asked at all: its state, votes and comments of this commit are not known (not none). */
+  gerrit_unavailable?: ApiError;
 }
 
 export interface FileChange {
@@ -628,6 +641,17 @@ export interface ShowOptions {
 
 type Params = Record<string, string | string[] | number | boolean | undefined>;
 
+/** What leaving a review answers: the change, the branches that went and stayed, and where its checkout is now (API 1.8). */
+export interface ReviewDone {
+  done: number;
+  deleted: string[];
+  kept: string[];
+  /** The branch the review's checkout has now; null when detached. */
+  branch?: string | null;
+  worktree?: string;
+  mode?: "worktree" | "branch";
+}
+
 export class GerApiError extends Error {
   constructor(
     readonly code: string,
@@ -645,6 +669,9 @@ export function isStack(local: Overview["local"] | undefined): local is Stack {
 }
 
 export class GerClient {
+  /** What `/health` answered when the service started (set by server.ts once it checked the API). */
+  served: Health | undefined;
+
   constructor(readonly hello: Hello) {}
 
   get repo(): string {
@@ -705,9 +732,12 @@ export class GerClient {
     return this.call("GET", "/overview", { refresh });
   }
 
-  /** The local stack alone, as `/overview`'s `local`: what a checkout here changes. */
-  stack(): Promise<Stack> {
-    return this.call("GET", "/stack");
+  /**
+   * The local stack alone, as `/overview`'s `local`: what a checkout here changes. `local`: from git
+   * alone, without asking Gerrit (API 1.8; an older ger serve asks Gerrit anyway).
+   */
+  stack(local = false): Promise<Stack> {
+    return this.call("GET", "/stack", { local: local || undefined });
   }
 
   chain(number: number): Promise<Chain> {
@@ -780,7 +810,7 @@ export class GerClient {
     }
   }
 
-  reviewDone(): Promise<{ done: number; deleted: string[]; kept: string[] }> {
+  reviewDone(): Promise<ReviewDone> {
     return this.call("POST", "/review/done", undefined, {});
   }
 

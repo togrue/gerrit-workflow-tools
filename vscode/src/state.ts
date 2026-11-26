@@ -6,8 +6,10 @@ import { IncompatibleServe } from "./compat";
 import { ExecutableNotFound, ServeFailed } from "./server";
 
 export type GerState =
-  /** `ger serve` is starting, or answering its first request. */
+  /** `ger serve` is starting. */
   | "starting"
+  /** `ger serve` runs, and its first answer, which asks Gerrit, has not come yet: Local stack shows what git knows meanwhile. */
+  | "asking"
   | "ready"
   /** Restricted Mode: ger runs git and the program the settings name, so nothing starts until you trust the folder. */
   | "untrusted"
@@ -44,6 +46,12 @@ export function staleReason(error: unknown): string {
   return error instanceof GerApiError && error.code === "GERRIT" ? `Gerrit unreachable: ${message}` : message;
 }
 
+/** What the views say while there is no answer yet: ger serve starting, then Gerrit asked (with how long it is given). */
+export const WAITING_WORDS = {
+  starting: "Starting ger serve…",
+  asking: (seconds?: number) => `Asking Gerrit…${seconds ? ` If it does not answer within ${seconds} seconds, the views say so.` : ""}`,
+};
+
 /** What a webview view shows in place of its content while ger is not running. */
 export interface Waiting {
   text: string;
@@ -56,12 +64,15 @@ export interface Waiting {
  * `incompatible`: the refusal, when that is the state; the view then says it and offers the fix.
  * `failure`: ger's own reason, said when setup is wanting (Review chains' welcome text cannot carry it).
  */
-export function waitingFor(state: GerState, what: string, incompatible?: IncompatibleServe, failure?: string): Waiting | undefined {
+export function waitingFor(state: GerState, what: string, incompatible?: IncompatibleServe, failure?: string, gerritWait?: number): Waiting | undefined {
   if (state === "ready") {
     return undefined;
   }
   if (state === "starting") {
-    return { text: "Starting ger serve…" };
+    return { text: WAITING_WORDS.starting };
+  }
+  if (state === "asking") {
+    return { text: WAITING_WORDS.asking(gerritWait) };
   }
   if (state === "incompatible" && incompatible) {
     return { text: incompatible.message, link: { label: incompatible.gerOlder ? "Update ger" : "Install Matching ger", command: "ger.installCli" } };

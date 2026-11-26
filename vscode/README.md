@@ -24,6 +24,24 @@ commit is on Gerrit, else its subject in quotes. A conflict is shown in the erro
 index is watched while a rebase is stopped, so a `git add` that resolves the last conflict shows at once. The tooltip says
 what to do next (amend, resolve and `git add`, `git rebase --continue` or `--abort`); a click
 opens *Local stack*. When the rebase ends, the item goes back to the headline.
+**When Gerrit cannot be asked** (it refuses the credentials, does not answer, or is not there),
+nothing is said as done or as none. Connecting waits at most 10 seconds (`/health`'s
+`gerrit_wait`): meanwhile the views say *Asking Gerrit…*, not *Starting ger serve…*, and Local
+stack draws what git alone knows at once (`/stack?local=1`). Then *Review chains* says Gerrit's
+reason with the ways on as rows (*Check Credentials (ger setup)…* for refused credentials, else
+*Retry*, *Check the Gerrit Address (ger setup)…*), *Show Log*, and that local work goes on; Local
+stack says once *Gerrit state unknown: …* with *Retry*; the Change view says the change's state,
+votes and comments are unknown (never *not on Gerrit* or *none*), keeps the task header and its
+exit, and Next names the fix instead of the vote. The status bar item wears an error icon, never
+the check; Refresh answers *Not refreshed from Gerrit: …* with the ways on; a file marked seen is
+ticked only once Gerrit took it (a refusal is said, once per reason); a vote, a draft, an edit or
+a delete that did not reach Gerrit is said as not done, with *Check Credentials* / *Retry* where
+that is the fix. While the views cannot follow Gerrit's event stream, the status bar's tooltip
+says when they last read from Gerrit, beside how they keep up (every `ger.pollSeconds`, and when
+the window gets the focus again).
+If `ger serve` dies under the views, it is started again at once, quietly; a restart that fails
+leaves the last answer, and *Review chains* says *Out of date: …* with *Restart ger serve* and *Show Log*.
+
 When a refresh fails, whether it ran in the background or you pressed *Refresh* (Gerrit unreachable, `ger serve` stopped
 and cannot be restarted), the views keep the last answer and the item carries a warning mark; its tooltip says why
 it is out of date, and *Review chains* is labelled so. The next refresh that works clears the mark. While `ger` cannot run at all (not found, not set up, folder not trusted) the
@@ -405,7 +423,18 @@ The commits above your upstream, newest first. One row per commit:
   review with no editor open yet; with editors open, only the change is shown). When the git config
   key `ger.reviewCheckout` says `branch`, it switches this checkout to a `change-<n>` branch instead,
   the message says so, the change is shown with all its files, and *Leave Review Checkout* switches
-  back. For reading someone's work.
+  back. For reading someone's work. While its review is open in the worktree's own window, this
+  window says so under the change's state and Next is **Go to Review Window**. In `branch` mode,
+  uncommitted changes to tracked files stand in its way: the Change view says so before the press
+  (core's `review_blocked`), and the refusal offers **Review in a Worktree Instead** and **Commit
+  or Stash Them…** (Source Control) as buttons; nothing is changed. **Leave Review** closes the
+  review's combined diffs and says where the checkout is now (*back on main*, or the review worktree
+  free) and what is next: the headline, with **Open It**. A comment written on an earlier patchset
+  says so (*written on patchset 1, line 5*), drawn where its lines are now when ger can map them,
+  else marked outdated; going to a resolved comment draws its thread (read only) at its line; and
+  going to a comment while the review's combined diff is in front opens the file in a tab of its own
+  beside it. When the inbox no longer lists a change of the chain under review (a new patchset
+  dropped its Verified vote), the task header keeps it, marked *not in your inbox now*.
 - **Review Next Change in Chain** (arrow in the Change view's title bar, `Ctrl+Alt+PageDown`) and
   **Review Previous Change in Chain** (the `…` menu, `Ctrl+Alt+PageUp`), while a staged review sits
   in this checkout: `ger review --next` / `--prev`. The review moves to the change above (below) in
@@ -504,13 +533,15 @@ restores the Change view's stored height, so a separate header took two thirds o
 ### Next: what it names, and when
 
 The first row that holds names the button; `src/nextAction.ts` is this table, and
-`test/next.test.ts` checks each row. *Yours to read / answer* is an open chain somebody started on
+`test/next.test.ts` checks each row. *To answer* is an open chain somebody started on
 Gerrit whose last published word is not yours and that no draft of yours answers.
 
 | You are | # | When | Next |
 |---|---|---|---|
-| reviewing (a staged review holds the change shown) | 1 | Gerrit has a newer patchset than the one checked out | *Update to patchset N* |
-| | 2 | a chain yours to read you have not gone to | *Next comment* |
+| anywhere but your own commit | 0 | Gerrit could not be asked about the change shown (credentials refused, no answer, unreachable) | *Check credentials* (`ger setup`) or *Ask Gerrit again*: never the vote |
+| reviewing (a staged review holds the change shown) | 1 | the change is abandoned or merged | *Next change*, or *Leave review* at the top of the chain (Vote and Publish is not offered: Gerrit takes nothing there) |
+| | 1 | Gerrit has a newer patchset than the one checked out | *Update to patchset N* (N as `/show` says it, even when the patchsets asked before are older) |
+| | 2 | a chain to answer you have not gone to (its title: *N of M to answer not gone to yet*) | *Next comment* |
 | | 3 | files of the comparison shown are not seen, and its combined diff is the editor in front (where they were read) | *Mark N files seen* (all of them, one request) |
 | | 4 | a file of the comparison shown is not seen (its tick: shown to its end, or clicked) | *Next file* (the first not seen) |
 | | 5 | drafts of yours wait, or Gerrit's attention set holds you (or ger cannot tell) | *Vote and publish* |
@@ -522,7 +553,8 @@ Gerrit whose last published word is not yours and that no draft of yours answers
 | | 4 | a commit above the stop needs edits, or (no rebase) any commit does | *Work on next* |
 | | 5 | a rebase underway, nothing above the stop needs edits | *Finish the rebase* |
 | | 6 | something to send (new code, a commit not on Gerrit, drafts of yours) and the push is not refused | *Push* |
-| looking at somebody's change on Gerrit | 1 | always | *Review change* |
+| looking at somebody's change on Gerrit | 1 | it is under review in the review worktree's own window | *Go to Review Window* |
+| | 2 | otherwise | *Review change* (its title says when uncommitted changes here would stand in the way: core's `review_blocked`) |
 
 Your own published comments waiting on the author never make *Next comment*: a change you voted
 on that waits on its author offers *Next change*.

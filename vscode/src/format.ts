@@ -1,6 +1,8 @@
 // How review state is put into words; how urgent it is, core says (`severity`). Pure: no `vscode`, no I/O.
 
-import { Attended, Chain, CommitStatus, EventsStatus, Headline, MoveConflict, Overview, Rebase, RebaseHeadline, RebaseStop, ReviewState, Severity, StackMoves } from "./api";
+import * as path from "node:path";
+
+import { Attended, Chain, CommitStatus, EventsStatus, Headline, MoveConflict, Overview, Rebase, RebaseHeadline, RebaseStop, ReviewDone, ReviewState, Severity, StackMoves } from "./api";
 import { Commented, commentState } from "./commentState";
 
 /** Every reason core names (`Attention`, core/attention.py), in words: test/format.test.ts checks them against test/attention.json, which tests/test_attention_severity.py checks against core. */
@@ -179,18 +181,21 @@ export function eventsMayCome(events: EventsStatus | undefined): boolean {
 }
 
 /** How the views stay current, in words, for the status bar tooltip and the log. */
-export function refreshMode(events: EventsStatus | undefined, pollSeconds: number): string {
+export function refreshMode(events: EventsStatus | undefined, pollSeconds: number, last?: Date): string {
   // Gerrit's events and the poll are about Gerrit; the repository is watched whatever they do.
   const local = " Commits, checkouts and rebases here refresh them at once.";
   if (events?.state === "live") {
     return `Following Gerrit's event stream${events.source ? ` (${events.source})` : ""}: review activity refreshes the views, and a poll every ${age(pollSeconds)} is the safety net.${local}`;
   }
-  const every = `Refreshing every ${age(pollSeconds)}`;
+  // Not following Gerrit live: how fresh the views are is said, beside how they keep up.
+  const at = last ? `Last read from Gerrit at ${clock(last)}. ` : "";
+  const every = `${at}Refreshing every ${age(pollSeconds)}`;
+  const focus = ", and when this window gets the focus again";
   if (!events || events.state === "connecting") {
-    return `${every}.${local}`;
+    return `${every}${focus}.${local}`;
   }
   const why = events.reason ? `: ${events.reason.replace(/\.$/, "")}` : "";
-  return `${events.state === "retrying" ? `${every} while Gerrit's event stream is down${why}.` : `${every}; no Gerrit event stream${why}.`}${local}`;
+  return `${events.state === "retrying" ? `${every} while Gerrit's event stream is down${why}${focus}.` : `${every}${focus}; no Gerrit event stream${why}.`}${local}`;
 }
 
 /** What `ger review` did, in words. `inPlace`: it switched this checkout instead of using the review worktree. */
@@ -353,4 +358,16 @@ export function commentLocation(file: string, lines?: { start: number; end: numb
  */
 export function markdownText(text: string): string {
   return text.replace(/[\\`*_{}[\]()#+\-.!|<>$~&]/g, "\\$&").replace(/\n/g, "\n\n");
+}
+
+/** Where leaving the review left you, in words: the branch this checkout is back on, or the review worktree freed. */
+export function leftReview(done: ReviewDone, repo: string): string {
+  const here = path.resolve(done.worktree ?? repo) === path.resolve(repo);
+  const where = here ? (done.branch ? `this checkout is back on ${done.branch}` : "this checkout is back where it was") : "the review worktree is free for the next review";
+  return `Left the review of change ${done.done}: ${where}.`;
+}
+
+/** A time of day as the status bar says it: `08:51`. */
+export function clock(time: Date): string {
+  return `${String(time.getHours()).padStart(2, "0")}:${String(time.getMinutes()).padStart(2, "0")}`;
 }

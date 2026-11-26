@@ -7,6 +7,7 @@ import { EventFollower } from "./events";
 import { headlineIcon, markdownText, plural, rebaseItem, refreshMode } from "./format";
 import { Model } from "./model";
 import { pollSeconds } from "./poller";
+import { WAITING_WORDS } from "./state";
 import { waitsOnYou } from "./rows";
 
 /** `note` says which repository it is about, when the window has several folders. */
@@ -23,7 +24,7 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
     let label: string;
     if (!overview) {
       const untrusted = model.state === "untrusted";
-      const why = untrusted ? "ger starts once you trust this folder." : (model.failure ?? "Starting ger serve…");
+      const why = untrusted ? "ger starts once you trust this folder." : (model.failure ?? (model.state === "asking" ? WAITING_WORDS.asking(model.gerritWait) : WAITING_WORDS.starting));
       item.text = untrusted ? "$(shield) Gerrit" : model.failure ? "$(warning) Gerrit" : "$(sync~spin) Gerrit";
       tooltip.appendMarkdown(markdownText(why));
       label = `Gerrit: ${why}`;
@@ -32,7 +33,8 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
       const headline = overview.headline;
       const rebase = headline?.section === "local" ? rebaseItem(headline, model.stack?.rebase) : undefined;
       const text = rebase ? rebase.text : headline ? headline.text : overview.error ? overview.error.message : "nothing needs you";
-      const glyph = `$(${headlineIcon(headline)})`;
+      // A failure is said with its own icon, never the check of "nothing needs you".
+      const glyph = `$(${!rebase && !headline && overview.error ? "error" : headlineIcon(headline)})`;
       // Out of date: the last refresh failed, and this is the answer before it.
       const old = model.stale ? " $(warning)" : "";
       // Failed CI is the red item: kept short, the change's subject is in the tooltip.
@@ -52,7 +54,7 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
       item.backgroundColor =
         headline?.severity === "error"
           ? new vscode.ThemeColor("statusBarItem.errorBackground")
-          : rebase
+          : rebase || (!headline && overview.error)
             ? new vscode.ThemeColor("statusBarItem.warningBackground")
             : undefined;
       for (const section of overview.sections ?? []) {
@@ -79,7 +81,7 @@ export function statusBar(model: Model, events: EventFollower, note: string | un
       }
       tooltip.appendMarkdown(rebase ? "Click to open Local stack." : headline ? "Click to open it." : "Click to open the overview.");
       // How the views stay current: unobtrusive, only here and in the log.
-      tooltip.appendMarkdown("\n\n").appendMarkdown(markdownText(refreshMode(events.events, pollSeconds(events.live))));
+      tooltip.appendMarkdown("\n\n").appendMarkdown(markdownText(refreshMode(events.events, pollSeconds(events.live), model.loadedAt)));
     }
     if (note) {
       tooltip.appendMarkdown("\n\n").appendMarkdown(markdownText(note));

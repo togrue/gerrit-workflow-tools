@@ -48,6 +48,7 @@ export const TREE_WORDS = {
   nothingWaitsOnYou: "Nothing waits on your review",
   waitingOnAuthor: "Waiting on the author",
   noChanges: "No open changes",
+  stale: "The last refresh failed: what is shown below is the last answer, and the next refresh that works replaces it.",
 };
 
 /** Whether a chain of `section` wants you: under To review, a member's turn is yours (core's `your_turn`); every outgoing chain is yours. */
