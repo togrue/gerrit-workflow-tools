@@ -466,6 +466,14 @@ button.twist:hover {
   background: var(--vscode-button-secondaryHoverBackground);
 }
 
+/* A button that would be refused now: it looks and behaves disabled; why is said beside it. */
+.button:disabled,
+.button:disabled:hover {
+  opacity: 0.4;
+  cursor: default;
+  background: var(--vscode-button-secondaryBackground);
+}
+
 .link {
   flex: none;
   padding: 0;
@@ -641,6 +649,10 @@ select:focus {
 .section-summary .detail {
   flex: 0 1 auto;
   white-space: normal;
+}
+
+.section-summary .counts {
+  margin-left: 0;
 }
 
 .file,

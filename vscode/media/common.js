@@ -353,13 +353,20 @@
     );
   }
 
+  /** A way on in the task header: what it does beside it; refused now, drawn and behaving disabled, with why beside it. */
   function taskAction(item) {
     return h(
       "div",
-      { class: "task-action" },
+      { class: `task-action${item.notNow ? " not-now" : ""}` },
       h(
         "button",
-        { class: "button secondary", disabled: Boolean(item.notNow), title: item.notNow || item.detail, onclick: () => post("command", { command: item.command }) },
+        {
+          class: `button${item.primary && !item.notNow ? "" : " secondary"}`,
+          disabled: Boolean(item.notNow),
+          "aria-disabled": item.notNow ? "true" : undefined,
+          title: item.notNow ? `Not now: ${item.notNow}` : item.detail,
+          onclick: () => post("command", { command: item.command }),
+        },
         item.label,
       ),
       h("span", { class: "task-detail" }, item.notNow ? `not now: ${item.notNow}` : item.detail),

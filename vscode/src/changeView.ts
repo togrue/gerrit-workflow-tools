@@ -17,6 +17,7 @@ import { ChangeTarget, Model, describeError } from "./model";
 import { openConflict } from "./rebase";
 import { waitingFor } from "./state";
 import { NextAction, nextAction } from "./nextAction";
+import { changeScreen } from "./changeScreen";
 import { changeProblem } from "./problemRows";
 import { focusedMember, reviewFocus } from "./reviewFocus";
 import { markOf } from "./staleDiffs";
@@ -114,6 +115,7 @@ export class ChangeView extends WebView<ChangeVm> {
       combinedActive: this.combinedActive(),
       yourTurn: member?.your_turn,
       above: focus ? above : undefined,
+      newest: this.patchsets?.current ?? null,
     });
   }
 
@@ -594,12 +596,8 @@ export class ChangeView extends WebView<ChangeVm> {
     if (!state) {
       return { empty: this.target && this.detail.loading() ? `Loading ${this.target.title}…` : NOTHING_SHOWN, task: this.task() };
     }
-    const next = this.busyText ? undefined : this.next();
     const task = this.task();
-    const vm = changeVm(state);
-    // Reworking, the header holds Continue, Abort and Skip: the head of a commit stopped at says what is left, not the buttons again.
-    const head = vm.head && task?.mode === "rework" ? { ...vm.head, actions: undefined } : vm.head;
-    return { ...vm, head, next: next && { label: next.label, title: next.title }, busy: this.busyText, task };
+    return changeScreen(changeVm({ ...state, task: task?.mode }), { task, next: this.busyText ? undefined : this.next(), busy: this.busyText });
   }
 
   /** The view as text, with the CI findings fetched: for the end-to-end suite. */

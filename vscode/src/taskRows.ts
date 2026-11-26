@@ -41,6 +41,8 @@ export interface TaskAction {
   command: string;
   /** Why it would not run now (core's words): drawn disabled, with the reason as its detail. */
   notNow?: string;
+  /** The next step on the screen (changeScreen.ts): drawn as the one primary button. */
+  primary?: boolean;
 }
 
 export interface TaskVm {
@@ -260,6 +262,6 @@ export function taskLines(vm: TaskVm | undefined): string[] {
     `Left: ${vm.left}`,
     ...(vm.busy ? [`… ${vm.busy}`] : []),
     ...vm.steps.map((step) => `${step.current ? "▸" : " "} ${step.position}. ${step.title} — ${step.marks.map((mark) => mark.text).join(" · ")}`),
-    ...vm.actions.map((action) => `[${action.label}] ${action.notNow ? `(not now: ${action.notNow})` : action.detail}`),
+    ...vm.actions.map((action) => `${action.primary ? `[**${action.label}**]` : `[${action.label}]`} ${action.notNow ? `(not now: ${action.notNow})` : action.detail}`),
   ];
 }

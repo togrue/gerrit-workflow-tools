@@ -260,15 +260,16 @@ export const REBASE_ACTIONS: Record<RebaseAction, { label: string; title: string
 
 /**
  * The buttons to go on with a stopped rebase: the ways on core allows from there (`rebase.actions`);
- * Continue is the one to press once resolved. Local stack's banner and the Change view of the commit
- * it stopped at both draw them with this, so they cannot disagree.
+ * Continue, wherever core allows it, is the one to press (the screen's one primary button: at an
+ * edit stop once the commit is as it should be, at a conflict once resolved). Local stack's banner
+ * and the Change view of the commit it stopped at both draw them with this, so they cannot disagree.
  */
 export function rebaseButtons(rebase: Pick<Rebase, "stop" | "actions"> | null | undefined): StackAction[] {
   return (rebase?.actions ?? []).map((action) => ({
     label: REBASE_ACTIONS[action].label,
     title: REBASE_ACTIONS[action].title,
     command: { id: REBASE_ACTIONS[action].command, args: [] },
-    ...(action === "continue" && rebase?.stop === "resolved" ? { primary: true } : {}),
+    ...(action === "continue" ? { primary: true } : {}),
   }));
 }
 

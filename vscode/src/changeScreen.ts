@@ -1,0 +1,50 @@
+// The Change view as a screen: the change (changeRows.ts) with what is drawn around it, the task
+// header (taskRows.ts) and Next (nextAction.ts), put together so that the screen has exactly one
+// primary button and it is the next step (Q2 of docu/plans/extension-vision.md). The rule, in
+// vscode/README.md beside the Next rules: Next is the primary button; where the next step is a
+// button the screen already has (Continue in the task header, Update to patchset N under the
+// change's state), that button is the primary one and Next is not drawn twice; every other button
+// is drawn plain. Pure: no `vscode`, no I/O. The Change view and the gallery both draw with it.
+
+import type { ChangeVm } from "./changeRows";
+import type { NextAction, NextKind } from "./nextAction";
+import { REBASE_ACTIONS } from "./stackRows";
+import type { TaskVm } from "./taskRows";
+
+/** Next kinds that a button already on screen does: the command that button runs. */
+const ON_SCREEN: Partial<Record<NextKind, string>> = {
+  continue: REBASE_ACTIONS.continue.command,
+  update: "ger.reviewUpdate",
+};
+
+export interface ScreenParts {
+  task?: TaskVm;
+  next?: NextAction;
+  /** Something under way the view waits on, said in place of Next. */
+  busy?: string;
+}
+
+const plain = <T extends { primary?: boolean }>(action: T): T => {
+  const { primary: _primary, ...rest } = action;
+  return rest as T;
+};
+
+/**
+ * `vm` with the task header and Next. Reworking, the header holds Continue, Abort and Skip: the
+ * head of a commit stopped at says what is left, not the buttons again.
+ */
+export function changeScreen(vm: ChangeVm, parts: ScreenParts): ChangeVm {
+  const { task, busy } = parts;
+  const next = busy ? undefined : parts.next;
+  const command = next && ON_SCREEN[next.kind];
+  // With no Next, the buttons keep what the change's own view model made primary.
+  const primaryIf = <T extends { primary?: boolean }>(action: T, runs: string) => (!next ? action : command === runs ? { ...action, primary: true } : plain(action));
+  const head = vm.head && { ...vm.head, actions: task?.mode === "rework" ? undefined : vm.head.actions?.map((action) => primaryIf(action, action.command.id)) };
+  const notes = vm.notes?.map((note) => ({ ...note, actions: note.actions?.map((action) => primaryIf(action, action.command.id)) }));
+  const header = task && { ...task, actions: task.actions.map((action) => primaryIf(action, action.command)) };
+  // Next is drawn unless a button on screen already does it.
+  const onScreen = command !== undefined && [...(head?.actions ?? []), ...(notes ?? []).flatMap((note) => note.actions ?? [])].some((action) => action.command.id === command);
+  const inHeader = command !== undefined && (header?.actions.some((action) => action.command === command && !action.notNow) ?? false);
+  const drawn = next && !onScreen && !inHeader ? { label: next.label, title: next.title } : undefined;
+  return { ...vm, head, notes, next: drawn, busy, task: header };
+}

@@ -10,8 +10,8 @@ import { Scenario } from "./scenarios";
 import { ThemeName, themeClass, themeCss } from "./theme";
 
 export const THEMES: ThemeName[] = ["dark", "light"];
-/** Side bar widths: a narrow one, and one dragged wider. */
-export const WIDTHS = [300, 450];
+/** Side bar widths: the narrowest a side bar is used at, the usual one, and one dragged wider. */
+export const WIDTHS = [200, 300, 450];
 export const VIEWS = ["stack", "change"] as const;
 export type View = (typeof VIEWS)[number];
 

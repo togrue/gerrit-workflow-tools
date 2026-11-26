@@ -6,7 +6,9 @@
 import { createHash } from "node:crypto";
 
 import { Chain, CommentChain, Member, MoveConflict, Overview, RebaseAction, RebaseStop, ReviewState, Section, ShownCommit, Stack, StackCommit } from "../../src/api";
-import { ChangeState, ChangeVm, changeVm } from "../../src/changeRows";
+import { ChangeState, ChangeVm, READ_ONLY, changeVm } from "../../src/changeRows";
+import { changeScreen } from "../../src/changeScreen";
+import { nextAction } from "../../src/nextAction";
 import { changeProblem } from "../../src/problemRows";
 import { SNAPSHOT_FORMAT, Snapshot } from "../../src/snapshot";
 import { StackVm, stackVm } from "../../src/stackRows";
@@ -343,12 +345,12 @@ function changeScenarios(): Scenario[] {
     scenario("Change: a rebase stopped here on a conflict", {
       change: change({
         shown: theChange({ patchset_status: "newer", last_pushed_votes: { verified: 1, code_review: 2 }, attention_reasons: ["ahead-of-gerrit"] }),
-        readOnly: "A rebase is in progress: finish or abort it first.",
+        readOnly: READ_ONLY.rebase,
         stopped: { stop: "conflict", unmerged: [TREE, "tests/integration/routing/test_longest_prefix_matching_with_overlapping_registrations.py"], actions: ["abort", "skip"] },
       }),
     }),
     scenario("Change: a rebase stopped here, its conflicts resolved", {
-      change: change({ shown: theChange(FAILING), readOnly: "A rebase is in progress: finish or abort it first.", stopped: { stop: "resolved", unmerged: [], actions: ["continue", "abort", "skip"] } }),
+      change: change({ shown: theChange(FAILING), readOnly: READ_ONLY.rebase, stopped: { stop: "resolved", unmerged: [], actions: ["continue", "abort", "skip"] } }),
     }),
     scenario("Change: loading, drawn from the clicked stack row", { change: change({ shown: theChange({ attention_reasons: [] }), base: undefined, patchsets: undefined, loading: fromRow }) }),
     scenario("Change: loading someone's change", {
@@ -374,8 +376,20 @@ function bothScenarios(): Scenario[] {
 
 // --- The task header (taskRows.ts) ----------------------------------------------------
 
-/** A chain of Alice's to review: four changes, the second reviewed here, each in another state. */
-function reviewTask(all = false, busy?: string): TaskVm | undefined {
+/** Where the review stands: the change reviewed, your votes so far, what Gerrit's attention set says. */
+interface ReviewAt {
+  all?: boolean;
+  busy?: string;
+  /** The change under review (48211 unless said). */
+  at?: number;
+  /** Changes you voted on already, by number. */
+  voted?: number[];
+}
+
+/** A chain of Alice's to review: four changes, one of them reviewed here, each in another state. */
+function reviewChain(options: ReviewAt = {}): { overview: Overview; stack: Stack; members: Member[] } {
+  const at = options.at ?? 48211;
+  const voted = new Set(options.voted ?? []);
   const member = (number: number, subject: string, extra: Partial<Member> = {}): Member => ({
     number,
     change_id: `I${number}`,
@@ -389,12 +403,13 @@ function reviewTask(all = false, busy?: string): TaskVm | undefined {
     local_sha: null,
     sha: null,
     ...extra,
+    ...(voted.has(number) ? { your_votes: { "Code-Review": 1 }, your_turn: false } : {}),
   });
   const members = [
     member(48210, "Add the routing table", { your_votes: { "Code-Review": 1 }, comments_unresolved: 1, comments_awaiting_reply: 1, comments_total: 3 }),
     member(48211, SUBJECT, { your_turn: true, comments_unresolved: 3, comments_to_answer: 2, comments_drafted: 1, comments_total: 5 }),
     member(48212, "Cache resolved routes", { your_turn: true, attention_reasons: ["ci-failed"], verified: -1 }),
-    member(48213, "Evict stale routes when the table changes", { not_ready: "WIP" }),
+    member(48213, "Evict stale routes when the table changes", { your_turn: true }),
   ];
   const chain: Chain = {
     key: "widget~main~I48213",
@@ -414,46 +429,112 @@ function reviewTask(all = false, busy?: string): TaskVm | undefined {
     partial_chain: false,
     members,
   };
-  const review: ReviewState = { number: 48211, patch_set: 5, commit: "5".repeat(40), subject: SUBJECT, staged: true, mode: "branch", worktree: "/src/widget", branch: "change-48211", return_to: "routing" };
+  const subject = members.find((m) => m.number === at)?.subject ?? SUBJECT;
+  const review: ReviewState = { number: at, patch_set: 5, commit: "5".repeat(40), subject, staged: true, mode: "branch", worktree: "/src/widget", branch: "change-48211", return_to: "routing" };
   const overview: Overview = { host: "gerrit.example.org", sections: [{ name: "to-review", query: "", summary: {}, chains: [chain] } as Section], local: local([]) };
-  return taskVm(overview, local([], { staged_review: review }), { all, busy });
+  return { overview, stack: local([], { staged_review: review }), members };
+}
+
+function reviewTask(options: ReviewAt = {}): TaskVm | undefined {
+  const { overview, stack } = reviewChain(options);
+  return taskVm(overview, stack, { all: options.all ?? false, busy: options.busy });
+}
+
+/** What Next is given in a review: as the Change view gives it (changeView.ts `next`). */
+interface Reading {
+  chains?: CommentChain[];
+  visited?: Set<string>;
+  seen?: Set<string>;
+  combinedActive?: boolean;
+  /** Gerrit has a newer patchset than the one checked out. */
+  behind?: boolean;
 }
 
 /**
- * Your stack, a rebase stopped at its third commit: the task header at the top of the Change view,
- * which shows the commit stopped at (Local stack steps aside; shown with All chains, without its banner).
+ * The Change view of somebody's change under review, as the window draws it: the change, the task
+ * header above it, and Next under that (changeScreen.ts), Next decided by nextAction on the same state.
  */
-function reworking(stop: RebaseStop, options: { busy?: string } = {}): { stack: StackVm; change: ChangeVm } {
+function reviewScreen(at: ReviewAt = {}, reading: Reading = {}, busy?: string): ChangeVm {
+  const { stack, members } = reviewChain(at);
+  const number = at.at ?? 48211;
+  const index = members.findIndex((m) => m.number === number);
+  const member = members[index];
+  const seen = reading.seen ?? new Set<string>();
+  const shownCommit = theChange({ own: false, number, ...(reading.behind ? { patchset_status: "outdated" as const, attention_reasons: ["outdated-patchset"] } : {}) });
+  const chainsShown = reading.chains ?? [];
+  const vm = change({ shown: shownCommit, seen, chains: chainsShown, reviewing: { behind: Boolean(reading.behind), newest: reading.behind ? 6 : 5 } });
+  const next = nextAction({
+    stack,
+    shown: shownCommit,
+    chains: chainsShown,
+    local: true,
+    reviewing: true,
+    visited: reading.visited ?? new Set(),
+    files: FILES.map((file) => file.path),
+    seenFiles: seen,
+    combinedActive: reading.combinedActive,
+    yourTurn: member?.your_turn,
+    above: index < members.length - 1,
+    newest: reading.behind ? 6 : 5,
+  });
+  return changeScreen(vm, { task: reviewTask({ ...at, busy }), next, busy });
+}
+
+/** Your stack, its commits oldest first, with the rebase stopped at the third. */
+function reworkStack(stop: RebaseStop, nothingLeft = false): Stack {
   const applied = stop === "edit";
+  const edits = !nothingLeft;
   const commits = [
     pushed("Add the routing table", { rebase: "done", code_review: 2, verified: 1 }),
-    pushed("Extract routing into its own module", { rebase: "done", comments_unresolved: 2, comments_total: 3, attention_reasons: ["unresolved-comments"], needs_edit: true }),
-    pushed("Route by longest matching prefix", { rebase: "current", is_head: applied, comments_unresolved: 1, comments_total: 1, needs_edit: true }),
-    pushed("Cache resolved routes", { rebase: "todo", ci_failures: ["Verified"], verified: -1, needs_edit: true }),
+    pushed("Extract routing into its own module", { rebase: "done", ...(edits ? { comments_unresolved: 2, comments_total: 3, attention_reasons: ["unresolved-comments"], needs_edit: true } : { comments_total: 3 }) }),
+    pushed("Route by longest matching prefix", { rebase: "current", is_head: applied, ...(edits ? { comments_unresolved: 1, comments_total: 1, needs_edit: true } : {}) }),
+    pushed("Cache resolved routes", { rebase: "todo", ...(edits ? { ci_failures: ["Verified"], verified: -1, needs_edit: true } : {}) }),
     unpushed("Evict stale routes", { rebase: "todo" }),
   ];
   const refused = stop === "conflict" ? { continue: "src/routes.ts is still conflicted: resolve it and git add it first" } : {};
   // Two files: the head then says how many, not a path (a path is theirs, and is replaced in a report).
   const unmerged = stop === "conflict" ? ["src/routes.ts", "src/cache.ts"] : [];
-  const stack = local(commits, { rebase_in_progress: true, rebase: { branch: "routing", onto: null, orig_head: "f".repeat(40), stop, applied, current: null, unmerged, as_before: false, actions: WAYS_ON[stop], refused } });
+  return local(commits, { rebase_in_progress: true, rebase: { branch: "routing", onto: null, orig_head: "f".repeat(40), stop, applied, current: null, unmerged, as_before: false, actions: WAYS_ON[stop], refused } });
+}
+
+/**
+ * Your stack, a rebase stopped at its third commit: the task header at the top of the Change view,
+ * which shows the commit stopped at (Local stack steps aside; shown with All chains, without its
+ * banner), Next under it, as the window draws them (changeScreen.ts).
+ */
+function reworking(stop: RebaseStop, options: { busy?: string; nothingLeft?: boolean; chains?: CommentChain[] } = {}): { stack: StackVm; change: ChangeVm } {
+  const stack = reworkStack(stop, options.nothingLeft);
+  const commit = stack.commits[2];
   const task = taskVm(undefined, stack, { all: false, busy: options.busy });
-  const stopped = stop === "conflict" ? { stop: "conflict" as const, unmerged, actions: WAYS_ON[stop] } : undefined;
-  const shown = change({ shown: theChange({ ...commits[2], own: true }), readOnly: "A rebase is in progress: finish or abort it first.", stopped });
-  // As the Change view draws it reworking: the header holds the rebase's buttons, the head only says what is left.
-  return { stack: stackVm(stack, undefined, never, () => 0, true), change: { ...shown, head: shown.head && { ...shown.head, actions: undefined }, task } };
+  const stopped = stop === "conflict" || stop === "resolved" ? { stop, unmerged: stack.rebase?.unmerged ?? [], actions: WAYS_ON[stop] } : undefined;
+  const shownCommit = theChange({ ...commit, own: true });
+  const chainsShown = options.chains ?? [];
+  const vm = change({ shown: shownCommit, chains: chainsShown, readOnly: READ_ONLY.rebase, stopped, task: "rework" });
+  const next = nextAction({ stack, shown: shownCommit, chains: chainsShown, local: true, reviewing: false, visited: new Set(), files: FILES.map((file) => file.path), seenFiles: new Set() });
+  return { stack: stackVm(stack, undefined, never, () => 0, true), change: changeScreen(vm, { task, next, busy: options.busy }) };
 }
 
 function taskScenarios(): Scenario[] {
-  const files = itsDiff();
-  const seen = new Set(files.files.slice(0, 2).map((file) => file.path));
-  const reviewed = (task: TaskVm | undefined, extra: Partial<ChangeState> = {}): ChangeVm => ({ ...change({ shown: theChange({ own: false }), seen, ...extra }), task });
+  const all = new Set(FILES.map((file) => file.path));
+  const some = new Set(FILES.slice(0, 2).map((file) => file.path));
+  const open = chain("q1", [comment("Should this be a node per path segment rather than per character?", { ...on(42), author: "Bob Becker" })], { ...on(42), turn: "yours" });
+  const answer = chain("a1", [comment("Rename this to longest_prefix: first-match is gone.", { ...on(12), author: "Bob Becker" })], { ...on(12), turn: "yours" });
   return [
-    scenario("Task: reviewing a chain, the header on the Change view", { change: reviewed(reviewTask()) }),
-    scenario("Task: reviewing, all chains shown again", { change: reviewed(reviewTask(true)) }),
-    scenario("Task: reviewing, the next change checking out", { change: { ...reviewed(reviewTask(false, "Checking out 48212…")), next: undefined, busy: "Checking out 48212… Go to Definition and edits in your files once it is checked out" } }),
+    scenario("Task: reviewing a chain, the header on the Change view", { change: reviewScreen({}, { chains: [open], seen: some }) }),
+    scenario("Task: reviewing, Next is Update to patchset 6", { change: reviewScreen({}, { chains: [open], seen: some, behind: true }) }),
+    scenario("Task: reviewing, Next is Mark 5 files seen", { change: reviewScreen({}, { seen: some, combinedActive: true }) }),
+    scenario("Task: reviewing, Next is Next file", { change: reviewScreen({}, { seen: some }) }),
+    scenario("Task: reviewing, Next is Vote and publish", { change: reviewScreen({}, { seen: all }) }),
+    scenario("Task: reviewing, Next is Next change", { change: reviewScreen({ voted: [48211] }, { seen: all }) }),
+    scenario("Task: reviewing, the last change of the chain after the vote", { change: reviewScreen({ at: 48213, voted: [48211, 48212, 48213] }, { seen: all }) }),
+    scenario("Task: reviewing, all chains shown again", { change: reviewScreen({ all: true }, { seen: some }) }),
+    scenario("Task: reviewing, the next change checking out", { change: reviewScreen({}, { seen: all }, "Checking out 48212… Go to Definition and edits in your files once it is checked out") }),
     scenario("Task: reworking, stopped to edit", { change: reworking("edit").change }),
+    scenario("Task: reworking, stopped to edit, a comment to answer", { change: reworking("edit", { chains: [answer] }).change }),
     scenario("Task: reworking, stopped on a conflict", { change: reworking("conflict").change }),
+    scenario("Task: reworking, the conflicts resolved", { change: reworking("resolved").change }),
     scenario("Task: reworking, Continue running in the terminal", { change: reworking("edit", { busy: "Continuing the rebase in the ger terminal…" }).change }),
+    scenario("Task: reworking, nothing left", { change: reworking("edit", { nothingLeft: true }).change }),
     scenario("Task: reworking, all chains shown: Local stack without its banner", { stack: reworking("edit").stack }),
   ];
 }

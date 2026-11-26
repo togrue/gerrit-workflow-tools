@@ -15,7 +15,7 @@
 import { randomInt } from "node:crypto";
 
 import { commentPhrases } from "./commentState";
-import { DISCARD, LOADING, NOTHING_SHOWN, NOT_FILES, NO_CI_LINK, READ_ONLY, REVIEW_UPDATE, STOPPED_WORDS, YOURS } from "./changeRows";
+import { DISCARD, LOADING, NOTHING_FROM_GERRIT, NOTHING_SHOWN, NOT_FILES, NO_CI_LINK, READ_ONLY, REVIEW_UPDATE, STOPPED_WORDS, YOURS } from "./changeRows";
 import { MODES, MODE_ICONS, SIDE_WORDS } from "./compareRows";
 import { Names, Random } from "./fakes";
 import { ATTENTION_ICONS, FILE_STATES, REASON_WORDS } from "./format";
@@ -263,6 +263,7 @@ const TASK: Shape = {
       command: ours(["ger.reviewDone", "ger.rebase.continue", "ger.rebase.abort", "ger.rebase.skip"]),
       /** Core's words about this repository: filler. */
       notNow: TEXT,
+      primary: KEEP,
     },
   ],
   views: { label: ours(["All chains", "Only this task"]), detail: ours([/keep going; show the inbox and Local stack too/, /hide the inbox and Local stack again/]), command: ours(["ger.showAllChains", "ger.focusReview"]) },
@@ -349,7 +350,7 @@ const CHANGE: Shape = {
     icon: ICON,
     tone: TONE,
     text: ours(
-      [reasons, "Ready to submit", "Loading…", "Nothing to do", STOPPED_WORDS.resolved, new RegExp(STOPPED_WORDS.conflicts(0).replace("0", COUNT))],
+      [reasons, "Ready to submit", "Loading…", "Nothing to do", NOTHING_FROM_GERRIT, STOPPED_WORDS.resolved, new RegExp(STOPPED_WORDS.conflicts(0).replace("0", COUNT))],
       around(/Conflict in (.+) — resolve it, then Continue/, (names, file) => STOPPED_WORDS.conflict(names.path(file))),
     ),
     detail: ours([VOTES, "not on Gerrit"]),
@@ -357,6 +358,28 @@ const CHANGE: Shape = {
     actions: ACTIONS,
   },
   conflicts: { summary: ours([new RegExp(`${COUNT} files?`)]), rows: [CONFLICT_ROW] },
+  /** Next (nextAction.ts): our names for it, a conflicted file's path made up; why, with subjects and paths in it: filler. */
+  next: {
+    label: ours(
+      [
+        "Next comment",
+        "Next file",
+        new RegExp(`Mark ${COUNT} files? seen`),
+        "Vote and publish",
+        "Next change",
+        "Leave review",
+        new RegExp(`Update to patchset ${PATCHSET}`),
+        "Update to the newest patchset",
+        "Continue",
+        "Work on next",
+        "Finish the rebase",
+        "Push",
+        "Review change",
+      ],
+      around(/Resolve (.+)/, (names, file) => `Resolve ${names.path(file)}`),
+    ),
+    title: TEXT,
+  },
   notes: [
     {
       icon: ICON,

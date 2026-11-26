@@ -12,7 +12,7 @@ import { Waiting } from "./state";
 import { latestSuggestion } from "./suggestions";
 import { Problem, problemLines } from "./problemRows";
 import { CompareState, CompareVm, MODES, Option, compareVm, deltaTitle } from "./compareRows";
-import type { TaskVm } from "./taskRows";
+import type { TaskMode, TaskVm } from "./taskRows";
 
 
 export const NOT_FILES = ["/COMMIT_MSG", "/PATCHSET_LEVEL", "/MERGE_LIST"];
@@ -68,6 +68,11 @@ export interface ChangeState extends CompareState {
   seen?: ReadonlySet<string>;
   /** What has not come yet; absent once everything has. */
   loading?: Loading;
+  /**
+   * The task header drawn above the change (taskRows.ts). Reworking, it says where the rebase
+   * stands and holds its buttons: the change does not say it again (P4).
+   */
+  task?: TaskMode;
 }
 
 /** The way on from a staged review behind Gerrit: `ger review` checks the newest patchset out. */
@@ -196,11 +201,14 @@ export const NOTHING_SHOWN = "Select a change in Review chains or a commit in Lo
 export const READ_ONLY = {
   remote: "Only a commit of your local stack can be reworded here.",
   patchset: "This is a patchset on Gerrit: choose the local commit to edit its message.",
-  rebase: "A rebase is in progress: finish or abort it first.",
+  rebase: "The message cannot be edited during a rebase: reword it once the rebase is finished or aborted.",
   review: "Somebody else's change, checked out for review: its message is theirs.",
 };
 
 export const LOADING = "loading…";
+
+/** The head of the commit a rebase stopped at, reworking, when Gerrit has nothing for you on it. */
+export const NOTHING_FROM_GERRIT = "Nothing from Gerrit to answer";
 
 /** Never reworded here: a box would only say so. A rebase underway passes; the message stays a box. */
 function isPlain(readOnly: string): boolean {
@@ -473,7 +481,9 @@ export function changeVm(state: ChangeState): ChangeVm {
   // Gerrit" and what its votes would do are not said. That Gerrit has a newer patchset still holds.
   const stopped = state.stopped;
   const status = commit.patchset_status;
-  if (status === "newer" && !stopped) {
+  // Reworking, every commit replayed is ahead of Gerrit: the push says what it sends, not each stop.
+  const reworking = state.task === "rework";
+  if (status === "newer" && !stopped && !reworking) {
     notes.push({
       icon: "history",
       tone: "warn",
@@ -509,7 +519,11 @@ export function changeVm(state: ChangeState): ChangeVm {
   const counts = [fromGerrit ? commentCounts(commit, left) : "", yours ? `${yours} of yours, not published` : ""];
   const hasCi = commit.ci_failures.length > 0 || commit.ci_links.length > 0 || commit.attention_reasons.includes("ci-failed");
   const loading = state.loading;
-  const words = sentence(reasonWords(commit.attention_reasons));
+  // Stopped before it is applied, what a push of it would do is not known yet. Reworking, the task
+  // header and the Conflicts list say where the rebase stands: the head says what Gerrit has to say.
+  const known = stopped ? commit.attention_reasons.filter((reason) => reason !== "ahead-of-gerrit") : commit.attention_reasons;
+  const words = sentence(reasonWords(known));
+  const quietStop = stopped && reworking;
   // Nothing calls for attention, and whether it is ready to submit is not known yet: no green check meanwhile.
   const unsure = !words && !commit.submittable && loading?.commit && !loading.ready;
   return {
@@ -517,10 +531,10 @@ export function changeVm(state: ChangeState): ChangeVm {
     loading: loading?.base && !state.base ? { message: true, readOnly: state.readOnly, plain: isPlain(state.readOnly) } : undefined,
     head: {
       ...(unsure ? { icon: "loading" } : headIcon(commit)),
-      text: words || (commit.submittable ? "Ready to submit" : unsure ? "Loading…" : "Nothing to do"),
+      text: words || (commit.submittable ? "Ready to submit" : unsure ? "Loading…" : quietStop ? NOTHING_FROM_GERRIT : "Nothing to do"),
       detail: commit.pushed ? commitVotes(commit) : "not on Gerrit",
       badges: commit.pushed ? badges(commit, loading?.commit ? 0 : draftsIn(chains)).filter((badge): badge is Badge => badge !== null) : [],
-      ...(stopped ? stoppedHead(stopped) : {}),
+      ...(stopped && !quietStop ? stoppedHead(stopped) : {}),
     },
     conflicts: stopped?.unmerged.length ? { summary: plural(stopped.unmerged.length, "file"), rows: stopped.unmerged.map(conflictRow) } : undefined,
     notes,

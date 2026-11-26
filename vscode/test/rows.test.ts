@@ -145,8 +145,8 @@ test("a resolution committed by hand as another commit is no conflict: core serv
   assert.deepEqual([vm.info[0].text, vm.info.length], ["A rebase is in progress", 1], "no conflict words, no conflicted files");
   assert.deepEqual(
     (vm.info[0].actions ?? []).map((action) => `${action.label}${action.primary ? "!" : ""}`),
-    ["Continue", "Abort"],
-    "the ways on core serves, none pressed as the one after a resolution",
+    ["Continue!", "Abort"],
+    "the ways on core serves, Continue the one to press, as wherever core allows it",
   );
 });
 
@@ -155,9 +155,9 @@ test("the rebase banner offers the ways on core allows from where it stopped, an
   const at = (rebase: Partial<Rebase>) => stackVm(stack(commits, { rebase_in_progress: true, rebase: { ...REBASE, ...rebase } }), undefined, never);
   const buttons = (vm: StackVm) => (vm.info[0].actions ?? []).map((action) => `${action.label}${action.primary ? "!" : ""} ${action.command.id}`);
   // Applied whole (an edit, a split): core offers nothing to skip, only to go on or go back.
-  assert.deepEqual(buttons(at({ stop: "edit" })), ["Continue ger.rebase.continue", "Abort ger.rebase.abort"]);
+  assert.deepEqual(buttons(at({ stop: "edit" })), ["Continue! ger.rebase.continue", "Abort ger.rebase.abort"]);
   const split = at({ stop: "split", current: null });
-  assert.deepEqual(buttons(split), ["Continue ger.rebase.continue", "Abort ger.rebase.abort"]);
+  assert.deepEqual(buttons(split), ["Continue! ger.rebase.continue", "Abort ger.rebase.abort"]);
   assert.deepEqual([split.info[0].text, split.info[0].detail], ["A rebase stopped while you split a commit", "Continue replays the rest on top of HEAD"]);
   // Still conflicted: no Continue until it is resolved; the commit can be left out. Resolved, Continue is the one to press.
   const conflict = at({ stop: "conflict", applied: false, unmerged: ["src/e.txt", "f.txt"], actions: ON_CONFLICT });
@@ -497,7 +497,7 @@ test("a message that cannot be reworded here is plain text; one held by a rebase
 });
 
 test("the commit message is read-only with the reason, and comment chains say what can be done with them", () => {
-  assert.equal(changeVm(state({ readOnly: "A rebase is in progress: finish or abort it first." })).message?.readOnly, "A rebase is in progress: finish or abort it first.");
+  assert.equal(changeVm(state({ readOnly: READ_ONLY.rebase })).message?.readOnly, "The message cannot be edited during a rebase: reword it once the rebase is finished or aborted.");
   const vm = changeVm(
     state({
       chains: [

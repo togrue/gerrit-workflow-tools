@@ -350,10 +350,12 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     vote: () => vscode.commands.executeCommand("ger.vote"),
     nextChange: () => stepReview(model, 1, reviewSteps),
     leave: () => leaveReview(model),
+    update: () => vscode.commands.executeCommand("ger.reviewUpdate"),
     conflict: () => {
       const first = model.stack?.rebase?.unmerged[0];
       return first ? openConflict(model, first) : undefined;
     },
+    continue: () => vscode.commands.executeCommand("ger.rebase.continue"),
     workOnNext: () => walk.next(),
     push: () => push(model),
     review: () => review(model, changeView.target, reviewSteps),

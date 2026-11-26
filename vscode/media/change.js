@@ -26,7 +26,7 @@
 
   function buildEditor(key) {
     const box = h("textarea", { class: "message", spellcheck: "false", "aria-label": "Commit message" });
-    const apply = h("button", { class: "button", title: "Rewrite the commit with this message (Ctrl+Enter)" }, "Apply");
+    const apply = h("button", { class: "button apply", title: "Rewrite the commit with this message (Ctrl+Enter)" }, "Apply");
     const revert = h("button", { class: "button secondary", title: "Back to the commit's message" }, "Revert");
     const note = h("span", { class: "detail" });
     const author = h("span", { class: "detail" });
@@ -48,6 +48,7 @@
       apply.hidden = revert.hidden = !changed || box.readOnly;
       note.textContent = box.readOnly ? box.title : changed ? "not applied yet" : "";
       fit();
+      primaryOnce();
     };
     const send = () => {
       if (box.value !== state.base && !box.readOnly) {
@@ -410,6 +411,19 @@
 
   // --- The page ---------------------------------------------------------------------
 
+  /**
+   * One primary button on screen (src/changeScreen.ts): while the message has edits not applied,
+   * Apply is the next step, and Next is drawn plain until they are applied or reverted.
+   */
+  function primaryOnce() {
+    const bar = document.querySelector(".next-bar");
+    const next = bar && bar.querySelector(".button");
+    const apply = editor && !editor.block.querySelector(".apply").hidden && root.contains(editor.block);
+    if (next) {
+      next.classList.toggle("secondary", Boolean(apply));
+    }
+  }
+
   /** The change could not be read (src/problemRows.ts): the state in ger's words, git's or Gerrit's under it, the ways on. */
   function problemBlock(problem) {
     return [h("div", { class: "head note wraps" }, icon("error", "bad"), words(problem.text, "", problem.raw)), actions(problem.actions)];
@@ -440,6 +454,20 @@
     if (vm.task) {
       parts.push(task(vm.task));
     }
+    // Next: the one thing to do now, named on the button; Alt+Enter does the same.
+    const nextBar = vm.busy
+      ? h("div", { class: "next-bar busy" }, icon("loading"), h("span", { class: "busy-text" }, vm.busy))
+      : vm.next
+        ? h("div", { class: "next-bar" }, actions([{ label: vm.next.label, title: vm.next.title, command: { id: "ger.next", args: [] }, primary: true }]))
+        : null;
+    // The files still conflicted, as under Local stack's banner: a click opens one to resolve.
+    const conflicts = vm.conflicts
+      ? section("conflicts", "Conflicts", h("span", { class: "detail" }, vm.conflicts.summary), true, () => h("div", {}, vm.conflicts.rows.map(info)))
+      : null;
+    // In a task, what to do now comes right under its header: Next, and the conflicts it walks.
+    if (vm.task) {
+      parts.push(nextBar, conflicts);
+    }
     if (vm.head) {
       const head = vm.head;
       // Votes and comments as badges, drawn as the Local stack draws them; words only when there are none.
@@ -451,11 +479,8 @@
         parts.push(actions(head.actions));
       }
     }
-    // Next: the one thing to do now, named on the button; Alt+Enter does the same.
-    if (vm.busy) {
-      parts.push(h("div", { class: "next-bar busy" }, icon("loading"), h("span", { class: "busy-text" }, vm.busy)));
-    } else if (vm.next) {
-      parts.push(h("div", { class: "next-bar" }, actions([{ label: vm.next.label, title: vm.next.title, command: { id: "ger.next", args: [] }, primary: true }])));
+    if (!vm.task) {
+      parts.push(nextBar, conflicts);
     }
     for (const note of vm.notes || []) {
       parts.push(explain(note.icon, note.tone, note.text, note.detail));
@@ -475,11 +500,6 @@
       const to = vm.compare ? vm.compare.to.selected : "current";
       const show = vm.hint.show ? h("button", { class: "link", onclick: () => post("compare", { from: "reviewed", to }) }, "Show") : null;
       parts.push(explain(vm.hint.show ? "git-compare" : "pass", vm.hint.show ? undefined : "good", vm.hint.text, "", show));
-    }
-    if (vm.conflicts) {
-      // The files still conflicted, as under Local stack's banner: a click opens one to resolve.
-      const conflicts = vm.conflicts;
-      parts.push(section("conflicts", "Conflicts", h("span", { class: "detail" }, conflicts.summary), true, () => h("div", {}, conflicts.rows.map(info))));
     }
     if (vm.files) {
       const files = vm.files;
@@ -510,7 +530,8 @@
       const summary = [icon("error", "bad"), h("span", { class: "detail" }, ci.state === "closed" ? [ci.summary, "open to fetch the findings"].filter(Boolean).join(" — ") : ci.summary)];
       parts.push(section("ci", "CI", summary, ci.state !== "closed", () => ciBody(ci), () => post("ci")));
     }
-    root.replaceChildren(...parts);
+    root.replaceChildren(...parts.filter(Boolean));
+    primaryOnce();
     if (document.scrollingElement) {
       document.scrollingElement.scrollTop = scroll;
     }
