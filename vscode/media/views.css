@@ -745,16 +745,15 @@ select:focus {
 
 .task-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  column-gap: 6px;
   font-weight: 600;
   line-height: 22px;
 }
 
 .task-mode {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .task-position {

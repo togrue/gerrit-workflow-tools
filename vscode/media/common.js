@@ -330,10 +330,10 @@
       { class: "task-action" },
       h(
         "button",
-        { class: "button secondary", disabled: Boolean(item.refused), title: item.refused || item.detail, onclick: () => post("command", { command: item.command }) },
+        { class: "button secondary", disabled: Boolean(item.notNow), title: item.notNow || item.detail, onclick: () => post("command", { command: item.command }) },
         item.label,
       ),
-      h("span", { class: "task-detail" }, item.refused ? `not now: ${item.refused}` : item.detail),
+      h("span", { class: "task-detail" }, item.notNow ? `not now: ${item.notNow}` : item.detail),
     );
   }
 

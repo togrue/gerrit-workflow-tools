@@ -38,7 +38,7 @@ export interface TaskAction {
   detail: string;
   command: string;
   /** Why it would not run now (core's words): drawn disabled, with the reason as its detail. */
-  refused?: string;
+  notNow?: string;
 }
 
 export interface TaskVm {
@@ -172,7 +172,7 @@ function reworkTask(stack: Stack, options: TaskOptions): TaskVm {
     label: REBASE_ACTIONS[action].label,
     detail,
     command: REBASE_ACTIONS[action].command,
-    refused: rebase && !rebase.actions.includes(action) ? (rebase.refused?.[action] ?? "not now") : undefined,
+    notNow: rebase && !rebase.actions.includes(action) ? (rebase.refused?.[action] ?? "not now") : undefined,
   });
   const actions = [
     go("continue", unmerged ? `once the ${plural(unmerged, "conflict")} ${unmerged === 1 ? "is" : "are"} resolved` : above ? `commit this stop as it is, then replay the ${plural(above, "commit")} above` : "commit this stop as it is and finish the rebase"),
@@ -213,6 +213,6 @@ export function taskLines(vm: TaskVm | undefined): string[] {
     `Left: ${vm.left}`,
     ...(vm.busy ? [`… ${vm.busy}`] : []),
     ...vm.steps.map((step) => `${step.current ? "▸" : " "} ${step.position}. ${step.title} — ${step.marks.map((mark) => mark.text).join(" · ")}`),
-    ...vm.actions.map((action) => `[${action.label}] ${action.refused ? `(not now: ${action.refused})` : action.detail}`),
+    ...vm.actions.map((action) => `[${action.label}] ${action.notNow ? `(not now: ${action.notNow})` : action.detail}`),
   ];
 }
