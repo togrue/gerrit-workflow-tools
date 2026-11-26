@@ -812,7 +812,9 @@ select:focus {
 }
 .message-row > .detail {
   flex: 1 0 100%;
+  box-sizing: border-box;
   padding-left: 22px;
+  line-height: 18px;
   white-space: normal;
   overflow-wrap: anywhere;
 }
