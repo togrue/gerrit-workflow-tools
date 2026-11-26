@@ -239,13 +239,11 @@ The commits above your upstream, newest first. One row per commit:
   core cannot tell why it stopped (a resolution committed by hand as another commit, with another
   subject and no Change-Id): Local stack marks the commit it stopped at as stopped, not conflicted.
 - **Next** (the primary button under the change's state, `Alt+Enter`): the one thing to do now,
-  named on it. Reviewing a change: *Next comment* while an open comment was not looked at yet,
-  *Next file* while a file was not opened (Open All Changes opens them all), *Vote and publish*
-  while it is your turn or drafts of yours wait, then *Next change* along the chain, *Leave review*
-  at its top. On your own commit: *Next comment* while one is left to answer and not gone to yet,
-  then *Work on next* (or *Finish the rebase*), then *Push* once nothing needs edits. On somebody's
-  change you only look at: *Review change*. It asks nothing of `ger serve` to decide; every other
-  action stays where it was, in the title bar and its `…` menu.
+  named on it: *Next comment*, *Next file*, *Vote and publish*, *Next change*, *Leave review* while
+  you review; *Resolve the conflict*, *Next comment*, *Work on next*, *Finish the rebase*, *Push*
+  on your own commit; *Review change* on somebody's change you only look at. Which one, when, is
+  the table under [Next: what it names, and when](#next-what-it-names-and-when). It asks nothing of
+  `ger serve` to decide; every other action stays where it was, in the title bar and its `…` menu.
 - **Commit message**: the whole message, its `Change-Id:` trailer shown read-only on a quiet line
   under it (select it to copy). For a commit of your local stack it is a text box without the
   Change-Id: edit it and press **Apply** (`Ctrl+Enter`); *Revert* goes back to the commit's
@@ -416,6 +414,29 @@ publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to t
 - CI findings a commit only inherits from the one below are not handed out twice.
 - Afterwards the stack view shows the amended commits; you review, then `ger push` sends the
   patchsets and publishes the draft replies.
+
+### Next: what it names, and when
+
+The first row that holds names the button; `src/nextAction.ts` is this table, and
+`test/next.test.ts` checks each row. *Yours to read / answer* is an open chain somebody started on
+Gerrit whose last published word is not yours and that no draft of yours answers.
+
+| You are | # | When | Next |
+|---|---|---|---|
+| reviewing (a staged review holds the change shown) | 1 | a chain yours to read you have not gone to | *Next comment* |
+| | 2 | a file of the comparison shown is not seen (Gerrit's *reviewed* flag, or opened here) | *Next file* (the first not seen) |
+| | 3 | drafts of yours wait, or Gerrit's attention set holds you (or ger cannot tell) | *Vote and publish* |
+| | 4 | the chain goes on above the change (or ger cannot tell) | *Next change* |
+| | 5 | the top of the chain | *Leave review* |
+| on your own commit, no staged review | 1 | a rebase stopped on a conflict, files still conflicted | *Resolve the conflict* (the first file) |
+| | 2 | a chain left to answer here, gone to or not (a reply typed into its box but not saved does not answer it) | *Next comment* |
+| | 3 | a commit above the stop needs edits, or (no rebase) any commit does | *Work on next* |
+| | 4 | a rebase underway, nothing above the stop needs edits | *Finish the rebase* |
+| | 5 | something to send (new code, a commit not on Gerrit, drafts of yours) and the push is not refused | *Push* |
+| looking at somebody's change on Gerrit | 1 | always | *Review change* |
+
+Your own published comments waiting on the author never make *Next comment*: a change you voted
+on that waits on its author offers *Next change*.
 
 ## Settings
 

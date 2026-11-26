@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Chain, Member, Overview, ReviewState, Section } from "../src/api";
+import { Chain, Member, Overview, Rebase, ReviewState, Section } from "../src/api";
 import { commentEntries } from "../src/commentEntries";
 import { NextState, nextAction } from "../src/nextAction";
 import { focusedMember, reviewFocus } from "../src/reviewFocus";
@@ -71,33 +71,56 @@ function reviewing(extra: Partial<NextState> = {}): NextState {
   };
 }
 
-test("reviewing, Next goes through the comments not read, the files not opened, the vote, then the next change or out", () => {
-  const open = chain("open", [comment("Why?")]);
-  assert.equal(nextAction(reviewing({ chains: [open] }))?.label, "Next comment");
-  assert.equal(nextAction(reviewing({ chains: [open], visited: new Set(["open"]) }))?.label, "Next file");
+// The rules of vscode/README.md, "Next: what it names, and when", one row each, in order.
+test("reviewing, Next goes through the comments not read, the files not seen, the vote, then the next change or out", () => {
+  const open = chain("open", [comment("Why?")], { turn: "yours" });
   const seen = { seenFiles: new Set(["a.py", "b.py"]) };
-  assert.equal(nextAction(reviewing(seen))?.label, "Vote and publish");
-  assert.match(nextAction(reviewing(seen))?.title ?? "", /Alt\+Enter/);
-  // Voted, nothing of yours left unpublished: on along the chain, out at its top.
-  assert.equal(nextAction(reviewing({ ...seen, yourTurn: false }))?.label, "Next change");
-  assert.equal(nextAction(reviewing({ ...seen, yourTurn: false, above: false }))?.label, "Leave review");
-  // A draft of yours still waits: the vote publishes it, whoever's turn it is.
   const draft = chain("mine", [comment("Typo", { state: "draft", comment_id: "d", author: undefined })]);
-  assert.equal(nextAction(reviewing({ ...seen, yourTurn: false, chains: [{ ...draft, resolved: true }] }))?.kind, "vote");
-  // Nothing loaded yet: no Next to press.
-  assert.equal(nextAction(reviewing({ shown: undefined })), undefined);
+  const rows: [string, Partial<NextState>, string | undefined][] = [
+    ["1 an open comment yours to read, not looked at", { chains: [open] }, "Next comment"],
+    ["2 a file of the comparison not seen", { chains: [open], visited: new Set(["open"]) }, "Next file"],
+    ["3 your turn on Gerrit", seen, "Vote and publish"],
+    ["3 not your turn, but a draft of yours waits", { ...seen, yourTurn: false, chains: [{ ...draft, resolved: true }] }, "Vote and publish"],
+    ["4 voted, the chain goes on above", { ...seen, yourTurn: false }, "Next change"],
+    ["5 voted, the top of the chain", { ...seen, yourTurn: false, above: false }, "Leave review"],
+    ["- nothing loaded yet", { shown: undefined }, undefined],
+  ];
+  for (const [rule, state, label] of rows) {
+    assert.equal(nextAction(reviewing(state))?.label, label, rule);
+  }
+  assert.match(nextAction(reviewing(seen))?.title ?? "", /Alt\+Enter/);
 });
 
-test("reworking your commit, Next goes through what is left to answer, then the attention walk, then the push", () => {
+test("reviewing a change you voted on that waits on the author, your own published comments are not what is next", () => {
+  // 11-focus, 1c: 2156 waits on the author; its open chains end with your word.
+  const yours = chain("asked", [comment("Rename this?", { author: "you" })], { turn: "theirs" });
+  const replied = chain("replied", [comment("Why?"), comment("Because.", { author: "you" })], { turn: "theirs" });
+  const voted = reviewing({ chains: [yours, replied], seenFiles: new Set(["a.py", "b.py"]), yourTurn: false });
+  assert.equal(nextAction(voted)?.label, "Next change");
+});
+
+test("reworking your commit, Next goes through a conflict, what is left to answer, the attention walk, then the push", () => {
   const top = commit("top", { patchset_status: "newer", needs_edit: true });
   const needs = stack([top], { summary: { commits: 1, ready: 0, attention: 1, needs_edit: 1, not_on_gerrit: 0 } });
   const rework = (extra: Partial<NextState>): NextState => ({ ...reviewing(), stack: needs, shown: shown({ own: true }), reviewing: false, ...extra });
   const ask = chain("ask", [comment("Rename this.")], { turn: "yours" });
-  assert.equal(nextAction(rework({ chains: [ask] }))?.label, "Next comment");
-  assert.equal(nextAction(rework({ chains: [ask], visited: new Set(["ask"]) }))?.label, "Work on next");
   const done = stack([{ ...top, needs_edit: false }], { summary: { commits: 1, ready: 1, attention: 0, needs_edit: 0, not_on_gerrit: 0 } });
-  assert.equal(nextAction(rework({ stack: done }))?.label, "Push");
-  assert.equal(nextAction(rework({ stack: { ...done, push_blocked: { reason: "rebase", message: "x" } } })), undefined, "a push would be refused: no Push offered");
+  const conflict = { ...needs, rebase_in_progress: true, rebase: { unmerged: ["a.py"] } as unknown as Rebase };
+  const rows: [string, Partial<NextState>, string | undefined][] = [
+    ["1 a conflict stop", { stack: conflict, chains: [ask] }, "Resolve the conflict"],
+    ["2 a comment left to answer, not gone to", { chains: [ask] }, "Next comment"],
+    // 11-focus, 4d: gone to, a reply typed into its box but not saved: still left to answer.
+    ["2 a comment gone to, not answered", { chains: [ask], visited: new Set(["ask"]) }, "Next comment"],
+    ["3 a commit needs edits", {}, "Work on next"],
+    ["5 nothing needs edits, new code to send", { stack: done }, "Push"],
+    ["6 a push would be refused", { stack: { ...done, push_blocked: { reason: "rebase", message: "x" } } }, undefined],
+  ];
+  for (const [rule, state, label] of rows) {
+    assert.equal(nextAction(rework(state))?.label, label, rule);
+  }
+  // Rule 4: a rebase underway, no commit above the stop needs edits.
+  const stopped = stack([{ ...top, rebase: "current", needs_edit: false }], { rebase_in_progress: true, rebase: { unmerged: [] } as unknown as Rebase });
+  assert.equal(nextAction(rework({ stack: stopped }))?.label, "Finish the rebase");
   // Somebody's change you only look at: review it.
   assert.equal(nextAction({ ...rework({}), local: false, shown: shown({ own: false, pushed: true }) })?.label, "Review change");
 });

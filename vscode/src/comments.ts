@@ -389,7 +389,8 @@ export class CommentThreads implements vscode.Disposable {
    * chain of the walk not gone to yet on this change; with none left, the next one, as Alt+F9.
    */
   async stepUnread(): Promise<void> {
-    const chains = this.view.shown?.own === false ? this.view.openChains() : this.view.toAnswer();
+    // What Next counts (nextAction.ts): left to answer, not what waits on a reply to you.
+    const chains = this.view.toAnswer();
     const visited = this.visitedHere();
     const ids = chains.map((chain) => chain.root_id);
     const from = Math.max(0, stepFrom(this.position, ids, 1));

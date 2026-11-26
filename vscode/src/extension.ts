@@ -20,7 +20,7 @@ import { configWarner, gerProgram, installGer, runInTerminal, versionSkewWarner 
 import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
 import { Poller } from "./poller";
-import { push, rebaseOntoUpstream, rebaseStep } from "./rebase";
+import { openConflict, push, rebaseOntoUpstream, rebaseStep } from "./rebase";
 import { RepoWatcher } from "./repoWatcher";
 import { reportIssue } from "./reportIssue";
 import { ReviewWalk, checkout, editCommit, leaveReview, review, stepReview, updateReview } from "./review";
@@ -327,6 +327,10 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     vote: () => vscode.commands.executeCommand("ger.vote"),
     nextChange: () => stepReview(model, 1, reviewWalk),
     leave: () => leaveReview(model),
+    conflict: () => {
+      const first = model.stack?.rebase?.unmerged[0];
+      return first ? openConflict(model, first) : undefined;
+    },
     workOnNext: () => walk.next(),
     push: () => push(model),
     review: () => review(model, changeView.target, reviewWalk),
