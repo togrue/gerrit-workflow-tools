@@ -51,6 +51,7 @@ def test_stack_says_where_a_stopped_rebase_stands(stack_repo: Path) -> None:
         "reused": [],
         "unmerged": [],
         "uncommitted": [],
+        "staged": [],
         "as_before": False,
         "actions": ["continue", "abort"],
         "refused": {

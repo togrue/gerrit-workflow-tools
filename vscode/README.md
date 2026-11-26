@@ -187,7 +187,10 @@ The commits above your upstream, newest first. One row per commit:
   So does Continue whenever files of the repository are changed and not amended or added. At an
   edit stop that is said before the press: core serves the files changed and not staged with the
   stop (`rebase.uncommitted`), Continue is drawn disabled with why, and the Change view of the
-  commit lists them under **Changed, not amended** (a click opens one). **Continue without saving** runs it with the edits left in the
+  commit lists them under **Changed, not amended** (a click opens one). Files staged there go into
+  the commit on Continue without a word from git: core serves them too (`rebase.staged`), the
+  Change view lists them as **Staged, go into this commit** (both kinds: *Changed at this stop*),
+  and Continue says *amend the 2 staged files into this commit, then …*. **Continue without saving** runs it with the edits left in the
   editor: git rewrites the files under them, and VS Code says so when you save. Cancel runs
   nothing. Nothing is saved unasked.
 - **Work on Next** (the step-over icon in *Local stack*'s and the Change view's title bars, the

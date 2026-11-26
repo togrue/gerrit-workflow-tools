@@ -185,7 +185,7 @@ a client words its own advice while `message` stays ger's.
 
 ## API version
 
-`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.8.0`); the URL
+`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.9.0`); the URL
 prefix carries only the major (`/api/v1`). It moves on its own, not with ger's package version:
 
 | Bump | When |
@@ -333,7 +333,11 @@ The top-level `rebase` is `null` without a rebase, else:
   files changed in the work tree and not staged, compared by content (a fix saved, not amended).
   `git rebase --continue` refuses over them (what is staged it amends in), and `git rebase
   --abort` would throw them away (`ger rebase --abort` keeps them in a stash). `[]` otherwise,
-  and at a stop on a conflict. Cost: one `git diff` while a rebase is stopped.
+  and at a stop on a conflict.
+- `staged` — at such a stop: the tracked files staged against `HEAD`. `git rebase --continue`
+  amends them into the commit it stopped at without a word, so a client lists them before
+  Continue (API 1.9). A file staged and changed again is in both. `[]` otherwise. Cost of the
+  two: one `git status` while a rebase is stopped, the index not written.
 - `as_before` — `true` when the stack is the branch as it was before the rebase: a rebase git
   runs through `am` (`git rebase --apply`, `rebase-apply`) keeps no todo, so no commit carries
   a `rebase` step. It still stops only on a conflict, and `stop`, `applied` and `unmerged` say

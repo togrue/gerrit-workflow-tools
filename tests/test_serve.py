@@ -1178,6 +1178,34 @@ def test_rebase_refusal_is_the_check_every_go_on_makes_unstaged_changes_too(stac
         _get(api, "/rebase/refusal", action="onward")
 
 
+def test_a_stop_serves_what_continue_amends_in_apart_from_what_it_refuses_over(stack_repo: Path) -> None:
+    """Staged changes go into the commit on Continue without a word: listed, they are said before."""
+    api = GerApi(stack_repo, gerrit=_gerrit(stack_repo)[0])
+    git(
+        "rebase",
+        "-q",
+        "-i",
+        "HEAD~2",
+        cwd=stack_repo,
+        env={"GIT_SEQUENCE_EDITOR": "sed -i 1s/^pick/edit/"},
+        check=False,
+    )
+    tracked = sorted(git_out("ls-files", cwd=stack_repo).split())[:2]
+    for name in tracked:
+        (stack_repo / name).write_text(f"{name} edited at the stop\n", encoding="utf-8")
+    git("add", tracked[0], cwd=stack_repo)
+    rebase = _get(api, "/stack")["rebase"]
+    assert (rebase["staged"], rebase["uncommitted"]) == ([tracked[0]], [tracked[1]])
+    git("add", tracked[1], cwd=stack_repo)
+    rebase = _get(api, "/stack")["rebase"]
+    assert (rebase["staged"], rebase["uncommitted"], rebase["actions"]) == (tracked, [], ["continue", "abort"])
+    (stack_repo / tracked[0]).write_text("staged, then changed again\n", encoding="utf-8")
+    assert (_get(api, "/stack")["rebase"]["staged"], _get(api, "/stack")["rebase"]["uncommitted"]) == (
+        tracked,
+        [tracked[0]],
+    )
+
+
 # --- Transport ---------------------------------------------------------------------
 
 
@@ -1217,7 +1245,7 @@ def _http(
 def test_http_answers_only_with_the_token_on_a_loopback_host(served: GerHttpServer) -> None:
     status, body = _http(served, f"{V1}/health")
     assert status == 200
-    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.8.0", "feature", "g.example")
+    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.9.0", "feature", "g.example")
     assert _http(served, f"{V1}/health", token=None)[0] == 401
     assert _http(served, f"{V1}/health", token="wrong")[0] == 401
     # A page that rebinds its own name to 127.0.0.1 still sends its name as Host.

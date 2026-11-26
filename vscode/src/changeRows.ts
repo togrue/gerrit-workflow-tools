@@ -60,6 +60,8 @@ export interface ChangeState extends CompareState {
   stopped?: Stopped;
   /** The rebase stopped at this commit with it applied, and these files are changed and not amended (core's `uncommitted`). */
   notAmended?: string[];
+  /** At that stop, these files are staged: Continue amends them in (core's `staged`). */
+  staged?: string[];
   /**
    * The change a staged review holds here (core's `staged_review`): read as somebody else's change,
    * with what is new since your review; `behind` when Gerrit has a newer patchset than the one
@@ -235,12 +237,32 @@ export const STOPPED_WORDS = {
   notAmendedTitle: "Changed, not amended",
   notAmended: "changed, not amended",
   notAmendedTooltip: "Saved in the work tree, not in the commit: Continue waits for it. git commit --amend -a (in the terminal) takes it into this commit, git stash sets it aside.",
+  stagedTitle: "Staged, go into this commit",
+  staged: "staged, goes into this commit",
+  stagedTooltip: "Staged: Continue amends it into this commit. git restore --staged <file> (in the terminal) takes it out again and keeps it in the work tree.",
+  /** The section's title when it lists both. */
+  bothTitle: "Changed at this stop",
   filesTooltip: "The rebase has not applied this commit yet: these are its files as they were before the rebase, against its old parent. What is left to resolve is under Conflicts.",
 };
 
 /** A file changed and not amended at an edit stop: a click opens it. */
 function notAmendedRow(file: string): StackInfo {
   return { text: file, detail: STOPPED_WORDS.notAmended, icon: "diff-modified", tone: "warn", tooltip: STOPPED_WORDS.notAmendedTooltip, conflict: file };
+}
+
+/** A file staged at an edit stop, which Continue amends in: said before Continue is pressed; a click opens it. */
+function stagedRow(file: string): StackInfo {
+  return { text: file, detail: STOPPED_WORDS.staged, icon: "git-commit", tone: "info", tooltip: STOPPED_WORDS.stagedTooltip, conflict: file };
+}
+
+/** What an edit stop holds besides the commit: what Continue waits for, then what it amends in. One section. */
+function changedAtStop(notAmended: readonly string[], staged: readonly string[]): ChangeVm["conflicts"] {
+  const count = new Set([...notAmended, ...staged]).size;
+  if (!count) {
+    return undefined;
+  }
+  const title = notAmended.length && staged.length ? STOPPED_WORDS.bothTitle : notAmended.length ? STOPPED_WORDS.notAmendedTitle : STOPPED_WORDS.stagedTitle;
+  return { title, summary: plural(count, "file"), rows: [...notAmended.map(notAmendedRow), ...staged.map(stagedRow)] };
 }
 
 /** The head of a commit a rebase stopped at before applying it: what is left to do, and the buttons to go on. */
@@ -601,9 +623,7 @@ export function changeVm(state: ChangeState): ChangeVm {
     },
     conflicts: stopped?.unmerged.length
       ? { summary: plural(stopped.unmerged.length, "file"), rows: stopped.unmerged.map(conflictRow) }
-      : state.notAmended?.length
-        ? { title: STOPPED_WORDS.notAmendedTitle, summary: plural(state.notAmended.length, "file"), rows: state.notAmended.map(notAmendedRow) }
-        : undefined,
+      : changedAtStop(state.notAmended ?? [], state.staged ?? []),
     notes,
     message: state.base?.message
       ? {

@@ -8,7 +8,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerApiError, GerClient, Patchsets, ShownCommit } from "./api";
-import { ChangeDetail, ciRevs, notAmendedHere, sameChange, stoppedHere } from "./changeLoad";
+import { ChangeDetail, changedHere, ciRevs, sameChange, stoppedHere } from "./changeLoad";
 import { ChainCounts, ChangeState, ChangeVm, SeenWhere, chainCounts, seenWhere, CiView, NOTHING_SHOWN, NOT_FILES, READ_ONLY, changeHeading, changeLines, changeVm, isYours, toAnswer } from "./changeRows";
 import { From, MODES, Mode, Sides, Version, fitSides, modeSides } from "./compareRows";
 import { FILE_SCHEME, filePath, fileUri, openDiff } from "./diffTabs";
@@ -635,7 +635,7 @@ export class ChangeView extends WebView<ChangeVm> {
       ci: this.ci,
       // Which commit a rebase stopped at is in the stack ger serve sent: the Change view reads it there, as Local stack does.
       stopped: this.target && stoppedHere(this.target, this.model.stack),
-      notAmended: this.target ? notAmendedHere(this.target, this.model.stack) : [],
+      ...(this.target ? changedHere(this.target, this.model.stack) : { notAmended: [], staged: [] }),
       reviewing: this.reviewing(),
       seen: this.seenHere(),
       elsewhere: this.model.reviewElsewhere(this.target?.number),

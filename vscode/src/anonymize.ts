@@ -126,7 +126,7 @@ function around(pattern: RegExp, rebuild: (names: Names, ...theirs: string[]) =>
 export const ICONS = [
   ...Object.values(SYNC_ICONS),
   ...ATTENTION_ICONS,
-  ...["beaker", "check", "circle-large-outline", "circle-slash", "comment", "debug-continue", "debug-stackframe", "edit", "error", "eye", "flame", "git-branch", "history", "list-selection", "loading", "note", "multiple-windows", "person", "person-add", "question", "sync", "target", "thumbsdown", "thumbsup", "warning"],
+  ...["beaker", "check", "circle-large-outline", "circle-slash", "comment", "debug-continue", "debug-stackframe", "edit", "error", "eye", "flame", "git-branch", "git-commit", "history", "list-selection", "loading", "note", "multiple-windows", "person", "person-add", "question", "sync", "target", "thumbsdown", "thumbsup", "warning"],
   ...Object.values(MODE_ICONS),
 ];
 const ICON = ours(ICONS);
@@ -166,6 +166,7 @@ const TOOLTIP_LINE = ours([
   REBASE_WORDS.tooltip,
   REBASE_WORDS.resolve,
   STOPPED_WORDS.notAmendedTooltip,
+  STOPPED_WORDS.stagedTooltip,
   "The log was cut: findings may be incomplete.",
   new RegExp(`${COUNT} unresolved comments?`),
   new RegExp(`(${commentPhrases(COUNT).join("|")})( · (${commentPhrases(COUNT).join("|")}))*`),
@@ -207,7 +208,7 @@ const ACTIONS: Shape = [
 const CONFLICT_ROW = {
   // It says its path: it becomes what its `conflict` becomes.
   text: string((text, names, info) => String((text === info.conflict ? PATH : INFO_TEXT)(text, names, info))),
-  detail: ours([REBASE_WORDS.ready, REBASE_WORDS.onTop, REBASE_WORDS.asBefore, REBASE_WORDS.conflicted, STOPPED_WORDS.notAmended]),
+  detail: ours([REBASE_WORDS.ready, REBASE_WORDS.onTop, REBASE_WORDS.asBefore, REBASE_WORDS.conflicted, STOPPED_WORDS.notAmended, STOPPED_WORDS.staged]),
   icon: ICON,
   tone: TONE,
   tooltip: TOOLTIP,
@@ -366,7 +367,7 @@ const CHANGE: Shape = {
     badges: [BADGE],
     actions: ACTIONS,
   },
-  conflicts: { title: ours([STOPPED_WORDS.notAmendedTitle]), summary: ours([new RegExp(`${COUNT} files?`)]), rows: [CONFLICT_ROW] },
+  conflicts: { title: ours([STOPPED_WORDS.notAmendedTitle, STOPPED_WORDS.stagedTitle, STOPPED_WORDS.bothTitle]), summary: ours([new RegExp(`${COUNT} files?`)]), rows: [CONFLICT_ROW] },
   /** Next (nextAction.ts): our names for it, a conflicted file's path made up; why, with subjects and paths in it: filler. */
   next: {
     label: ours(

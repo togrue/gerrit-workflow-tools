@@ -259,8 +259,11 @@ function reworkTask(stack: Stack, options: TaskOptions): TaskVm {
     const notNow = options.busy ? "the step before it is still running" : refused ? notNowLine(rebase, action, refused) : undefined;
     return { label: REBASE_ACTIONS[action].label, detail, command: REBASE_ACTIONS[action].command, ...(notNow ? { notNow } : {}), ...(refused && !options.busy ? { tooltip: refused } : {}) };
   };
+  // Staged files go into the commit on Continue: its words say so, as the Change view lists them.
+  const staged = rebase?.applied ? (rebase.staged ?? []) : [];
+  const commitIt = staged.length ? `amend the ${plural(staged.length, "staged file")} into this commit` : "commit this stop as it is";
   const actions = [
-    go("continue", unmerged ? `once the ${plural(unmerged, "conflict")} ${unmerged === 1 ? "is" : "are"} resolved` : above ? `commit this stop as it is, then replay the ${plural(above, "commit")} above` : "commit this stop as it is and finish the rebase"),
+    go("continue", unmerged ? `once the ${plural(unmerged, "conflict")} ${unmerged === 1 ? "is" : "are"} resolved` : above ? `${commitIt}, then replay the ${plural(above, "commit")} above` : `${commitIt} and finish the rebase`),
     go("abort", "put the branch back as it was before the rebase"),
     ...(rebase?.actions.includes("skip") ? [go("skip", "leave this commit out and go on")] : []),
   ];

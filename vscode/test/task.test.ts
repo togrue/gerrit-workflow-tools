@@ -171,6 +171,24 @@ test("at an edit stop with a fix saved and not amended, the header says it, and 
   assert.equal(vm.actions[0].tooltip, refusal);
 });
 
+test("staged files at an edit stop are listed before Continue, which says it amends them in", () => {
+  // Continue amends what is staged without a word: the view lists those files beside the ones it waits for.
+  const rebase = { stop: "edit", applied: true, actions: ["continue", "abort"], refused: {}, unmerged: [], uncommitted: [], staged: ["calc/ops.py", "README.md"] } as unknown as Rebase;
+  const commits = [commit("stop", { rebase: "current" }), commit("above", { rebase: "todo" })];
+  const vm = taskVm(undefined, stack(commits, { rebase_in_progress: true, rebase }), { all: false })!;
+  assert.equal(vm.actions[0].detail, "amend the 2 staged files into this commit, then replay the 1 commit above");
+  const view = changeVm(fixtureState({ notAmended: ["calc/ops.py"], staged: ["calc/ops.py", "README.md"] }));
+  assert.equal(view.conflicts?.title, "Changed at this stop");
+  assert.equal(view.conflicts?.summary, "2 files", "a file staged and changed again is one file");
+  assert.deepEqual(view.conflicts?.rows.map((row) => [row.text, row.detail]), [
+    ["calc/ops.py", "changed, not amended"],
+    ["calc/ops.py", "staged, goes into this commit"],
+    ["README.md", "staged, goes into this commit"],
+  ]);
+  assert.equal(changeVm(fixtureState({ staged: ["README.md"] })).conflicts?.title, "Staged, go into this commit");
+  assert.equal(changeVm(fixtureState({})).conflicts, undefined);
+});
+
 test("how the last step ended is said in the header until the next action, in ger's words, and not while a step runs", () => {
   const rebase = { stop: "conflict", actions: ["abort", "skip"], refused: {}, unmerged: ["a.py"] } as unknown as Rebase;
   const commits = [commit("stop", { rebase: "current" })];

@@ -108,6 +108,9 @@ class RebaseProgress:
     """Tracked files changed in the work tree and not staged, at a stop with the commit applied whole
     or between commits: an edit saved, not amended. ``git rebase --continue`` refuses over them (it
     amends what is staged), and ``git rebase --abort`` would throw them away."""
+    staged: tuple[str, ...] = ()
+    """Tracked files staged against ``HEAD`` at such a stop: ``git rebase --continue`` amends them
+    into the commit it stopped at, without a word, so a client lists them before Continue."""
 
     @property
     def committed_by_hand(self) -> bool:
@@ -229,6 +232,7 @@ def rebase_progress(cwd: Path | str | None, *, repo_dir: Path | None = None) -> 
     # Detached while it runs, so HEAD names a commit: one git did not leave there was made by hand.
     moved = not applied and _state_word(repo_dir / "HEAD") not in settled
     unmerged = unmerged_paths(cwd)
+    staged, unstaged = stop_changes(cwd) if applied else ((), ())
     return RebaseProgress(
         done=tuple(sha for sha in done[:-1] if sha),
         current=current,
@@ -244,7 +248,8 @@ def rebase_progress(cwd: Path | str | None, *, repo_dir: Path | None = None) -> 
         clean=moved and _nothing_uncommitted(cwd),
         folding_into=(amend or _state_word(repo_dir / "HEAD")) if folding and not applied and not moved else None,
         reused=_reused_resolutions(cwd, repo_dir, current, unmerged) if current and not applied and not moved else (),
-        uncommitted=uncommitted_files(cwd) if applied else (),
+        uncommitted=unstaged,
+        staged=staged,
     )
 
 
@@ -309,11 +314,21 @@ def _apply_progress(cwd: Path | str | None, repo_dir: Path) -> RebaseProgress:
     )
 
 
-def uncommitted_files(cwd: Path | str | None) -> tuple[str, ...]:
-    """Tracked files whose work tree differs from the index, a submodule's own state left out: what
-    an edit stop holds that Continue would not amend in. Compared by content, the index not written."""
-    out = git("diff", "--name-only", "-z", "--ignore-submodules", cwd=cwd, check=False).stdout
-    return tuple(nul_paths(out))
+def stop_changes(cwd: Path | str | None) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Tracked files staged against ``HEAD``, and those whose work tree differs from the index, a
+    submodule's state left out: what an edit stop holds that Continue amends in, and what it would
+    not. One ``git status``, compared by content, the index not written."""
+    out = git(
+        "--no-optional-locks",
+        *("status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=no", "--ignore-submodules=all"),
+        cwd=cwd,
+        check=False,
+    ).stdout
+    # -z: each entry is ``XY path``, the path as is; X is the index against HEAD, Y the work tree against the index.
+    entries = [(entry[0], entry[1], entry[3:]) for entry in (out or "").split("\0") if len(entry) > 3]
+    staged = tuple(path for x, _y, path in entries if x not in " ?!")
+    unstaged = tuple(path for _x, y, path in entries if y not in " ?!")
+    return staged, unstaged
 
 
 def _nothing_uncommitted(cwd: Path | str | None) -> bool:

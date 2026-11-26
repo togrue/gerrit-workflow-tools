@@ -123,10 +123,14 @@ export function stoppedHere(target: ChangeTarget, stack: Stack | undefined): Sto
   return stop === "conflict" || stop === "resolved" ? { stop, unmerged: stack?.rebase?.unmerged ?? [], actions: stack?.rebase?.actions ?? [] } : undefined;
 }
 
-/** The files changed and not amended at the stop on the commit `target` names (core's `uncommitted`); none elsewhere. */
-export function notAmendedHere(target: ChangeTarget, stack: Stack | undefined): string[] {
+/**
+ * What the work tree holds at the stop on the commit `target` names: the files changed and not
+ * amended (core's `uncommitted`), and those staged, which Continue amends in (`staged`). None elsewhere.
+ */
+export function changedHere(target: ChangeTarget, stack: Stack | undefined): { notAmended: string[]; staged: string[] } {
   const commit = target.local ? stack?.commits.find((c) => c.sha === target.rev) : undefined;
-  return commit?.rebase === "current" && stack?.rebase?.applied ? (stack.rebase.uncommitted ?? []) : [];
+  const here = commit?.rebase === "current" && stack?.rebase?.applied ? stack.rebase : undefined;
+  return { notAmended: here?.uncommitted ?? [], staged: here?.staged ?? [] };
 }
 
 export class ChangeDetail {

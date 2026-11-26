@@ -525,7 +525,7 @@ function reviewScreen(at: ReviewAt = {}, reading: Reading = {}, busy?: string): 
 }
 
 /** Your stack, its commits oldest first, with the rebase stopped at the third. */
-function reworkStack(stop: RebaseStop, nothingLeft = false, uncommitted: string[] = []): Stack {
+function reworkStack(stop: RebaseStop, nothingLeft = false, uncommitted: string[] = [], staged: string[] = []): Stack {
   const applied = stop === "edit";
   const edits = !nothingLeft;
   const commits = [
@@ -540,7 +540,7 @@ function reworkStack(stop: RebaseStop, nothingLeft = false, uncommitted: string[
   // Two files: the head then says how many, not a path (a path is theirs, and is replaced in a report).
   const unmerged = stop === "conflict" ? ["src/routes.ts", "src/cache.ts"] : [];
   const actions = uncommitted.length ? WAYS_ON[stop].filter((way) => way !== "continue") : WAYS_ON[stop];
-  return local(commits, { rebase_in_progress: true, rebase: { branch: "routing", onto: null, orig_head: "f".repeat(40), stop, applied, current: null, unmerged, uncommitted, as_before: false, actions, refused } });
+  return local(commits, { rebase_in_progress: true, rebase: { branch: "routing", onto: null, orig_head: "f".repeat(40), stop, applied, current: null, unmerged, uncommitted, staged, as_before: false, actions, refused } });
 }
 
 /**
@@ -548,14 +548,14 @@ function reworkStack(stop: RebaseStop, nothingLeft = false, uncommitted: string[
  * which shows the commit stopped at (Local stack steps aside; shown with All chains, without its
  * banner), Next under it, as the window draws them (changeScreen.ts).
  */
-function reworking(stop: RebaseStop, options: { busy?: string; nothingLeft?: boolean; chains?: CommentChain[]; uncommitted?: string[]; outcome?: Outcome } = {}): { stack: StackVm; change: ChangeVm } {
-  const stack = reworkStack(stop, options.nothingLeft, options.uncommitted);
+function reworking(stop: RebaseStop, options: { busy?: string; nothingLeft?: boolean; chains?: CommentChain[]; uncommitted?: string[]; staged?: string[]; outcome?: Outcome } = {}): { stack: StackVm; change: ChangeVm } {
+  const stack = reworkStack(stop, options.nothingLeft, options.uncommitted, options.staged);
   const commit = stack.commits[2];
   const task = taskVm(undefined, stack, { all: false, busy: options.busy, ...(options.outcome ? { outcome: options.outcome } : {}) });
   const stopped = stop === "conflict" || stop === "resolved" ? { stop, unmerged: stack.rebase?.unmerged ?? [], actions: WAYS_ON[stop] } : undefined;
   const shownCommit = theChange({ ...commit, own: true });
   const chainsShown = options.chains ?? [];
-  const vm = change({ shown: shownCommit, chains: chainsShown, readOnly: READ_ONLY.rebase, stopped, task: "rework", notAmended: options.uncommitted ?? [] });
+  const vm = change({ shown: shownCommit, chains: chainsShown, readOnly: READ_ONLY.rebase, stopped, task: "rework", notAmended: options.uncommitted ?? [], staged: options.staged ?? [] });
   const next = nextAction({ stack, shown: shownCommit, chains: chainsShown, local: true, reviewing: false, visited: new Set(), files: FILES.map((file) => file.path), seenFiles: new Set() });
   // Continue running in the terminal is the header's to say (task.ts busyUntilMoved), as in the window.
   return { stack: stackVm(stack, undefined, never, () => 0, true), change: changeScreen(vm, { task, next }) };
@@ -588,6 +588,10 @@ function taskScenarios(): Scenario[] {
     scenario("Task: reworking, nothing left", { change: reworking("edit", { nothingLeft: true }).change }),
     scenario("Task: reworking, all chains shown: Local stack without its banner", { stack: reworking("edit").stack }),
     scenario("Task: reworking, a fix saved and not amended at the stop", { change: reworking("edit", { nothingLeft: true, uncommitted: ["src/widget/routing/prefix_tree.py"] }).change }),
+    scenario("Task: reworking, staged files Continue amends in, listed before it", {
+      change: reworking("edit", { nothingLeft: true, uncommitted: ["src/widget/routing/prefix_tree.py"], staged: ["src/widget/routing/__init__.py", "tests/test_routing.py"] }).change,
+    }),
+    scenario("Task: reworking, only staged files at the stop", { change: reworking("edit", { nothingLeft: true, staged: ["src/widget/routing/__init__.py"] }).change }),
     scenario("Task: reworking, Continue refused, said in the header", {
       change: reworking("edit", { nothingLeft: true, uncommitted: ["src/widget/routing/prefix_tree.py"], outcome: { text: "ger rebase --continue did not run: you have unstaged changes to src/widget/routing/prefix_tree.py; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`.", ok: false, more: [] } }).change,
     }),
