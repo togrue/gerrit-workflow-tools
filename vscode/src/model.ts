@@ -131,6 +131,8 @@ export class Model implements vscode.Disposable {
   readonly subjects = new Map<number, string>();
   /** When the last overview that Gerrit answered came; undefined before the first. */
   loadedAt: Date | undefined;
+  /** Since when Gerrit could not be asked (unreachable, no answer, refused credentials); undefined while it can. */
+  awaySince: Date | undefined;
   /** Seconds Gerrit is given to answer, as the running ger serve said (`/health`'s `gerrit_wait`). */
   gerritWait: number | undefined;
 
@@ -279,8 +281,11 @@ export class Model implements vscode.Disposable {
       const seen = rememberSeen(this.overview, this.memento.get<Seen>(SEEN_KEY, {}));
       this.active = chainsWithActivity(this.overview, seen);
       await this.memento.update(SEEN_KEY, seen);
-      // When the views last heard from Gerrit: said while they cannot follow it live. Not when Gerrit could not be asked.
-      this.loadedAt = this.gerritAway() ? this.loadedAt : new Date();
+      // When the views last heard from Gerrit: said while they cannot follow it live. Not when Gerrit could not be asked;
+      // then since when it could not (the first refusal after the last answer).
+      const away = this.gerritAway();
+      this.loadedAt = away ? this.loadedAt : new Date();
+      this.awaySince = away ? (this.awaySince ?? new Date()) : undefined;
       await this.setState("ready");
     } catch (error) {
       const state = failureState(error);

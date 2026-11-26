@@ -26,6 +26,7 @@ export class EventFollower implements vscode.Disposable {
   private debounce: ReturnType<typeof setTimeout> | undefined;
   private readonly abort = new AbortController();
   private disposed = false;
+  private logged: string | undefined;
 
   constructor(
     private readonly model: Model,
@@ -85,8 +86,11 @@ export class EventFollower implements vscode.Disposable {
       return;
     }
     this.events = events;
-    if (events) {
-      this.log(`Gerrit events: ${events.state}${events.reason ? ` (${events.reason})` : ""}${events.source ? ` — ${events.source}` : ""}`);
+    const line = events && `Gerrit events: ${events.state}${events.reason ? ` (${events.reason})` : ""}${events.source ? ` — ${events.source}` : ""}`;
+    // A restarted ger serve finds the stream where it was: not said again.
+    if (line && line !== this.logged) {
+      this.logged = line;
+      this.log(line);
     }
     this.changed.fire();
   }

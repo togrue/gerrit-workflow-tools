@@ -17,7 +17,7 @@ import { CommentThreads, ThreadComment, closeComment, leaveCommentBox } from "./
 import { setting } from "./config";
 import { EventFollower } from "./events";
 import { ShownCommitFollower } from "./follow";
-import { plural } from "./format";
+import { liveness, plural } from "./format";
 import { GER_TERMINAL, configWarner, gerProgram, installGer, runInTerminal, versionSkewWarner } from "./launch";
 import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
@@ -155,7 +155,6 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   model.onDidChange(() => {
     // What waits on your review: the chains whose turn is yours, not those waiting on their author.
     const waiting = model.overview?.sections?.find((s) => s.name === "to-review")?.chains.filter((chain) => waitsOnYou(chain, "to-review")).length ?? 0;
-    overviewTree.description = model.stale ? "out of date" : undefined;
     // Over the welcome text, which cannot say which versions: this can. (A message hides the welcome text and its
     // buttons, so setup wanting says its cause there by `ger.setupReason`, and ger's own words in the other views.)
     overviewTree.message = model.incompatible?.message;
@@ -600,6 +599,25 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       void model.refreshLocal();
     }
   });
+  const poller = new Poller(() => void model.refresh({ background: true }), events, () => {
+    // Not again and again: ger serve would start and fail each tick. Regaining focus, Retry and a changed setting still try.
+    const paused = waitsForYou(model.state);
+    if (paused && !pausedLogged) {
+      log.appendLine(`Background refresh paused: ${model.failure ?? model.state}. Retry, or fix the setting, to try again.`);
+    }
+    pausedLogged = paused;
+    return paused;
+  });
+  // Whether the views follow Gerrit live, beside Review chains' title: live, when last checked and next, or since when not reachable.
+  const describeTree = () => {
+    overviewTree.description = model.stale
+      ? "out of date"
+      : model.overview
+        ? liveness({ live: events.live, checked: model.loadedAt, nextAt: poller.nextAt, awaySince: model.awaySince, now: Date.now() })
+        : undefined;
+  };
+  const describeEvery = setInterval(describeTree, 30_000);
+  const describing = vscode.Disposable.from(model.onDidChange(describeTree), events.onDidChange(describeTree), { dispose: () => clearInterval(describeEvery) });
   context.subscriptions.push(
     terminalEnded,
     model,
@@ -619,21 +637,14 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     vscode.workspace.onDidGrantWorkspaceTrust(() => void model.refresh()),
     events,
     ...(localGit ? [localGit] : []),
-    new Poller(() => void model.refresh({ background: true }), events, () => {
-      // Not again and again: ger serve would start and fail each tick. Regaining focus, Retry and a changed setting still try.
-      const paused = waitsForYou(model.state);
-      if (paused && !pausedLogged) {
-        log.appendLine(`Background refresh paused: ${model.failure ?? model.state}. Retry, or fix the setting, to try again.`);
-      }
-      pausedLogged = paused;
-      return paused;
-    }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("ger.executable")) {
         model.restart();
         void model.refresh();
       }
     }),
+    poller,
+    describing,
   );
   void model.refresh();
   return { model, overviewView, stackView, changeView, task, threads, statusItem, events, diffTabs, useUi: showTo };

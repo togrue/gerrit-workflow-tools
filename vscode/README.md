@@ -667,6 +667,20 @@ two primary buttons.
 once per session, with **Run ger config --migrate**, which renames them all in the *ger* terminal.
 
 **Gerrit's event stream.** When `ger serve` can follow Gerrit's event stream (`ssh … gerrit
+stream-events`: it needs ssh, a key Gerrit accepts and the *Stream Events* capability), the
+views refresh a second after review activity happens — a new patchset, comment, vote, reviewer,
+merge — instead of at the next poll, and the poll drops to a 15-minute safety net. When it
+cannot (HTTP only, no key, no capability, the connection dropped), nothing changes: the views
+poll every `ger.pollSeconds` as before, and no notification says so. The status bar tooltip
+says which of the two is keeping the views current, and why; the log (**Show Log**) has one line
+per change. Beside *Review chains*' title a few words say which it is: *live*; *checked 12:40 · next
+in 58 min* while the views poll; *not reachable since 12:41* while Gerrit cannot be asked. A
+`ger serve` that dies under the views is started again at once, and that is one line in the log
+(*ger serve exited (137) and was started again: listening on …*), nothing on screen. Configure the
+stream with the git keys `ger.eventStream` (`auto`, `on`, `off`) and
+`ger.eventStreamHost` / `Port` / `User`:
+[docu/Configuration.md](../docu/Configuration.md#ger-serve--gereventstream).
+
 **Your repository.** The views follow it as the built-in Git view does: a commit, a checkout, a
 `ger edit` and its `git rebase --continue` (anything that moves `HEAD`, a branch or a rebase) or a fetch that moves the upstream, refresh *Local stack*,
 the *in your stack* markers and the Change view's buttons about a second after the last change, also when you
@@ -676,16 +690,6 @@ too: a file you save, or one changed elsewhere (a terminal, an agent), and the i
 the stop's *changed, not amended* and *staged* files, and Continue's words, within a moment, one
 `GET /stack` for each burst of changes (VS Code's own save and file events; git is not polled). A
 refused Continue or Work on Next reads the stack again too, so the buttons under the refusal agree with it.
-
-stream-events`: it needs ssh, a key Gerrit accepts and the *Stream Events* capability), the
-views refresh a second after review activity happens — a new patchset, comment, vote, reviewer,
-merge — instead of at the next poll, and the poll drops to a 15-minute safety net. When it
-cannot (HTTP only, no key, no capability, the connection dropped), nothing changes: the views
-poll every `ger.pollSeconds` as before, and no notification says so. The status bar tooltip
-says which of the two is keeping the views current, and why; the log (**Show Log**) has one line
-per change. Configure it with the git keys `ger.eventStream` (`auto`, `on`, `off`) and
-`ger.eventStreamHost` / `Port` / `User`:
-[docu/Configuration.md](../docu/Configuration.md#ger-serve--gereventstream).
 
 These are VS Code settings. How ger itself behaves (`ger.reviewCheckout`, `ger.webUrl` and
 the rest) is git configuration, the same for the extension and the command line: see

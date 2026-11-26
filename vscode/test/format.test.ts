@@ -31,6 +31,7 @@ import {
   WORDED_REASONS,
   currentHeadline,
   headlineNews,
+  liveness,
 } from "../src/format";
 import { attended } from "./fixtures";
 
@@ -300,4 +301,14 @@ test("text in a Markdown tooltip shows as it is: no &nbsp; between its words, no
   assert.equal(shown.replace(/\\(.)/g, "$1"), refusal);
   assert.equal(markdownText("$(warning) *a* [b](c) <d> & e"), "\\$\\(warning\\) \\*a\\* \\[b\\]\\(c\\) \\<d\\> \\& e");
   assert.equal(markdownText("one\ntwo"), "one\n\ntwo");
+});
+
+test("F3, S1: beside Review chains' title, whether the views follow Gerrit live, and if not, how fresh they are", () => {
+  const at = new Date(2026, 10, 26, 12, 40);
+  const now = at.getTime() + 2 * 60_000;
+  assert.equal(liveness({ live: true, checked: at, now }), "live");
+  assert.equal(liveness({ live: false, checked: at, nextAt: now + 58 * 60_000, now }), "checked 12:40 · next in 58 min");
+  assert.equal(liveness({ live: false, checked: at, nextAt: now + 90 * 60_000, now }), "checked 12:40 · next at 14:12");
+  assert.equal(liveness({ live: false, checked: at, awaySince: new Date(2026, 10, 26, 12, 41), now }), "not reachable since 12:41", "Gerrit away wins over live");
+  assert.equal(liveness({ live: false, now }), "not live");
 });

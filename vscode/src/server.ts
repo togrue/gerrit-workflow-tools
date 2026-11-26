@@ -33,6 +33,10 @@ export class ServeFailed extends Error {
 export class GerProcess {
   private child: ChildProcess | undefined;
   private starting: Promise<GerClient> | undefined;
+  /** The exit code of a service that died under the views, while it is started again: the restart is one log line. */
+  private died: number | null | undefined;
+  /** What ger serve printed on stderr before: a restart says it again, and it is not logged twice. */
+  private readonly said = new Set<string>();
   /**
    * Called when a service that was serving exits without being asked to (killed, crashed): the
    * model starts it again at once, so a failed restart is said while the views are watched, not
@@ -64,7 +68,12 @@ export class GerProcess {
     // The service stops when its stdin closes, so it cannot outlive the editor.
     const argv = [...this.program(), "serve", "--exit-with-stdin"];
     const shown = shellCommandLine(argv, process.platform === "win32" ? "cmd" : "posix");
-    this.log(`starting: ${shown}  (in ${this.cwd})`);
+    // Started again after it died under the views: one line, once it listens (a failed restart is said in full).
+    const again = this.died !== undefined ? { code: this.died } : undefined;
+    this.died = undefined;
+    if (!again) {
+      this.log(`starting: ${shown}  (in ${this.cwd})`);
+    }
     return new Promise<GerClient>((resolve, reject) => {
       const { command, args, shell } = spawnable(argv);
       const child = spawn(command, args, { cwd: this.cwd, shell, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
@@ -72,6 +81,7 @@ export class GerProcess {
       let out = "";
       let err = "";
       let settled = false;
+      let quietUntil = again ? Infinity : 0;
       const fail = (reason: Error) => {
         if (!settled) {
           settled = true;
@@ -107,25 +117,34 @@ export class GerProcess {
         }
         settled = true;
         clearTimeout(timer);
-        this.log(`ger serve is listening on ${first.url} for ${first.repo}`);
-        resolve(this.checked(new GerClient(first)));
+        this.log(again ? `ger serve exited (${again.code ?? "killed"}) and was started again: listening on ${first.url}` : `ger serve is listening on ${first.url} for ${first.repo}`);
+        quietUntil = again ? Date.now() + 5000 : 0;
+        resolve(this.checked(new GerClient(first), Boolean(again)));
       });
       child.stderr?.setEncoding("utf8").on("data", (chunk: string) => {
         err += chunk;
-        this.log(chunk.trimEnd());
+        // While it starts again (and a moment after), what it said at its first start is not said twice.
+        const fresh = chunk.trimEnd().split("\n").filter((line) => Date.now() >= quietUntil || !this.said.has(line));
+        chunk.trimEnd().split("\n").forEach((line) => this.said.add(line));
+        if (fresh.length) {
+          this.log(fresh.join("\n"));
+        }
       });
       child.on("error", (error: NodeJS.ErrnoException) =>
         fail(error.code === "ENOENT" ? new ExecutableNotFound(argv[0]) : new ServeFailed(`could not run ${shown}: ${error.message}`)),
       );
       child.on("exit", (code) => {
-        this.log(`ger serve exited (${code ?? "killed"})`);
         const died = this.child === child && settled;
+        if (!died) {
+          this.log(`ger serve exited (${code ?? "killed"})`);
+        }
         if (this.child === child) {
           this.child = undefined;
           this.starting = undefined;
         }
         fail(new ServeFailed(err.trim() || `${shown} exited with code ${code}`));
         if (died) {
+          this.died = code;
           this.onDied(code);
         }
       });
@@ -133,7 +152,7 @@ export class GerProcess {
   }
 
   /** `client` once its API is one this extension can use; else the service stops and the reason is the error. */
-  private async checked(client: GerClient): Promise<GerClient> {
+  private async checked(client: GerClient, again = false): Promise<GerClient> {
     let health: Health;
     try {
       health = await client.health();
@@ -142,14 +161,18 @@ export class GerProcess {
       throw error;
     }
     const problem = apiProblem(health.api, REQUIRED_API);
-    this.log(`ger ${health.version} speaks API ${health.api}; the extension needs ${REQUIRED_API}: ${problem ? "refused" : "compatible"}`);
+    if (!again || problem) {
+      this.log(`ger ${health.version} speaks API ${health.api}; the extension needs ${REQUIRED_API}: ${problem ? "refused" : "compatible"}`);
+    }
     if (problem) {
       this.log(problem.message);
       this.stop();
       throw problem;
     }
     client.served = health;
-    this.onServed(health);
+    if (!again) {
+      this.onServed(health); // the same ger: its versions and warnings were said when it first started
+    }
     return client;
   }
 
