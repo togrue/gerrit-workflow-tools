@@ -45,8 +45,18 @@
     return h("span", { class: `${cls} tone-${item.tone}${item.stale ? " stale" : ""}`, title: item.title }, icon(item.icon), item.text);
   }
 
+  /** Set once the extension traces (a render carries `trace`): what the page sends then says when (`at`). */
+  let tracing = false;
+  const clock = () => (typeof performance === "object" ? performance.timeOrigin + performance.now() : Date.now());
+
   function post(type, fields) {
-    vscode.postMessage({ type, ...(fields || {}) });
+    vscode.postMessage(tracing ? { type, at: clock(), ...(fields || {}) } : { type, ...(fields || {}) });
+  }
+
+  /** Tell the extension render `seq` is on screen: after the next frame is painted. */
+  function painted(seq) {
+    const later = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (run) => setTimeout(run, 0);
+    later(() => setTimeout(() => post("painted", { trace: seq, at: clock() }), 0));
   }
 
   /** The panel shown instead of content: a sentence, and maybe one button. */
@@ -97,7 +107,11 @@
     window.addEventListener("message", (event) => {
       const message = event.data;
       if (message && message.type === "render") {
+        tracing = message.trace !== undefined;
         draw(message.vm);
+        if (message.trace) {
+          painted(message.trace);
+        }
       } else if (message && other) {
         other(message);
       }

@@ -75,7 +75,8 @@ it went, the same whether it succeeded or failed.
 subprocess and Gerrit round trip the request made, and their time; `calls` lists the 40
 slowest of them in the order made, and `calls_left_out` how many more there were. Calls a
 background thread makes are not the request's. Without the header nothing is collected beyond
-a context lookup per call, and no header is sent.
+a context lookup per call, and no header is sent. The VS Code extension sends it while its
+trace is on ([`ger.trace`](../../../vscode/README.md#tracing)).
 
 ### Requests are serialised
 

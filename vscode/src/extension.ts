@@ -26,7 +26,9 @@ import { GerProcess } from "./server";
 import { CommitArg, StackView, commitTarget } from "./stackView";
 import { waitsForYou } from "./state";
 import { statusBar } from "./statusBar";
-import { Ui, feedback, saveReplyResolved, ui, useUi } from "./ui";
+import { activeTracer } from "./trace";
+import { startTracing, tracedCommand, tracedTree, tracedUi } from "./tracing";
+import { Ui, feedback, saveReplyResolved, ui, useUi, vscodeUi } from "./ui";
 import { setUpstream } from "./upstream";
 import { voteAndPublish } from "./vote";
 import { AttentionWalk } from "./walk";
@@ -111,12 +113,16 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     skew(health);
     warnings(health);
   };
+  // Before anything asks ger serve: the first requests are traced too. Off, nothing is wrapped.
+  context.subscriptions.push(startTracing(logLine));
+  const showTo = (next: Ui) => useUi(activeTracer() ? tracedUi(next) : next);
+  showTo(vscodeUi);
   const model = new Model(new GerProcess(repo, gerProgram, logLine, served), context.workspaceState, repo);
   const overviewView = new OverviewView(model, context.workspaceState);
   const stackView = new StackView(context.extensionUri, model);
   const changeView = new ChangeView(context.extensionUri, model);
 
-  const overviewTree = vscode.window.createTreeView("ger.overview", { treeDataProvider: overviewView });
+  const overviewTree = vscode.window.createTreeView("ger.overview", { treeDataProvider: activeTracer() ? tracedTree(overviewView) : overviewView });
   // Kept while hidden: the selection in the stack, and a commit message you are still typing.
   const kept = { webviewOptions: { retainContextWhenHidden: true } };
   const stackPane = vscode.window.registerWebviewViewProvider("ger.stack", stackView, kept);
@@ -433,7 +439,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.release": (arg: unknown) => setHold(arg, false),
   };
   for (const [name, run] of Object.entries(commands)) {
-    context.subscriptions.push(vscode.commands.registerCommand(name, run as (...args: unknown[]) => unknown));
+    context.subscriptions.push(vscode.commands.registerCommand(name, tracedCommand(name, run as (...args: unknown[]) => unknown)));
   }
 
   // Files as they are in a commit, for diffs and for changes that are not checked out.
@@ -486,7 +492,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     }),
   );
   void model.refresh();
-  return { model, overviewView, stackView, changeView, threads, statusItem, events, diffTabs, useUi };
+  return { model, overviewView, stackView, changeView, threads, statusItem, events, diffTabs, useUi: showTo };
 }
 
 export function deactivate(): void {

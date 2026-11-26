@@ -84,6 +84,13 @@
           "scope": "window",
           "order": 5,
           "markdownDescription": "Close a diff tab opened from the Change view once it is stale: its commit left the stack (rewritten by a rebase, in the views or in a terminal, an amend or a reorder; dropped; or merged past the upstream), or, with your file on its right, HEAD moved off it. Off: the tab stays open, its title marked *stale*. A tab that may hold unsaved edits is never closed."
+        },
+        "ger.trace": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "order": 6,
+          "markdownDescription": "Measure how fast the views answer: a file each user action (a command, a click or key in a view) is appended to as one JSON line, with its time to the first visible response and until settled, and the requests to `ger serve` it caused with their git and Gerrit calls. Empty: off. The environment variable `GER_TRACE` does the same and wins. Format: the extension's README, *Tracing*."
         }
       }
     },
