@@ -944,6 +944,7 @@ estimate, the totals per loop and the steps over budget. See
 | `src/compat.ts` | The API version the extension needs (`REQUIRED_API`), and the rule for whether a served API and a package version fit. No `vscode` import, unit-tested. |
 | `src/format.ts` | Words, ages, urgency, activity tracking. Pure, unit-tested. |
 | `src/model.ts` | The shared state the views read; refresh; what you have seen. |
+| `src/movePreview.ts` | Local stack's conflict preview (`GET /stack/moves`): which neighbours cannot swap places. No `vscode` import. |
 | `src/overviewView.ts`, `src/stackView.ts`, `src/changeView.ts` | The three views. |
 | `src/rows.ts` | The `contextValue` of every tree row, which the menus in `package.json` match with `viewItem =~ /…/`. Pinned against them by `test/package.test.ts`. |
 | `src/comments.ts` | Editor comment threads, stepping, draft replies, Suggest Edit and Apply. |
