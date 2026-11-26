@@ -10,7 +10,7 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
 
-from gerrit_workflow_tools.core.rebase_state import RebaseProgress, rebase_progress
+from gerrit_workflow_tools.core.rebase_state import RebaseProgress, rebase_progress, uncommitted_files
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range, read_commit_rows
 
 
@@ -107,7 +107,7 @@ def load_rebasing_stack(
     rows: list[Commit] = []
     if (at := _stopped_on_head(replayed, start, made_at, rebase, was)) is not None:
         steps[at] = RebaseStep.CURRENT
-        rebase = replace(rebase, applied=True, moved=at < len(replayed) - 1)
+        rebase = replace(rebase, applied=True, moved=at < len(replayed) - 1, uncommitted=uncommitted_files(cwd))
     elif rebase.applied and rebase.amend is not None:
         rebase = replace(rebase, moved=True)  # applied, then reset away: maybe split into new commits
     elif was is not None and not rebase.applied:

@@ -120,6 +120,8 @@ def stop_refusal(progress: RebaseProgress, action: RebaseAction, *, walk_on: str
     if action is RebaseAction.CONTINUE:
         if progress.unmerged:
             return f"the index has unresolved conflicts; {_resolve_step(progress.unmerged, walk_on)}"
+        if progress.uncommitted:
+            return unstaged_refusal(progress.uncommitted, progress.stop)
         return (
             "the commit it stopped on was committed by hand, so nothing is left to apply and "
             f"continuing would stop again: {SKIP} goes on from HEAD, or {ABORT}"
@@ -138,6 +140,13 @@ def stop_refusal(progress: RebaseProgress, action: RebaseAction, *, walk_on: str
         "skipping would only throw away your uncommitted changes; "
         f"go on with {CONTINUE}, or {ABORT}"
     )
+
+
+def unstaged_refusal(paths: Collection[str], stop: RebaseStop | None) -> str:
+    """Why Continue waits over unstaged changes to *paths*: git refuses over them; add, amend or stash them."""
+    on_conflict = stop in (RebaseStop.CONFLICT, RebaseStop.RESOLVED)
+    take = "`git add` them" if on_conflict else "amend them in (`git commit --amend -a`)"
+    return f"you have unstaged changes to {', '.join(paths)}; {take} or `git stash` them, then {CONTINUE}"
 
 
 def _unstaged_paths(cwd: Path | str | None) -> list[str]:
@@ -176,9 +185,7 @@ def go_on_refusal(
     if refusal := stop_refusal(progress, action, walk_on=walk_on):
         return refusal
     if action is RebaseAction.CONTINUE and (paths := _unstaged_paths(cwd)):
-        on_conflict = progress.stop in (RebaseStop.CONFLICT, RebaseStop.RESOLVED)
-        take = "`git add` them" if on_conflict else "amend them in (`git commit --amend -a`)"
-        return f"you have unstaged changes to {', '.join(paths)}; {take} or `git stash` them, then {CONTINUE}"
+        return unstaged_refusal(paths, progress.stop)
     return None
 
 

@@ -1077,8 +1077,10 @@ def test_rebase_refusal_is_the_check_every_go_on_makes_unstaged_changes_too(stac
     (stack_repo / "a.txt").write_text("edited at the stop\n", encoding="utf-8")
     refused = _get(api, "/rebase/refusal")["refused"]
     assert refused.startswith("you have unstaged changes to a.txt; amend them in (`git commit --amend -a`)")
-    # The stack's own `refused` is told from the stop alone: it does not look at the work tree.
-    assert "continue" not in _get(api, "/stack")["rebase"]["refused"]
+    # The stack says it too, with the files, before anybody presses Continue: one verdict, one wording.
+    rebase = _get(api, "/stack")["rebase"]
+    assert (rebase["uncommitted"], rebase["actions"]) == (["a.txt"], ["abort"])
+    assert rebase["refused"]["continue"] == refused
     with pytest.raises(BadRequest, match="action must be one of continue, abort, skip"):
         _get(api, "/rebase/refusal", action="onward")
 

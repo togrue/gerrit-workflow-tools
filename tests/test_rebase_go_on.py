@@ -395,7 +395,9 @@ def test_skip_after_a_resolution_committed_by_hand_is_refused_and_keeps_the_work
     assert "it stopped with the commit applied (an `edit`, or a conflict's resolution committed by hand)" in err
     assert rebase_in_progress(stack_repo) and git_out("rev-parse", "HEAD", cwd=stack_repo) == head
     assert (stack_repo / "c.txt").read_text(encoding="utf-8") == "resolved\nextra\n"
-    assert (_served(stack_repo)["stop"], _served(stack_repo)["actions"]) == ("edit", ["continue", "abort"])
+    # The unstaged change is served with the stop: Continue waits for it, before anybody presses it.
+    served = _served(stack_repo)
+    assert (served["stop"], served["actions"], served["uncommitted"]) == ("edit", ["abort"], ["c.txt"])
 
 
 def test_continue_over_unstaged_changes_after_a_resolution_committed_by_hand_says_to_amend_them(

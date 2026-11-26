@@ -322,6 +322,11 @@ The top-level `rebase` is `null` without a rebase, else:
 - `unmerged` — the paths the index holds as unresolved conflicts, at whatever stop (a `git stash
   pop` at an `edit` stop can leave some). Each is the literal path relative to the worktree's top,
   as the file is named (`café.txt`), never git's C-quoted form (`"caf\303\251.txt"`).
+- `uncommitted` — at a stop with the commit applied (`edit`, `split`, `paused`): the tracked
+  files changed in the work tree and not staged, compared by content (a fix saved, not amended).
+  `git rebase --continue` refuses over them (what is staged it amends in), and `git rebase
+  --abort` would throw them away (`ger rebase --abort` keeps them in a stash). `[]` otherwise,
+  and at a stop on a conflict. Cost: one `git diff` while a rebase is stopped.
 - `as_before` — `true` when the stack is the branch as it was before the rebase: a rebase git
   runs through `am` (`git rebase --apply`, `rebase-apply`) keeps no todo, so no commit carries
   a `rebase` step. It still stops only on a conflict, and `stop`, `applied` and `unmerged` say
@@ -329,14 +334,14 @@ The top-level `rebase` is `null` without a rebase, else:
   now either way.
 - `actions` — the ways on from this stop, in order, by the verdict `ger rebase` refuses by
   (`RebaseProgress.actions`; `ger rebase --continue|--skip` and `ger edit -n` judge the stop as
-  this serves it, `stopped_rebase`): `continue` unless paths are still unmerged, `abort` always,
+  this serves it, `stopped_rebase`): `continue` unless paths are still unmerged or `uncommitted` holds a file, `abort` always,
   `skip` at a `conflict` or `resolved` stop, where it leaves out the commit not applied yet (at
   an `edit`, `split` or `paused` stop the commit is in, and `git rebase --skip` would only throw
   away what is not committed). At a `null` stop where the conflict was committed by hand,
   `skip` once the index and work tree hold nothing it would throw away: it keeps `HEAD` and goes
   on. Then a rebase through `am` has nothing left to continue with (git would stop again, "No
-  changes"), so `continue` is left out there. A client offers these and no others. `continue`
-  can still be refused over unstaged changes, which this does not look at:
+  changes"), so `continue` is left out there. A client offers these and no others. At a stop on a
+  conflict `continue` can still be refused over unstaged changes, which this does not look at:
   [`GET /rebase/refusal`](#get-rebaserefusalactioncontinue) does, when asked.
 - `refused` — for each way on `actions` leaves out, the refusal `ger rebase --<action>` prints
   for it, by action (`{"skip": "--skip leaves out …"}`): what a client says when one is asked for
@@ -422,8 +427,8 @@ ahead plus behind. Two git calls: all remote branches are measured by one `for-e
 Why `ger rebase --<action>` (`continue`, `abort` or `skip`; `continue` when not given) would
 refuse now, in its words, as `refused`; `null` when it would run. This is the one check every ger
 "go on" makes before git runs (`ger rebase --continue|--skip`, `ger edit -n`): the stop as
-`rebase.refused` judges it, and for `continue` also the work tree, which `GET /stack` does not
-look at: unstaged changes to tracked files (`you have unstaged changes to a.txt; amend them in
+`rebase.refused` judges it (unstaged changes at an applied stop included, as `uncommitted`), and
+for `continue` also the work tree afresh, with the index refreshed as git does: unstaged changes to tracked files (`you have unstaged changes to a.txt; amend them in
 (…) or git stash them, then ger rebase --continue`). Without a rebase it says there is none. A
 client asks it just before it starts the step in a terminal, so a refusal is said where the
 client is, not only in the terminal. Cost: two git calls (`update-index --refresh`, `diff-files`)

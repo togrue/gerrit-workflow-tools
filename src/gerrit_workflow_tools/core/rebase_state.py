@@ -104,6 +104,10 @@ class RebaseProgress:
     reused: tuple[str, ...] = ()
     """Paths of this stop's conflict that git rerere resolved with a resolution recorded before:
     staged already, or written into the file and still unmerged. Nobody has looked at them yet."""
+    uncommitted: tuple[str, ...] = ()
+    """Tracked files changed in the work tree and not staged, at a stop with the commit applied whole
+    or between commits: an edit saved, not amended. ``git rebase --continue`` refuses over them (it
+    amends what is staged), and ``git rebase --abort`` would throw them away."""
 
     @property
     def committed_by_hand(self) -> bool:
@@ -133,7 +137,8 @@ class RebaseProgress:
     def actions(self) -> tuple[RebaseAction, ...]:
         """The ways on from this stop, by one verdict for ``ger rebase``, ``ger edit -n`` and ``ger serve``.
 
-        Abort always. Continue unless paths are still unmerged. Skip at a stop on a conflict
+        Abort always. Continue unless paths are still unmerged, or files are changed and not
+        committed at a stop with the commit applied (git refuses over them). Skip at a stop on a conflict
         (resolved or not), where it leaves out the commit not applied yet: at any other stop the
         commit is already in, and ``git rebase --skip`` would only throw away what is not committed.
         Where the conflict's resolution was committed by hand as another commit, Skip goes on from
@@ -141,7 +146,8 @@ class RebaseProgress:
         to continue with (git would say "No changes"), so Skip is its only way on.
         """
         settled_by_hand = self.committed_by_hand and self.clean
-        go_on = () if self.unmerged or (settled_by_hand and not self.keeps_todo) else (RebaseAction.CONTINUE,)
+        held = self.unmerged or self.uncommitted or (settled_by_hand and not self.keeps_todo)
+        go_on = () if held else (RebaseAction.CONTINUE,)
         on_conflict = self.stop in (RebaseStop.CONFLICT, RebaseStop.RESOLVED)
         skip = (RebaseAction.SKIP,) if on_conflict or settled_by_hand else ()
         return (*go_on, RebaseAction.ABORT, *skip)
@@ -238,6 +244,7 @@ def rebase_progress(cwd: Path | str | None, *, repo_dir: Path | None = None) -> 
         clean=moved and _nothing_uncommitted(cwd),
         folding_into=(amend or _state_word(repo_dir / "HEAD")) if folding and not applied and not moved else None,
         reused=_reused_resolutions(cwd, repo_dir, current, unmerged) if current and not applied and not moved else (),
+        uncommitted=uncommitted_files(cwd) if applied else (),
     )
 
 
@@ -300,6 +307,13 @@ def _apply_progress(cwd: Path | str | None, repo_dir: Path) -> RebaseProgress:
         moved=moved,
         clean=moved and current is not None and _nothing_uncommitted(cwd),
     )
+
+
+def uncommitted_files(cwd: Path | str | None) -> tuple[str, ...]:
+    """Tracked files whose work tree differs from the index, a submodule's own state left out: what
+    an edit stop holds that Continue would not amend in. Compared by content, the index not written."""
+    out = git("diff", "--name-only", "-z", "--ignore-submodules", cwd=cwd, check=False).stdout
+    return tuple(nul_paths(out))
 
 
 def _nothing_uncommitted(cwd: Path | str | None) -> bool:
