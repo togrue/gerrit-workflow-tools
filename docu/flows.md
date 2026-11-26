@@ -114,15 +114,19 @@ A **gap** names the work that would close it.
 | `ger.copyChangeId` | `ger change-id REV` | Review chains, Local stack, and the palette for the change shown |
 | `ger.copySha` | `ger sha CHANGEISH` | the local commit; for a change not in the stack, its current patch set's |
 | `ger.sortChains` | UI only | `ger inbox` prints chains by state |
+| `ger.showAllChains` | `ger inbox` | every chain again while a review narrows *Review chains* to its own |
+| `ger.focusReview` | `ger review --status` | back to the chain under review, as `--status` names it |
 | `ger.openDiff` | UI only | `ger review --stage` shows the diff to git's own tools |
 | `ger.openAllChanges` | `ger review CHANGEISH` (staged), then `git diff --cached` | every file of the change in one view |
 | `ger.openLocation` | UI only | |
 | `ger.nextComment` | UI only | `ger show` lists every unresolved chain |
 | `ger.prevComment` | UI only | |
+| `ger.next` | what it names: `ger review --next`, `ger edit -n`, `ger push`, … | the Change view's primary button, `Alt+Enter` |
 | `ger.reply` | `ger reply CHAIN -m MSG`, with `--resolve` / `--unresolve` | the box's Resolved toggle starts where the comment stands |
 | `ger.replySaveResolved` | `ger reply CHAIN -m MSG --resolve` | Ctrl+Shift+Enter in the *Reply as Draft…* box |
 | `ger.replyDone` | `ger reply CHAIN --done` | |
 | `ger.thread.reply` | `ger reply CHAIN -m MSG --resolve` / `--unresolve` | Save in a thread's reply box, as its Resolved toggle says |
+| `ger.thread.done` | `ger reply CHAIN -m MSG --resolve`, `ger reply CHAIN --done` | Done in a thread's reply box |
 | `ger.thread.cancel` | UI only | Cancel in a thread's reply box |
 | `ger.thread.markResolved` | `ger reply CHAIN --resolve` (with your draft there) | the Resolved toggle in a thread's header; with no draft yet it only sets what Save does |
 | `ger.thread.markUnresolved` | `ger reply CHAIN --unresolve` (with your draft there) | |
@@ -133,7 +137,10 @@ A **gap** names the work that would close it.
 | `ger.comment.cancelNew` | UI only | closes a comment box |
 | `ger.comment.suggest` | `ger comment PATH:START-END -m MSG` with a ```` ```suggestion ```` block in MSG | opens the comment box on the selected lines with them in a suggestion block, to change |
 | `ger.comment.applySuggestion` | `ger show --json` (each comment's `suggested_edits`: path, range, new text), then edit the file | writes the edit a comment suggests into your file where its lines are now (the thread's title bar); nothing is committed. No ger command writes it for you yet |
-| `ger.applySuggestion` | `ger show --json`, as above | the same, from the comment's row in the Change view |
+| `ger.applySuggestion` | `ger show --json`, as above | the same, for a chain the caller names (the Change view's rows no longer offer it: they are an index) |
+| `ger.comment.goto` | `ger show CHANGEISH` lists each chain at `PATH:LINE` | *Go there* in a change row's comment hover |
+| `ger.comment.done` | `ger reply CHAIN --done` | *Reply Done* in a change row's comment hover |
+| `ger.comment.apply` | `ger show --json`, as above | *Apply* in a change row's comment hover |
 | `ger.comment.file` | `ger comment PATH -m MSG` | |
 | `ger.comment.edit` | `ger comment --edit ID -m MSG` | turns your comment into a text box; *Save* writes it |
 | `ger.comment.save` | `ger comment --edit ID -m MSG` | |

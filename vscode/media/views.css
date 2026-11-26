@@ -34,6 +34,9 @@ body {
 .tone-warn {
   color: var(--vscode-list-warningForeground, var(--vscode-charts-yellow));
 }
+.tone-info {
+  color: var(--vscode-charts-blue, var(--vscode-textLink-foreground));
+}
 .tone-dim {
   color: var(--vscode-disabledForeground);
 }
@@ -592,3 +595,50 @@ select:focus {
   margin: 0;
   accent-color: var(--vscode-checkbox-selectBackground, var(--vscode-button-background));
 }
+
+/* The Change view's Next button: the one thing to do now. */
+.next-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--vscode-sideBar-background);
+}
+.next-bar .info-buttons {
+  padding-left: 22px;
+}
+.next-bar .button {
+  min-width: 10em;
+}
+
+/* Local stack: the comments of a row, on hovering its comment badge. */
+.comment-hover {
+  position: absolute;
+  z-index: 10;
+  padding: 6px 8px;
+  overflow-y: auto;
+  color: var(--vscode-editorHoverWidget-foreground);
+  background: var(--vscode-editorHoverWidget-background);
+  border: 1px solid var(--vscode-editorHoverWidget-border);
+  border-radius: 3px;
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow);
+}
+.comment-hover .hover-entry + .hover-entry {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--vscode-editorHoverWidget-border);
+}
+.comment-hover .hover-entry > div:first-child {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.comment-hover .comment-text {
+  margin: 2px 0 2px 20px;
+  white-space: normal;
+}
+.comment-hover .hover-links {
+  display: flex;
+  gap: 10px;
+  margin-left: 20px;
+}
+

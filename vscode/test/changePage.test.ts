@@ -15,51 +15,39 @@ const changePage = (view: ChangeVm) => fakePage("change", view);
 const byClass = (cls: string) => (element: FakeElement) => element.className.split(" ").includes(cls);
 const button = (box: FakeElement, text: string) => box.all((element) => element.tagName === "BUTTON" && element.textContent === text)[0];
 
-/** A chain about the whole change, opened in the view so its reply box shows; `draft`: with your draft reply in it. */
-function wholeChange(draft: boolean) {
+const buttons = (row: FakeElement) => row.all((element) => element.tagName === "BUTTON" && !element.className.includes("twist")).map((element) => element.title);
+
+test("the comment list is an index: a chain in a file has no reply box or answer buttons, a click goes to its editor thread", () => {
+  const inFile = { path: "src/parser.py", line: 12 };
+  const page = changePage(changeVm(state({ chains: [chain("there", [comment("Rename this.", inFile)], inFile)] })));
+  const [row] = page.root.all(byClass("thread"));
+  assert.deepEqual(buttons(row), ["Keep for Me (Not for the Agent)"], "answering is the editor thread's: Reply, Done, Apply and Delete are there");
+  row.click();
+  assert.deepEqual(page.posted.at(-1), { type: "thread", id: "there", action: "open" });
+  page.root.all(byClass("twist"))[0].click();
+  assert.equal(page.root.all(byClass("reply-box")).length, 0, "opened, it shows the text whole, and no box to answer in");
+});
+
+test("a chain about the whole change, which no file shows, is answered from its row: Reply, Done, Delete, and no box in the side bar", () => {
   const whole = { path: "/PATCHSET_LEVEL", line: null };
-  const comments = [comment("Looks good overall.", whole), ...(draft ? [comment("Added a test.", { ...whole, state: "draft", comment_id: "d1", author: undefined })] : [])];
+  const comments = [comment("Looks good overall.", whole), comment("Added a test.", { ...whole, state: "draft", comment_id: "d1", author: undefined })];
   const page = changePage(changeVm(state({ chains: [chain("whole", comments, whole)] })));
   page.root.all(byClass("twist"))[0].click();
-  const box = page.root.all(byClass("reply-box"))[0];
-  assert.ok(box, "the chain shows its reply box once opened");
-  return { ...page, box };
-}
-
-test("the Change view's reply box is, as on Gerrit, Resolved on the left and Discard, Cancel, Save bottom right", () => {
-  const { box } = wholeChange(true);
-  const bar = box.all(byClass("message-bar"))[0];
-  const order = bar.children.map((child) => (typeof child === "string" ? child : child.tagName === "BUTTON" ? child.textContent : child.className));
-  assert.deepEqual(order, ["resolved", "detail", "Discard", "Cancel", "Save"]);
+  assert.equal(page.root.all(byClass("reply-box")).length, 0);
+  const [row] = page.root.all(byClass("thread"));
+  assert.deepEqual(buttons(row), ["Reply as Draft…", "Reply Done and Resolve as Draft", "Keep for Me (Not for the Agent)", "Delete Your Draft Reply…"]);
+  row.all((element) => element.title === "Reply as Draft…")[0].click();
+  assert.deepEqual(page.posted.at(-1), { type: "thread", id: "whole", action: "reply" }, "the reply box opens at the top of the window");
 });
 
-test("Discard shows in the Change view's reply box only while your draft reply is there, and asks through the row's trash", () => {
-  const without = wholeChange(false);
-  assert.equal(button(without.box, "Discard").hidden, true, "no draft of yours: nothing to discard, Cancel covers it");
-
-  const { box, posted } = wholeChange(true);
-  const discard = button(box, "Discard");
-  assert.equal(discard.hidden, false);
-  assert.equal(discard.title, "Delete Your Draft Reply…", "named as the row's trash");
-  discard.click();
-  assert.deepEqual(posted.at(-1), { type: "thread", id: "whole", action: "discard" });
-  assert.ok(!posted.some((message) => message.action === "chain.delete"), "the extension runs the trash's command, not the page");
-});
-
-test("a confirmed Discard empties the reply box and resets Resolved; a dismissed one keeps both", () => {
-  const { box, send } = wholeChange(true);
-  const text = box.all((element) => element.tagName === "TEXTAREA")[0];
-  const resolved = box.all((element) => element.tagName === "INPUT")[0];
-  const standing = resolved.checked;
-  text.value = "And the docs.";
-  // The deleted draft's choice, kept while text is typed: a fresh Save must not resolve with it.
-  resolved.checked = !standing;
-  send({ type: "discarded", id: "whole", deleted: false });
-  assert.equal(text.value, "And the docs.");
-  assert.equal(resolved.checked, !standing);
-  send({ type: "discarded", id: "whole", deleted: true });
-  assert.equal(text.value, "");
-  assert.equal(resolved.checked, standing, "back where the comment stands, as Cancel leaves it");
+test("Next is one primary button with what it does on it, and runs ger.next", () => {
+  const view = { ...changeVm(state({})), next: { label: "Vote and publish", title: "Gerrit waits for your review of it (Alt+Enter)" } };
+  const page = changePage(view);
+  const next = button(page.root, "Vote and publish");
+  assert.ok(next, "the button names what it does");
+  assert.equal(next.className, "button", "the primary button");
+  next.click();
+  assert.deepEqual(page.posted.at(-1), { type: "command", command: "ger.next", args: [] });
 });
 
 test("stopped by a rebase on a conflict, the Change view's buttons run the rebase's commands and a conflicted file opens to resolve", () => {

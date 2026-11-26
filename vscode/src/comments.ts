@@ -380,27 +380,117 @@ export class CommentThreads implements vscode.Disposable {
     const index = (stepFrom(this.position, ids, direction) + ids.length) % ids.length;
     const chain = chains[index];
     this.position = { change: changeKey(this.view.target), id: chain.root_id, order: ids };
-    this.reveal(chain);
-    if (NOT_FILES.includes(chain.path)) {
-      await this.view.focusThread(chain);
-    } else {
-      await this.show(chain);
-    }
+    await this.goTo(chain);
     ui().status(`Comment ${index + 1} of ${chains.length}${reviewing ? "" : " to answer"}`, 4000);
   }
 
   /**
-   * Open the file at `chain`'s line with its thread expanded there, the other threads closed.
-   * A chain the editor shows no thread for (a resolved one) just opens its line.
+   * Next comment, as the Change view's Next does it: on from where the walk stands to the first
+   * chain of the walk not gone to yet on this change; with none left, the next one, as Alt+F9.
+   */
+  async stepUnread(): Promise<void> {
+    const chains = this.view.shown?.own === false ? this.view.openChains() : this.view.toAnswer();
+    const visited = this.visitedHere();
+    const ids = chains.map((chain) => chain.root_id);
+    const from = Math.max(0, stepFrom(this.position, ids, 1));
+    const order = [...ids.slice(from), ...ids.slice(0, from)];
+    const unread = order.find((id) => !visited.has(id));
+    if (!unread) {
+      return this.step(1);
+    }
+    const chain = chains[ids.indexOf(unread)];
+    this.position = { change: changeKey(this.view.target), id: chain.root_id, order: ids };
+    await this.goTo(chain);
+    ui().status(`Comment ${ids.indexOf(unread) + 1} of ${chains.length}`, 4000);
+  }
+
+  /**
+   * Go to `chain` where it is answered: its row marked in the Change view, and the file opened at
+   * its thread (`show`); one about the whole change (no line in a file) is shown in the Change view.
+   * Nothing is asked of ger serve: the chains are those the Change view has loaded.
+   */
+  async goTo(chain: CommentChain): Promise<void> {
+    this.reveal(chain);
+    if (NOT_FILES.includes(chain.path)) {
+      this.seen(chain);
+      await this.view.focusThread(chain);
+    } else {
+      await this.show(chain);
+    }
+  }
+
+  /**
+   * Open the file at `chain`'s line with its thread expanded there, the other threads closed, and
+   * what it was aimed at highlighted until you move on. A chain the editor shows no thread for (a
+   * resolved one) just opens its line, highlighted the same.
    */
   async show(chain: CommentChain): Promise<void> {
     // The reply box of the thread it opens answers the last of them who spoke.
     this.controller.options = BOX.reply(chain.comments.filter((comment) => comment.state === "published").at(-1)?.author);
-    await this.view.openLocation({ path: chain.path, line: this.view.placeOf(chain).line });
+    this.seen(chain);
+    const editor = await this.view.openLocation({ path: chain.path, line: this.view.placeOf(chain).line });
     for (const [thread, anchor] of this.anchors) {
       const here = anchor.chain.root_id === chain.root_id;
       thread.collapsibleState = here ? vscode.CommentThreadCollapsibleState.Expanded : vscode.CommentThreadCollapsibleState.Collapsed;
     }
+    if (editor) {
+      this.aim(editor, chain);
+    }
+  }
+
+  /** The chains gone to on each change this session (by Change-Id): what Next has shown already. */
+  private readonly visited = new Map<string, Set<string>>();
+
+  private seen(chain: CommentChain): void {
+    const key = changeKey(this.view.target);
+    this.visited.set(key, (this.visited.get(key) ?? new Set()).add(chain.root_id));
+    this.view.render(); // Next moves on from it
+  }
+
+  /** The ids of the chains of the change shown that were gone to already. */
+  visitedHere(): ReadonlySet<string> {
+    return this.visited.get(changeKey(this.view.target)) ?? new Set();
+  }
+
+  /** What a comment was aimed at, as the editor shows it: a soft highlight, gone with the next move. */
+  private readonly aimed = vscode.window.createTextEditorDecorationType({
+    // The colour of a search match: seen at a glance on every theme, and known to mean "here".
+    backgroundColor: new vscode.ThemeColor("editor.findMatchHighlightBackground"),
+    borderColor: new vscode.ThemeColor("editor.findMatchHighlightBorder"),
+    borderStyle: "solid",
+    borderWidth: "1px",
+    borderRadius: "2px",
+    overviewRulerColor: new vscode.ThemeColor("editorOverviewRuler.findMatchForeground"),
+  });
+  private aiming: vscode.Disposable | undefined;
+
+  /**
+   * Highlight what `chain` was aimed at in `editor`: the characters of its range (Gerrit's `range`)
+   * where its lines are where Gerrit has them, else its lines as they are drawn. Cleared once the
+   * cursor moves or another editor comes up; the move that opened it does not count.
+   */
+  private aim(editor: vscode.TextEditor, chain: CommentChain): void {
+    const place = this.view.placeOf(chain);
+    const last = Math.min(Math.max(0, (place.line ?? 1) - 1), editor.document.lineCount - 1);
+    const first = Math.min(place.start ? Math.max(0, place.start - 1) : last, last);
+    const range = chain.range;
+    const there = range && range.start_line - 1 === first && range.end_line - 1 === last;
+    const aimed = there
+      ? new vscode.Range(range.start_line - 1, range.start_character, range.end_line - 1, range.end_character)
+      : new vscode.Range(first, 0, last, editor.document.lineAt(last).text.length);
+    this.aiming?.dispose();
+    editor.setDecorations(this.aimed, [aimed]);
+    editor.revealRange(aimed, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+    const since = Date.now();
+    const clear = () => {
+      editor.setDecorations(this.aimed, []);
+      this.aiming?.dispose();
+      this.aiming = undefined;
+    };
+    this.aiming = vscode.Disposable.from(
+      vscode.window.onDidChangeTextEditorSelection((event) => (Date.now() - since > 500 || event.textEditor !== editor ? clear() : undefined)),
+      vscode.window.onDidChangeActiveTextEditor((active) => (active !== editor ? clear() : undefined)),
+    );
   }
 
   /** The editor thread that shows `chain`, if the shown change has one. */
@@ -423,6 +513,15 @@ export class CommentThreads implements vscode.Disposable {
     if (anchor) {
       await this.replyWith(anchor.chain, reply.text, reply.thread.contextValue === "resolved");
     }
+  }
+
+  /** Done in a thread's reply box: what you typed (else "Done", or your draft as it is) saved as your draft, resolving the chain. */
+  async doneInThread(reply: vscode.CommentReply): Promise<void> {
+    const anchor = this.anchors.get(reply.thread);
+    if (!anchor) {
+      return;
+    }
+    await (reply.text.trim() ? this.replyWith(anchor.chain, reply.text, true) : this.replyToChain(anchor.chain, true));
   }
 
   /** Cancel in a thread's reply box: VS Code has emptied the box; the thread closes and its toggle goes back. */
@@ -791,6 +890,8 @@ export class CommentThreads implements vscode.Disposable {
 
   dispose(): void {
     this.listeners.forEach((listener) => listener.dispose());
+    this.aiming?.dispose();
+    this.aimed.dispose();
     this.controller.dispose();
   }
 }

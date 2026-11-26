@@ -12,10 +12,8 @@
   const drafts = getState().drafts || {};
   /** Sections the user opened or closed, by name: their choice wins over the default. */
   const toggled = {};
-  /** Comment chains shown in full: every comment's whole text, and (with no line in a file) a reply box. */
+  /** Comment chains shown in full: every comment's whole text. */
   const expanded = new Set();
-  /** Reply boxes by chain, kept across redraws so typing is never interrupted. */
-  const replyBoxes = new Map();
   /** The message block, kept across redraws so typing is never interrupted. */
   let editor = null;
   let revealed = null;
@@ -259,12 +257,14 @@
       "aria-expanded": open ? "true" : "false",
       onclick: toggle,
     });
+    // An index: a chain on a line of a file is read and answered in its editor thread, where a click
+    // takes you. Only one about the whole change, which no file shows, is answered from here.
+    const answers = !thread.file;
     const row = item(
       {
         class: `thread${revealed === thread.id ? " revealed" : ""}`,
-        title: thread.tooltip,
+        title: thread.file ? `${thread.tooltip}\n\nClick to open it in its file, where it is answered.` : thread.tooltip,
         "data-id": thread.id,
-        // On a line of a file: open it there, in its thread. About the whole change: read and answer it here.
         onclick: thread.file ? act("open") : toggle,
       },
       twist,
@@ -274,13 +274,12 @@
       h(
         "span",
         { class: "actions" },
-        thread.edit ? h("button", { class: "codicon codicon-edit", title: "Edit…", onclick: act("chain.edit") }) : null,
-        thread.reply ? h("button", { class: "codicon codicon-reply", title: "Reply as Draft…", onclick: act("reply") }) : null,
-        thread.apply ? h("button", { class: "codicon codicon-lightbulb-autofix", title: "Apply Suggested Edit to Your File", onclick: act("applySuggestion") }) : null,
-        thread.open ? h("button", { class: "codicon codicon-check", title: "Reply Done and Resolve as Draft", onclick: act("replyDone") }) : null,
+        answers && thread.edit ? h("button", { class: "codicon codicon-edit", title: "Edit…", onclick: act("chain.edit") }) : null,
+        answers && thread.reply ? h("button", { class: "codicon codicon-reply", title: "Reply as Draft…", onclick: act("reply") }) : null,
+        answers && thread.open ? h("button", { class: "codicon codicon-check", title: "Reply Done and Resolve as Draft", onclick: act("replyDone") }) : null,
         thread.open && !thread.held ? h("button", { class: "codicon codicon-person", title: "Keep for Me (Not for the Agent)", onclick: act("hold") }) : null,
         thread.open && thread.held ? h("button", { class: "codicon codicon-hubot", title: "Let the Agent Handle It", onclick: act("release") }) : null,
-        thread.discard ? h("button", { class: "codicon codicon-trash", title: thread.discard, onclick: act("chain.delete") }) : null,
+        answers && thread.discard ? h("button", { class: "codicon codicon-trash", title: thread.discard, onclick: act("chain.delete") }) : null,
       ),
     );
     if (!open) {
@@ -297,61 +296,7 @@
       row,
       comment(thread.author, "", thread.body),
       thread.replies.map((reply) => comment(reply.author, reply.state, reply.text)),
-      thread.reply && !thread.file ? replyBox(thread) : null,
     ];
-  }
-
-  /**
-   * A box to answer a chain that has no line in a file, saved as a draft reply as an editor thread's
-   * reply box saves it. As on Gerrit: a Resolved checkbox, and bottom right Discard (while your
-   * draft reply is there), Cancel and Save. Discard deletes it as the trash on the row does, asking
-   * first; once it is deleted, the box is emptied.
-   */
-  function replyBox(thread) {
-    let box = replyBoxes.get(thread.id);
-    if (!box) {
-      const to = thread.replies.filter((reply) => !reply.state).map((reply) => reply.author).pop() || thread.author;
-      const text = h("textarea", { class: "message", rows: "3", spellcheck: "true", "aria-label": "Reply", placeholder: `Reply to ${to}… (Ctrl+Enter saves it as a draft)` });
-      const resolved = h("input", { type: "checkbox" });
-      const tick = h("label", { class: "resolved", title: "The reply resolves the comment; untick it to leave the comment open" }, resolved, "Resolved");
-      const save = h("button", { class: "button", title: "Save as your draft reply on Gerrit (Ctrl+Enter)" }, "Save");
-      const cancel = h("button", { class: "button secondary", title: "Drop what you typed and close the comment" }, "Cancel");
-      const discard = h("button", { class: "button secondary" }, "Discard");
-      const note = h("span", { class: "detail" });
-      const send = () => {
-        // With your draft there, Save with nothing typed still sets whether it resolves the comment.
-        if (text.value.trim() || box.draft) {
-          note.textContent = "saving…";
-          post("thread", { id: thread.id, action: "replyText", text: text.value, resolved: resolved.checked });
-        }
-      };
-      text.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-          event.preventDefault();
-          send();
-        }
-      });
-      save.addEventListener("click", send);
-      cancel.addEventListener("click", () => {
-        text.value = "";
-        note.textContent = "";
-        resolved.checked = box.resolving;
-        expanded.delete(thread.id);
-        draw(vm);
-      });
-      discard.addEventListener("click", () => post("thread", { id: thread.id, action: "discard" }));
-      box = { block: h("div", { class: "reply-box" }, text, h("div", { class: "message-bar" }, tick, note, discard, cancel, save)), text, note, resolved, discard };
-      replyBoxes.set(thread.id, box);
-    }
-    // The checkbox starts where the comment stands once your drafts are published; while you type, it is yours.
-    if (!box.text.value || box.resolving === undefined) {
-      box.resolved.checked = thread.resolving;
-    }
-    box.resolving = thread.resolving;
-    box.draft = thread.draft;
-    box.discard.hidden = !thread.discard;
-    box.discard.title = thread.discard;
-    return box.block;
   }
 
   function ciBody(ci) {
@@ -440,7 +385,6 @@
       shownKey = key;
       delete toggled.ci;
       expanded.clear();
-      replyBoxes.clear();
       revealed = null;
     }
     const parts = [];
@@ -453,6 +397,10 @@
       if (head.actions && head.actions.length) {
         parts.push(actions(head.actions));
       }
+    }
+    // Next: the one thing to do now, named on the button; Alt+Enter does the same.
+    if (vm.next) {
+      parts.push(h("div", { class: "next-bar" }, actions([{ label: vm.next.label, title: vm.next.title, command: { id: "ger.next", args: [] }, primary: true }])));
     }
     for (const note of vm.notes || []) {
       parts.push(h("div", { class: "head note", title: `${note.text} — ${note.detail}` }, icon(note.icon, note.tone), h("span", { class: "label" }, note.text), h("span", { class: "detail" }, note.detail)));
@@ -533,35 +481,18 @@
         editor.base = editor.box.value;
         editor.sync();
       }
-    } else if (message.type === "replied") {
-      // Saved: the draft shows in the chain now. Not saved: the text stays, to try again.
-      const box = replyBoxes.get(message.id);
-      if (box) {
-        box.text.value = message.saved ? "" : box.text.value;
-        box.note.textContent = message.saved ? "" : "not saved";
-      }
-    } else if (message.type === "discarded") {
-      // Your draft reply is deleted: what you typed to add to it goes too, and the checkbox is back
-      // where the comment now stands, as Cancel leaves it. Dismissed, both stay.
-      const box = replyBoxes.get(message.id);
-      if (box && message.deleted) {
-        box.text.value = "";
-        box.note.textContent = "";
-        box.resolved.checked = box.resolving;
-      }
     } else if (message.type === "reveal") {
       revealed = message.id;
       toggled.comments = true;
       if (message.open) {
-        expanded.add(message.id); // about the whole change: its text whole, and its reply box
+        expanded.add(message.id); // about the whole change: its text whole, its buttons on the row
       }
       draw(vm);
       const row = document.querySelector(`.thread[data-id="${CSS.escape(message.id)}"]`);
       if (row) {
         row.scrollIntoView({ block: "nearest" });
         if (message.open) {
-          const box = replyBoxes.get(message.id);
-          (box && box.text.isConnected ? box.text : row).focus();
+          row.focus();
         }
       }
     }
