@@ -320,7 +320,7 @@ export async function run(): Promise<void> {
       "Inline Review Change on change 900",
       "Progress while it fetches; then where change 900 is checked out for review (the review worktree, as ger.reviewCheckout is not set), with a button to open that worktree in a new window.",
       exec("ger.review", theirs),
-      [{ button: "Open Review Worktree" }],
+      [{ button: "Go to Review Window" }],
     );
     await press("Change › … › Leave Review Checkout", "The review checkout of 900 is closed, and a notification says so.", exec("ger.reviewDone"));
     await press(
@@ -1387,7 +1387,7 @@ export async function run(): Promise<void> {
           [{ dismiss: true }],
         );
         await press("Task header › All chains", "The header now offers Only this task; Review chains and Local stack are back for the rest of this review.", exec("ger.showAllChains"));
-        await press("Change › … › Leave Review Checkout", "Back on the branch it came from; the views are your stack again, and the task header is gone.", exec("ger.reviewDone"));
+        await press("Change › … › Leave Review Checkout", "Back on the branch it came from; the views are your stack again, and the task header is gone. The Change view shows the change left as it is on Gerrit, with Review change: never as not in the local stack any more, which it never was.", exec("ger.reviewDone"));
       } finally {
         execFileSync("git", ["config", "--unset", "ger.reviewCheckout"], { cwd: repo });
       }

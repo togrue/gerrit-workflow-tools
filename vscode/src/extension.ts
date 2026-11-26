@@ -304,7 +304,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   };
   /**
    * The review here moved, from wherever (a shell's `ger review`, a restart): its change is shown. A
-   * window opened on a staged review (Open Review Worktree, or a reload there) opens on it the first
+   * window opened on a staged review (Go to Review Window, or a reload there) opens on it the first
    * time: the Gerrit view, and in a window with no editor open yet, all its files.
    */
   let greeted = false;
