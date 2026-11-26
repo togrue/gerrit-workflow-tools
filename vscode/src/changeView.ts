@@ -19,7 +19,7 @@ import { NextAction, nextAction } from "./nextAction";
 import { focusedMember, reviewFocus } from "./reviewFocus";
 import { markOf } from "./staleDiffs";
 import { ui } from "./ui";
-import { TaskVm } from "./taskRows";
+import { TaskVm, taskLines } from "./taskRows";
 import { Message, WebView } from "./webview";
 
 /** What the comment commands take: the chain a row of the view stands for. */
@@ -552,7 +552,8 @@ export class ChangeView extends WebView<ChangeVm> {
     if (this.vm().ci?.state === "closed") {
       await this.openCi();
     }
-    return changeLines(this.vm());
+    const vm = this.vm();
+    return [...taskLines(vm.task).map((line) => `▌ ${line}`), ...changeLines(vm)];
   }
 
   protected decorate(view: vscode.WebviewView): void {

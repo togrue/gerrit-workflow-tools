@@ -907,7 +907,7 @@ export async function run(): Promise<void> {
     // --- Rebasing in the terminal ------------------------------------------------------------
     {
       // Most of it is git in the terminal, as a user runs it, with the extension only watched; where the extension offers
-      // the way on (the banner's Continue, Abort and Skip, the conflicted files, Push), it is pressed, and what it starts
+      // the way on (the task header's Continue, Abort and Skip, the conflicted files, Push), it is pressed, and what it starts
       // in the ger terminal is then run as the terminal would.
       // Fixed identities and dates for what this block commits (the commits it builds on are not; their ids are
       // normalised). Where the views are wrong today, **Today** says how and names the issue that fixes it: that
@@ -1006,7 +1006,7 @@ export async function run(): Promise<void> {
           answers,
           true,
         );
-      /** What Local stack's page posts when a conflicted file under the banner is clicked. */
+      /** What Local stack's page posts when a conflicted file under the task header is clicked. */
       const stackPage = api.stackView as unknown as { receive(message: { type: string; [field: string]: unknown }): Promise<unknown> };
 
       await press(
@@ -1052,7 +1052,7 @@ export async function run(): Promise<void> {
       );
       await pressAndRun(
         "Local stack › Continue (the rebase stopped at the amended commit)",
-        "ger rebase --continue runs in the ger terminal, and the status bar says so; once it has run, the banner and the marks go: the branch is back, the amended commit with its code changed since the last push and \"Add e.txt\" on top of it; the header names the branch; the Change view shows the amended commit, its message editable again.",
+        "ger rebase --continue runs in the ger terminal, and the status bar says so; once it has run, the task header and the marks go: the branch is back, the amended commit with its code changed since the last push and \"Add e.txt\" on top of it; the header names the branch; the Change view shows the amended commit, its message editable again.",
         undefined,
         "ger.rebase.continue",
         ["rebase", "--continue"],
@@ -1072,12 +1072,12 @@ export async function run(): Promise<void> {
       );
       await inTerminal(
         "you run git rebase --continue, and \"Add e.txt\" conflicts in e.txt",
-        "Local stack says the rebase stopped on a conflict, lists e.txt under the banner, with Abort and Skip (no Continue while e.txt is conflicted); \"Add e.txt\" has a red conflict icon and is not dimmed; the commits below are done, showing what they are now. The status bar says Conflict in \"Add e.txt\".",
+        "Local stack's task header says Reworking your chain, the change it stopped at and what is left, Continue (not now, in core's words), Abort and Skip with what each does, and lists e.txt under it; \"Add e.txt\" has a red conflict icon and is not dimmed; the commits below are done, showing what they are now. The status bar says Conflict in \"Add e.txt\".",
         undefined,
         () => gitStops(["rebase", "--continue"]),
       );
       await inTerminal(
-        "Local stack › click e.txt under the banner",
+        "Local stack › click e.txt under the task header",
         "e.txt opens with its conflict markers in the text editor (VS Code offers Accept Current / Incoming / Both there, and Resolve in Merge Editor), not in the merge editor; nothing else changes.",
         undefined,
         () => stackPage.receive({ type: "conflict", path: "e.txt" }),
@@ -1097,7 +1097,7 @@ export async function run(): Promise<void> {
       );
       await pressAndRun(
         "Local stack › Continue (the conflict resolved)",
-        "ger rebase --continue runs in the ger terminal; once it has run, the banner and the marks go; Local stack shows the branch with \"Refactor parser init\" changed here since the last push and \"Add e.txt\" on top.",
+        "ger rebase --continue runs in the ger terminal; once it has run, the task header and the marks go; Local stack shows the branch with \"Refactor parser init\" changed here since the last push and \"Add e.txt\" on top.",
         undefined,
         "ger.rebase.continue",
         ["rebase", "--continue"],
@@ -1352,7 +1352,7 @@ export async function run(): Promise<void> {
       try {
         await press(
           "Inline Review Change on change 900, ger.reviewCheckout being branch",
-          "This checkout switches to change-900 with 900's changes staged, and the notification says so. Local stack lists 900's chain: its row is marked under review, not HEAD, with no Rebase onto origin/main (nothing there is yours to rewrite). The Change view shows 900, and all its files open in one editor (here one, added by the change).",
+          "This checkout switches to change-900 with 900's changes staged, and the notification says so. The task header at the top of the Change view says Reviewing alice's chain, change 1 of 1, what is left, 900 marked reviewing, and Leave review; Review chains and Local stack step aside (Local stack, were it shown, lists 900's chain: its row is marked under review, not HEAD, with no Rebase onto origin/main). The Change view shows 900, and all its files open in one editor (here one, added by the change).",
           exec("ger.review", await chainRow("Add retry to the uploader")),
         );
         await press(
@@ -1376,7 +1376,8 @@ export async function run(): Promise<void> {
           exec("ger.reviewNext"),
           [{ dismiss: true }],
         );
-        await press("Change › … › Leave Review Checkout", "Back on the branch it came from; the views are your stack again.", exec("ger.reviewDone"));
+        await press("Task header › All chains", "The header now offers Only this task; Review chains and Local stack are back for the rest of this review.", exec("ger.showAllChains"));
+        await press("Change › … › Leave Review Checkout", "Back on the branch it came from; the views are your stack again, and the task header is gone.", exec("ger.reviewDone"));
       } finally {
         execFileSync("git", ["config", "--unset", "ger.reviewCheckout"], { cwd: repo });
       }

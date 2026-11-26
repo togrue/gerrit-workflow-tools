@@ -12,7 +12,7 @@ import { openConflict } from "./rebase";
 import { StackVm, frozen, pinned, pinnedWhy, stackLines, stackVm, stackWhere } from "./stackRows";
 import { waitingFor } from "./state";
 import { feedback, ui } from "./ui";
-import { TaskVm } from "./taskRows";
+import { TaskVm, taskLines } from "./taskRows";
 import { Message, WebView } from "./webview";
 
 const STASH = "Stash and Continue";
@@ -53,7 +53,8 @@ export class StackView extends WebView<StackVm> {
 
   /** The view as text: for the end-to-end suite. */
   lines(): string[] {
-    return stackLines(this.vm());
+    const vm = this.vm();
+    return [...taskLines(vm.task).map((line) => `▌ ${line}`), ...stackLines(vm)];
   }
 
   protected decorate(view: vscode.WebviewView): void {
