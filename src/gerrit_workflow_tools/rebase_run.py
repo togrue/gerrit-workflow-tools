@@ -160,7 +160,8 @@ def go_on_with_rebase(run: RunContext, action: RebaseAction, *, walk_on: str | N
     # The stop or the finish leads; what was dropped and the next step follow it.
     lead = next((line for line in said if line.startswith(("stopped", "rebase finished"))), None)
     if lead:
-        record_outcome(cwd, command, lead, ok=code == 0 or now is not None, more=[x for x in said if x != lead])
+        # A stop on a conflict is no failure, but not done either: git's code says which (a warning, not a tick).
+        record_outcome(cwd, command, lead, ok=code == 0, more=[x for x in said if x != lead])
     else:
         record_outcome(cwd, command, f"git rebase --{action.value} failed (exit {code}); see the terminal", ok=False)
     return code

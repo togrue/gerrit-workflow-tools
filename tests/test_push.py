@@ -1557,6 +1557,7 @@ def test_a_push_not_sent_takes_the_change_ids_it_added_back(stack_repo: Path, mo
     outcome = last_outcome(git_dir(stack_repo))
     assert outcome is not None and (outcome.command, outcome.ok) == ("push", False)
     assert outcome.text == "push cancelled: nothing sent; the Change-Ids added to 1 commit are taken back"
+    assert outcome.head == head  # recorded once the branch is back: the views show it while HEAD stays there
 
 
 def test_push_wip_from_above_the_ready_boundary_names_it_and_all(

@@ -270,19 +270,16 @@ class _ChangeIds:
         )
         return True
 
-    @property
-    def note(self) -> str:
-        """What a push not sent says of them."""
-        return f"; the Change-Ids added to {counted(self.count, 'commit')} are taken back" if self.count else ""
-
-    def take_back(self) -> None:
+    def take_back(self) -> str:
+        """Put the branch back where it was, unless the push was sent; what a push not sent says of it."""
         if self.sent or not (self.before and self.after):
-            return
-        if take_back(self.cwd, self.before, self.after, why="ger push: not sent, Change-Ids taken back"):
-            print(
-                f"The Change-Ids added to {counted(self.count, 'commit')} are taken back: your commits are as before."
-            )
-        self.before = None
+            return ""
+        before, self.before = self.before, None
+        if not take_back(self.cwd, before, self.after, why="ger push: not sent, Change-Ids taken back"):
+            return ""
+        said = f"the Change-Ids added to {counted(self.count, 'commit')} are taken back"
+        print(f"{said[0].upper()}{said[1:]}: your commits are as before.")
+        return f"; {said}"
 
 
 def _confirm_and_push(
@@ -299,14 +296,16 @@ def _confirm_and_push(
     first_parent = not args.follow_merges
     if isinstance(prepared, PushRefusal):
         print_refusal(cwd, branch, prepared, first_parent=first_parent, settings=settings)
-        record_outcome(cwd, "push", f"refused: {prepared.message.removeprefix('error: ')}{added.note}", ok=False)
+        note = added.take_back()  # first: the outcome names HEAD as it is left
+        record_outcome(cwd, "push", f"refused: {prepared.message.removeprefix('error: ')}{note}", ok=False)
         return int(ExitCode.REFUSED)
     for warning in prepared.warnings:
         print(warning, file=sys.stderr)
     asked = prompt_initial_options(cwd, prepared, args, settings=settings) if args.i else prepared
     if asked is None:
         print("Push cancelled.", file=sys.stderr)
-        record_outcome(cwd, "push", f"push cancelled: nothing sent{added.note}", ok=False)
+        note = added.take_back()  # first: the outcome names HEAD as it is left
+        record_outcome(cwd, "push", f"push cancelled: nothing sent{note}", ok=False)
         return int(ExitCode.OK)
     plan = asked
     highlighter = branch_summary_highlighter(cwd, plan.branch, first_parent=first_parent, settings=settings)
@@ -316,7 +315,8 @@ def _confirm_and_push(
     confirmed = confirm_gerrit_push(run, plan, args, summary_highlighter=highlighter)
     if isinstance(confirmed, int):
         if not args.dry_run:
-            record_outcome(cwd, "push", f"push cancelled: nothing sent{added.note}", ok=False)
+            note = added.take_back()  # first: the outcome names HEAD as it is left
+            record_outcome(cwd, "push", f"push cancelled: nothing sent{note}", ok=False)
         return confirmed
     added.sent = True
     code = finish_and_record(cwd, execute(run, confirmed), confirmed)

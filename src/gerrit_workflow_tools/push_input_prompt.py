@@ -319,7 +319,8 @@ def prompt_room(rows: int) -> PromptRoom:
     """
     if rows >= _FULL_ROOM:
         return PromptRoom(menu=8, toolbar=True)
-    note = f"(the terminal is {rows} rows high: the preview is above, scroll up or make the terminal taller)"
+    high = f"{rows} row{'' if rows == 1 else 's'} high"
+    note = f"(the terminal is {high}: the preview is above, scroll up or make it taller)"
     return PromptRoom(menu=0, toolbar=False, note=note)
 
 
