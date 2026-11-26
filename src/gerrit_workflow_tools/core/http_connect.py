@@ -42,6 +42,11 @@ ATTEMPT_DELAY = 0.25
 PREFERRED_ROUTE_TIMEOUT = 1.0
 """Seconds the remembered address has to connect before the race starts over."""
 
+CONNECT_TIMEOUT = 10.0
+"""Seconds a connection has to be made at most, whatever the request's own timeout: a host that
+does not answer at all (a dead route, a firewall that drops) is said to be away after this long,
+not after the request's read timeout. The request's timeout still bounds each read."""
+
 AddrInfo = tuple[int, int, int, str, tuple[Any, ...]]
 Resolver = Callable[[str, int, int, int], Sequence[AddrInfo]]
 
@@ -60,11 +65,13 @@ def connect(
 ) -> socket.socket:
     """A socket connected to *address*, for :mod:`http.client` in place of :func:`socket.create_connection`.
 
-    *timeout* bounds the connecting and is then the socket's timeout; anything but a number
-    (the default, or :mod:`socket`'s sentinel) means :func:`socket.getdefaulttimeout`.
+    *timeout* is the socket's timeout once connected, and bounds the connecting too, but never
+    beyond :data:`CONNECT_TIMEOUT`; anything but a number (the default, or :mod:`socket`'s
+    sentinel) means :func:`socket.getdefaulttimeout`.
     """
     host, port = address[0], int(address[1])
     seconds = float(timeout) if isinstance(timeout, (int, float)) else socket.getdefaulttimeout()
+    limit = CONNECT_TIMEOUT if seconds is None else min(seconds, CONNECT_TIMEOUT)
     infos = list((resolve or socket.getaddrinfo)(host, port, 0, socket.SOCK_STREAM))
     if not infos:
         raise OSError(f"no address for {host}")
@@ -73,9 +80,8 @@ def connect(
         preferred = _routes.get(key)
     known = [info for info in infos if info[4] == preferred]
     if known:
-        limit = PREFERRED_ROUTE_TIMEOUT if seconds is None else min(seconds, PREFERRED_ROUTE_TIMEOUT)
         try:
-            sock, _ = _race(known, limit, source_address)
+            sock, _ = _race(known, min(limit, PREFERRED_ROUTE_TIMEOUT), source_address)
         except OSError:
             with _routes_lock:
                 if _routes.get(key) == preferred:
@@ -83,7 +89,7 @@ def connect(
         else:
             sock.settimeout(seconds)
             return sock
-    sock, winner = _race(_interleaved(infos), seconds, source_address)
+    sock, winner = _race(_interleaved(infos), limit, source_address)
     with _routes_lock:
         _routes[key] = winner
     sock.settimeout(seconds)
@@ -233,12 +239,18 @@ def urlopen(request: str | urllib.request.Request, *, timeout: float) -> Any:
     return _opener.open(request, timeout=timeout)
 
 
+def timed_out(error: OSError) -> bool:
+    """Whether *error* is a wait that ran out: the host did not answer, rather than refused."""
+    reason = error.reason if isinstance(error, URLError) else error
+    return isinstance(reason, (TimeoutError, socket.timeout))
+
+
 def why_unreachable(error: OSError) -> str:
     """A few words on why a connection failed, without the platform's localized prose."""
     reason = error.reason if isinstance(error, URLError) else error
     if isinstance(reason, ConnectionRefusedError):
         return "connection refused"
-    if isinstance(reason, (TimeoutError, socket.timeout)):
+    if timed_out(error):
         return "timed out"
     if isinstance(reason, socket.gaierror):
         return "unknown host"

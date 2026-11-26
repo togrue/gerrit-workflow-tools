@@ -35,7 +35,9 @@ class GerritUnavailableError(GerritApiError):
 
     Unlike a per-change failure, this says nothing about any one change, so nothing may
     read it as "not found" or "not pushed", and retrying change by change cannot help.
-    The message is the whole story, written for the user.
+    The message is the whole story, written for the user. Its *reason* is a word for which
+    case it is, what ``ger serve`` serves for a client to offer the fix: ``credentials`` (HTTP
+    401), ``unreachable`` (refused, unknown host) or ``no-answer`` (the wait ran out).
     """
 
 

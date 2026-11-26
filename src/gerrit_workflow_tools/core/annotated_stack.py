@@ -235,8 +235,9 @@ def load_annotated_stack(
     *,
     first_parent: bool = True,
     fetch_ci_pipelines: bool = False,
+    gerrit: bool = True,
 ) -> AnnotatedStack:
-    """Load *rev_range*, overlay Gerrit state, annotate attention, and derive notes.
+    """Load *rev_range*, overlay Gerrit state (unless *gerrit* is off), annotate attention, and derive notes.
 
     With no *rev_range*, the run's **local stack**: while a rebase is underway, the commits it
     replayed so far as they are now, then those still to replay as they were
@@ -256,7 +257,7 @@ def load_annotated_stack(
         return AnnotatedStack(rebase=rebasing)
     on_target = _commits_on_target(run, rows, rev_range) if rev_range else frozenset()
     # A detached HEAD's rebase has no working branch, so no push branch to find its changes on.
-    overlay = rebasing is None or run.repo.working_branch is not None
+    overlay = gerrit and (rebasing is None or run.repo.working_branch is not None)
     annotated = annotate(
         rows, service=service, cwd=cwd, fetch_ci_pipelines=fetch_ci_pipelines, on_target=on_target, overlay=overlay
     )
@@ -369,9 +370,11 @@ def load_stack_overview(
     *,
     first_parent: bool = True,
     fetch_ci_pipelines: bool = False,
+    gerrit: bool = True,
 ) -> StackOverview:
     """:func:`load_annotated_stack`, with the ready boundary ``ger push`` stops at, the rebase and the upstream."""
-    view = load_annotated_stack(run, rev_range, first_parent=first_parent, fetch_ci_pipelines=fetch_ci_pipelines)
+    loaded = {"first_parent": first_parent, "fetch_ci_pipelines": fetch_ci_pipelines, "gerrit": gerrit}
+    view = load_annotated_stack(run, rev_range, **loaded)
     settings = run.settings
     blocked = (
         blocked_shas_for_stack(

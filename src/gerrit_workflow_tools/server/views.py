@@ -25,6 +25,7 @@ from gerrit_workflow_tools.core.gerrit.change_view import parse_gerrit_time
 from gerrit_workflow_tools.core.gerrit.rest import norm_change_id
 from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_show_targets
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
+from gerrit_workflow_tools.core.http_connect import CONNECT_TIMEOUT
 from gerrit_workflow_tools.core.inbox import RebaseHeadline, load_inbox, pick_headline, project_scope
 from gerrit_workflow_tools.core.push_checks import push_blocked
 from gerrit_workflow_tools.core.rebase_next_step import go_on_refusal
@@ -57,7 +58,7 @@ from gerrit_workflow_tools.server.diff_views import add_worktree_places, commit_
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
 
-API_VERSION = "1.7.0"
+API_VERSION = "1.8.0"
 """The serve contract's version, ``MAJOR.MINOR.PATCH`` (bump rules: ``docu/spec/commands/serve.md``)."""
 _T = TypeVar("_T")
 _NOT_ON_GERRIT = frozenset({Attention.NOT_PUSHED, Attention.AHEAD_OF_GERRIT, Attention.DIVERGED})
@@ -75,8 +76,9 @@ def error_json(error: BaseException) -> dict[str, str]:
 
 
 def health(ctx: Context, _req: Request) -> dict[str, Any]:
-    """Who is answering, for which repository, whether Gerrit's event stream is followed, and what
-    in this repository's configuration ger warns about (old key names), with the command that fixes it."""
+    """Who is answering, for which repository, how long Gerrit is given to answer (``gerrit_wait``,
+    seconds), whether Gerrit's event stream is followed, and what in this repository's configuration
+    ger warns about (old key names), with the command that fixes it."""
     top = ctx.run.repo.root
     legacy = legacy_keys_notice(ctx.settings.values, ctx.settings.scopes)
     return {
@@ -86,6 +88,7 @@ def health(ctx: Context, _req: Request) -> dict[str, Any]:
         "repo": str(top) if top else None,
         "branch": ctx.run.worktree.branch,
         "host": host_from_web_base(ctx.service.web_base),
+        "gerrit_wait": CONNECT_TIMEOUT,
         "warnings": [{"message": legacy.message, "argv": list(legacy.argv) if legacy.argv else None}] if legacy else [],
         **ctx.activity.json(),
     }
@@ -108,7 +111,8 @@ def rebase_refusal(ctx: Context, req: Request) -> dict[str, Any]:
 def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline | None]:
     """:func:`stack`, and the rebase underway as the headline it makes: ``None`` without one."""
     cwd = ctx.cwd
-    overview = load_stack_overview(ctx.run, fetch_ci_pipelines=req.flag("pipelines"))
+    local_only = req.flag("local")
+    overview = load_stack_overview(ctx.run, fetch_ci_pipelines=req.flag("pipelines"), gerrit=not local_only)
     view, blocked, progress = overview.view, overview.blocked, overview.progress
     context = ctx.run.repo.shown_stack
     head = commit_sha_or_none(cwd, "HEAD")
@@ -162,6 +166,7 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
         "commits": commits,
         "next": next_steps_json(overview),
         **({"gerrit_unavailable": error_json(view.gerrit_unavailable)} if view.gerrit_unavailable else {}),
+        **({"local_only": True} if local_only else {}),
     }
     return answer, rebase
 
@@ -325,6 +330,8 @@ def show(ctx: Context, req: Request) -> dict[str, Any]:
         if introduced is not None:
             found = introduced[index]
             payload["ci_introduced"] = sorted(found) if found is not None else None
+        if item.gerrit_unavailable is not None:
+            payload["gerrit_unavailable"] = error_json(item.gerrit_unavailable)
         commits.append(payload)
     return {"commits": commits}
 

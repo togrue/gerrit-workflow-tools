@@ -13,7 +13,7 @@ from urllib.request import Request
 
 from gerrit_workflow_tools.core.call_trace import gerrit_request_label_from_url, record_call
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.gerrit.credentials import GerritAuth, gerrit_auth_from_settings
+from gerrit_workflow_tools.core.gerrit.credentials import GerritAuth, credential_keys, gerrit_auth_from_settings
 from gerrit_workflow_tools.core.gerrit.rest import (
     LOG_QUERY_OPTIONS,
     GerritApiError,
@@ -24,12 +24,15 @@ from gerrit_workflow_tools.core.gerrit.rest import (
     resolve_gerrit_web_base,
     strip_terminal_controls,
 )
-from gerrit_workflow_tools.core.http_connect import urlopen, why_unreachable
+from gerrit_workflow_tools.core.http_connect import timed_out, urlopen, why_unreachable
 from gerrit_workflow_tools.core.words import counted
 
 
 logger = logging.getLogger(__name__)
 _LOG_RESPONSE_BODIES = False
+
+READ_TIMEOUT = 60
+"""Seconds Gerrit has to send the next part of an answer; connecting has less (``CONNECT_TIMEOUT``)."""
 
 
 def set_log_gerrit_response_bodies(enabled: bool) -> None:
@@ -82,6 +85,9 @@ class HttpGerritRest:
         """
         self.web_base = web_base.rstrip("/")
         self.auth = auth
+        # Gerrit could not be reached: later requests of this client fail at once, not each after its
+        # own wait. A client lives for one run (a command, a ger serve request): the next asks again.
+        self._unreachable: GerritUnavailableError | None = None
 
     @property
     def host(self) -> str:
@@ -140,6 +146,8 @@ class HttpGerritRest:
 
     def _request(self, url: str, *, method: str = "GET", json_body: dict[str, Any] | None = None) -> str:
         """One request to *url* with the credentials; the answer's text. Every failure is a :class:`GerritApiError`."""
+        if self._unreachable is not None:
+            raise self._unreachable
         headers = self._auth_headers()
         data: bytes | None = None
         if json_body is not None:
@@ -150,20 +158,28 @@ class HttpGerritRest:
         label = gerrit_request_label_from_url(method, url)
         t0 = time.perf_counter()
         try:
-            with urlopen(req, timeout=120) as resp:
+            with urlopen(req, timeout=READ_TIMEOUT) as resp:
                 raw = resp.read().decode("utf-8", errors="replace")
         except HTTPError as e:
             if e.code == 401:
                 raise GerritUnavailableError(
                     f"Gerrit at {self.host} rejected the credentials (HTTP 401); "
-                    f"check ger.{self.web_base}.user and ger.{self.web_base}.token, or run `ger setup`",
+                    f"check {credential_keys(self.auth, self.web_base)}, or run `ger setup`",
                     status=e.code,
+                    reason="credentials",
                 ) from e
             reason = gerrit_error_reason(_error_body(e), str(e.reason))
             logger.info("%s %s -> HTTP %s: %s", method, url, e.code, reason)
             raise GerritApiError(f"Gerrit HTTP {e.code}: {reason}", status=e.code, reason=reason) from e
         except (URLError, OSError) as e:
-            raise GerritUnavailableError(f"Gerrit unreachable at {self.host} ({why_unreachable(e)})") from e
+            waited = time.perf_counter() - t0
+            words = (
+                f"Gerrit at {self.host} does not answer (waited {waited:.0f} s)"
+                if timed_out(e)
+                else f"Gerrit unreachable at {self.host} ({why_unreachable(e)})"
+            )
+            self._unreachable = GerritUnavailableError(words, reason="no-answer" if timed_out(e) else "unreachable")
+            raise self._unreachable from e
         finally:
             record_call("gerrit", label, time.perf_counter() - t0)
         return raw

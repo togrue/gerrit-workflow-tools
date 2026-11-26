@@ -134,6 +134,47 @@ def test_stack_is_the_annotated_stack_with_the_ready_boundary(stack_repo: Path) 
     assert [c["code_change"] for c in stack["commits"]] == [None] * 4, "only a commit ahead of Gerrit has one"
 
 
+def test_stack_local_answers_from_git_alone_without_asking_gerrit(stack_repo: Path) -> None:
+    """``local=1``: the same commits at once, every Gerrit state unknown, Gerrit never asked."""
+    _store, _keys, rows = _gerrit(stack_repo)
+    stack = _get(GerApi(stack_repo, gerrit=_Refusing()), "/stack", local="1")
+    assert stack["local_only"] is True
+    assert [c["sha"] for c in stack["commits"]] == [row.sha for row in rows]
+    assert {c["patchset_status"] for c in stack["commits"]} == {"unknown"}
+    assert "gerrit_unavailable" not in stack
+    assert [c["held_back"] for c in stack["commits"]] == [False, False, True, True], "the ready boundary is git's"
+
+
+def test_show_says_why_gerrit_state_is_unknown_when_gerrit_refuses(stack_repo: Path) -> None:
+    """Refused credentials: the commit carries the reason, so a viewer says unknown, never none."""
+    from gerrit_workflow_tools.core.gerrit.rest import GerritUnavailableError
+
+    _gerrit(stack_repo)
+    refused = "Gerrit at g.example rejected the credentials (HTTP 401)"
+
+    class _Rejecting:
+        web_base = WEB
+
+        def __getattr__(self, name: str) -> Any:
+            def _fail(*_args: object, **_kwargs: object) -> Any:
+                raise GerritUnavailableError(refused, status=401, reason="credentials")
+
+            return _fail
+
+    shown = _get(GerApi(stack_repo, gerrit=_Rejecting()), "/show", rev="HEAD")["commits"][0]
+    assert shown["gerrit_unavailable"] == {"code": "GERRIT", "message": refused, "reason": "credentials"}
+    assert shown["patchset_status"] == "unknown"
+
+
+class _Refusing:
+    """A Gerrit that fails the test when asked anything."""
+
+    web_base = WEB
+
+    def __getattr__(self, name: str) -> Any:
+        raise AssertionError(f"Gerrit was asked ({name})")
+
+
 def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Both answer from one stack overview: the keys each has today, and the same commits and boundary."""
     store, _keys, rows = _gerrit(stack_repo)
@@ -1122,7 +1163,7 @@ def _http(
 def test_http_answers_only_with_the_token_on_a_loopback_host(served: GerHttpServer) -> None:
     status, body = _http(served, f"{V1}/health")
     assert status == 200
-    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.7.0", "feature", "g.example")
+    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.8.0", "feature", "g.example")
     assert _http(served, f"{V1}/health", token=None)[0] == 401
     assert _http(served, f"{V1}/health", token="wrong")[0] == 401
     # A page that rebinds its own name to 127.0.0.1 still sends its name as Host.

@@ -185,7 +185,7 @@ a client words its own advice while `message` stays ger's.
 
 ## API version
 
-`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.7.0`); the URL
+`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.8.0`); the URL
 prefix carries only the major (`/api/v1`). It moves on its own, not with ger's package version:
 
 | Bump | When |
@@ -211,7 +211,8 @@ All under `/api/v1`.
 ### `GET /health`
 
 `name`, `version` (ger's package version), `api` (the [API version](#api-version)), `repo`,
-`branch`, `host`; `activity` (the activity sequence) and `events`: the event stream's `state`,
+`branch`, `host`, `gerrit_wait` (the seconds Gerrit is given to answer a connection, after which
+it is said not to answer); `activity` (the activity sequence) and `events`: the event stream's `state`,
 `reason` and `source` (`ssh://user@host:port`, or `null`). `warnings`: what ger warns about in
 this repository's configuration, each with `message` (the line every command logs once: old
 key names it still answers from, [config](config.md)) and `argv`, the ger command that fixes it
@@ -271,7 +272,11 @@ The **annotated stack** of the working branch: `ger log --json`, plus per commit
 `needs_edit` (edit attention). `summary` counts `commits`, `ready`, `attention`, `needs_edit`
 and `not_on_gerrit`. `pipelines=1` adds `ci_pipelines`. When Gerrit could not be asked at all,
 the commits still come back with `patchset_status: "unknown"`, and `gerrit_unavailable` is the
-`{code, message}` saying why. `next` is `ger log --json`'s: the stack's next steps, as
+`{code, message}` saying why: its `reason` is `credentials` (HTTP 401), `unreachable` or
+`no-answer` (connecting waits at most 10 s, each read 60 s; the message says how long it waited),
+and the rest of that request does not ask Gerrit again. `local=1` does not ask Gerrit at all and
+answers with `local_only: true`: what git alone knows, every Gerrit state `unknown`, for a client
+to draw at once while the full answer is on its way. `next` is `ger log --json`'s: the stack's next steps, as
 [log.md](log.md#json-fields) describes them.
 
 For a view that draws the stack, each commit also says:
@@ -441,6 +446,10 @@ local commit with its Change-Id pushes to is that change, `local_commit: false`,
 `resolution.local_sibling` ([show](show.md)). A commit ahead of the patchset CI built, with
 other code, keeps that patchset's `ci_content`, marked with its `patch_set` and its findings' lines
 mapped onto the local commit ([while you fix it](../ci-content.md#while-you-fix-it)).
+
+When Gerrit could not be asked at all, a commit carries `gerrit_unavailable` (`{code, message,
+reason}`, as in [`GET /stack`](#get-stack)): its Gerrit state, votes and comments are then not
+known, and `comment_chains` holds only what is local. A client says them as unknown, never as none.
 
 Each comment also carries its whole text with the Gerrit fix suggestions written out below it
 (`render/suggested_fixes.py`), so a viewer shows them without rendering them itself: `text`
