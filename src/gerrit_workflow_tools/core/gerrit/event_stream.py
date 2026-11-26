@@ -17,7 +17,12 @@ from enum import Enum
 from typing import Any
 
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
-from gerrit_workflow_tools.core.gerrit.event_source import EventConnection, EventSource, EventSourceUnavailable
+from gerrit_workflow_tools.core.gerrit.event_source import (
+    CONNECT_TIMEOUT_SECONDS,
+    EventConnection,
+    EventSource,
+    EventSourceUnavailable,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -44,7 +49,10 @@ CHANGE_EVENTS = frozenset(
 _ACCOUNT_FIELDS: tuple[str, ...] = ("uploader", "author", "submitter", "abandoner", "restorer", "deleter")
 _ACCOUNT_FIELDS += ("editor", "changer", "reviewer", "adder", "remover")
 
-GRACE_SECONDS = 5.0
+GRACE_SECONDS = CONNECT_TIMEOUT_SECONDS + 2.0
+"""How long a quiet connection must stay open to count as live: past ssh's own connect timeout, by
+which ssh has given up on a host that does not answer. A shorter grace called an unanswered
+connection live, and the log said so, until the timeout ended it (F6)."""
 BACKOFF_SECONDS = (1.0, 60.0)
 
 
@@ -168,8 +176,9 @@ class EventStream:
     ``auto`` gives up for good when the first connection never becomes live; ``on`` keeps
     trying. Once a stream has been live, a drop is retried in either mode. *on_event* gets
     every parsed event, *on_status* every change of :class:`StreamStatus`; both run on the
-    reader thread and must not block for long. A connection that stays open *grace* seconds,
-    or delivers a line, is live: ``stream-events`` prints nothing until something happens.
+    reader thread and must not block for long. A connection that stays open *grace* seconds
+    (longer than ssh takes to give up on a host that does not answer), or delivers a line, is
+    live: ``stream-events`` prints nothing until something happens.
     """
 
     def __init__(

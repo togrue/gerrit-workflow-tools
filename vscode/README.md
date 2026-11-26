@@ -17,7 +17,8 @@ Failed CI counts only on the chain of your local stack, and the item then just s
 *CI failed:* and the change number; the tooltip has the change's subject. A bell
 with a count appears when chains had activity since you last looked. Click to open the change.
 While a rebase is underway (a `ger edit`, a conflict, also one you started in a terminal), the item
-shows that instead, as ger serve's headline does (and so does the first row of *Review chains*): *Rebase stopped at 101*,
+shows that instead, as ger serve's headline does (and so does the first row of *Review chains*; both read it from the
+local stack, so it goes from both with the rebase): *Rebase stopped at 101*,
 *Rebase stopped to split 101*, *Conflict in 103*, *Conflict resolved in 103*, *Rebase paused*, *Rebase stopped* when the
 commit it stopped at was reset away, or *Rebase underway* when it cannot tell why it stopped — the change number when the
 commit is on Gerrit, else its subject in quotes. A conflict is shown in the error colour, another stop as a warning. The
@@ -116,8 +117,12 @@ The commits above your upstream, newest first. One row per commit:
   a moment for the comments, with *Go there*, *Reply Done* and *Apply*. From the keyboard: the
   list walks its rows with the arrow keys (each row read out with its notes, Gerrit's state and its
   badges' words); **Tab** then reaches the focused row's badges, one stop named by their words, and
-  **Enter** there shows the comments. The Change view's head badges are one stop too, and every
-  button, row and step of both views shows the focus ring.
+  **Enter** there shows the comments; the next **Tab** reaches the row's *Edit Commit Here* and
+  *Open in Gerrit*. A redraw (a refresh, the Change view following the row) keeps the keyboard on the
+  button it was on, so **Enter** there does the same every time; *Edit Commit Here* asks nothing
+  (Abort puts the branch back) and says at once on Local stack that `ger edit` is starting. The
+  Change view's head badges are one stop too, and every button, row and step of both views shows
+  the focus ring.
 - An **icon** in front says how the commit relates to Gerrit: a **full circle** when it is the
   same as on Gerrit; a **yellow arrow up** in a circle when it is only rebased since the last push
   (the same code by patch-id, whitespace and message aside: Gerrit usually keeps the votes); a **yellow diff** square when its code changed since (push it, and
@@ -180,7 +185,11 @@ The commits above your upstream, newest first. One row per commit:
 - **The Change view follows the rebase.** Each time it stops somewhere new — an edit stop, a
   conflict, also from a `git rebase --continue` in a terminal — the Change view shows the commit it
   stopped at, whatever was clicked before (the keyboard stays where it is). While it stays at that
-  stop (you amend, resolve, or click another row) the view is yours.
+  stop (you amend, resolve, or click another row) the view is yours. A review follows the same way:
+  started, moved along its chain or updated anywhere (the views, `ger review` in a shell, a restart),
+  the Change view shows the change it holds; once you leave it, the change's page on Gerrit. Only a
+  commit of your own stack that left it is said to be *not in the local stack any more*, and it is
+  shown again once it is back.
 - **Stopped on a conflict**, the commit it stopped at has a red conflict icon and is not dimmed:
   it is what wants you. The files still conflicted are listed under the banner; click one to
   open it with its conflict markers in the text editor, where VS Code offers *Accept Current*,
@@ -260,8 +269,10 @@ The commits above your upstream, newest first. One row per commit:
   the push: branch no-such-branch not found*, with **Choose Upstream…** where ger's next step is
   another upstream), and once in the status bar. It comes from core's **step outcome** (`GET /stack`'s
   `last_outcome`), which each of those commands leaves in the git dir; the view looks again as soon
-  as the command in the terminal ends (VS Code's shell integration) or the file changes. Once `HEAD`
-  moves on, the outcome is history and goes.
+  as the command in the terminal ends (VS Code's shell integration) or the file changes. It lives
+  until the next action (Edit Commit Here, Work on Next, a rebase step, Push) or until what it says
+  is no longer true, whichever is first: once `HEAD` moves on, a rebase begins or ends, or the
+  changes it kept in a stash are back in the work tree (`git stash apply`), it is history and goes.
 - **The title bar offers Work on Next and Push only where they would do something** (P6): Work on
   Next while a commit needs edits and nothing blocks the rebase underway (no conflict, no fix
   left unamended), Push while a push would send something (new code, a commit not on Gerrit,
@@ -273,7 +284,10 @@ The commits above your upstream, newest first. One row per commit:
   as the push does.
 - **A detached HEAD** says *Detached HEAD: commits made here belong to no branch*, with **Create
   Branch Here…** (VS Code's *Git: Create Branch…*).
-- Push (`ger push` in the *ger* terminal, where it can ask you). During a rebase, when `ger push`
+- Push (`ger push` in the *ger* terminal, where it can ask you). A push is never confirmed with
+  its preview off screen: in a terminal too low to show it, Enter does not push, `ger push` says so,
+  and the extension makes the panel taller and puts the keyboard there (it reads `ger push`'s
+  outcome *push waits: the terminal is too low to show what is pushed*). During a rebase, when `ger push`
   would refuse (the branch still points at the commits from before it), Push says *Finish the
   rebase first*, in `ger push`'s own words, and offers the ways on instead (Abort, and Continue
   once nothing is conflicted); during a
@@ -487,7 +501,11 @@ The commits above your upstream, newest first. One row per commit:
   else marked outdated; going to a resolved comment draws its thread (read only) at its line; and
   going to a comment while the review's combined diff is in front opens the file in a tab of its own
   beside it. When the inbox no longer lists a change of the chain under review (a new patchset
-  dropped its Verified vote), the task header keeps it, marked *not in your inbox now*.
+  dropped its Verified vote), the task header keeps it, marked *not in your inbox now*. An abandoned
+  or merged change of the chain keeps its row too, marked *abandoned* or *merged*, and is not counted
+  in what is left (*1 closed*); reviewing the change above an abandoned one, the header says so in a
+  line of its own (*builds on 2306 "…", which is abandoned: its code is the base this change is
+  reviewed on*). On a closed change the Files list offers no *Mark all seen*: nothing is left to read there.
 - **Review Next Change in Chain** (arrow in the Change view's title bar, `Ctrl+Alt+PageDown`) and
   **Review Previous Change in Chain** (the `…` menu, `Ctrl+Alt+PageUp`), while a staged review sits
   in this checkout: `ger review --next` / `--prev`. The review moves to the change above (below) in
@@ -656,21 +674,29 @@ two primary buttons.
 once per session, with **Run ger config --migrate**, which renames them all in the *ger* terminal.
 
 **Gerrit's event stream.** When `ger serve` can follow Gerrit's event stream (`ssh … gerrit
-**Your repository.** The views follow it as the built-in Git view does: a commit, a checkout, a
-`ger edit` and its `git rebase --continue` (anything that moves `HEAD`, a branch or a rebase) or a fetch that moves the upstream, refresh *Local stack*,
-the *in your stack* markers and the Change view's buttons about a second after the last change, also when you
-work in the integrated terminal. This does not make Gerrit refetch anything (answers still fresh are reused), and says nothing
-in a notification, as you did it yourself.
-
 stream-events`: it needs ssh, a key Gerrit accepts and the *Stream Events* capability), the
 views refresh a second after review activity happens — a new patchset, comment, vote, reviewer,
 merge — instead of at the next poll, and the poll drops to a 15-minute safety net. When it
 cannot (HTTP only, no key, no capability, the connection dropped), nothing changes: the views
 poll every `ger.pollSeconds` as before, and no notification says so. The status bar tooltip
 says which of the two is keeping the views current, and why; the log (**Show Log**) has one line
-per change. Configure it with the git keys `ger.eventStream` (`auto`, `on`, `off`) and
+per change. Beside *Review chains*' title a few words say which it is: *live*; *checked 12:40 · next
+in 58 min* while the views poll; *not reachable since 12:41* while Gerrit cannot be asked. A
+`ger serve` that dies under the views is started again at once, and that is one line in the log
+(*ger serve exited (137) and was started again: listening on …*), nothing on screen. Configure the
+stream with the git keys `ger.eventStream` (`auto`, `on`, `off`) and
 `ger.eventStreamHost` / `Port` / `User`:
 [docu/Configuration.md](../docu/Configuration.md#ger-serve--gereventstream).
+
+**Your repository.** The views follow it as the built-in Git view does: a commit, a checkout, a
+`ger edit` and its `git rebase --continue` (anything that moves `HEAD`, a branch or a rebase) or a fetch that moves the upstream, refresh *Local stack*,
+the *in your stack* markers and the Change view's buttons about a second after the last change, also when you
+work in the integrated terminal. This does not make Gerrit refetch anything (answers still fresh are reused), and says nothing
+in a notification, as you did it yourself. While a rebase is stopped or a review is checked out here, the work tree is followed
+too: a file you save, or one changed elsewhere (a terminal, an agent), and the index (`git add`) bring
+the stop's *changed, not amended* and *staged* files, and Continue's words, within a moment, one
+`GET /stack` for each burst of changes (VS Code's own save and file events; git is not polled). A
+refused Continue or Work on Next reads the stack again too, so the buttons under the refusal agree with it.
 
 These are VS Code settings. How ger itself behaves (`ger.reviewCheckout`, `ger.webUrl` and
 the rest) is git configuration, the same for the extension and the command line: see
@@ -923,14 +949,14 @@ estimate, the totals per loop and the steps over budget. See
 | `src/comments.ts` | Editor comment threads, stepping, draft replies, Suggest Edit and Apply. |
 | `src/suggestions.ts` | Suggested edits as a thread shows them (old → new), and where Apply writes one, or why not. Pure, unit-tested. |
 | `src/statusBar.ts` | The status bar item: the headline (a rebase underway, when core says so) and the activity bell. |
-| `src/follow.ts` | The Change view following its commit through rewrites and amends. |
+| `src/shownChange.ts`, `src/follow.ts` | Which change the Change view shows and why, the one owner of it: the change the review here holds (however the review moved: the views, a shell, a restart), the commit a rebase stopped at, your selection followed through rewrites and amends, said when it left the stack and shown again when it is back (the rule pure, unit-tested); applying it on every change of the views' state. |
 | `src/diffTabs.ts`, `src/staleDiffs.ts` | `ger-file:` documents and the diff tabs of them: opening one, knowing it again, marking it stale or closing it once its right side is no longer the commit its title names, unmarking it once it is again (the rule is pure, unit-tested); your files' repository paths; saving before a rebase continues. |
 | `src/compareRows.ts` | What the Change view compares: the From and To pickers, the default mode and its toggle, what the files compared are called. Pure, unit-tested. |
 | `src/problemRows.ts` | An error state of the two webview views: a sentence in ger's words, git's or Gerrit's under it, the options as buttons. Pure, unit-tested. |
 | `src/changeLoad.ts` | Which change the Change view shows and what of it has come: drawn at once from the clicked row, filled in answer by answer, a stale answer dropped. Pure, unit-tested. |
 | `src/review.ts` | Review Change, Check Out to Work On, Leave Review Checkout, Edit Commit Here; moving a review along its chain. |
 | `src/reviewWalk.ts`, `src/reviewAhead.ts` | The review walk as the views do it: the change under review shown with all its files; the next one asked ahead and drawn from it before the checkout, its diff from git, then your files. |
-| `src/task.ts`, `src/taskRows.ts` | The task you are in (a review, a rework): its header (pure, unit-tested), and the context keys the lists step aside by. |
+| `src/task.ts`, `src/taskRows.ts`, `src/reviewTask.ts` | The task you are in (a review, a rework): its header (pure, unit-tested; the review's in reviewTask.ts), and the context keys the lists step aside by. |
 | `src/changeScreen.ts` | The Change view as a screen: the change, the task header and Next put together, one primary button that is the next step. Pure, unit-tested. |
 | `src/nextAction.ts` | Next: the one thing to do now on the change shown. Pure, the rules are the table above, unit-tested row by row. |
 | `src/stackSummary.ts` | Local stack at a glance: `ger log`'s summary line, and the row the ready boundary is drawn under. Pure, unit-tested. |

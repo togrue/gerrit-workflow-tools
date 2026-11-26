@@ -4,7 +4,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { ApiError, GerApiError, GerClient, Headline, MoveConflict, Overview, ReviewState, Stack, UpstreamChoice, isStack } from "./api";
-import { Seen, blockedSwaps, chainsWithActivity, headlineNews, rememberSeen, swapKey } from "./format";
+import { Seen, blockedSwaps, chainsWithActivity, currentHeadline, headlineNews, rememberSeen, swapKey } from "./format";
 import type { RowStatus } from "./changeLoad";
 import { IncompatibleServe } from "./compat";
 import { GerProcess, ServeFailed } from "./server";
@@ -125,10 +125,14 @@ export class Model implements vscode.Disposable {
 
   /** The chain of the staged review here at its patchset, base first (`/review?chain=1`); undefined without one. */
   reviewChain: number[] | undefined;
+  /** Every change of that chain, closed ones too with Gerrit's status (`/review?chain=1`'s `members`, API 1.10). */
+  reviewMembers: ReviewState["members"];
   /** Subjects of the changes the inbox listed this session: the task header names a change it no longer lists. */
   readonly subjects = new Map<number, string>();
   /** When the last overview that Gerrit answered came; undefined before the first. */
   loadedAt: Date | undefined;
+  /** Since when Gerrit could not be asked (unreachable, no answer, refused credentials); undefined while it can. */
+  awaySince: Date | undefined;
   /** Seconds Gerrit is given to answer, as the running ger serve said (`/health`'s `gerrit_wait`). */
   gerritWait: number | undefined;
 
@@ -140,6 +144,11 @@ export class Model implements vscode.Disposable {
   get stack(): Stack | undefined {
     const local = this.local;
     return isStack(local) ? local : undefined;
+  }
+
+  /** The headline the views show: a rebase underway as the stack says it, else the overview's (`currentHeadline`). */
+  get headline(): Headline | undefined {
+    return currentHeadline(this.overview, this.stack);
   }
 
   /** Why Gerrit could not be asked in the last overview (the inbox's error, else the stack's), when it could not. */
@@ -181,8 +190,13 @@ export class Model implements vscode.Disposable {
     this.loadStartedAt = Date.now();
     try {
       const stack = await (await this.client()).stack();
+      // A rebase headline that ended with this stack hid the inbox's: that one is asked again.
+      const ended = this.overview?.headline?.section === "local" && stack.headline === null;
       this.setStack(stack);
       this.stackContext();
+      if (ended) {
+        void this.refresh();
+      }
     } catch {
       await this.refresh(); // a whole load says what went wrong, as any refresh does
     }
@@ -193,6 +207,12 @@ export class Model implements vscode.Disposable {
    * once, before `/stack` confirms the rest. Local state the checkout has already made true.
    */
   adoptReview(review: ReviewState): void {
+    // The review moved here: it is the review now, with the chain the step walked (served with it). A
+    // refresh Gerrit then refuses keeps that chain, as it is the same review (F4: "change 1 of 1").
+    if (review.chain?.length) {
+      this.reviewChain = review.chain;
+    }
+    this.review = review;
     const stack = this.stack;
     if (stack?.staged_review && this.overview) {
       this.overview = { ...this.overview, local: { ...stack, staged_review: { ...stack.staged_review, ...review } } };
@@ -253,6 +273,7 @@ export class Model implements vscode.Disposable {
       const same = review && this.review?.number === review.number && this.review.patch_set === review.patch_set;
       // `[]` is core's "Gerrit cannot say": not known, so not a chain of none.
       this.reviewChain = review?.chain?.length ? review.chain : same ? this.reviewChain : undefined;
+      this.reviewMembers = review?.members?.length ? review.members : same ? this.reviewMembers : undefined;
       this.review = review ?? undefined;
       void vscode.commands.executeCommand("setContext", "ger.reviewOpen", Boolean(review));
       this.stackContext();
@@ -266,8 +287,11 @@ export class Model implements vscode.Disposable {
       const seen = rememberSeen(this.overview, this.memento.get<Seen>(SEEN_KEY, {}));
       this.active = chainsWithActivity(this.overview, seen);
       await this.memento.update(SEEN_KEY, seen);
-      // When the views last heard from Gerrit: said while they cannot follow it live. Not when Gerrit could not be asked.
-      this.loadedAt = this.gerritAway() ? this.loadedAt : new Date();
+      // When the views last heard from Gerrit: said while they cannot follow it live. Not when Gerrit could not be asked;
+      // then since when it could not (the first refusal after the last answer).
+      const away = this.gerritAway();
+      this.loadedAt = away ? this.loadedAt : new Date();
+      this.awaySince = away ? (this.awaySince ?? new Date()) : undefined;
       await this.setState("ready");
     } catch (error) {
       const state = failureState(error);

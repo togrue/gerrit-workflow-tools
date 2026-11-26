@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import socket
+import struct
 import sys
 import threading
 import urllib.error
@@ -198,7 +199,7 @@ def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monk
     assert list(log) == ["stack", "rebase", "upstream", "commits", "next"]
     assert list(stack) == [
         *("branch", "head", "rebase_in_progress", "rebase", "upstream", "push_blocked", "staged_review"),
-        *("review_blocked", "last_outcome", "stack"),
+        *("headline", "review_blocked", "last_outcome", "stack"),
         *("summary", "commits"),
         "next",
     ]
@@ -878,7 +879,16 @@ def test_review_open_checks_out_in_the_review_worktree_and_done_leaves_it(stack_
                 for n in (103, 102, 101, 100)
             ],
         )
-    assert _get(api, "/review", chain="1")["review"]["chain"] == [101, 102, 103]
+    asked = _get(api, "/review", chain="1")["review"]
+    assert asked["chain"] == [101, 102, 103]
+    # Every member keeps its place with Gerrit's status: a client marks the closed ones in words.
+    assert [(m["number"], m["status"]) for m in asked["members"]] == [
+        (100, "MERGED"),
+        (101, "NEW"),
+        (102, "ABANDONED"),
+        (103, "NEW"),
+    ]
+    assert _get(api, "/review")["review"]["members"] is None, "only asked for with chain=1"
     for key in keys:
         store.set_related(
             key, [{"_change_number": n, "_revision_number": 1, "status": "NEW"} for n in (103, 102, 101, 100)]
@@ -1245,7 +1255,7 @@ def _http(
 def test_http_answers_only_with_the_token_on_a_loopback_host(served: GerHttpServer) -> None:
     status, body = _http(served, f"{V1}/health")
     assert status == 200
-    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.9.0", "feature", "g.example")
+    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.10.0", "feature", "g.example")
     assert _http(served, f"{V1}/health", token=None)[0] == 401
     assert _http(served, f"{V1}/health", token="wrong")[0] == 401
     # A page that rebinds its own name to 127.0.0.1 still sends its name as Host.
@@ -1334,6 +1344,46 @@ def test_http_skips_a_read_its_caller_called_off_while_it_queued(
     assert asked.wait(timeout=10)
     assert _http(served, f"{V1}/health")[0] == 200  # a caller that waits is answered
     assert f"{V1}/show" not in handled
+
+
+def test_http_says_nothing_but_a_debug_line_when_the_caller_hung_up_before_its_answer(
+    served: GerHttpServer, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A client that went away (the Change view moved on) is no error: no traceback, one debug line."""
+    hung_up, asked, answered = threading.Event(), threading.Event(), threading.Event()
+
+    def handle(_method: str, _path: str, *_rest: Any) -> dict[str, Any]:
+        asked.set()
+        assert hung_up.wait(timeout=10)
+        return {"big": "x" * 8_000_000}  # more than a socket buffer: the write meets the closed connection
+
+    monkeypatch.setattr(served.api, "handle", handle)
+    log = logging.getLogger("gerrit_workflow_tools.server.httpd")
+    seen: list[str] = []
+
+    class Collect(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            seen.append(record.getMessage())
+            if "went away" in record.getMessage():
+                answered.set()
+
+    collect, level = Collect(), log.level
+    log.addHandler(collect)
+    log.setLevel(logging.DEBUG)
+    try:
+        port = int(served.url.rsplit(":", 1)[1])
+        caller = socket.create_connection(("127.0.0.1", port))
+        caller.sendall(f"GET {V1}/show HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer s3cret\r\n\r\n".encode())
+        assert asked.wait(timeout=10)
+        caller.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+        caller.close()  # a reset, as an aborted fetch leaves it
+        hung_up.set()
+        assert answered.wait(timeout=10), seen
+    finally:
+        log.setLevel(level)
+        log.removeHandler(collect)
+    assert "Traceback" not in capsys.readouterr().err
+    assert _http(served, f"{V1}/health")[0] == 200  # it serves on
 
 
 def test_serve_prints_where_it_listens_and_stops_with_stdin(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

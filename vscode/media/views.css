@@ -49,6 +49,8 @@ body[data-vscode-theme-kind="vscode-light"],
 body[data-vscode-theme-kind="vscode-high-contrast-light"] {
   --ger-good: color-mix(in srgb, var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-charts-green)) 75%, var(--vscode-foreground));
   --ger-added: var(--ger-good);
+  /* The list's yellow measured 4.3:1 drawn at 11 px on the current step (22): darkened toward the text, as the green is. */
+  --ger-warn: color-mix(in srgb, var(--vscode-list-warningForeground, var(--vscode-charts-yellow)) 75%, var(--vscode-foreground));
 }
 /* Dark: git's red for deleted lines is too dark for words on the side bar. */
 body[data-vscode-theme-kind="vscode-dark"],
@@ -164,6 +166,14 @@ a:focus-visible {
   display: none;
   flex: none;
   gap: 2px;
+}
+
+/* A Local stack row has its badges before its icon buttons for the keyboard, after them on screen. */
+.row > .actions {
+  order: 1;
+}
+.row > .badges {
+  order: 2;
 }
 
 .row:hover .actions,

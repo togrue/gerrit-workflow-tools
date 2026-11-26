@@ -226,6 +226,7 @@ status bar message: $(check) Copied SHA <sha>…
 ```
 terminal "ger": runs `ger edit <sha>`
 status bar message: $(terminal) ger edit runs in the ger terminal: once the rebase stops at "103: Cleanup after experiment", amend it, then ger rebase --continue
+progress (in view ger.stack): Starting ger edit of "103: Cleanup after experiment" in the ger terminal…
 --- on screen:
 (no change)
 ```
@@ -236,8 +237,8 @@ status bar message: $(terminal) ger edit runs in the ger terminal: once the reba
 
 ```
 progress (notification): Checking out 900: Add retry to the uploader
-notification (info): Change 900 (patchset 1) is checked out for review on change-900 in <repo>-review, with its changes staged.  [Open Review Worktree]
-    → pressed "Open Review Worktree"
+notification (info): Change 900 (patchset 1) is checked out for review on change-900 in <repo>-review, with its changes staged.  [Go to Review Window]
+    → pressed "Go to Review Window"
 new VS Code window on: <repo>-review
 --- on screen:
 + change | [Go to Review Window] — the review of 900 is open in <repo>-review, in its own window (Alt+Enter)
@@ -1015,6 +1016,7 @@ status bar message: $(check) Draft saved on Gerrit, visible only to you: your ne
 ```
 terminal "ger": runs `ger edit <sha>`
 status bar message: $(terminal) ger edit runs in the ger terminal: once the rebase stops at "Extract command routing", amend it, then ger rebase --continue
+progress (in view ger.stack): Starting ger edit of "Extract command routing" in the ger terminal…
 --- on screen:
 (no change)
 ```
@@ -3763,7 +3765,7 @@ notification (info): Change 900 has no review chain to walk.  [Vote on the Chain
 
 ## 121. Change › … › Leave Review Checkout
 
-**Expect:** Back on the branch it came from; the views are your stack again, and the task header is gone.
+**Expect:** Back on the branch it came from; the views are your stack again, and the task header is gone. The Change view shows the change left as it is on Gerrit, with Review change: never as not in the local stack any more, which it never was.
 
 ```
 progress (notification): Leaving the review
@@ -3788,30 +3790,20 @@ notification (info): Left the review of change 900: this checkout is back on fea
 + stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 + stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 + stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
-+ change | title: (nothing shown)
-+ change | "Add retry to the uploader" is not in the local stack any more (a checkout, a drop or a squash). Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.
 - chains |   test! temporary experiment — 4 changes · V-1 CR+2 💬2 open · active <age> ago  [ger.chain.url]
 - chains |     test! temporary experiment — 103 · V-1 CR+2  [ger.change.url]
 - chains |     Refactor parser init — 102 · V-1 CR+2  [ger.change.url]
 - chains |     Extract command routing — 101 · V+1 CR+2 💬2 open  [ger.change.url]
 - chains |     Cleanup after experiment — 100 · V+1 CR+2  [ger.change.url]
 - stack  | Add retry to the uploader — under review · <sha> · the same as on Gerrit  [comments 2, review +1, ci good]
-- change | title: Change 900
 - change | ▌ Reviewing alice's chain: Add retry to the uploader — change 1 of 1  [Only this task]
 - change | ▌ Left: you voted on 1 of 1 · 3 comments to answer
 - change | ▌ ▸ 1. Add retry to the uploader — reviewing · you voted +1 · 3 to answer
 - change | ▌ [Leave review] back to feature; the review's branches go
-- change | Waiting for your review, unresolved comments — V+1 CR+1 💬2 open
++ change | [Review change] — check it out for review, staged, with all its files (Alt+Enter)
 - change | [Next comment] — 2 of 3 to answer not gone to yet (Alt+Enter)
-- change | Commit message — Add retry to the uploader  (read-only)
++ change | Comparing — Base commit → Patchset 1 (current) · default: Against its base commit
 - change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
-- change | Files — 1 · +1 −0
-- change |   uploader.txt — added +1 −0
-- change | Comments — 3 to answer, 1 gone to · 1 of yours, not published
-- change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
-- change |   And cap the delay. — uploader.txt:1 · Bob Architect  [open]
-- change |   Cap the retries at 5? — uploader.txt:1  [open]
-- change |   Is 3 enough on a slow link? — your draft · uploader.txt:1  [yours]
 ```
 
 ## At the end
@@ -3836,7 +3828,17 @@ stack  | ---- ready boundary ----
 stack  | Refactor parser init — <sha> · code changed · its code changed since the last push  [last pushed review +2?, last pushed ci bad?]
 stack  | Extract command routing — <sha> · only rebased since the last push  [comments 2, review +2, ci good]
 stack  | Cleanup after experiment — <sha> · only rebased since the last push  [review +2, ci good]
-change | title: (nothing shown)
-change | "Add retry to the uploader" is not in the local stack any more (a checkout, a drop or a squash). Select a change in Review chains or a commit in Local stack to see its commit message, files, comments and CI findings.
+change | title: Change 900
+change | Waiting for your review, unresolved comments — V+1 CR+1 💬2 open
+change | [Review change] — check it out for review, staged, with all its files (Alt+Enter)
+change | Commit message — Add retry to the uploader  (read-only)
+change | Comparing — Base commit → Patchset 1 (current) · default: Against its base commit
+change | Files — 1 · +1 −0
+change |   uploader.txt — added +1 −0
+change | Comments — 3 to answer, 1 gone to · 1 of yours, not published
+change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
+change |   And cap the delay. — uploader.txt:1 · Bob Architect  [open]
+change |   Cap the retries at 5? — uploader.txt:1  [open]
+change |   Is 3 enough on a slow link? — your draft · uploader.txt:1  [yours]
 editor | uploader.txt (file, line 1)
 ```

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Diff, Member, RebaseAction, ShownCommit, StackCommit } from "../src/api";
-import { ChangeDetail, ciRevs, memberStatus, memberTarget, sameChange, stoppedHere } from "../src/changeLoad";
+import { ChangeDetail, ciRevs, memberStatus, memberTarget, sameChange, stoppedHere, worktreeIsHead } from "../src/changeLoad";
 import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { ChangeTarget } from "../src/model";
 import { badges } from "../src/stackRows";
@@ -213,6 +213,25 @@ test("a /show failure stays shown when a late answer of another part comes", () 
   assert.equal(detail.problem, "change 7 is gone");
 });
 
+test("F4: Gerrit refusing a reload leaves what is local of the change drawn, marked as not asked of Gerrit", () => {
+  const commit = row("Extract routing");
+  const detail = new ChangeDetail();
+  const token = detail.select(target(commit), false);
+  assert.ok(detail.arrive(token, "commit", answer(commit)));
+  assert.ok(detail.arrive(token, "base", files("Extract routing")));
+  const again = detail.select(target(commit), true); // the reload after a refused publish
+  const refused = { code: "GERRIT", message: "Gerrit at g rejected the credentials (HTTP 401)", reason: "credentials" };
+  assert.ok(detail.fail(again, refused.message, refused, true));
+  assert.equal(detail.problem, undefined, "the message and the files stay");
+  assert.deepEqual(detail.shown?.gerrit_unavailable, refused);
+  assert.deepEqual([detail.shown?.patchset_status, detail.shown?.own], ["unknown", null], "said unknown, as /show says it");
+  assert.ok(detail.diff, "its files too");
+  // Nothing drawn yet: the refusal is the view, as before.
+  const fresh = new ChangeDetail();
+  assert.ok(fresh.fail(fresh.select(target(commit), false), refused.message, refused, true));
+  assert.equal(fresh.problem, refused.message);
+});
+
 test("answers out of order: the review delta before the commit fills in its hint, the rest still loading", () => {
   const member: Member = { number: 12, change_id: "I12", subject: "Add cache", verified: 1, code_review: null, comments_unresolved: 0, attention_reasons: [], severity: "ok", url: "https://g/c/12", local_sha: null, sha: "f".repeat(40) };
   const detail = new ChangeDetail();
@@ -271,4 +290,12 @@ test("the commit a rebase stopped at before applying it is told from the stack h
   assert.equal(stoppedHere(mine(commits[1]), undefined), undefined, "no stack held yet");
   const byHand = stack(commits, { rebase_in_progress: true, rebase: { branch: "feature", onto: null, orig_head: null, stop: null, applied: false, current: commits[1].sha, unmerged: [], as_before: false, actions: ["continue", "abort"], refused: {} } });
   assert.equal(stoppedHere(mine(commits[1]), byHand), undefined, "a resolution committed by hand as another commit: core serves no stop, so no conflict and no Conflicts resolved");
+});
+
+test("state 28: at a conflict the working files are not HEAD's commit, so its diff is read from git, not from your files", () => {
+  const rebase = (extra: object) => stack([], { rebase_in_progress: true, rebase: { applied: false, unmerged: [], ...extra } as never });
+  assert.equal(worktreeIsHead(stack([])), true, "no rebase: your files are HEAD's");
+  assert.equal(worktreeIsHead(rebase({ applied: true })), true, "an edit stop: the commit is applied, your fix goes in place");
+  assert.equal(worktreeIsHead(rebase({ unmerged: ["calc/ops.py"] })), false, "a conflict: the files hold the merge of the next commit");
+  assert.equal(worktreeIsHead(rebase({})), false, "resolved, not continued: still the next commit's merge");
 });

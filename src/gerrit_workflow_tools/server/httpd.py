@@ -117,6 +117,15 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: Any) -> None:  # pylint: disable=redefined-builtin
         logger.debug("%s %s", self.address_string(), format % args)
 
+    def handle(self) -> None:
+        """Serve the connection; a client that went away before its answer (it moved on) is no error."""
+        try:
+            super().handle()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError) as gone:
+            self.close_connection = True
+            asked = f"{getattr(self, 'command', None) or '-'} {getattr(self, 'path', None) or '-'}"
+            logger.debug("%s: the client went away before the answer (%s)", asked, gone)
+
     def do_GET(self) -> None:  # pylint: disable=invalid-name
         """Answer a read."""
         self._answer("GET")

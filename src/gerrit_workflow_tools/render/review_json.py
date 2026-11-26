@@ -19,7 +19,8 @@ from gerrit_workflow_tools.core.inbox import (
 from gerrit_workflow_tools.core.rebase_state import RebaseStop
 from gerrit_workflow_tools.core.review_chain import ChainMember, ReviewChain, format_age
 from gerrit_workflow_tools.core.review_checkout import ReviewState
-from gerrit_workflow_tools.core.review_target import VoteOption, VotePlan
+from gerrit_workflow_tools.core.review_target import RelatedChange, VoteOption, VotePlan
+from gerrit_workflow_tools.core.step_outcome import StepOutcome
 from gerrit_workflow_tools.render.comments import chain_location, draft_transition, drafts_in, first_line
 from gerrit_workflow_tools.render.status_fmt import unresolved_comments_text
 
@@ -87,10 +88,16 @@ def chain_json(chain: ReviewChain, *, to_review: bool = False) -> dict[str, obje
     }
 
 
-def review_state_json(state: ReviewState, *, chain: list[int] | None, url: str | None) -> dict[str, object]:
-    """The review state, flat: the reviewed patchset's fields beside where and how it is checked out."""
+def review_state_json(
+    state: ReviewState, *, chain: list[int] | None, url: str | None, members: list[RelatedChange] | None = None
+) -> dict[str, object]:
+    """The review state, flat: the reviewed patchset's fields beside where and how it is checked out.
+
+    *members*, when asked for: every change of the chain, closed ones too, with Gerrit's status.
+    """
     flat = {**asdict(state.change), **{k: v for k, v in asdict(state).items() if k != "change"}}
-    return {**flat, "branch": state.branch, "chain": chain, "url": url}
+    listed = [asdict(member) for member in members] if members is not None else None
+    return {**flat, "branch": state.branch, "chain": chain, "members": listed, "url": url}
 
 
 def _headline_text(headline: Headline) -> str:
@@ -153,6 +160,13 @@ def sections_json(sections: list[InboxSection]) -> list[dict[str, object]]:
         }
         for section in sections
     ]
+
+
+def outcome_json(outcome: StepOutcome | None) -> dict[str, object] | None:
+    """The **step outcome** the last rebase step or push left, while it is still the state, or ``None``."""
+    if outcome is None:
+        return None
+    return {**asdict(outcome), "more": list(outcome.more), "kept": list(outcome.kept)}
 
 
 def headline_json(headline: Headline | RebaseHeadline | None) -> dict[str, object] | None:

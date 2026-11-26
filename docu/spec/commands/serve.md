@@ -124,7 +124,7 @@ attention set: that, like anything else, still arrives with the next poll.
 |----------------|---------|
 | `off` | Not followed: `ger.eventStream` is `off`, no Gerrit host is known, or (tests) a Gerrit was injected without an event source. `reason` says which. |
 | `connecting` | ssh is starting. |
-| `live` | Following. A connection is live once it has stayed open 5 seconds or delivered an event. |
+| `live` | Following. A connection is live once it has delivered an event, or stayed open past ssh's connect timeout (10 seconds) by 2 seconds: a host that never answers is not called live. |
 | `retrying` | The stream dropped (or, with `on`, never came up); `reason` is the last thing ssh said. It reconnects after 1, 2, 4 … seconds, at most 60. |
 | `unavailable` | `auto` tried once and the stream never became live (no ssh, `Permission denied`, no capability, refused); not tried again until the service restarts. |
 
@@ -185,7 +185,7 @@ a client words its own advice while `message` stays ger's.
 
 ## API version
 
-`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.9.0`); the URL
+`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.10.0`); the URL
 prefix carries only the major (`/api/v1`). It moves on its own, not with ger's package version:
 
 | Bump | When |
@@ -401,9 +401,16 @@ or `ger push` left in this worktree, or `null`: `command` (`rebase --abort`, `pu
 a refusal, a failure or a cancel), `text` (the one line of what happened, in the command's words:
 `rebase aborted: s14 is at d66fc18 …, as before the rebase`, `refused: you have unstaged changes …`,
 `push cancelled: nothing sent`), `more` (the lines after it: what was kept and where, the `next:`
-step), `at` (seconds since the epoch) and `head` (`HEAD` then). A client that ran the step in a
-terminal takes a newer `at` as the step's end and shows `text`; once `HEAD` is not `head` any
-more, the outcome is history. It is written to the file ger-outcome.json in the worktree's git dir.
+step), `at` (seconds since the epoch), `head` (`HEAD` then), `rebasing` (a rebase was underway
+then) and `kept` (API 1.10: the files whose changes it put in a stash). A client that ran the step
+in a terminal takes a newer `at` as the step's end and shows `text`. It is served only while it is
+the state: `null` once `HEAD` is not `head` any more, once a rebase began or ended since, or once a
+file of `kept` has changes again (`git stash apply` brought them back; that check costs two `git
+diff` calls, and only then). It is written to the file ger-outcome.json in the worktree's git dir.
+
+`headline` (API 1.10) is the rebase underway as the **headline** `GET /overview` makes of it
+(`section` `local`), or `null` without one: a client that read only the stack after a step knows
+the rebase headline it shows has ended, or begun.
 
 `review_blocked` is why `ger review` would refuse to check a change out for review here now, or
 `null`: only where the review goes into this checkout (`ger.reviewCheckout` = `branch`) and no
@@ -624,7 +631,10 @@ In `GET /show`, every comment chain carries `held`.
 The **review state**, as `ger review --status --json`, under `review`; `null` when none. With
 `chain=1` its `chain` is the review chain's open changes, base first, as `ger review` prints it,
 with the change under review in its place even when it was abandoned or merged since (one Gerrit
-request); without, `null`.
+request); without, `null`. With `chain=1` its `members` (API 1.10) are every change of that chain,
+base first, closed ones in their place: `number`, `subject` and Gerrit's `status` (`NEW`, `MERGED`,
+`ABANDONED`), from the same request; a client marks a closed member in words, counts it as no work
+left, and says so when the change reviewed builds on an abandoned one. Without `chain=1`, `null`.
 
 ### `GET /vote?change=<changeish>`
 

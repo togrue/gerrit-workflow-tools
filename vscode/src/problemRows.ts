@@ -26,7 +26,7 @@ export const PROBLEM_ACTIONS = {
   log: { label: "Show Log", title: "What ger serve said, in the extension's log", command: { id: "ger.showLog", args: [] } },
   retry: { label: "Retry", title: "Ask Gerrit again (Refresh from Gerrit)", command: { id: "ger.refresh", args: [] } },
   restart: { label: "Restart ger serve", title: "Start ger serve again and read everything afresh", command: { id: "ger.refresh", args: [] } },
-  credentials: { label: "Check Credentials (ger setup)…", title: "ger setup asks for your Gerrit user and HTTP password and stores them for this Gerrit", command: { id: "ger.setup", args: [] } },
+  credentials: { label: "Check Credentials (ger setup)…", title: "ger setup --credentials asks for your Gerrit user and HTTP password and stores them for this Gerrit", command: { id: "ger.setup", args: ["credentials"] } },
   address: { label: "Check the Gerrit Address (ger setup)…", title: "ger setup asks for Gerrit's web address (ger.webUrl) and your credentials", command: { id: "ger.setup", args: [] } },
 } satisfies Record<string, StackAction>;
 
@@ -36,9 +36,20 @@ export const PROBLEM_WORDS = {
   stack: "Your local stack could not be read, so it is not shown.",
   /** What still works while Gerrit cannot be asked: said once, beside the reason. */
   localGoesOn: "Your local stack, its files and git work without Gerrit; what Gerrit says about them is unknown until it answers.",
+  /** The same, short enough for a row of Review chains (F14: it was cut at "what Ger…"); the whole is its tooltip. */
+  localGoesOnShort: "Local stack and git work without Gerrit",
   credentials: "Gerrit refused your credentials: nothing can be read from it or sent to it.",
   away: "Gerrit cannot be asked: what it says is unknown, not none.",
 };
+
+/**
+ * Why Gerrit could not be asked, short enough for the status bar (F14: "…check ger.u" was all of the
+ * fix that showed): the condition alone; the whole sentence and the fix are in the tooltip and the view.
+ */
+export function shortAway(error: ApiError): string {
+  const short: Record<string, string> = { credentials: "Gerrit refused the credentials", unreachable: "Gerrit unreachable", "no-answer": "Gerrit does not answer" };
+  return short[error.reason ?? ""] ?? error.message;
+}
 
 /** Whether `error` says Gerrit could not be asked at all, as `ger serve` serves it: then {@link gerritProblem} says it. */
 export function gerritAway(error: ApiError | undefined): boolean {

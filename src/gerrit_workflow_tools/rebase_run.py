@@ -191,7 +191,7 @@ def _abort(cwd: Path, progress: RebaseProgress, env: dict[str, str] | None) -> i
         said.append("gone: the conflict resolution of the commit it stopped at")
     for line in said:
         say(line)
-    record_outcome(cwd, "rebase --abort", said[0], ok=True, more=said[1:])
+    record_outcome(cwd, "rebase --abort", said[0], ok=True, more=said[1:], kept=loss.uncommitted if stash else ())
     return code
 
 

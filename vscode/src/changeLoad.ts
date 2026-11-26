@@ -133,6 +133,16 @@ export function changedHere(target: ChangeTarget, stack: Stack | undefined): { n
   return { notAmended: here?.uncommitted ?? [], staged: here?.staged ?? [] };
 }
 
+/**
+ * Whether the working files hold HEAD's commit, so a diff of it may show your file on its right: not
+ * while a rebase is stopped before applying the commit it stopped at (a conflict, or one resolved and
+ * not continued). The files hold that merge then, conflict markers and all, not the commit HEAD is
+ * (state 28: Show What Would Go showed the rewritten commit with the markers of the next one).
+ */
+export function worktreeIsHead(stack: Stack): boolean {
+  return !stack.rebase || (stack.rebase.applied && !stack.rebase.unmerged.length);
+}
+
 export class ChangeDetail {
   target: ChangeTarget | undefined;
   /** `/show`'s answer; undefined until it has come. */
@@ -199,10 +209,20 @@ export class ChangeDetail {
     return true;
   }
 
-  /** The change cannot be shown: why. Taken, as an answer is, only for the change selected now. */
-  fail(token: number, problem: string, error?: ApiError): boolean {
+  /**
+   * The change cannot be shown: why. Taken, as an answer is, only for the change selected now. Gerrit
+   * away (`away`) on a reload of what is drawn: what is local of it stays (its message, its files),
+   * marked as not asked of Gerrit, instead of the whole view giving way to the refusal (F4).
+   */
+  fail(token: number, problem: string, error?: ApiError, away = false): boolean {
     if (!this.current(token)) {
       return false;
+    }
+    if (away && this.shown && error) {
+      // As `/show` serves a commit Gerrit could not be asked about: its state unknown, whose it is unknown.
+      this.shown = { ...this.shown, gerrit_unavailable: error, patchset_status: "unknown", own: null };
+      this.waiting.clear();
+      return true;
     }
     this.problem = problem;
     this.problemError = error;

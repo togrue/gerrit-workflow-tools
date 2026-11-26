@@ -102,6 +102,26 @@ test("the change under review stays in the header when core's chain (open change
   assert.equal(taskLines(vm)[2], "▸ 1. parser — reviewing · not in your inbox now");
 });
 
+test("states 11 and 26: an abandoned change of the chain stays as a row marked in words, is no work left, and the next one says it builds on it", () => {
+  // U1 101 ← U2 102 (abandoned) ← U3 103: core's open chain is [101, 103]; its members say all three.
+  const members = [
+    { number: 101, subject: "step1", status: "NEW" as const },
+    { number: 102, subject: "step2", status: "ABANDONED" as const },
+    { number: 103, subject: "step3", status: "NEW" as const },
+  ];
+  const inbox = overview([member(101, { your_turn: true }), member(103, { your_turn: true, comments_unresolved: 2, comments_to_answer: 2 })]);
+  const atU1 = taskVm(inbox, stack([], { staged_review: { ...review, number: 101, subject: "step1" } }), { all: false, chain: [101, 103], members })!;
+  assert.equal(atU1.position, "change 1 of 3");
+  assert.deepEqual(taskLines(atU1).slice(1, 5), ["Left: 2 of 2 to vote on · 2 comments to answer · 1 closed", "▸ 1. change 101 — reviewing · to review", "  2. step2 — abandoned", "  3. change 103 — to review · 2 to answer"]);
+  const atU3 = taskVm(inbox, stack([], { staged_review: { ...review, number: 103, subject: "step3" } }), { all: false, chain: [101, 103], members })!;
+  assert.equal(atU3.notice, 'builds on 102 "step2", which is abandoned: its code is the base this change is reviewed on');
+  assert.ok(taskLines(atU3).includes(`⚠ ${atU3.notice}`));
+  // The change under review abandoned itself (state 11): marked so, and nothing on it is counted as left.
+  const gone = [{ number: 102, subject: "parser", status: "ABANDONED" as const }, { number: 103, subject: "change 103", status: "NEW" as const }];
+  const onIt = taskVm(overview([member(103, { your_turn: true })]), stack([], { staged_review: review }), { all: false, chain: [102, 103], members: gone })!;
+  assert.deepEqual(taskLines(onIt).slice(1, 3), ["Left: 1 of 1 to vote on · 1 closed", "▸ 1. parser — reviewing · abandoned"]);
+});
+
 test("while Gerrit refuses, the header keeps the chain it knew and says what is left is unknown, never 'not in your inbox' (W2)", () => {
   const away: Overview = { host: "g", error: { code: "GERRIT", message: "rejected", reason: "credentials" }, local: stack([]) };
   const vm = taskVm(away, stack([], { staged_review: review }), { all: false, chain: [101, 102, 103], inboxUnknown: true, subjects: new Map([[101, "lexer"]]) })!;

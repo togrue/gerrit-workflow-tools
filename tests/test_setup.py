@@ -268,3 +268,51 @@ def test_declining_plain_http_asks_for_the_url_again(stack_repo: Path, monkeypat
     assert code == 0, err
     assert _config(stack_repo, "ger.webUrl", "--local") == "https://gerrit.test"
     assert _config(stack_repo, "ger.allowInsecureHttp", "--local") is None
+
+
+def test_credentials_alone_are_asked_where_gerrit_refused_them(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The editor's Check Credentials (state 9): the first prompt was the address, not the rejected token."""
+    git("config", "--global", "ger.webUrl", "https://gerrit.example.com", cwd=stack_repo)
+    asked: list[str] = []
+    answers = iter(["alice", "secret-token"])
+
+    def _session(*_args: object, **_kwargs: object) -> object:
+        class _Session:
+            def prompt(self, label: str, *_a: object, **_kw: object) -> str:
+                asked.append(label.rstrip(": "))
+                return next(answers)
+
+        return _Session()
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("prompt_toolkit.PromptSession", _session)
+    code, _out, err = _setup(stack_repo, ["--credentials"], monkeypatch)
+
+    assert code == 0, err
+    assert "webUrl" not in asked and asked[0] == "user", asked
+    assert _config(stack_repo, f"{HOST}.token", "--global") == "secret-token"
+
+
+def test_credentials_alone_take_the_repositorys_web_url_when_none_is_saved_globally(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The playground keeps ger.webUrl in the repository's config: still only the user and token are asked."""
+    git("config", "ger.webUrl", "https://gerrit.example.com", cwd=stack_repo)
+    asked: list[str] = []
+    answers = iter(["alice", "secret-token"])
+
+    def _session(*_args: object, **_kwargs: object) -> object:
+        class _Session:
+            def prompt(self, label: str, *_a: object, **_kw: object) -> str:
+                asked.append(label.rstrip(": "))
+                return next(answers)
+
+        return _Session()
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("prompt_toolkit.PromptSession", _session)
+    code, _out, err = _setup(stack_repo, ["--credentials"], monkeypatch)
+    assert code == 0, err
+    assert asked == ["user", "token"], asked

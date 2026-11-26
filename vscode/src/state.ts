@@ -49,7 +49,10 @@ export function staleReason(error: unknown): string {
 /** What the views say while there is no answer yet: ger serve starting, then Gerrit asked (with how long it is given). */
 export const WAITING_WORDS = {
   starting: "Starting ger serve…",
-  asking: (seconds?: number) => `Asking Gerrit…${seconds ? ` If it does not answer within ${seconds} seconds, the views say so.` : ""}`,
+  // One wording in every view (F24: "within seconds" in Review chains' welcome text, which cannot hold a number, "within 10 seconds" here).
+  asking: (seconds?: number) => `Asking Gerrit…${seconds ? " If it does not answer within seconds, the views say so." : ""}`,
+  /** How long, said where there is room for it: the status bar's tooltip. */
+  given: (seconds: number) => `Gerrit is given ${seconds} seconds to answer.`,
 };
 
 /** What a webview view shows in place of its content while ger is not running. */

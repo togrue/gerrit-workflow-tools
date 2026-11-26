@@ -11,14 +11,40 @@ import { ChangeTarget, Model, describeError } from "./model";
 import { failureWays } from "./problemRows";
 import { feedback, offerWaysOn, ui } from "./ui";
 
-/** Your own stack commit: `ger edit` stops an interactive rebase on it, here, to amend it in place. */
-export function editCommit(model: Model, target: ChangeTarget | undefined): void {
+/** How long Edit Commit Here says it is starting, at most: the terminal may be waiting on a question. */
+const EDIT_START_MS = 20_000;
+
+/**
+ * Your own stack commit: `ger edit` stops an interactive rebase on it, here, to amend it in place.
+ * No question (Abort puts the branch back, and says so), so it answers at once instead: the press is
+ * the next action (`pressed`: the last step's outcome is history), and Local stack says it is starting
+ * until the rebase has stopped.
+ */
+export function editCommit(model: Model, target: ChangeTarget | undefined, pressed?: () => void, stopped?: () => unknown): void {
   if (!target) {
     return;
   }
+  pressed?.();
   runInTerminal(model.repo, ["edit", target.rev]);
   // It runs in the terminal: say what to do once it stopped, not that it already has.
   feedback(`ger edit runs in the ger terminal: once the rebase stops at "${target.title}", amend it, then ger rebase --continue`, { icon: "terminal", milliseconds: 12000 });
+  void ui()
+    .progress({ viewId: "ger.stack" }, `Starting ger edit of "${target.title}" in the ger terminal…`, () => rebaseStarted(model, EDIT_START_MS))
+    // Local stack, where the press was, steps aside for the task header: the keyboard follows to it (state 24).
+    .then(() => (model.stack?.rebase_in_progress ? stopped?.() : undefined));
+}
+
+/** Resolves once a rebase is underway (or after `ms`). */
+function rebaseStarted(model: Model, ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const listener = model.onDidChange(() => (model.stack?.rebase_in_progress ? end() : undefined));
+    const timer = setTimeout(() => end(), ms);
+    const end = () => {
+      listener.dispose();
+      clearTimeout(timer);
+      resolve();
+    };
+  });
 }
 
 /**
@@ -26,12 +52,12 @@ export function editCommit(model: Model, target: ChangeTarget | undefined): void
  * tracks its target branch, so it is your local stack. It may ask (update to the newest patchset?),
  * so it runs in a terminal; the views follow once it moves HEAD (repoWatcher.ts), as the terminal does not say when it ends.
  */
-export function checkout(model: Model, target: ChangeTarget | undefined): void {
+export function checkout(model: Model, target: ChangeTarget | undefined, pressed?: () => void, stopped?: () => unknown): void {
   if (!target) {
     return;
   }
   if (target.local) {
-    editCommit(model, target); // already in your stack: nothing to fetch, edit it where it is
+    editCommit(model, target, pressed, stopped); // already in your stack: nothing to fetch, edit it where it is
     return;
   }
   runInTerminal(model.repo, ["checkout", target.rev]);
@@ -43,6 +69,10 @@ export async function review(model: Model, target: ChangeTarget | undefined, wal
   if (!target) {
     return;
   }
+  return walk ? walk.hold(() => checkOutForReview(model, target, walk, mode)) : checkOutForReview(model, target, walk, mode);
+}
+
+async function checkOutForReview(model: Model, target: ChangeTarget, walk?: ReviewWalk, mode?: ReviewState["mode"]): Promise<void> {
   try {
     const client = await model.client();
     const opened = await ui().progress(vscode.ProgressLocation.Notification, `Checking out ${target.title}`, () =>
@@ -61,7 +91,8 @@ export async function review(model: Model, target: ChangeTarget | undefined, wal
       }
       return;
     }
-    const picked = await ui().message("info", reviewOpened(opened, false), {}, ["Open Review Worktree"]);
+    // Named as the view names the same step once it is open there (F13: two names, two filled buttons).
+    const picked = await ui().message("info", reviewOpened(opened, false), {}, ["Go to Review Window"]);
     void model.refresh(); // a review is open now: the Change view offers to leave it
     if (picked) {
       await ui().openFolder(where);
@@ -103,7 +134,7 @@ export async function leaveReview(model: Model, walk?: Pick<ReviewWalk, "leave">
     const done = await ui().progress(vscode.ProgressLocation.Window, "Leaving the review", () => client.reviewDone());
     await walk?.leave();
     await model.refresh();
-    const headline = model.overview?.headline;
+    const headline = model.headline;
     const text = `${leftReview(done, model.repo)} ${headline ? `Next: ${headline.text}.` : "Nothing else waits on you now."}`;
     void ui().message("info", text, {}, headline ? [OPEN_NEXT] : []).then((picked) => (picked ? vscode.commands.executeCommand("ger.openHeadline") : undefined));
   } catch (error) {
@@ -116,6 +147,8 @@ const OPEN_NEXT = "Open It";
 
 /** What moving a staged review along its chain needs from the rest of the extension. */
 export interface ReviewWalk {
+  /** Run a step that moves the review: it shows its own result, and nothing else follows the review meanwhile. */
+  hold<T>(run: () => Promise<T>): Promise<T>;
   /** Show the change the staged review holds now, with all its files; says when it is done (`busy`). */
   show(): Promise<void>;
   /** Close what showed the change it left (its combined diffs: their right side is your file). */
@@ -141,7 +174,11 @@ const LEAVE = "Leave Review";
  * of the chain it says so and offers what `ger review`'s own `next:` line does there: a vote on
  * the chain, and leaving the review.
  */
-export async function stepReview(model: Model, step: 1 | -1, walk: ReviewWalk): Promise<void> {
+export function stepReview(model: Model, step: 1 | -1, walk: ReviewWalk): Promise<void> {
+  return walk.hold(() => moveReview(model, step, walk));
+}
+
+async function moveReview(model: Model, step: 1 | -1, walk: ReviewWalk): Promise<void> {
   const here = model.stack?.staged_review;
   if (!here) {
     void ui().message("info", "No staged review here: Review Change on a change of Review chains starts one.", {}, []);
@@ -198,7 +235,11 @@ const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(
  * again at its newest patchset (`ger review CHANGE`, in the review's own mode), then shown from
  * what is new since your review, with all its files.
  */
-export async function updateReview(model: Model, walk: ReviewWalk): Promise<void> {
+export function updateReview(model: Model, walk: ReviewWalk): Promise<void> {
+  return walk.hold(() => updateNow(model, walk));
+}
+
+async function updateNow(model: Model, walk: ReviewWalk): Promise<void> {
   const here = model.stack?.staged_review;
   if (!here) {
     void ui().message("info", "No staged review here to update.", {}, []);

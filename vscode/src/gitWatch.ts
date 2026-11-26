@@ -1,6 +1,8 @@
 // What to watch in a git directory so the views follow the repository, and how to calm a burst
 // of changes into one refresh. No `vscode` import: unit-tested. The watcher itself is repoWatcher.ts.
 
+import * as path from "node:path";
+
 import type { GitDirs } from "./workspace";
 
 /** A rebase or a script updates many refs in a row; this long after the last change is quiet enough to look. */
@@ -37,6 +39,25 @@ export function watches({ gitDir, commonDir }: GitDirs): Watch[] {
  */
 export function indexWatch({ gitDir }: GitDirs): Watch {
   return { base: gitDir, pattern: "index" };
+}
+
+/**
+ * A saved file, or one changed outside the editor (a terminal, an agent): it changes what a stop or a
+ * review says (a fix saved, not amended), and nothing in the git directory moves with it. Followed
+ * only while a rebase is stopped or a review is staged here (`following`), and calmed into one
+ * `GET /stack` a short moment after the last change: VS Code's own events (a save, its watcher of
+ * the workspace, which runs anyway), no polling of git.
+ */
+export const TREE_QUIET_MS = 300;
+
+/** Whether a change at `file` is one of the work tree's: under `repo`, not in a git directory. */
+export function treeChange(file: string, repo: string, { gitDir, commonDir }: GitDirs): boolean {
+  const within = (dir: string) => {
+    const relative = path.relative(dir, file);
+    return !relative.startsWith("..") && !path.isAbsolute(relative);
+  };
+  const relative = path.relative(repo, file);
+  return Boolean(relative) && within(repo) && !relative.split(/[\\/]/).includes(".git") && !within(gitDir) && !within(commonDir);
 }
 
 /** The injectable clock of {@link Quiet}. */

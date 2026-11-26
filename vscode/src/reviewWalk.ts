@@ -13,7 +13,7 @@ import { ChangeTarget, Model } from "./model";
 import { ReviewWalk, review, stepReview } from "./review";
 import { ReviewAhead } from "./reviewAhead";
 import { reviewFocus } from "./reviewFocus";
-import { commitTarget } from "./stackView";
+import { reviewTarget } from "./shownChange";
 import { Task } from "./task";
 
 /** What the walk needs of the extension. */
@@ -25,6 +25,8 @@ export interface WalkViews {
   open(target: ChangeTarget): Promise<void>;
   /** Vote and Publish on every open change of the chain of `number`. */
   voteChain(number: number): Promise<void>;
+  /** Run a step that moves the review: it shows its own result, and nothing else follows the review meanwhile (follow.ts). */
+  hold<T>(run: () => Promise<T>): Promise<T>;
 }
 
 /** The member `step` places from the change under review, as the inbox has the chain. */
@@ -44,7 +46,7 @@ export interface ReviewWalking {
   disposable: vscode.Disposable;
 }
 
-export function reviewWalk({ model, changeView, task, open, voteChain }: WalkViews): ReviewWalking {
+export function reviewWalk({ model, changeView, task, open, voteChain, hold }: WalkViews): ReviewWalking {
   const ahead = new ReviewAhead(() => model.client());
 
   const busy = (text: string | undefined) => {
@@ -59,10 +61,7 @@ export function reviewWalk({ model, changeView, task, open, voteChain }: WalkVie
       busy(undefined);
       return;
     }
-    const commit = model.stack?.commits.find((c) => c.sha === staged.commit);
-    const target: ChangeTarget = commit
-      ? commitTarget(commit)
-      : { rev: staged.commit, title: staged.subject, number: staged.number, local: true, sha: staged.commit, changeId: changeView.shown?.change_id ?? null };
+    const target = reviewTarget(staged, model.stack);
     // Drawn already from what was asked ahead: its files are the commit checked out now.
     const drawn = all && changeView.target?.number === staged.number && changeView.diff?.commit === staged.commit;
     // Drawn: the same change, now your commit; kept on screen while it reloads.
@@ -89,6 +88,7 @@ export function reviewWalk({ model, changeView, task, open, voteChain }: WalkVie
   };
 
   const walk: ReviewWalk = {
+    hold,
     show: () => show(true),
     leave: () => changeView.closeCombined(),
     voteChain,

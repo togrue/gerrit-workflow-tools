@@ -23,7 +23,7 @@ import { SECTION_TITLES, TREE_WORDS, allRowContexts } from "./rows";
 import { BOUNDARY_WORDS } from "./stackSummary";
 import { MARKER_WORDS, MERGE_WORDS, REBASE_ACTIONS, REBASE_WORDS, REVIEW_FROZEN, STACK_GERRIT_WORDS, SYNC_ICONS, SYNC_WORDS } from "./stackRows";
 import { PROBLEM_ACTIONS, PROBLEM_WORDS } from "./problemRows";
-import { NOT_KNOWN, NOT_LISTED } from "./taskRows";
+import { NOT_KNOWN, NOT_LISTED } from "./reviewTask";
 
 type Json = Record<string, unknown>;
 const isObject = (value: unknown): value is Json => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -146,7 +146,7 @@ const reasons = (text: string) => text.split(", ").every((word) => REASON_WORDS.
 
 /** What a view says in place of its content (state.ts, waitingFor). */
 const WAITING: Shape = {
-  text: ours(["Starting ger serve…", "Asking Gerrit…", /^Asking Gerrit… If it does not answer within \d{1,3} seconds, the views say so\.$/, /(Your local stack|A change) shows here once ger runs\. Review chains says what is missing and what to do next\./]),
+  text: ours(["Starting ger serve…", "Asking Gerrit…", "Asking Gerrit… If it does not answer within seconds, the views say so.", /(Your local stack|A change) shows here once ger runs\. Review chains says what is missing and what to do next\./]),
   link: { label: ours(["Show Review Chains"]), command: ours(["ger.overview.focus"]) },
 };
 
@@ -202,7 +202,7 @@ const ACTIONS: Shape = [
   {
     label: ours([...Object.values(REBASE_ACTIONS), ...Object.values(PROBLEM_ACTIONS)].map((action) => action.label)),
     title: ours([...Object.values(REBASE_ACTIONS), ...Object.values(PROBLEM_ACTIONS)].map((action) => action.title)),
-    command: { id: ours([...Object.values(REBASE_ACTIONS).map((action) => action.command), ...Object.values(PROBLEM_ACTIONS).map((action) => action.command.id)]), args: [TEXT] },
+    command: { id: ours([...Object.values(REBASE_ACTIONS).map((action) => action.command), ...Object.values(PROBLEM_ACTIONS).map((action) => action.command.id)]), args: [ours(["credentials"], TEXT)] },
     primary: KEEP,
   },
 ];
@@ -247,6 +247,8 @@ const TASK: Shape = {
       new RegExp(`CI failed on ${COUNT} commits?`),
       new RegExp(`${COUNT} commits? needs? edits`),
       "its chain is not in your inbox",
+      "nothing: Gerrit takes no vote on a closed change",
+      new RegExp(`${COUNT} closed`),
       "nothing left to answer or fix",
       new RegExp(`${COUNT} conflicts? to resolve`),
       new RegExp(`${COUNT} commits? to replay`),
@@ -262,7 +264,7 @@ const TASK: Shape = {
       marks: [
         {
           icon: ICON,
-          text: ours([NOT_LISTED, NOT_KNOWN, "reviewing", "to review", "CI failed", "your drafts", "waits on a reply", "replayed", "stopped here", "to come", "needs edits", new RegExp(`you voted [+-]${COUNT}`), new RegExp(`${COUNT} to answer`)], around(/not ready: (.+)/, (names, why) => `not ready: ${names.text(why)}`)),
+          text: ours([NOT_LISTED, NOT_KNOWN, "reviewing", "to review", "abandoned", "merged", "CI failed", "your drafts", "waits on a reply", "replayed", "stopped here", "to come", "needs edits", new RegExp(`you voted [+-]${COUNT}`), new RegExp(`${COUNT} to answer`)], around(/not ready: (.+)/, (names, why) => `not ready: ${names.text(why)}`)),
           tone: TONE,
           ring: { share: KEEP, shape: ours(["solid", "dashed", "thin", "tick"]) },
         },
@@ -286,6 +288,7 @@ const TASK: Shape = {
   busy: ours([/(Continuing the rebase|Aborting the rebase|Skipping the commit) in the ger terminal…/], CHECKING_OUT),
   /** ger's closing words about this repository (commits, branches, files): filler. */
   outcome: { text: TEXT, ok: KEEP, more: [TEXT] },
+  notice: TEXT,
 };
 
 const STACK: Shape = {
@@ -429,7 +432,7 @@ const CHANGE: Shape = {
         {
           label: ours([new RegExp(`Update to patchset ${PATCHSET}`), "Update to the newest patchset", ...Object.values(PROBLEM_ACTIONS).map((action) => action.label)]),
           title: ours([REVIEW_UPDATE.title, ...Object.values(PROBLEM_ACTIONS).map((action) => action.title)]),
-          command: { id: ours([REVIEW_UPDATE.command, ...Object.values(PROBLEM_ACTIONS).map((action) => action.command.id)]), args: [TEXT] },
+          command: { id: ours([REVIEW_UPDATE.command, ...Object.values(PROBLEM_ACTIONS).map((action) => action.command.id)]), args: [ours(["credentials"], TEXT)] },
           primary: KEEP,
         },
       ],

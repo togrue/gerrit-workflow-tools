@@ -7,7 +7,7 @@ import { handToAgent, runAgent } from "./agent";
 import { CommentChain, Diff, FileChange, Health } from "./api";
 import { sameChange } from "./changeLoad";
 import { NextKind, pushable } from "./nextAction";
-import { titleOffers } from "./stackRows";
+import { PUSH_WAITS, titleOffers } from "./stackRows";
 import { gerritOffers } from "./changeScreen";
 import { ChangeView, Location, ThreadArg } from "./changeView";
 import { draftsIn } from "./changeRows";
@@ -17,12 +17,12 @@ import { CommentThreads, ThreadComment, closeComment, leaveCommentBox } from "./
 import { setting } from "./config";
 import { EventFollower } from "./events";
 import { ShownCommitFollower } from "./follow";
-import { plural } from "./format";
+import { liveness, plural } from "./format";
 import { GER_TERMINAL, configWarner, gerProgram, installGer, runInTerminal, versionSkewWarner } from "./launch";
 import { ChangeTarget, Model } from "./model";
 import { OverviewView, headlineTarget } from "./overviewView";
 import { Poller } from "./poller";
-import { PROBLEM_ACTIONS, gerritProblem } from "./problemRows";
+import { PROBLEM_ACTIONS, gerritProblem, shortAway } from "./problemRows";
 import { openConflict, push, rebaseOntoUpstream, rebaseStep } from "./rebase";
 import { RepoWatcher } from "./repoWatcher";
 import { reportIssue } from "./reportIssue";
@@ -155,7 +155,6 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   model.onDidChange(() => {
     // What waits on your review: the chains whose turn is yours, not those waiting on their author.
     const waiting = model.overview?.sections?.find((s) => s.name === "to-review")?.chains.filter((chain) => waitsOnYou(chain, "to-review")).length ?? 0;
-    overviewTree.description = model.stale ? "out of date" : undefined;
     // Over the welcome text, which cannot say which versions: this can. (A message hides the welcome text and its
     // buttons, so setup wanting says its cause there by `ger.setupReason`, and ger's own words in the other views.)
     overviewTree.message = model.incompatible?.message;
@@ -166,8 +165,10 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     void vscode.commands.executeCommand("setContext", "ger.canPush", offers.push);
   });
   let pausedLogged = false;
-  // A rebase that stops somewhere new is shown there (the keyboard stays where it is): openChange is defined below.
-  const follower = new ShownCommitFollower(model, changeView, (commit) => openChange(commitTarget(commit), true));
+  // What the Change view shows and why (shownChange.ts): the review's change, a rebase's stop (the keyboard stays
+  // where it is), your selection. openChange and the review walk are defined below.
+  let showReviewNow: () => Promise<unknown> = async () => undefined;
+  const follower = new ShownCommitFollower(model, changeView, { stop: (commit) => openChange(commitTarget(commit), true), review: () => showReviewNow() });
   const diffTabs = new DiffTabs(model, (line) => log.appendLine(line));
   model.onDidGetNewHeadline(async (headline) => {
     if (setting("notify", true) && (await ui().message("info", headline.text, {}, ["Open"])) === "Open") {
@@ -286,6 +287,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     changeView,
     task,
     open: (target) => openChange(target, true),
+    hold: (run) => follower.hold(run),
     voteChain: (number) => {
       const shown = changeView.target?.number === number ? changeView.target : { rev: `change:${number}`, title: String(number), number, local: false };
       return voteAndPublish(model, shown, { chain: true, after: afterVote });
@@ -301,22 +303,19 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     return commit ? openChange(commitTarget(commit), true) : undefined;
   };
   /**
-   * A window opened on a staged review (Open Review Worktree, or a reload there) opens on it: the
-   * Gerrit view, the change under review shown, and, in a window with no editor open yet, all its
-   * files. Once, on the first stack ger serve sends.
+   * The review here moved, from wherever (a shell's `ger review`, a restart): its change is shown. A
+   * window opened on a staged review (Go to Review Window, or a reload there) opens on it the first
+   * time: the Gerrit view, and in a window with no editor open yet, all its files.
    */
-  const greet = model.onDidChange(() => {
-    if (model.state !== "ready" || !model.overview) {
-      return;
+  let greeted = false;
+  showReviewNow = () => {
+    if (greeted) {
+      return showReview(false);
     }
-    greet.dispose();
-    if (!model.stack?.staged_review || changeView.target) {
-      return;
-    }
+    greeted = true;
     const fresh = vscode.window.tabGroups.all.every((group) => group.tabs.length === 0);
-    void vscode.commands.executeCommand("workbench.view.extension.ger").then(() => showReview(fresh));
-  });
-  context.subscriptions.push(greet);
+    return Promise.resolve(vscode.commands.executeCommand("workbench.view.extension.ger")).then(() => showReview(fresh));
+  };
   /**
    * After a vote on the change a staged review holds: Next Change while the chain goes on above it,
    * Leave Review at its top (`ger review`'s own `next:` line, the vote done). Nothing elsewhere.
@@ -356,6 +355,9 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     }
   };
 
+  /** A rewrite started from Local stack has stopped: Local stack steps aside for the task, so the keyboard goes to the Change view. */
+  const focusTask = () => (task.focused ? vscode.commands.executeCommand("ger.change.focus") : undefined);
+
   /** What Next does, by what the Change view's button names. */
   const next: Record<NextKind, () => unknown> = {
     comment: () => threads.stepUnread(),
@@ -375,7 +377,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       task.pressed();
       return push(model);
     },
-    review: () => review(model, changeView.target, reviewSteps),
+    // Your edits here are in the way of a checkout here: the review worktree, as Next names it.
+    review: () => review(model, changeView.target, reviewSteps, model.stack?.review_blocked?.files.length ? "worktree" : undefined),
     reviewWindow: () => {
       const worktree = model.reviewElsewhere(changeView.target?.number);
       return worktree ? ui().openFolder(vscode.Uri.file(worktree)) : undefined;
@@ -413,7 +416,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
         if (away) {
           // The local stack was read again, Gerrit was not: said as a failure, never a tick. The views
           // say it with the ways on (Check Credentials, Retry): a toast would offer them a second time.
-          feedback(`Not refreshed from Gerrit: ${away.message}`, { icon: "warning" });
+          feedback(`Not refreshed from Gerrit: ${shortAway(away)}`, { icon: "warning" });
         } else {
           feedback("Refreshed from Gerrit");
         }
@@ -453,8 +456,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       return undefined;
     },
     "ger.review": (arg: unknown) => review(model, targetOf(arg), reviewSteps),
-    "ger.checkout": (arg: unknown) => checkout(model, targetOf(arg)),
-    "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg)),
+    "ger.checkout": (arg: unknown) => checkout(model, targetOf(arg), () => task.pressed(), focusTask),
+    "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg), () => task.pressed(), focusTask),
     "ger.setUpstream": (upstream?: unknown) => setUpstream(model, typeof upstream === "string" ? upstream : undefined),
     "ger.reviewDone": () => leaveReview(model, reviewSteps),
     "ger.vote": (arg: unknown) => {
@@ -478,9 +481,11 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.rebase.abort": () => stepInTerminal("abort", "Aborting the rebase in the ger terminal…"),
     "ger.rebase.skip": () => stepInTerminal("skip", "Skipping the commit in the ger terminal…"),
     "ger.rebase.upstream": () => rebaseOntoUpstream(model),
-    "ger.setup": () => {
-      runInTerminal(repo, ["setup"]);
-      feedback("ger setup runs in the ger terminal", { icon: "terminal" });
+    // Gerrit refused the credentials (Check Credentials): those alone are asked, not the address first (F12).
+    "ger.setup": (what?: string) => {
+      const argv = what === "credentials" ? ["setup", "--credentials"] : ["setup"];
+      runInTerminal(repo, argv);
+      feedback(`ger ${argv.join(" ")} runs in the ger terminal`, { icon: "terminal" });
     },
     "ger.installCli": () => installGer(repo, context.extension.packageJSON),
     "ger.stack.squash": (arg: CommitArg) => stackView.fold(arg, false),
@@ -582,21 +587,60 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   // Local git (a commit, a checkout, a rebase) is news Gerrit's events do not carry. Not news to notify about: you did it.
   const dirs = gitDirs(repo);
   const localGit = dirs
-    ? new RepoWatcher(dirs, (lastChange) => {
-        // A refresh that began after the last change (your own stack edit refreshes itself) already knows.
-        if (!waitsForYou(model.state) && !model.loadedSince(lastChange)) {
-          void model.refresh();
-        }
-      }, () => Boolean(model.stack?.rebase))
+    ? new RepoWatcher(dirs, repo, {
+        changed: (lastChange) => {
+          // A refresh that began after the last change (your own stack edit refreshes itself) already knows.
+          if (!waitsForYou(model.state) && !model.loadedSince(lastChange)) {
+            void model.refresh();
+          }
+        },
+        // What a stop or a review says of the files (changed, not amended; staged): the stack alone, one request.
+        treeChanged: (lastChange) => (model.state === "ready" && !model.loadedSince(lastChange) ? void model.refreshLocal() : undefined),
+        // Also while an outcome says changes were kept in a stash: `git stash apply` brings them back, and the line goes.
+        following: () => Boolean(model.stack?.rebase || model.stack?.staged_review || model.stack?.last_outcome?.kept?.length),
+      })
     : undefined;
+  // ger push waits because its terminal is too low to show what it would push (state 19): the panel is made
+  // taller, with the keyboard in it, where Enter confirms once the preview is on screen. Once per push.
+  let sized = 0;
+  const sizeForPush = model.onDidChange(async () => {
+    const last = model.stack?.last_outcome;
+    if (last?.command === "push" && last.text === PUSH_WAITS && last.at > sized) {
+      sized = last.at;
+      await vscode.commands.executeCommand("workbench.action.terminal.focus");
+      for (let step = 0; step < 4; step++) {
+        await vscode.commands.executeCommand("workbench.action.terminal.resizePaneUp");
+      }
+    }
+  });
   // A command of ours ended in the ger terminal: look at once (the step outcome, a refusal that moved nothing).
   const terminalEnded = onTerminalCommandEnd((name) => {
     if (name === GER_TERMINAL && model.state === "ready") {
       void model.refreshLocal();
     }
   });
+  const poller = new Poller(() => void model.refresh({ background: true }), events, () => {
+    // Not again and again: ger serve would start and fail each tick. Regaining focus, Retry and a changed setting still try.
+    const paused = waitsForYou(model.state);
+    if (paused && !pausedLogged) {
+      log.appendLine(`Background refresh paused: ${model.failure ?? model.state}. Retry, or fix the setting, to try again.`);
+    }
+    pausedLogged = paused;
+    return paused;
+  });
+  // Whether the views follow Gerrit live, beside Review chains' title: live, when last checked and next, or since when not reachable.
+  const describeTree = () => {
+    overviewTree.description = model.stale
+      ? "out of date"
+      : model.overview
+        ? liveness({ live: events.live, checked: model.loadedAt, nextAt: poller.nextAt, awaySince: model.awaySince, now: Date.now() })
+        : undefined;
+  };
+  const describeEvery = setInterval(describeTree, 30_000);
+  const describing = vscode.Disposable.from(model.onDidChange(describeTree), events.onDidChange(describeTree), { dispose: () => clearInterval(describeEvery) });
   context.subscriptions.push(
     terminalEnded,
+    sizeForPush,
     model,
     overviewTree,
     stackPane,
@@ -614,21 +658,14 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     vscode.workspace.onDidGrantWorkspaceTrust(() => void model.refresh()),
     events,
     ...(localGit ? [localGit] : []),
-    new Poller(() => void model.refresh({ background: true }), events, () => {
-      // Not again and again: ger serve would start and fail each tick. Regaining focus, Retry and a changed setting still try.
-      const paused = waitsForYou(model.state);
-      if (paused && !pausedLogged) {
-        log.appendLine(`Background refresh paused: ${model.failure ?? model.state}. Retry, or fix the setting, to try again.`);
-      }
-      pausedLogged = paused;
-      return paused;
-    }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("ger.executable")) {
         model.restart();
         void model.refresh();
       }
     }),
+    poller,
+    describing,
   );
   void model.refresh();
   return { model, overviewView, stackView, changeView, task, threads, statusItem, events, diffTabs, useUi: showTo };

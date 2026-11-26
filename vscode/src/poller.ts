@@ -43,9 +43,16 @@ export class Poller implements vscode.Disposable {
     }
     clearInterval(this.timer);
     this.seconds = seconds;
+    this.nextAt = Date.now() + seconds * 1000;
     // Unfocused, nobody is looking: the refresh on focus catches up.
-    this.timer = setInterval(() => (vscode.window.state.focused && !this.paused() ? this.refresh() : undefined), seconds * 1000);
+    this.timer = setInterval(() => {
+      this.nextAt = Date.now() + seconds * 1000;
+      return vscode.window.state.focused && !this.paused() ? this.refresh() : undefined;
+    }, seconds * 1000);
   }
+
+  /** When the timer looks next (ms since the epoch): said while the views do not follow Gerrit live. */
+  nextAt: number | undefined;
 
   dispose(): void {
     clearInterval(this.timer);

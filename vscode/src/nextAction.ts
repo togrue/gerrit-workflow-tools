@@ -157,6 +157,7 @@ export function nextAction(state: NextState): NextAction | undefined {
   }
   // Somebody's change you are only looking at: reviewing it is next. Said before the press when your edits are in the way here.
   const blocked = stack.review_blocked?.files;
-  const why = blocked?.length ? `check it out for review: ${blocked.join(", ")} ${blocked.length === 1 ? "has" : "have"} uncommitted changes here, so it offers the review worktree instead` : "check it out for review, staged, with all its files";
-  return !state.local && shown.own === false && shown.pushed ? action("review", "Review change", why) : undefined;
+  const why = blocked?.length ? `check it out for review in the review worktree, its own checkout: ${blocked.join(", ")} ${blocked.length === 1 ? "has" : "have"} uncommitted changes here` : "check it out for review, staged, with all its files";
+  // Named by the way it goes (F16): a checkout here would be refused over the edits, the review worktree is not.
+  return !state.local && shown.own === false && shown.pushed ? action("review", blocked?.length ? "Review in a worktree" : "Review change", why) : undefined;
 }

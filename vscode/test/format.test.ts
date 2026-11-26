@@ -29,7 +29,9 @@ import {
   vote,
   votes,
   WORDED_REASONS,
+  currentHeadline,
   headlineNews,
+  liveness,
 } from "../src/format";
 import { attended } from "./fixtures";
 
@@ -171,6 +173,15 @@ test("a rebase is never news, and the headline from before it is not news when i
   assert.equal(headlineNews(state.last, other, true).news, true, "a new headline in a background load is news");
 });
 
+test("state 24: the stack says whether a rebase headline is the present; an ended one leaves no \"Rebase stopped at\"", () => {
+  const ci: Headline = { section: "outgoing", reason: "ci-failed", severity: "error", chain: "k", number: 102, subject: "s", url: null, text: "CI failed" };
+  const rebase = { section: "local", reason: "rebase", severity: "warning", stop: "edit", chain: null, number: 103, subject: "t", sha: null, url: null, text: "Rebase stopped at t" } as Headline;
+  assert.equal(currentHeadline({ headline: rebase }, { headline: null }), undefined, "aborted: the overview's rebase line is history");
+  assert.equal(currentHeadline({ headline: ci }, { headline: rebase }), rebase, "begun since the overview: the stack's leads");
+  assert.equal(currentHeadline({ headline: ci }, { headline: null }), ci);
+  assert.equal(currentHeadline({ headline: rebase }, {}), rebase, "a ger before API 1.10 serves none: the overview's stands");
+});
+
 test("activity is what moved since the chain was last seen", () => {
   const first = overview(chain("a", "2026-11-09T10:00:00Z"), chain("b", "2026-11-09T10:00:00Z"));
   // First sight is not news.
@@ -290,4 +301,14 @@ test("text in a Markdown tooltip shows as it is: no &nbsp; between its words, no
   assert.equal(shown.replace(/\\(.)/g, "$1"), refusal);
   assert.equal(markdownText("$(warning) *a* [b](c) <d> & e"), "\\$\\(warning\\) \\*a\\* \\[b\\]\\(c\\) \\<d\\> \\& e");
   assert.equal(markdownText("one\ntwo"), "one\n\ntwo");
+});
+
+test("F3, S1: beside Review chains' title, whether the views follow Gerrit live, and if not, how fresh they are", () => {
+  const at = new Date(2026, 10, 26, 12, 40);
+  const now = at.getTime() + 2 * 60_000;
+  assert.equal(liveness({ live: true, checked: at, now }), "live");
+  assert.equal(liveness({ live: false, checked: at, nextAt: now + 58 * 60_000, now }), "checked 12:40 · next in 58 min");
+  assert.equal(liveness({ live: false, checked: at, nextAt: now + 90 * 60_000, now }), "checked 12:40 · next at 14:12");
+  assert.equal(liveness({ live: false, checked: at, awaySince: new Date(2026, 10, 26, 12, 41), now }), "not reachable since 12:41", "Gerrit away wins over live");
+  assert.equal(liveness({ live: false, now }), "not live");
 });

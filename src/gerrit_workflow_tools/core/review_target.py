@@ -24,7 +24,6 @@ from gerrit_workflow_tools.core.gerrit_patchset import GerritPatchset, resolve_c
 from gerrit_workflow_tools.core.review_checkout import (
     ReviewState,
     ReviewUsageError,
-    chain_numbers,
     find_review,
     neighbour,
 )
@@ -32,15 +31,54 @@ from gerrit_workflow_tools.core.usage import Refusal, UsageError
 from gerrit_workflow_tools.core.votes import DEFAULT_LABEL, votes_ruled_out, your_votes
 
 
+@dataclass(frozen=True)
+class RelatedChange:
+    """One change of a review chain as Gerrit's related changes list it, closed ones too."""
+
+    number: int
+    subject: str
+    status: str
+    """Gerrit's: ``NEW``, ``MERGED`` or ``ABANDONED``."""
+
+
+def related_changes(related: Mapping[str, object]) -> list[RelatedChange]:
+    """Every change of a RelatedChangesInfo, base first, merged and abandoned ones in their place."""
+    rows = related.get("changes")
+    members: list[RelatedChange] = []
+    for row in reversed(rows if isinstance(rows, list) else []):
+        number = row.get("_change_number") if isinstance(row, dict) else None
+        if isinstance(number, int) and all(member.number != number for member in members):
+            commit = row.get("commit")
+            subject = commit.get("subject") if isinstance(commit, dict) else None
+            status = str(row.get("status") or "NEW").upper()
+            members.append(RelatedChange(number, subject if isinstance(subject, str) else "", status))
+    return members
+
+
+def chain_numbers(members: Sequence[RelatedChange], keep: int | None = None) -> list[int]:
+    """The open changes of *members*, and *keep* (the change under review): closed meanwhile, it
+    keeps its place, so the chain still goes on from it."""
+    return [member.number for member in members if member.status == "NEW" or member.number == keep]
+
+
+def related_chain(
+    service: GerritService, key: str, patch_set: int | str = "current", keep: int | None = None
+) -> tuple[list[int], list[RelatedChange]]:
+    """The review chain *key* sits in at *patch_set*, base first, in one Gerrit request: its open
+    change numbers with *keep* in its place even when closed (:func:`chain_numbers`), and every
+    member, merged and abandoned ones too; ``([], [])`` when Gerrit cannot say."""
+    try:
+        members = related_changes(service.rest.get_related(key, patch_set))
+    except GerritApiError:
+        return [], []
+    return chain_numbers(members, keep), members
+
+
 def related_chain_numbers(
     service: GerritService, key: str, patch_set: int | str = "current", keep: int | None = None
 ) -> list[int]:
-    """Open change numbers of the review chain *key* sits in, base first, and *keep* in its place
-    even when closed; ``[]`` when Gerrit cannot say."""
-    try:
-        return chain_numbers(service.rest.get_related(key, patch_set), keep)
-    except GerritApiError:
-        return []
+    """The open change numbers of :func:`related_chain`; ``[]`` when Gerrit cannot say."""
+    return related_chain(service, key, patch_set, keep)[0]
 
 
 def review_neighbour(

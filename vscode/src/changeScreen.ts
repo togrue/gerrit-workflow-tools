@@ -15,7 +15,14 @@ import type { TaskVm } from "./taskRows";
 const ON_SCREEN: Partial<Record<NextKind, string>> = {
   continue: REBASE_ACTIONS.continue.command,
   update: "ger.reviewUpdate",
+  // The header's Leave review (C2/F13: it was offered three times, two of them filled).
+  leave: "ger.reviewDone",
 };
+
+/** The command a button on screen runs for `next`: Gerrit away, its first way on (ger setup for refused credentials, else Retry). */
+function onScreen(next: NextAction): string | undefined {
+  return next.kind === "gerrit" ? (next.label === "Check credentials" ? "ger.setup" : "ger.refresh") : ON_SCREEN[next.kind];
+}
 
 export interface ScreenParts {
   task?: TaskVm;
@@ -37,7 +44,7 @@ export function changeScreen(vm: ChangeVm, parts: ScreenParts): ChangeVm {
   const { task, busy } = parts;
   // While a step runs (here, or in the terminal as the header says), nothing is offered as next.
   const next = busy || task?.busy ? undefined : parts.next;
-  const command = next && ON_SCREEN[next.kind];
+  const command = next && onScreen(next);
   // With no Next, the buttons keep what the change's own view model made primary.
   const primaryIf = <T extends { primary?: boolean }>(action: T, runs: string) => (!next ? action : command === runs ? { ...action, primary: true } : plain(action));
   const head = vm.head && { ...vm.head, actions: task?.mode === "rework" ? undefined : vm.head.actions?.map((action) => primaryIf(action, action.command.id)) };
@@ -46,9 +53,9 @@ export function changeScreen(vm: ChangeVm, parts: ScreenParts): ChangeVm {
   const said = busy !== undefined && task?.busy !== undefined && busy.startsWith(task.busy);
   const header = task && { ...task, busy: said ? undefined : task.busy, actions: task.actions.map((action) => primaryIf(action, action.command)) };
   // Next is drawn unless a button on screen already does it.
-  const onScreen = command !== undefined && [...(head?.actions ?? []), ...(notes ?? []).flatMap((note) => note.actions ?? [])].some((action) => action.command.id === command);
+  const shown = command !== undefined && [...(head?.actions ?? []), ...(notes ?? []).flatMap((note) => note.actions ?? [])].some((action) => action.command.id === command);
   const inHeader = command !== undefined && (header?.actions.some((action) => action.command === command && !action.notNow) ?? false);
-  const drawn = next && !onScreen && !inHeader ? { label: next.label, title: next.title } : undefined;
+  const drawn = next && !shown && !inHeader ? { label: next.label, title: next.title } : undefined;
   return { ...vm, head, notes, next: drawn, busy, task: header };
 }
 

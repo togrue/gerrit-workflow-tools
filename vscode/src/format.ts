@@ -2,7 +2,7 @@
 
 import * as path from "node:path";
 
-import { Attended, Chain, CommitStatus, EventsStatus, Headline, MoveConflict, Overview, Rebase, RebaseHeadline, RebaseStop, ReviewDone, ReviewState, Severity, StackMoves } from "./api";
+import { Attended, Chain, CommitStatus, EventsStatus, Headline, MoveConflict, Overview, Rebase, RebaseHeadline, RebaseStop, ReviewDone, ReviewState, Severity, Stack, StackMoves } from "./api";
 import { Commented, commentState } from "./commentState";
 
 /** Every reason core names (`Attention`, core/attention.py), in words: test/format.test.ts checks them against test/attention.json, which tests/test_attention_severity.py checks against core. */
@@ -45,6 +45,19 @@ export function attentionIcon({ attention_reasons: reasons, severity: level }: R
   const comments = level === "warning" && reasons.includes("unresolved-comments");
   const yours = level === "pending" && reasons.includes("waiting-on-you");
   return { icon: comments ? "comment-unresolved" : yours ? "eye" : SEVERITY_ICONS[level], severity: level };
+}
+
+/**
+ * The headline now: the rebase underway as the stack says it (the stack owns whether one is), else
+ * the overview's, unless that one is a rebase that has ended since (state 24: "Rebase stopped at …"
+ * stayed after the abort). A ger that serves no stack headline (before API 1.10) leaves the overview's.
+ */
+export function currentHeadline(overview: Pick<Overview, "headline"> | undefined, stack: Pick<Stack, "headline"> | undefined): Headline | undefined {
+  const served = overview?.headline ?? undefined;
+  if (stack?.headline === undefined) {
+    return served;
+  }
+  return stack.headline ?? (served?.section === "local" ? undefined : served);
 }
 
 /**
@@ -196,6 +209,24 @@ export function refreshMode(events: EventsStatus | undefined, pollSeconds: numbe
   }
   const why = events.reason ? `: ${events.reason.replace(/\.$/, "")}` : "";
   return `${events.state === "retrying" ? `${every} while Gerrit's event stream is down${why}${focus}.` : `${every}${focus}; no Gerrit event stream${why}.`}${local}`;
+}
+
+/**
+ * Whether the views follow Gerrit live, in a few words beside Review chains' title: `live` while the
+ * event stream is; else when Gerrit was last read and when the next check is (`checked 12:40 · next
+ * in 58 min`); `not reachable since 12:41` while Gerrit cannot be asked. Unobtrusive, and only here:
+ * the status bar's tooltip has the whole of it (`refreshMode`).
+ */
+export function liveness(options: { live: boolean; checked?: Date; nextAt?: number; awaySince?: Date; now: number }): string {
+  if (options.awaySince) {
+    return `not reachable since ${clock(options.awaySince)}`;
+  }
+  if (options.live) {
+    return "live";
+  }
+  const minutes = options.nextAt === undefined ? undefined : Math.max(1, Math.ceil((options.nextAt - options.now) / 60_000));
+  const next = minutes === undefined ? "" : minutes >= 60 ? ` · next at ${clock(new Date(options.nextAt!))}` : ` · next in ${minutes} min`;
+  return options.checked ? `checked ${clock(options.checked)}${next}` : `not live${next}`;
 }
 
 /** What `ger review` did, in words. `inPlace`: it switched this checkout instead of using the review worktree. */

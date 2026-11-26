@@ -15,6 +15,7 @@ import pytest
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
 from gerrit_workflow_tools.core.gerrit.event_source import (
+    CONNECT_TIMEOUT_SECONDS,
     DEFAULT_SSH_PORT,
     SUBSCRIBED_EVENTS,
     EventSourceUnavailable,
@@ -24,6 +25,7 @@ from gerrit_workflow_tools.core.gerrit.event_source import (
 )
 from gerrit_workflow_tools.core.gerrit.event_stream import (
     CHANGE_EVENTS,
+    GRACE_SECONDS,
     EventScope,
     EventStream,
     GerritEvent,
@@ -237,6 +239,12 @@ def test_a_quiet_stream_is_live_once_it_stays_open_for_the_grace_period() -> Non
     assert recorder.wait(lambda: recorder.states() == ["connecting", "live"])
     assert stream.status.state is StreamState.LIVE
     stream.stop()
+
+
+def test_a_host_that_does_not_answer_is_never_called_live() -> None:
+    """ssh waits its connect timeout on a host that does not answer: the grace outlasts it (F6)."""
+    assert GRACE_SECONDS > CONNECT_TIMEOUT_SECONDS
+    assert f"ConnectTimeout={CONNECT_TIMEOUT_SECONDS}" in SshTarget("gerrit.example").argv()
 
 
 def test_auto_tries_once_and_gives_up_quietly_when_it_never_gets_live() -> None:

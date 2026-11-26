@@ -92,11 +92,16 @@ export class Task implements vscode.Disposable {
     this.changed.fire();
   }
 
-  /** A step was refused before anything ran: said in the header until the next action, nothing under way. */
+  /**
+   * A step was refused before anything ran: said in the header until the next action, nothing under
+   * way. The refusal is core's fresh look, so the stack is read again: what the buttons under it say
+   * must not contradict it (state 16: Continue still offered "commit this stop as it is").
+   */
   refused(text: string): void {
     this.busy(undefined);
     this.said = { text, ok: false, more: [], at: Date.now(), head: this.model.stack?.head };
     this.changed.fire();
+    void this.model.refreshLocal();
   }
 
   /**
@@ -167,7 +172,7 @@ export class Task implements vscode.Disposable {
   /** The header for the mode the checkout is in. */
   vm(): TaskVm | undefined {
     const outcome = this.busyText ? undefined : this.outcome();
-    return this.mode ? taskVm(this.model.overview, this.model.stack, { all: this.all, busy: this.busyText, shown: this.shown(), chain: this.model.reviewChain, inboxUnknown: Boolean(this.model.overview?.error), subjects: this.model.subjects, ...(outcome ? { outcome } : {}) }) : undefined;
+    return this.mode ? taskVm(this.model.overview, this.model.stack, { all: this.all, busy: this.busyText, shown: this.shown(), chain: this.model.reviewChain, members: this.model.reviewMembers ?? undefined, inboxUnknown: Boolean(this.model.overview?.error), subjects: this.model.subjects, ...(outcome ? { outcome } : {}) }) : undefined;
   }
 
   /** The header as text: for the end-to-end transcript. */

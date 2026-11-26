@@ -84,6 +84,26 @@ test("Local stack: Tab reaches the focused row's badges, named by their words, a
   assert.ok(page.posted.some((message) => message.type === "comments"), "Enter asks for the comments, as hovering the ring does");
 });
 
+test("state 24: a row's Edit Commit Here keeps the keyboard across a redraw, and comes after the row's badges", () => {
+  const commits = [commit("A", { code_review: 1 }), commit("B"), commit("C", { verified: 1 })];
+  const page = fakePage("stack", stackVm(stack(commits), undefined, never));
+  const rowOf = (summary: string) => page.root.querySelectorAll(".row").find((row) => row.textContent.includes(summary))!;
+  const pencil = (row: FakeElement) => row.all((element) => element.getAttribute("data-command") === "ger.stack.edit")[0];
+  const kids = rowOf("A").children.filter((child): child is FakeElement => typeof child !== "string");
+  assert.ok(kids.findIndex((child) => child.classList.contains("badges")) < kids.findIndex((child) => child.classList.contains("actions")), "Tab reaches the badges first");
+  pencil(rowOf("B")).focus();
+  // Showing the row the list moved to redraws the view: the pencil under the keyboard is a new element then.
+  page.send({ type: "render", vm: stackVm(stack(commits), undefined, never) });
+  const now = page.active() as FakeElement;
+  assert.equal(now, pencil(rowOf("B")), "the same row's pencil has the keyboard again");
+  now.dispatch("keydown", { key: "Enter" });
+  now.click();
+  assert.deepEqual(page.posted.filter((message) => message.type === "command").map((message) => (message.args as { sha: string }[])[0].sha), [commits[1].sha]);
+  // The rebase it started freezes the stack: no pencil any more, the keyboard goes back to the list.
+  page.send({ type: "render", vm: stackVm(stack(commits, { rebase_in_progress: true }), undefined, never) });
+  assert.ok((page.active() as FakeElement).classList.contains("list"));
+});
+
 test("the stylesheet draws a focus ring on every kind of stop", () => {
   const css = fs.readFileSync(path.join(__dirname, "..", "..", "media", "views.css"), "utf8");
   for (const selector of ["button:focus-visible", "a:focus-visible", '[tabindex="0"]:not(.list):focus-visible', ".badges[tabindex]:focus", ".step:focus", ".fold:focus", ".list:focus .row.focused"]) {
