@@ -416,13 +416,47 @@
     return [head, isOpen ? link.warnings.map((finding) => findingRow(finding, "finding nested")) : []];
   }
 
+  /** One side's picker: a label and its select, as two cells of the compare grid. */
   function picker(label, choice, type) {
+    const id = `pick-${type}`;
     const select = h(
       "select",
-      { "aria-label": label, disabled: choice.options.length < 2, onchange: (event) => post(type, { value: event.target.value }) },
+      { id, disabled: choice.options.length < 2, onchange: (event) => post(type, { value: event.target.value }) },
       choice.options.map((option) => h("option", { value: option.value, disabled: option.disabled, selected: option.value === choice.selected }, option.label)),
     );
-    return h("label", { class: "picker" }, h("span", { class: "detail" }, label), select);
+    return [h("label", { class: "side", for: id }, label), select];
+  }
+
+  /**
+   * From and To, one above the other so each select has the width of the view, and beside them the
+   * toggle of the default mode: lit while From and To are the default's, dim once picked by hand.
+   */
+  function compareBlock(compare) {
+    const mode = compare.mode;
+    const toggle = h(
+      "button",
+      {
+        class: `mode-toggle${mode.active ? " active" : ""}`,
+        title: mode.title,
+        "aria-label": mode.title,
+        "aria-pressed": mode.active ? "true" : "false",
+        disabled: mode.next === mode.mode && mode.active,
+        onclick: () => post("mode", { value: mode.next }),
+      },
+      icon(mode.icon),
+    );
+    return h("div", { class: "compare" }, ...picker("From", compare.from, "from"), toggle, ...picker("To", compare.to, "to"));
+  }
+
+  /** An explanation: an icon and words that wrap under each other in a narrow view, never cut off. */
+  function explain(iconId, tone, text, detail, ...rest) {
+    return h(
+      "div",
+      { class: "head note explain" },
+      icon(iconId, tone),
+      h("span", { class: "words" }, h("span", { class: "label" }, text), detail ? [" ", h("span", { class: "detail" }, detail)] : null),
+      ...rest,
+    );
   }
 
   // --- The page ---------------------------------------------------------------------
@@ -455,7 +489,7 @@
       }
     }
     for (const note of vm.notes || []) {
-      parts.push(h("div", { class: "head note", title: `${note.text} — ${note.detail}` }, icon(note.icon, note.tone), h("span", { class: "label" }, note.text), h("span", { class: "detail" }, note.detail)));
+      parts.push(explain(note.icon, note.tone, note.text, note.detail));
       if (note.actions && note.actions.length) {
         parts.push(actions(note.actions));
       }
@@ -465,19 +499,13 @@
     } else if (vm.loading && vm.loading.message) {
       parts.push(messagePlace(vm.loading.readOnly, vm.loading.plain));
     }
-    if (vm.versions && vm.modes) {
-      parts.push(h("div", { class: "pickers" }, picker("Show", vm.versions, "version"), picker("Compare", vm.modes, "mode")));
+    if (vm.compare) {
+      parts.push(compareBlock(vm.compare));
     }
     if (vm.hint) {
-      parts.push(
-        h(
-          "div",
-          { class: "head note" },
-          icon(vm.hint.show ? "git-compare" : "pass", vm.hint.show ? undefined : "good"),
-          h("span", { class: "label" }, vm.hint.text),
-          vm.hint.show ? h("button", { class: "link", onclick: () => post("mode", { value: "reviewed" }) }, "Show") : null,
-        ),
-      );
+      const to = vm.compare ? vm.compare.to.selected : "current";
+      const show = vm.hint.show ? h("button", { class: "link", onclick: () => post("compare", { from: "reviewed", to }) }, "Show") : null;
+      parts.push(explain(vm.hint.show ? "git-compare" : "pass", vm.hint.show ? undefined : "good", vm.hint.text, "", show));
     }
     if (vm.conflicts) {
       // The files still conflicted, as under Local stack's banner: a click opens one to resolve.

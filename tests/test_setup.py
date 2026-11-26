@@ -24,6 +24,7 @@ from tests.change_store import ChangeStore
 from tests.conftest import run_cli
 
 
+HOST = "ger.https://gerrit.example.com"
 ALICE = {"_account_id": 1000, "name": "Alice Reviewer", "email": "alice@example.com", "username": "alice"}
 
 
@@ -97,7 +98,7 @@ def test_without_a_terminal_it_asks_for_the_flags_and_saves_nothing(
 
     assert code == ExitCode.USAGE
     assert "no terminal to ask in: give --url, --user, --token-file" in err
-    assert _config(stack_repo, "ger.user", "--local") is None
+    assert _config(stack_repo, f"{HOST}.user", "--local") is None
 
 
 def test_ger_setup_treats_windows_nul_as_non_interactive(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -122,11 +123,12 @@ def test_from_flags_it_checks_saves_and_says_what_next(
 
     assert code == 0, err
     assert _config(stack_repo, "ger.webUrl", "--local") == "https://gerrit.example.com"
-    assert _config(stack_repo, "ger.token", "--local") == "secret-token"
+    assert _config(stack_repo, f"{HOST}.token", "--local") == "secret-token"
+    assert _config(stack_repo, "ger.token", "--local") is None
     assert not _hook(stack_repo).exists(), "ger setup installs no commit-msg hook"
     assert err.splitlines() == [
         "Signed in as Alice Reviewer <alice@example.com> on https://gerrit.example.com",
-        "saved to your repository git config: ger.webUrl, ger.user and ger.token",
+        f"saved to your repository git config: ger.webUrl, {HOST}.user and {HOST}.token",
         "next: `ger log` shows your stack and its reviews; `ger inbox` the changes waiting for you",
     ]
 
@@ -141,7 +143,7 @@ def test_rejected_credentials_save_nothing_and_exit_as_gerrit_failures(
 
     assert code == ExitCode.GERRIT
     assert "Gerrit at gerrit.example.com did not accept user alice with that token; nothing was saved" in err
-    assert _config(stack_repo, "ger.token", "--local") is None
+    assert _config(stack_repo, f"{HOST}.token", "--local") is None
 
 
 def test_plain_http_needs_the_opt_in_said_up_front(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -156,7 +158,10 @@ def test_plain_http_needs_the_opt_in_said_up_front(stack_repo: Path, monkeypatch
     code, _out, err = _setup(stack_repo, [*argv, "--allow-insecure-http"], monkeypatch)
     assert code == 0, err
     assert _config(stack_repo, "ger.allowInsecureHttp", "--local") == "true"
-    assert "saved to your repository git config: ger.webUrl, ger.user, ger.allowInsecureHttp and ger.token" in err
+    host = "ger.http://gerrit.test:8081"
+    assert (
+        f"saved to your repository git config: ger.webUrl, {host}.user, ger.allowInsecureHttp and {host}.token" in err
+    )
 
 
 def test_in_a_terminal_a_wrong_answer_is_asked_again(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -176,7 +181,7 @@ def test_in_a_terminal_a_wrong_answer_is_asked_again(stack_repo: Path, monkeypat
     assert "Gerrit at gerrit.test:8081 did not accept user alice with that token; nothing was saved" in err
     assert "Type the user and token again" in err
     assert "Signed in as Alice Reviewer <alice@example.com> on http://gerrit.test:8081" in err
-    assert _config(stack_repo, "ger.token", "--local") == "right"
+    assert _config(stack_repo, "ger.http://gerrit.test:8081.token", "--local") == "right"
     assert _config(stack_repo, "ger.allowInsecureHttp", "--local") == "true"
 
 
@@ -188,8 +193,61 @@ def test_ger_setup_writes_global_config(stack_repo: Path, monkeypatch: pytest.Mo
     assert code == 0, err
     assert "saved to your global git config" in err
     assert _config(stack_repo, "ger.webUrl", "--global") == "https://gerrit.example.com"
-    assert _config(stack_repo, "ger.user", "--global") == "alice"
-    assert _config(stack_repo, "ger.token", "--global") == "secret-token"
+    assert _config(stack_repo, f"{HOST}.user", "--global") == "alice"
+    assert _config(stack_repo, f"{HOST}.token", "--global") == "secret-token"
+    assert _config(stack_repo, "ger.token", "--global") is None
+
+
+def test_ger_setup_moves_an_unscoped_token_to_the_host(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An existing unscoped ger.token is kept on Enter, written for the host, and removed (#111)."""
+    git("config", "--global", "ger.user", "carol", cwd=stack_repo)
+    git("config", "--global", "gerrit.token", "old-tok", cwd=stack_repo)
+    _answers(monkeypatch, ["https://gerrit.example.com", "carol", ""])
+
+    code, _out, err = _setup(stack_repo, [], monkeypatch)
+
+    assert code == 0, err
+    assert "Moved the unscoped ger.token" in err
+    assert _config(stack_repo, f"{HOST}.token", "--global") == "old-tok"
+    for key in ("ger.token", "gerrit.token"):
+        assert _config(stack_repo, key, "--global") is None
+
+
+def test_ger_setup_rerun_offers_the_hosts_token(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    git("config", "--global", f"{HOST}.token", "kept", cwd=stack_repo)
+    _answers(monkeypatch, ["https://gerrit.example.com", "dave", ""])
+
+    code, _out, err = _setup(stack_repo, [], monkeypatch)
+
+    assert code == 0, err
+    assert "Moved" not in err
+    assert _config(stack_repo, f"{HOST}.token", "--global") == "kept"
+
+
+def test_ger_setup_moves_an_unscoped_password_to_the_host(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An unscoped password left in place would still go to any host; it moves to the host's key."""
+    git("config", "--global", "gerrit.password", "pw", cwd=stack_repo)
+    _answers(monkeypatch, ["https://gerrit.example.com", "erin", "tok"])
+
+    code, _out, err = _setup(stack_repo, [], monkeypatch)
+
+    assert code == 0, err
+    assert "Moved the unscoped ger.password" in err
+    assert _config(stack_repo, f"{HOST}.password", "--global") == "pw"
+    for key in ("ger.password", "gerrit.password"):
+        assert _config(stack_repo, key, "--global") is None
+
+
+def test_flags_take_the_hosts_saved_token(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without a terminal, a value not given comes from what the host already has."""
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    git("config", "--local", f"{HOST}.token", "kept", cwd=stack_repo)
+    argv = ["--local", "--url", "https://gerrit.example.com", "--user", "alice"]
+
+    code, _out, err = _setup(stack_repo, argv, monkeypatch)
+
+    assert code == 0, err
+    assert _config(stack_repo, f"{HOST}.token", "--local") == "kept"
 
 
 def test_an_empty_answer_stops_and_saves_nothing(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -199,7 +257,7 @@ def test_an_empty_answer_stops_and_saves_nothing(stack_repo: Path, monkeypatch: 
 
     assert code == ExitCode.REFUSED
     assert "setup aborted: nothing was saved" in err
-    assert _config(stack_repo, "ger.user", "--local") is None
+    assert _config(stack_repo, f"{HOST}.user", "--local") is None
 
 
 def test_declining_plain_http_asks_for_the_url_again(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

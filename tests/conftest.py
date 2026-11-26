@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import tempfile
 import time
 from collections import defaultdict
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Iterator, Sequence
 from pathlib import Path
 
 import pytest
@@ -64,6 +65,26 @@ def _reset_output_modes() -> Generator[None]:
 
     set_color_mode(False)
     set_hyperlink_mode(False)
+
+
+@pytest.fixture
+def config_warnings(caplog: pytest.LogCaptureFixture) -> Iterator[Callable[[], list[str]]]:
+    """The warnings ``core.config`` logged, as messages.
+
+    Hooks the config logger directly, and only directly: whether the package logger
+    propagates to the root (where caplog also listens) depends on which test configured
+    logging first.
+    """
+    log = logging.getLogger("gerrit_workflow_tools.core.config")
+    propagate, level = log.propagate, log.level
+    log.propagate = False
+    log.setLevel(logging.WARNING)
+    log.addHandler(caplog.handler)
+    try:
+        yield lambda: [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    finally:
+        log.removeHandler(caplog.handler)
+        log.propagate, log.level = propagate, level
 
 
 def _is_xdist_worker(config: pytest.Config) -> bool:

@@ -54,11 +54,11 @@ ger setup              # writes to global ~/.gitconfig
 ger setup --local
 ```
 
-Asks for `ger.webUrl`, `ger.user` and `ger.token` (an HTTP password: Gerrit's web UI, *Settings*, *HTTP Credentials*), asks again when an answer will not do, and checks them with Gerrit before it saves anything:
+Asks for `ger.webUrl`, your user and a token (an HTTP password: Gerrit's web UI, *Settings*, *HTTP Credentials*), asks again when an answer will not do, and checks them with Gerrit before it saves anything. The user and token are stored for that host only (`ger.<webUrl>.user`, `ger.<webUrl>.token`), so they are never sent to another server:
 
 ```text
 Signed in as Alice Reviewer <alice@example.com> on https://gerrit.example.com
-saved to your global git config: ger.webUrl, ger.user and ger.token
+saved to your global git config: ger.webUrl, ger.https://gerrit.example.com.user and ger.https://gerrit.example.com.token
 next: `ger log` shows your stack and its reviews; `ger inbox` the changes waiting for you
 ```
 
@@ -72,8 +72,8 @@ ger setup --url https://gerrit.example.com --user YOUR_USERNAME --token-file - <
 
 ```bash
 git config --global ger.webUrl https://gerrit.example.com
-git config --global ger.user YOUR_USERNAME
-git config --global ger.token YOUR_HTTP_TOKEN
+git config --global ger.https://gerrit.example.com.user YOUR_USERNAME
+git config --global ger.https://gerrit.example.com.token YOUR_HTTP_TOKEN
 ```
 
 Use repo-local config instead of `--global` when settings differ per project.

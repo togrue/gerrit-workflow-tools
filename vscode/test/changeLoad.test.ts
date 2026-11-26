@@ -69,7 +69,7 @@ function files(subject: string): Diff {
 
 /** The view as ChangeView draws it, looked at against its base. */
 function drawn(detail: ChangeDetail, extra: Partial<ChangeState> = {}) {
-  const state = detail.state({ chains: detail.shown?.comment_chains ?? [], patchsets: undefined, version: "local", mode: "base", readOnly: "", ci: { state: "closed" }, ...extra });
+  const state = detail.state({ chains: detail.shown?.comment_chains ?? [], patchsets: undefined, version: "local", from: "base", mode: "base", readOnly: "", ci: { state: "closed" }, ...extra });
   assert.ok(state, "something is drawn");
   return changeVm(state);
 }
@@ -88,7 +88,7 @@ test("a click draws the Change view at once from the Local stack row: what it ne
   assert.deepEqual(changeLines(vm), [
     "Unresolved comments — V+1 CR+2 💬1",
     "Commit message — loading…",
-    "Showing — Local commit extract · Against its base commit",
+    "Comparing — Base commit → Local commit extract · default: Against its base commit",
     "Files — loading…",
     "Comments — loading…",
   ]);
@@ -152,7 +152,7 @@ test("an answer for a change selected before never overwrites the change selecte
   assert.equal(detail.shown?.summary, "Add cache");
   detail.clear();
   assert.equal(detail.arrive(now, "base", files("Add cache")), false, "closed: nothing is shown any more");
-  assert.equal(detail.state({ chains: [], patchsets: undefined, version: "local", mode: "base", readOnly: "", ci: { state: "closed" } }), undefined);
+  assert.equal(detail.state({ chains: [], patchsets: undefined, version: "local", from: "base", mode: "base", readOnly: "", ci: { state: "closed" } }), undefined);
 });
 
 test("a reload keeps what is shown until its answers replace it", () => {
@@ -209,7 +209,7 @@ test("a /show failure stays shown when a late answer of another part comes", () 
   assert.ok(detail.fail(token, "change 7 is gone"));
   assert.ok(detail.arrive(token, "base", files("Extract routing")));
   assert.equal(detail.loading(), undefined, "the late answer brings no loading mark back");
-  assert.equal(detail.state({ chains: [], patchsets: undefined, version: "local", mode: "base", readOnly: "", ci: { state: "closed" } })?.loading, undefined);
+  assert.equal(detail.state({ chains: [], patchsets: undefined, version: "local", from: "base", mode: "base", readOnly: "", ci: { state: "closed" } })?.loading, undefined);
   assert.equal(detail.problem, "change 7 is gone");
 });
 

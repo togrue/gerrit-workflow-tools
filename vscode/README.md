@@ -228,14 +228,20 @@ The commits above your upstream, newest first. One row per commit:
   paragraphs and list items hard-wrapped at 72 joined again, so they wrap once, where the view
   does; indented and fenced blocks kept line for line in the editor font (they scroll sideways when
   wide); the trailers (`Bug:`, `Signed-off-by:`) small and dim, as the Change-Id is.
-- **Show**: which version of the change you look at. It always starts on your **local commit**
-  when the change is in your stack; the list also has every patchset on Gerrit, the current one
-  and the one you reviewed marked.
-- **Compare**: *Against its base commit* (what the change does), *Since my last review* (from
-  the newest patchset you voted or commented on), or *Gerrit vs. local* (Gerrit's current
-  patchset against your commit: what a push would add; when your commit is that patchset, it
-  says there is nothing to push). On someone else's change you reviewed
-  before, a line says what is new since, with **Show** to switch to it.
+- **From / To**: what is compared. *To* is the version you look at: your **local commit** (when
+  the change is in your stack) or any patchset on Gerrit. *From* is what it is compared with:
+  the **base commit** (what the change does) or any patchset older than *To*. Both lists run
+  newest first and mark the current patchset and the one you reviewed. Picking *To* at or below
+  *From*'s patchset sets *From* back to the base commit.
+- **Default mode** (the icon beside the pickers): a click moves to the next mode —
+  *Against its base commit* (base → your commit, or Gerrit's current patchset),
+  *Since my last review* (the newest patchset you voted or commented on → the current one), or
+  *Gerrit vs. local* (the current patchset → your commit: what a push would add; when your commit
+  is that patchset, it says there is nothing to push). A mode the change cannot have is skipped.
+  The default is remembered and every change you open starts on it; picking *From* or *To* by
+  hand overrides it for that change only, until you open it again, and the icon dims meanwhile.
+  On someone else's change you reviewed before, a line says what is new since, with **Show** to
+  switch to it.
 - **Files**: added and removed lines per file, in the colours git gives them. Click for the
   diff of what is compared; an added or deleted file opens on its own. What your working files
   hold diffs against the real file: the commit you are standing on, so you can fix things in the
@@ -310,7 +316,7 @@ The commits above your upstream, newest first. One row per commit:
   - **Private note**, always: kept here and never uploaded.
 
   The comment goes on the version you are looking at: with another patchset chosen under
-  **Show**, it is a draft on that patchset, on the lines its diff shows.
+  **To**, it is a draft on that patchset, on the lines its diff shows.
 - **CI**: opened on demand (it downloads build logs: this change's and its parent's, not the rest
   of its chain). Findings this change **introduced** are
   on top with a flame; findings that already fail on its parent are dimmed. Click a finding to

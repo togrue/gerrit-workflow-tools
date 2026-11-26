@@ -159,3 +159,8 @@ def legacy_keys_notice(values: Mapping[str, str], scopes: Mapping[str, ConfigSco
         return None
     on_disk = any(scope is not None and scope.flag is not None for scope in moves.values())
     return LegacyKeysNotice(legacy_keys_warning(moves), tuple(MIGRATE_COMMAND.split()[1:]) if on_disk else None)
+
+
+def gerrit_host_key(web_url: str, name: str) -> str:
+    """``ger.<web_url>.<name>``: *name* (``user``, ``token``, ``password``) for one Gerrit host (#111)."""
+    return f"ger.{web_url.strip().rstrip('/')}.{name}"

@@ -14,6 +14,7 @@ from typing import Any
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit.cache import GerritCache
+from gerrit_workflow_tools.core.gerrit.credentials import gerrit_user_for
 from gerrit_workflow_tools.core.gerrit.event_source import (
     EventSource,
     EventSourceUnavailable,
@@ -97,7 +98,7 @@ def follow_events(
     """
     mode = StreamMode(settings.event_stream)
     web_base = gerrit.web_base if gerrit is not None else settings.gerrit_web_url
-    you = [settings.gerrit_user]
+    you = [gerrit_user_for(settings, web_base)]
     off_reason: str | None = None
     if not web_base:
         source, off_reason = None, "ger.webUrl is not set"

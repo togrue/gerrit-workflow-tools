@@ -14,7 +14,7 @@
 
 import { randomInt } from "node:crypto";
 
-import { DISCARD, LOADING, MODES, NOTHING_SHOWN, NOT_FILES, NO_CI_LINK, READ_ONLY, REVIEW_UPDATE, STOPPED_WORDS, YOURS } from "./changeRows";
+import { DISCARD, LOADING, MODES, MODE_ICONS, SIDE_WORDS, NOTHING_SHOWN, NOT_FILES, NO_CI_LINK, READ_ONLY, REVIEW_UPDATE, STOPPED_WORDS, YOURS } from "./changeRows";
 import { Names, Random } from "./fakes";
 import { ATTENTION_ICONS, FILE_STATES, REASON_WORDS } from "./format";
 import { SECTION_TITLES, TREE_WORDS, allRowContexts } from "./rows";
@@ -123,6 +123,7 @@ export const ICONS = [
   ...Object.values(SYNC_ICONS),
   ...ATTENTION_ICONS,
   ...["beaker", "debug-continue", "edit", "eye", "flame", "git-branch", "history", "list-selection", "loading", "note", "person", "person-add", "target", "thumbsdown", "thumbsup"],
+  ...Object.values(MODE_ICONS),
 ];
 const ICON = ours(ICONS);
 const TONE = ours(["good", "bad", "warn", "plain", "dim"]);
@@ -243,10 +244,12 @@ const STACK: Shape = {
   review: KEEP,
 };
 
-/** `Local commit 1a2b3c4`, `Patchset 3 (current)`: which version is shown. A patchset's number says how many there were, as a count does. */
-const VERSION_LABEL = around(/Local commit ([0-9a-f]+)/, (names, sha) => `Local commit ${names.hex(sha)}`, ours([new RegExp(`Patchset ${PATCHSET}( \\((current|you reviewed it|current, you reviewed it)\\))?`), "Gerrit's current patchset"]));
-const VERSION = ours([new RegExp(`local|current|${PATCHSET}`)]);
+/** `Local commit 1a2b3c4`, `Patchset 3 (current)`, `Base commit`: a side From or To names. A patchset's number says how many there were, as a count does. */
+const SIDE_LABEL = around(/Local commit ([0-9a-f]+)/, (names, sha) => `Local commit ${names.hex(sha)}`, ours([new RegExp(`Patchset ${PATCHSET}( \\((current|you reviewed it|current, you reviewed it)\\))?`), ...Object.values(SIDE_WORDS).filter((words) => typeof words === "string"), new RegExp(`Gerrit's patchset ${PATCHSET} \\(current\\)`)]));
+const SIDE = ours([new RegExp(`base|local|current|reviewed|${PATCHSET}`)]);
+const PICKER: Shape = { options: [{ value: SIDE, label: SIDE_LABEL, disabled: KEEP }], selected: SIDE };
 const MODE = ours(Object.keys(MODES));
+const MODE_WORDS = `(${Object.values(MODES).join("|")})`;
 
 /** A file's name and folder as its row shows them: those of what its path became. */
 const FILE_NAME = string((text, names, row) => (typeof row.path === "string" && row.path.split("/").at(-1) === text ? (names.path(row.path).split("/").at(-1) ?? "") : names.fileName(text)));
@@ -305,25 +308,51 @@ const CHANGE: Shape = {
     },
   ],
   message: { key: KEY, text: TEXT, changeId: FOOTER_CHANGE_ID, author: PERSON, readOnly: READ_ONLY_WORDS, plain: KEEP },
-  versions: { options: [{ value: VERSION, label: VERSION_LABEL, disabled: KEEP }], selected: VERSION },
-  modes: { options: [{ value: MODE, label: ours([...Object.values(MODES), `${MODES.reviewed} (you have not reviewed it)`]), disabled: KEEP }], selected: MODE },
+  compare: {
+    from: PICKER,
+    to: PICKER,
+    mode: {
+      mode: MODE,
+      icon: ICON,
+      next: MODE,
+      active: KEEP,
+      title: ours([new RegExp(`Default comparison: ${MODE_WORDS}( — (not possible for this change|From and To picked by hand for this change))?\\. Click for ${MODE_WORDS}\\.`)]),
+    },
+  },
   hint: {
     text: ours([new RegExp(`Nothing new since your review of patchset ${PATCHSET}`), new RegExp(`Since your review: patchset ${PATCHSET} → ${PATCHSET} · ${COUNT} files?( · rebased)?`)]),
     show: KEEP,
   },
   files: {
-    title: ours(["Files", STOPPED_WORDS.files, "Gerrit vs. local", "Since your review", new RegExp(`(Gerrit vs\\. local|Since your review): patchset ${PATCHSET} → (patchset ${PATCHSET}|local)( \\(rebased\\))?`)]),
-    summary: ours([new RegExp(`${COUNT} files?`), LOADING, "could not be compared", "you have not reviewed this change yet", "the commit is not available here", new RegExp(`nothing new: you reviewed patchset ${PATCHSET}`)]),
+    title: ours(["Files", STOPPED_WORDS.files, "Gerrit vs. local", "Since your review", "Compared", new RegExp(`(Gerrit vs\\. local|Since your review|Compared): patchset ${PATCHSET} → (patchset ${PATCHSET}|local)( \\(rebased\\))?`)]),
+    summary: ours([
+      new RegExp(`${COUNT} files?`),
+      LOADING,
+      "could not be compared",
+      "you have not reviewed this change yet",
+      "the commit is not available here",
+      new RegExp(`nothing new: you reviewed patchset ${PATCHSET}`),
+      new RegExp(`identical to patchset ${PATCHSET}( — nothing to push)?`),
+    ]),
     /** Lines added and removed, in all. */
     added: KEEP,
     deleted: KEEP,
-    note: ours(["", LOADING, "could not be compared", "you have not reviewed this change yet", "the commit is not available here", new RegExp(`nothing new: you reviewed patchset ${PATCHSET}`)]),
+    note: ours([
+      "",
+      LOADING,
+      "could not be compared",
+      "you have not reviewed this change yet",
+      "the commit is not available here",
+      new RegExp(`nothing new: you reviewed patchset ${PATCHSET}`),
+      new RegExp(`identical to patchset ${PATCHSET}( — nothing to push)?`),
+    ]),
     tooltip: ours([
       "What the change does: its files against the parent commit.",
       STOPPED_WORDS.filesTooltip,
       "The two versions sit on different parents. Only files the change touches are listed; inside them, edits that came in from underneath show too.",
       "What your commit changes compared with the patchset Gerrit has: what a push would upload on top.",
       "What changed after the patchset you last voted or commented on.",
+      "What changed from the version under From to the one under To.",
     ]),
     rows: [
       {

@@ -128,6 +128,7 @@ def test_stack_is_the_annotated_stack_with_the_ready_boundary(stack_repo: Path) 
     assert "unresolved-comments" in second["attention_reasons"]
     assert second["gerrit_url"] == f"{WEB}/c/testproj/+/101"
     assert [c["number"] for c in stack["commits"]] == [100, 101, 102, 103]
+    assert [c["current_patch_set"] for c in stack["commits"]] == [1] * 4, "the number the Change view names"
     assert [c["last_pushed_votes"] for c in stack["commits"]] == [None] * 4, "in step with Gerrit: votes are current"
     assert [c["code_change"] for c in stack["commits"]] == [None] * 4, "only a commit ahead of Gerrit has one"
 
@@ -153,6 +154,7 @@ def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monk
         *(
             "gerrit_url",
             "number",
+            "current_patch_set",
             "last_pushed_votes",
             "code_change",
             "ci_patch_set",

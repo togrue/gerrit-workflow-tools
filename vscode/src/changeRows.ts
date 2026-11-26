@@ -10,9 +10,11 @@ import { Badge, SYNC_WORDS, StackAction, StackInfo, Tone, actionsText, badges, s
 import { Waiting } from "./state";
 import { latestSuggestion } from "./suggestions";
 
-/** Which version of the change is looked at: your commit, Gerrit's current patchset, or patchset `n`. */
+/** The newer side, the version looked at ("To"): your commit, Gerrit's current patchset, or patchset `n`. */
 export type Version = "local" | "current" | number;
-/** What it is compared with: its parent, the patchset you last reviewed, or (your commit only) Gerrit's current patchset. */
+/** The older side, what it is compared with ("From"): its base commit, the patchset you last reviewed, Gerrit's current one, or patchset `n`. */
+export type From = "base" | "reviewed" | "current" | number;
+/** The default comparison, remembered across changes: what a change opened next starts on. */
 export type Mode = "base" | "reviewed" | "gerrit";
 
 export const MODES: Record<Mode, string> = {
@@ -20,6 +22,59 @@ export const MODES: Record<Mode, string> = {
   reviewed: "Since my last review",
   gerrit: "Gerrit vs. local",
 };
+
+/** The codicon the default-mode toggle wears for each mode. */
+export const MODE_ICONS: Record<Mode, string> = { base: "git-commit", reviewed: "eye", gerrit: "cloud-upload" };
+
+/** What a change allows: patchsets to compare once it is on Gerrit, your commit when it is in your stack. */
+export interface Sides {
+  pushed: boolean;
+  local: boolean;
+}
+
+/** The default modes `sides` allows, in the toggle's order: Gerrit vs. local needs your commit and a patchset, Since my last review a patchset. */
+export function modesFor(sides: Sides): Mode[] {
+  return (["base", "reviewed", "gerrit"] as Mode[]).filter((mode) => mode === "base" || (sides.pushed && (mode === "reviewed" || sides.local)));
+}
+
+/**
+ * From and To of `mode` for a change: base → your commit (else Gerrit's current patchset); your
+ * last review → Gerrit's current patchset; Gerrit's current patchset → your commit. A mode the
+ * change does not allow is its base comparison.
+ */
+export function modeSides(mode: Mode, sides: Sides): { from: From; to: Version } {
+  const allowed = modesFor(sides).includes(mode) ? mode : "base";
+  if (allowed === "reviewed") {
+    return { from: "reviewed", to: "current" };
+  }
+  if (allowed === "gerrit") {
+    return { from: "current", to: "local" };
+  }
+  return { from: "base", to: sides.local ? "local" : "current" };
+}
+
+/** A patchset number for `side`, once the patchsets are known: "current" and "reviewed" resolved. Else the side itself. */
+export function resolveSide<T extends From | Version>(side: T, patchsets: Patchsets | undefined): T | number {
+  if (side === "current" && patchsets?.current) {
+    return patchsets.current;
+  }
+  if (side === "reviewed" && patchsets?.reviewed) {
+    return patchsets.reviewed;
+  }
+  return side;
+}
+
+/**
+ * A comparison as asked for, made one core can answer: From older than To. Picking To at or
+ * below the patchset From names sets From back to the base commit; once the patchsets are
+ * known, a From that names one at or above To does the same. Before they are known, From and
+ * To naming the same patchset ("current" both) does too: nothing refits the pick later.
+ */
+export function fitSides(from: From, to: Version, patchsets: Patchsets | undefined): { from: From; to: Version } {
+  const [older, newer] = [resolveSide(from, patchsets), resolveSide(to, patchsets)];
+  const notOlder = older === newer || (typeof older === "number" && typeof newer === "number" && older >= newer);
+  return notOlder ? { from: "base", to } : { from, to };
+}
 
 export const NOT_FILES = ["/COMMIT_MSG", "/PATCHSET_LEVEL", "/MERGE_LIST"];
 
@@ -58,10 +113,14 @@ export interface ChangeState {
   chains: CommentChain[];
   /** The version looked at against its parent; it carries the commit message. */
   base: Diff | undefined;
-  /** The review delta: for the mode chosen, or (someone's change) since your review. */
+  /** The review delta: From against To, or (someone's change, From its base) since your review. */
   delta: Diff | undefined;
   patchsets: Patchsets | undefined;
+  /** The newer side ("To"). */
   version: Version;
+  /** The older side ("From"). */
+  from: From;
+  /** The default mode, remembered; From and To are its sides unless picked by hand. */
   mode: Mode;
   /** Why the commit message cannot be edited; empty when it can. */
   readOnly: string;
@@ -181,8 +240,15 @@ export interface ChangeVm {
    * that cannot be reworded here at all (someone's change, a patchset on Gerrit), drawn as text, not a box.
    */
   message?: { key: string; text: string; changeId: string; author: string; readOnly: string; plain: boolean };
-  versions?: { options: Option[]; selected: string };
-  modes?: { options: Option[]; selected: Mode };
+  /**
+   * The From and To pickers, and the toggle of the default mode: `mode` is the default, `next` the
+   * one a click makes it, `active` whether From and To are the default's (else picked by hand).
+   */
+  compare?: {
+    from: { options: Option[]; selected: string };
+    to: { options: Option[]; selected: string };
+    mode: { mode: Mode; icon: string; next: Mode; active: boolean; title: string };
+  };
   /** Someone's change you reviewed before: what is new, one click away. */
   hint?: { text: string; show: boolean };
   /** A rebase stopped here on a conflict: the files still conflicted, as Local stack lists them under its banner. */
@@ -266,56 +332,111 @@ export function ownComment(chain: CommentChain): Comment | undefined {
 
 export const DISCARD: Record<string, string> = { note: "Delete Your Private Note…", "local-draft": "Delete Your Local Draft…", draft: "Delete Your Draft…" };
 
-function versions(state: ChangeState): { options: Option[]; selected: string } {
+/** `Patchset 3 (current, you reviewed it)`: a patchset as both pickers list it. */
+function patchsetLabel(number: number, patchsets: Patchsets): string {
+  const marks = [number === patchsets.current ? "current" : "", number === patchsets.reviewed ? "you reviewed it" : ""].filter(Boolean);
+  return `Patchset ${number}${marks.length ? ` (${marks.join(", ")})` : ""}`;
+}
+
+/** What each picker says while the patchsets are not known yet, for the sides that name one. */
+export const SIDE_WORDS = {
+  base: "Base commit",
+  current: "Gerrit's current patchset",
+  /** Gerrit's current patchset by its number, as the commit's status names it: the list need not have come. */
+  currentNumbered: (number: number) => `Gerrit's patchset ${number} (current)`,
+  reviewed: "Patchset you last reviewed",
+  notReviewed: "Patchset you last reviewed (none)",
+};
+
+/** Gerrit's current patchset before the list has come: by its number when the commit's status says it. */
+function currentLabel(shown: ShownCommit): string {
+  return shown.current_patch_set ? SIDE_WORDS.currentNumbered(shown.current_patch_set) : SIDE_WORDS.current;
+}
+
+/** The patchsets newest first: both pickers list the versions as a timeline, the newest on top. */
+function newestFirst(patchsets: Patchsets): number[] {
+  return patchsets.patchsets.map((patchset) => patchset.number).reverse();
+}
+
+/** The To picker: your commit (in your stack), then every patchset on Gerrit. */
+function toPicker(state: ChangeState): { options: Option[]; selected: string } {
   const { shown, patchsets } = state;
   const options: Option[] = [];
   if (state.local) {
     options.push({ value: "local", label: `Local commit ${shown.short_sha}` });
   }
   if (shown.pushed && patchsets) {
-    for (const patchset of [...patchsets.patchsets].reverse()) {
-      const marks = [patchset.number === patchsets.current ? "current" : "", patchset.number === patchsets.reviewed ? "you reviewed it" : ""].filter(Boolean);
-      options.push({ value: String(patchset.number), label: `Patchset ${patchset.number}${marks.length ? ` (${marks.join(", ")})` : ""}` });
-    }
+    options.push(...newestFirst(patchsets).map((number) => ({ value: String(number), label: patchsetLabel(number, patchsets) })));
   } else if (shown.pushed) {
-    options.push({ value: "current", label: "Gerrit's current patchset" });
+    options.push({ value: "current", label: currentLabel(shown) });
   }
-  const current = state.version === "current" && patchsets?.current ? patchsets.current : state.version;
-  const wanted = String(current);
+  const wanted = String(resolveSide(state.version, patchsets));
   return { options, selected: options.some((option) => option.value === wanted) ? wanted : (options[0]?.value ?? "") };
 }
 
-function modes(state: ChangeState): { options: Option[]; selected: Mode } {
-  const pushed = state.shown.pushed;
-  const never = state.patchsets !== undefined && state.patchsets.reviewed === null;
-  return {
-    options: [
-      { value: "base", label: MODES.base },
-      { value: "reviewed", label: never ? `${MODES.reviewed} (you have not reviewed it)` : MODES.reviewed, disabled: !pushed || never },
-      { value: "gerrit", label: MODES.gerrit, disabled: !pushed || !state.local },
-    ],
-    selected: state.mode,
-  };
+/** The From picker: every patchset on Gerrit older than To, then the base commit. */
+function fromPicker(state: ChangeState): { options: Option[]; selected: string } {
+  const { shown, patchsets } = state;
+  const to = resolveSide(state.version, patchsets);
+  const options: Option[] = [];
+  if (shown.pushed && patchsets) {
+    options.push(...newestFirst(patchsets).map((number) => ({ value: String(number), label: patchsetLabel(number, patchsets), disabled: typeof to === "number" && number >= to })));
+    if (state.from === "reviewed" && patchsets.reviewed === null) {
+      options.push({ value: "reviewed", label: SIDE_WORDS.notReviewed, disabled: true });
+    }
+  } else if (shown.pushed) {
+    options.push({ value: "current", label: currentLabel(shown), disabled: to === "current" }, { value: "reviewed", label: SIDE_WORDS.reviewed });
+  }
+  options.push({ value: "base", label: SIDE_WORDS.base });
+  const wanted = String(resolveSide(state.from, patchsets));
+  return { options, selected: options.some((option) => option.value === wanted) ? wanted : "base" };
+}
+
+/** The toggle of the default mode: which it is, the next a click makes it, whether From and To are its sides. */
+function modeToggle(state: ChangeState): NonNullable<ChangeVm["compare"]>["mode"] {
+  const sides = { pushed: state.shown.pushed, local: state.local };
+  const allowed = modesFor(sides);
+  const next = allowed[(allowed.indexOf(state.mode) + 1) % allowed.length] ?? "base";
+  const own = modeSides(state.mode, sides);
+  const same = (a: From | Version, b: From | Version) => resolveSide(a, state.patchsets) === resolveSide(b, state.patchsets);
+  const active = same(own.from, state.from) && same(own.to, state.version);
+  const here = !allowed.includes(state.mode) ? " — not possible for this change" : active ? "" : " — From and To picked by hand for this change";
+  return { mode: state.mode, icon: MODE_ICONS[state.mode], next, active, title: `Default comparison: ${MODES[state.mode]}${here}. Click for ${MODES[next]}.` };
+}
+
+/** What the files compared are called: by what From and To are, whether picked by hand or by the default mode. */
+function deltaTitle(state: ChangeState): "Gerrit vs. local" | "Since your review" | "Compared" {
+  const from = resolveSide(state.from, state.patchsets);
+  if (state.version === "local" && (state.from === "current" || from === state.patchsets?.current)) {
+    return "Gerrit vs. local";
+  }
+  return state.from === "reviewed" || from === state.patchsets?.reviewed ? "Since your review" : "Compared";
 }
 
 function files(state: ChangeState): NonNullable<ChangeVm["files"]> {
-  const diff = state.mode === "base" ? state.base : state.delta;
+  const compared = state.from !== "base";
+  const diff = compared ? state.delta : state.base;
   const since = diff?.since;
   const to = since?.to_patch_set ? `patchset ${since.to_patch_set}` : "local";
   let [title, note, tooltip] = ["Files", "", "What the change does: its files against the parent commit."];
-  if (state.mode !== "base") {
-    title = state.mode === "gerrit" ? "Gerrit vs. local" : "Since your review";
+  if (compared) {
+    const kind = deltaTitle(state);
+    title = kind;
     tooltip = since?.rebased
       ? "The two versions sit on different parents. Only files the change touches are listed; inside them, edits that came in from underneath show too."
-      : state.mode === "gerrit"
+      : kind === "Gerrit vs. local"
         ? "What your commit changes compared with the patchset Gerrit has: what a push would upload on top."
-        : "What changed after the patchset you last voted or commented on.";
+        : kind === "Since your review"
+          ? "What changed after the patchset you last voted or commented on."
+          : "What changed from the version under From to the one under To.";
     if (!diff) {
       note = state.loading?.delta ? LOADING : "could not be compared";
     } else if (since?.patch_set === null || since?.patch_set === undefined) {
       note = "you have not reviewed this change yet";
-    } else if (since.identical && state.mode === "gerrit") {
+    } else if (since.identical && kind === "Gerrit vs. local") {
       note = `identical to patchset ${since.patch_set} — nothing to push`;
+    } else if (since.identical && kind !== "Since your review") {
+      note = `identical to patchset ${since.patch_set}`;
     } else if (since.up_to_date || since.identical) {
       note = `nothing new: you reviewed patchset ${since.patch_set}`;
     } else {
@@ -324,7 +445,7 @@ function files(state: ChangeState): NonNullable<ChangeVm["files"]> {
   } else if (!diff) {
     note = state.loading?.base ? LOADING : "the commit is not available here";
   }
-  if (state.stopped && state.mode === "base" && state.version === "local") {
+  if (state.stopped && !compared && state.version === "local") {
     [title, tooltip] = [STOPPED_WORDS.files, STOPPED_WORDS.filesTooltip];
   }
   const rows = (diff?.files ?? []).map((file): FileRow => {
@@ -495,7 +616,7 @@ export function changeVm(state: ChangeState): ChangeVm {
   const since = state.delta?.since;
   // Someone's change, also one checked out for review (unless it is behind: the update says it).
   const theirs = !state.local || (state.reviewing !== undefined && !state.reviewing.behind);
-  const reviewed = theirs && state.mode === "base" && since && since.patch_set !== null;
+  const reviewed = theirs && state.from === "base" && since && since.patch_set !== null;
   const open = chains.filter((chain) => !chain.resolved && !isYours(chain)).length;
   const fromGerrit = chains.filter((chain) => !isYours(chain)).length;
   const yours = chains.length - fromGerrit;
@@ -528,8 +649,7 @@ export function changeVm(state: ChangeState): ChangeVm {
           plain: isPlain(state.readOnly),
         }
       : undefined,
-    versions: versions(state),
-    modes: modes(state),
+    compare: { from: fromPicker(state), to: toPicker(state), mode: modeToggle(state) },
     hint: reviewed
       ? {
           text: since.up_to_date
@@ -584,9 +704,10 @@ export function changeLines(vm: ChangeVm): string[] {
   } else if (vm.loading?.message) {
     add(0, "Commit message", LOADING);
   }
-  const version = vm.versions?.options.find((option) => option.value === vm.versions?.selected);
-  if (version && vm.modes) {
-    add(0, "Showing", `${version.label} · ${MODES[vm.modes.selected]}`);
+  if (vm.compare) {
+    const label = (picker: { options: Option[]; selected: string }) => picker.options.find((option) => option.value === picker.selected)?.label ?? "";
+    const { from, to, mode } = vm.compare;
+    add(0, "Comparing", `${label(from)} → ${label(to)} · default: ${MODES[mode.mode]}${mode.active ? "" : " (picked by hand)"}`);
   }
   if (vm.hint) {
     add(0, vm.hint.text);

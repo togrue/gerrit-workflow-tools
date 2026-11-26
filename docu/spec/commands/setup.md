@@ -6,8 +6,8 @@
 | **Module** | `src/gerrit_workflow_tools/cli_setup.py`; checks in `core/gerrit_setup.py` |
 | **Requires** | A terminal to ask in, or `--url`, `--user` and `--token-file` |
 
-Configure `ger.webUrl`, `ger.user` and `ger.token` in git config, check them with Gerrit before
-saving anything, and say what comes next. A setup that cannot work says so here, not at the next command.
+Configure `ger.webUrl` and that host's user and token (`ger.<webUrl>.user`, `ger.<webUrl>.token`) in
+git config, check them with Gerrit before saving anything, and say what comes next. A setup that cannot work says so here, not at the next command.
 
 ---
 
@@ -29,10 +29,10 @@ ger setup [--local] [--url URL --user USER --token-file FILE] [--allow-insecure-
 
 ## In a terminal
 
-Prompts, each with a short description; a value saved before (also under its old name `gerrit.webUrl`,
-`gerrit.user`, `gerrit.token`) is the default, and leaving the token empty keeps the one you have.
-Saving writes the `ger.*` key and removes the old name at that scope
-([Renamed keys](../../Configuration.md#renamed-keys-gerrit-inbox-branchnamegerrit)). An empty answer
+Prompts, each with a short description; a value saved before is the default, and leaving the token
+empty keeps the one you have. For the URL entered, the user defaults to `ger.<webUrl>.user`, else
+`ger.user`, and the token kept is `ger.<webUrl>.token`, else the unscoped `ger.token`; a value still
+under its old name (`gerrit.webUrl`, `gerrit.user`, `gerrit.token`) is offered too. An empty answer
 stops with nothing saved, exit `1`.
 
 - **An answer that will not do is asked again**, with the reason: a URL without a scheme
@@ -53,6 +53,17 @@ stops with nothing saved, exit `1`.
   is right, Gerrit answered there, and an http opt-in already given stands. Unreachable or any other
   failure: the reason, `nothing was saved`, and every prompt again, your answers the defaults.
 
+## Where it saves
+
+The user and token are written for the entered host only
+([Credentials are per host](../../Configuration.md#credentials-are-per-host)). Saving removes the
+old name of each key it writes at that scope
+([Renamed keys](../../Configuration.md#renamed-keys-gerrit-inbox-branchnamegerrit)), and the unscoped
+`ger.token` and `ger.password` (and their `gerrit.*` names), since they would go to any host
+`ger.webUrl` names; a password moves to `ger.<webUrl>.password` unless the host has one. Each move
+says so: `Moved the unscoped ger.token to ger.https://gerrit.example.com.token: it went to any host
+ger.webUrl named.`
+
 ## Without a terminal
 
 Nothing is asked. The values come from the flags, else from what the scope already has (so
@@ -65,7 +76,7 @@ cannot reach, exit `5` with nothing saved, naming `--no-check`.
 ## Once saved
 
 ```text
-saved to your repository git config: ger.webUrl, ger.user and ger.token
+saved to your repository git config: ger.webUrl, ger.https://gerrit.example.com.user and ger.https://gerrit.example.com.token
 next: `ger log` shows your stack and its reviews; `ger inbox` the changes waiting for you
 ```
 

@@ -9,7 +9,7 @@ import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
 import { ChangeDetail, ciRevs, sameChange, stoppedHere } from "./changeLoad";
-import { ChangeState, ChangeVm, CiView, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Version, changeHeading, changeLines, changeVm, isYours, toAnswer } from "./changeRows";
+import { ChangeState, ChangeVm, CiView, From, MODES, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Sides, Version, changeHeading, changeLines, changeVm, fitSides, isYours, modeSides, toAnswer } from "./changeRows";
 import { fileUri, openDiff } from "./diffTabs";
 import { ChangeTarget, Model, describeError } from "./model";
 import { openConflict } from "./rebase";
@@ -24,6 +24,9 @@ export interface ThreadArg {
   chain: CommentChain;
 }
 
+/** Where the default mode is remembered (`globalState`): it is yours, whatever the repository. */
+export const MODE_KEY = "ger.change.defaultMode";
+
 export interface Location {
   path: string;
   line: number | null;
@@ -36,9 +39,10 @@ export class ChangeView extends WebView<ChangeVm> {
 
   /** The change selected, and what of it has come: drawn at once from its row, filled in answer by answer. */
   private readonly detail = new ChangeDetail();
-  /** Which version is looked at. A change you open starts on your local commit when there is one. */
+  /** To: which version is looked at. A change you open starts on the default mode's, by default your local commit. */
   version: Version = "current";
-  mode: Mode = "base";
+  /** From: what it is compared with. A pick by hand holds for the change shown; the next one starts on the default mode's. */
+  from: From = "base";
   private patchsets: Patchsets | undefined;
   private ci: CiView = { state: "closed" };
   /** Aborted with each open and close: the requests of a load nobody waits for any more are called off, so ger serve skips what it has not started. */
@@ -90,10 +94,28 @@ export class ChangeView extends WebView<ChangeVm> {
   constructor(
     extensionUri: vscode.Uri,
     private readonly model: Model,
+    private readonly memory: vscode.Memento,
   ) {
     super(extensionUri, "change");
     // The view says why nothing is shown while ger is not running, and whether a rebase keeps the message read-only.
     model.onDidChange(() => this.render());
+  }
+
+  /** The default mode, remembered: what a change opened next starts on. */
+  get mode(): Mode {
+    const mode = this.memory.get<string>(MODE_KEY);
+    return mode !== undefined && mode in MODES ? (mode as Mode) : "base";
+  }
+
+  /** What `target` allows comparing: patchsets once it is on Gerrit, your commit when it is in your stack. */
+  private sides(target: ChangeTarget): Sides {
+    const shown = target === this.target ? this.shown : undefined;
+    return { pushed: shown ? shown.pushed : this.change(target) !== undefined, local: Boolean(target.local) };
+  }
+
+  /** From and To as the default mode has them for `target`. */
+  private startOn(target: ChangeTarget): void {
+    ({ from: this.from, to: this.version } = modeSides(this.mode, this.sides(target)));
   }
 
   /** Resolves once no load is under way: for the end-to-end suite, which reads the view after each press. */
@@ -107,8 +129,8 @@ export class ChangeView extends WebView<ChangeVm> {
 
   /**
    * Show `target`; with no argument, reload the change that is shown. A click starts on the
-   * change's local commit against its base; `keep` (a reload, or the same change under a new
-   * commit id) leaves the version and the comparison as you chose them. What is drawn stays
+   * default mode's From and To; `keep` (a reload, or the same change under a new commit id)
+   * leaves them as you chose them. What is drawn stays
    * until the answers replace it whenever the change is the one shown (`sameChange`), however
    * it was opened: clicking it again draws no loading frame.
    */
@@ -117,15 +139,15 @@ export class ChangeView extends WebView<ChangeVm> {
       return this.loading;
     }
     const same = keep || (this.target !== undefined && sameChange(this.target, target));
-    if (!keep) {
-      [this.version, this.mode] = [target.local ? "local" : "current", "base"];
-    }
     if (!same) {
       this.patchsets = undefined;
       // Another change: no save button of the one before until its own `/show` says which.
       void vscode.commands.executeCommand("setContext", "ger.newComment", "none");
     }
     const token = this.supersede(() => this.detail.select(target, keep));
+    if (!keep) {
+      this.startOn(target); // after select: a change shown before does not lend this one its answer
+    }
     this.ci = { state: "closed" };
     // The title bar offers "Edit Commit" for your own stack commit, "Review Change" and "Check Out to Work On" otherwise.
     void vscode.commands.executeCommand("setContext", "ger.changeShown", true);
@@ -171,7 +193,7 @@ export class ChangeView extends WebView<ChangeVm> {
   async preferReviewDelta(): Promise<void> {
     const target = this.target;
     const change = target && this.change(target);
-    if (!target || !change || !this.holdsReview(target) || this.mode !== "base") {
+    if (!target || !change || !this.holdsReview(target) || this.from !== "base") {
       return;
     }
     const patchsets = this.patchsets ?? (await (await this.model.client()).patchsets(change).catch(() => undefined));
@@ -179,7 +201,7 @@ export class ChangeView extends WebView<ChangeVm> {
     if (patchsets && this.target === target) {
       this.patchsets = patchsets;
       if (patchsets.reviewed !== null && review && patchsets.reviewed < review.patch_set) {
-        await this.choose("local", "reviewed");
+        await this.choose("reviewed", "local");
       }
     }
   }
@@ -302,20 +324,19 @@ export class ChangeView extends WebView<ChangeVm> {
     return typeof version === "number" && change ? client.diff(change, { patchset: version }, signal) : client.diff(target.rev, {}, signal);
   }
 
+  /** From against To; for someone's change looked at against its base, what is new since your review (its hint). */
   private async deltaDiff(client: GerClient, target: ChangeTarget, signal: AbortSignal): Promise<Diff | undefined> {
     const change = this.change(target);
     if (!change) {
       return undefined;
     }
     const local = target.local && this.version === "local" ? target.rev : undefined;
-    if (this.mode === "gerrit") {
-      return local ? client.diff(change, { since: "current", local }, signal) : undefined;
+    const patchset = typeof this.version === "number" ? this.version : undefined;
+    if (this.from !== "base") {
+      return client.diff(change, { since: this.from, patchset, local }, signal);
     }
     // Someone's change (also one checked out for review): asked either way, as what is new since your review is offered up front.
-    if (this.mode === "reviewed" || !target.local || this.holdsReview(target)) {
-      return client.diff(change, { since: "reviewed", patchset: typeof this.version === "number" ? this.version : undefined, local }, signal);
-    }
-    return undefined;
+    return target.local && !this.holdsReview(target) ? undefined : client.diff(change, { since: "reviewed", patchset, local }, signal);
   }
 
   /** The patchsets to choose from. After the change itself, and only once it has stayed a moment: walking the stack with the arrow keys asks nothing. */
@@ -343,7 +364,7 @@ export class ChangeView extends WebView<ChangeVm> {
   setLocal(local: boolean): void {
     if (this.target && this.target.local !== local) {
       this.detail.target = { ...this.target, local };
-      [this.version, this.mode] = [local ? "local" : "current", "base"];
+      this.startOn(this.detail.target);
       void this.open();
     }
   }
@@ -409,6 +430,7 @@ export class ChangeView extends WebView<ChangeVm> {
       chains: this.chains(),
       patchsets: this.patchsets,
       version: this.version,
+      from: this.from,
       mode: this.mode,
       readOnly: this.readOnly(),
       ci: this.ci,
@@ -483,10 +505,14 @@ export class ChangeView extends WebView<ChangeVm> {
         return this.openLocation({ path: message.path as string, line: (message.line as number | null) ?? null });
       case "url":
         return ui().openExternal(vscode.Uri.parse(message.url as string));
-      case "version":
-        return this.choose(message.value as string, this.mode);
+      case "from":
+        return this.choose(String(message.value), String(this.version));
+      case "to":
+        return this.choose(String(this.from), String(message.value));
+      case "compare":
+        return this.choose(String(message.from), String(message.to));
       case "mode":
-        return this.choose(String(this.version), message.value as Mode);
+        return this.setMode(message.value as Mode);
       case "ci":
         return this.openCi();
       case "message":
@@ -500,12 +526,25 @@ export class ChangeView extends WebView<ChangeVm> {
     }
   }
 
-  /** Look at another version, or compare with something else. Gerrit against local is about your commit. */
-  choose(version: string, mode: Mode): Promise<void> {
-    const wanted: Version = version === "local" || version === "current" ? version : Number(version);
-    const moved = wanted !== this.version;
-    this.mode = mode === "gerrit" && moved && wanted !== "local" ? "base" : mode;
-    this.version = this.mode === "gerrit" ? "local" : wanted;
+  /**
+   * Compare `from` with `to`, picked by hand: for the change shown only, the default mode stays.
+   * To at or below From's patchset sets From back to the base commit (`fitSides`).
+   */
+  choose(from: string, to: string): Promise<void> {
+    const side = (value: string) => (value === "base" || value === "reviewed" || value === "current" || value === "local" ? value : Number(value));
+    ({ from: this.from, to: this.version } = fitSides(side(from) as From, side(to) as Version, this.patchsets));
+    return this.open();
+  }
+
+  /** Make `mode` the default, remembered for the changes opened next, and show the change shown that way. */
+  async setMode(mode: Mode): Promise<void> {
+    if (!(mode in MODES)) {
+      return;
+    }
+    await this.memory.update(MODE_KEY, mode);
+    if (this.target) {
+      this.startOn(this.target);
+    }
     return this.open();
   }
 
@@ -582,9 +621,9 @@ export class ChangeView extends WebView<ChangeVm> {
 
   // --- Opening things ---------------------------------------------------------------
 
-  /** The files the view lists: against the base, or the review delta of the mode chosen. */
+  /** The files the view lists: To against its base, or From against To. */
   shownDiff(): Diff | undefined {
-    return this.mode === "base" ? this.diff : this.delta;
+    return this.from === "base" ? this.diff : this.delta;
   }
 
   /**
@@ -593,7 +632,7 @@ export class ChangeView extends WebView<ChangeVm> {
    * your file (`worktreeHolds`): comments are drawn where they are written, F12 works, edits go in
    * place. `own`: the right side is your file.
    */
-  private sides(file: FileChange, diff: Diff & { base: string }): { left?: vscode.Uri; right?: vscode.Uri; own: boolean } {
+  private fileSides(file: FileChange, diff: Diff & { base: string }): { left?: vscode.Uri; right?: vscode.Uri; own: boolean } {
     const own = this.worktreeHolds(diff.commit);
     const left = file.status === "A" ? undefined : fileUri(diff.base, file.old_path ?? file.path, own ? this.model.repo : undefined);
     const right = file.status === "D" ? undefined : own ? vscode.Uri.file(path.join(this.model.repo, file.path)) : fileUri(diff.commit, file.path);
@@ -615,7 +654,7 @@ export class ChangeView extends WebView<ChangeVm> {
     if (!diff || diff.base === null) {
       return;
     }
-    const { left, right, own } = this.sides(file, { ...diff, base: diff.base });
+    const { left, right, own } = this.fileSides(file, { ...diff, base: diff.base });
     if (!left || !right) {
       await vscode.commands.executeCommand("vscode.open", left ?? right);
       return;
@@ -632,7 +671,7 @@ export class ChangeView extends WebView<ChangeVm> {
   async openAll(diff: Diff | undefined = this.shownDiff()): Promise<void> {
     if (!diff || diff.base === null || !diff.files.length) {
       const what = this.target ? `${this.target.title}: ` : "";
-      void ui().message("info", `${what}there are no files to show${this.mode === "base" ? "" : " for this comparison"}.`, {}, []);
+      void ui().message("info", `${what}there are no files to show${this.from === "base" ? "" : " for this comparison"}.`, {}, []);
       return;
     }
     if (!(await vscode.commands.getCommands(true)).includes("vscode.changes")) {
@@ -641,7 +680,7 @@ export class ChangeView extends WebView<ChangeVm> {
     }
     const base = diff.base;
     const resources = diff.files.map((file) => {
-      const { left, right } = this.sides(file, { ...diff, base });
+      const { left, right } = this.fileSides(file, { ...diff, base });
       // The row's name: the file in the repository, as Source Control names it.
       return [vscode.Uri.file(path.join(this.model.repo, file.path)), left, right];
     });
