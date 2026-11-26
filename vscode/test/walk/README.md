@@ -77,6 +77,13 @@ rebase in the terminal, publishing) shows progress within 100 ms. **Windows** is
 settled time plus each subprocess × `GER_WALK_PROCESS_MS` (default 80 ms), since process start
 is what is slow there and the walk runs on Linux.
 
+**Subprocesses per loop** (git started by `ger serve` and by ger commands in the terminal) are
+pinned in `scorecard.ts` (`PROCESS_BUDGET`) as the number not to exceed: **review 218, rework 328**,
+measured once the duplicate reads were gone (`experimental-shots/22-processes`). A loop over its pin
+is listed under *Over budget*. A change that needs more raises the pin and says why in its commit.
+The rework loop's count includes `ger push` when the push preview starts within the step's time,
+as it did when the pin was measured.
+
 **Context switches** are counted from where each step takes the user (`where`: the Review
 chains tree, the Change view, the editor, a picker, a dialog, a notification, the terminal):
 each change of place is one, from where the step before left off.
