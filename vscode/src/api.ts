@@ -79,6 +79,8 @@ export interface Member {
   your_turn?: boolean;
   /** Under To review, a change of the chain the section's query left out, and why: `not verified yet`, `WIP`, `private`, `not asked of you`. */
   not_ready?: string | null;
+  /** Your non-zero votes on its current patchset, by label (API 1.6). */
+  your_votes?: Record<string, number>;
 }
 
 export interface Chain {
@@ -532,6 +534,8 @@ export interface ReviewState {
   branch: string;
   /** The review chain's open changes, base first; null unless asked for. */
   chain?: number[] | null;
+  /** Where Leave Review goes back to: the branch (or commit) checked out before the review. */
+  return_to?: string | null;
 }
 
 /** The attention walk as work for an agent: Markdown to follow, and what is in it. */
@@ -701,6 +705,11 @@ export class GerClient {
     return this.call("GET", "/overview", { refresh });
   }
 
+  /** The local stack alone, as `/overview`'s `local`: what a checkout here changes. */
+  stack(): Promise<Stack> {
+    return this.call("GET", "/stack");
+  }
+
   chain(number: number): Promise<Chain> {
     return this.call("GET", `/chains/${number}`);
   }
@@ -745,6 +754,16 @@ export class GerClient {
   /** `ger review --next` (1) or `--prev` (-1): the review moves along its chain. At its end a `GerApiError` with reason `chain-end`. */
   async reviewStep(step: 1 | -1): Promise<ReviewState> {
     return (await this.call<{ review: ReviewState }>("POST", "/review/open", undefined, { step })).review;
+  }
+
+  /** Gerrit's per-file *reviewed* flag: the files of patchset `patchSet` of change `change` you marked (API 1.6). */
+  async reviewedFiles(change: number, patchSet: number, signal?: AbortSignal): Promise<string[]> {
+    return (await this.call<{ reviewed: string[] }>("GET", "/reviewed", { change, patchset: patchSet }, undefined, signal)).reviewed;
+  }
+
+  /** Mark `path` of that patchset reviewed on Gerrit, or clear the mark. */
+  async markReviewed(change: number, patchSet: number, path: string, reviewed: boolean): Promise<void> {
+    await this.call("POST", "/reviewed", undefined, { change, patchset: patchSet, path, reviewed });
   }
 
   reviewDone(): Promise<{ done: number; deleted: string[]; kept: string[] }> {

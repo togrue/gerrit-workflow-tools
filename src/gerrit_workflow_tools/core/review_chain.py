@@ -11,7 +11,7 @@ Pure functions over :class:`ChangeView` values, so unit tests drive them from
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from urllib.parse import urlparse
 
@@ -19,6 +19,7 @@ from gerrit_workflow_tools.core.attention import Attention, ci_failed, comment_r
 from gerrit_workflow_tools.core.comment_chains import ChainTurns
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView, parse_gerrit_time
 from gerrit_workflow_tools.core.review_chain_graph import ChainComponent, chain_components
+from gerrit_workflow_tools.core.votes import your_votes
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,8 @@ class ChainMember:  # pylint: disable=too-many-instance-attributes
     your_turn: bool = False
     """It is your turn to review it (:func:`your_turn_since`), and the query matched it; never on a
     change of yours."""
+    your_votes: Mapping[str, int] = field(default_factory=dict)
+    """Your non-zero votes on its current patch set, by label (:func:`your_votes`)."""
     matched: bool = True
     """The section's query matched it. Otherwise it is context: a parent the chain sits on, or a
     change of the chain the *to review* query leaves out as not ready (no Verified, WIP, private)."""
@@ -237,6 +240,7 @@ def _to_member(
         comments_drafted=known.drafted,
         comments_total=known.total if turns else change.comments_total,
         your_turn=matched and your_turn_since(change, self_account_id) is not None,
+        your_votes=your_votes(change, self_account_id),
         matched=matched,
     )
 

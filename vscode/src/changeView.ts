@@ -9,8 +9,9 @@ import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
 import { ChangeDetail, ciRevs, sameChange, stoppedHere } from "./changeLoad";
-import { ChangeState, ChangeVm, CiView, From, MODES, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Sides, Version, changeHeading, changeLines, changeVm, fitSides, isYours, modeSides, toAnswer } from "./changeRows";
-import { fileUri, openDiff } from "./diffTabs";
+import { ChangeState, ChangeVm, SeenWhere, seenWhere, CiView, From, MODES, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Sides, Version, changeHeading, changeLines, changeVm, fitSides, isYours, modeSides, toAnswer } from "./changeRows";
+import { FILE_SCHEME, filePath, fileUri, openDiff } from "./diffTabs";
+import { FilesSeen } from "./filesSeen";
 import { ChangeTarget, Model, describeError } from "./model";
 import { openConflict } from "./rebase";
 import { waitingFor } from "./state";
@@ -18,6 +19,7 @@ import { NextAction, nextAction } from "./nextAction";
 import { focusedMember, reviewFocus } from "./reviewFocus";
 import { markOf } from "./staleDiffs";
 import { ui } from "./ui";
+import { TaskVm, taskLines } from "./taskRows";
 import { Message, WebView } from "./webview";
 
 /** What the comment commands take: the chain a row of the view stands for. */
@@ -59,22 +61,42 @@ export class ChangeView extends WebView<ChangeVm> {
 
   /** The chains already gone to on the change shown (CommentThreads keeps them). Set by the extension. */
   visited: () => ReadonlySet<string> = () => new Set();
-  /** The files opened of each change this session, by its Change-Id (else its commit): what Next file has left. */
-  private readonly opened = new Map<string, Set<string>>();
+  /** The files seen of each version: Gerrit's reviewed flag where the version is a patchset. */
+  readonly filesSeen: FilesSeen;
 
   get target(): ChangeTarget | undefined {
     return this.detail.target;
   }
 
-  private openedHere(): Set<string> {
-    const key = this.target?.changeId ?? this.target?.rev ?? "";
-    const files = this.opened.get(key) ?? new Set<string>();
-    this.opened.set(key, files);
-    return files;
+  /** Where the ticks of the version looked at are kept. */
+  private seenWhere(): SeenWhere | undefined {
+    const review = this.holdsReview() ? this.model.stack?.staged_review?.patch_set : undefined;
+    const version = this.version === "current" && this.patchsets?.current ? this.patchsets.current : this.version;
+    return seenWhere(this.target, version, { staged: review, current: this.shown?.current_patch_set ?? this.patchsets?.current });
+  }
+
+  /** The files of the comparison shown that were seen. */
+  private seenHere(): ReadonlySet<string> {
+    const where = this.seenWhere();
+    return where ? this.filesSeen.seen(where) : new Set();
+  }
+
+  /** The file of the comparison shown that `uri` shows on its right side, and where its tick is kept. */
+  private fileOf(uri: vscode.Uri): { where: SeenWhere; path: string } | undefined {
+    const [diff, where] = [this.shownDiff(), this.seenWhere()];
+    if (!diff || !where) {
+      return undefined;
+    }
+    const own = uri.scheme === "file" && (this.worktreeHolds(diff.commit) || this.showsLocal());
+    const name = own ? path.relative(this.model.repo, uri.fsPath).split(path.sep).join("/") : uri.scheme === FILE_SCHEME && uri.query === diff.commit ? filePath(uri, this.model.repo) : undefined;
+    return name && diff.files.some((file) => file.path === name && file.status !== "D") ? { where, path: name } : undefined;
   }
 
   /** Next on the change shown: what its button names and `ger.next` does. Asks nothing of ger serve. */
   next(): NextAction | undefined {
+    if (this.busyText) {
+      return undefined;
+    }
     const stack = this.model.stack;
     const focus = this.holdsReview() ? reviewFocus(this.model.overview, stack) : undefined;
     const { member, above } = focus ? focusedMember(focus) : { member: undefined, above: undefined };
@@ -86,16 +108,16 @@ export class ChangeView extends WebView<ChangeVm> {
       reviewing: this.holdsReview(),
       visited: this.visited(),
       files: (this.shownDiff()?.files ?? []).map((file) => file.path),
-      seenFiles: this.openedHere(),
+      seenFiles: this.seenHere(),
       yourTurn: member?.your_turn,
       above: focus ? above : undefined,
     });
   }
 
-  /** Next file: the first file of the comparison shown that was not opened yet, in the Files list's order. */
+  /** Next file: the first file of the comparison shown that was not seen yet, in the Files list's order. */
   async openNextFile(): Promise<void> {
     const diff = this.shownDiff();
-    const seen = this.openedHere();
+    const seen = this.seenHere();
     const file = diff?.files.find((f) => !seen.has(f.path));
     if (file) {
       await this.openDiff(file, diff);
@@ -138,6 +160,8 @@ export class ChangeView extends WebView<ChangeVm> {
     private readonly memory: vscode.Memento,
   ) {
     super(extensionUri, "change");
+    this.filesSeen = new FilesSeen(() => model.client(), (uri) => this.fileOf(uri));
+    this.filesSeen.onDidChange(() => this.render());
     // The view says why nothing is shown while ger is not running, and whether a rebase keeps the message read-only.
     model.onDidChange(() => this.render());
   }
@@ -202,6 +226,41 @@ export class ChangeView extends WebView<ChangeVm> {
     const load = () => (this.detail.current(token) ? this.load(target, token, signal) : undefined);
     this.loading = this.loading.then(load, load);
     return this.loading;
+  }
+
+  /**
+   * Show `target` from answers already in hand (`shown` with its `files`): the next change of a
+   * review, asked while you read the one before it. Drawn at once; nothing is asked of ger serve.
+   */
+  prefill(target: ChangeTarget, shown: ShownCommit, files: Diff): void {
+    this.patchsets = undefined;
+    const token = this.supersede(() => this.detail.select(target, false));
+    this.startOn(target);
+    this.ci = { state: "closed" };
+    this.detail.arrive(token, "commit", shown);
+    this.detail.arrive(token, "base", files);
+    void vscode.commands.executeCommand("setContext", "ger.changeShown", true);
+    void vscode.commands.executeCommand("setContext", "ger.changeIsLocal", Boolean(target.local));
+    this.offerNewComment();
+    this.render();
+    this.loaded.fire();
+  }
+
+  /**
+   * The change drawn, under the target it has now (checked out here: your files hold it): kept as
+   * drawn while it reloads, its sides picked anew for that target.
+   */
+  adopt(target: ChangeTarget): Promise<void> {
+    this.startOn(target);
+    return this.open(target, true);
+  }
+
+  /** What is under way that the view waits on (a checkout of the change shown): said in place of Next. */
+  private busyText: string | undefined;
+
+  busy(text: string | undefined): void {
+    this.busyText = text;
+    this.render();
   }
 
   /** The changeish the patchset endpoints take; undefined before the first push. */
@@ -479,12 +538,13 @@ export class ChangeView extends WebView<ChangeVm> {
       // Which commit a rebase stopped at is in the stack ger serve sent: the Change view reads it there, as Local stack does.
       stopped: this.target && stoppedHere(this.target, this.model.stack),
       reviewing: this.reviewing(),
+      seen: this.seenHere(),
     });
     if (!state) {
-      return { empty: this.target && this.detail.loading() ? `Loading ${this.target.title}…` : NOTHING_SHOWN };
+      return { empty: this.target && this.detail.loading() ? `Loading ${this.target.title}…` : NOTHING_SHOWN, task: this.task() };
     }
-    const next = this.next();
-    return { ...changeVm(state), next: next && { label: next.label, title: next.title } };
+    const next = this.busyText ? undefined : this.next();
+    return { ...changeVm(state), next: next && { label: next.label, title: next.title }, busy: this.busyText, task: this.task() };
   }
 
   /** The view as text, with the CI findings fetched: for the end-to-end suite. */
@@ -492,7 +552,8 @@ export class ChangeView extends WebView<ChangeVm> {
     if (this.vm().ci?.state === "closed") {
       await this.openCi();
     }
-    return changeLines(this.vm());
+    const vm = this.vm();
+    return [...taskLines(vm.task).map((line) => `▌ ${line}`), ...changeLines(vm)];
   }
 
   protected decorate(view: vscode.WebviewView): void {
@@ -500,7 +561,7 @@ export class ChangeView extends WebView<ChangeVm> {
     this.heading = changeHeading(commit?.number ?? this.target?.number);
     view.title = this.heading;
     // Alt+Enter does what the button names, while there is one.
-    void vscode.commands.executeCommand("setContext", "ger.nextAction", Boolean(this.target && this.next()));
+    void vscode.commands.executeCommand("setContext", "ger.nextAction", Boolean(this.target && !this.busyText && this.next()));
   }
 
   /** Scroll to a comment chain and mark it, without taking the keyboard. */
@@ -518,12 +579,22 @@ export class ChangeView extends WebView<ChangeVm> {
     this.post({ type: "reveal", id: chain.root_id, open: true });
   }
 
+  /** The task header to draw at the top (reviewing), and what a click on its chain does. Set by the extension. */
+  task: () => TaskVm | undefined = () => undefined;
+  taskStep: (key: string) => unknown = () => undefined;
+
   protected receive(message: Message): unknown {
     const diff = this.shownDiff();
     switch (message.type) {
+      case "taskStep":
+        return this.taskStep(String(message.key));
       case "file": {
         const file = diff?.files[message.index as number];
         return file ? this.openDiff(file, diff) : undefined;
+      }
+      case "seen": {
+        const [file, where] = [diff?.files[message.index as number], this.seenWhere()];
+        return file && where ? this.filesSeen.mark(where, file.path, !this.seenHere().has(file.path)) : undefined;
       }
       case "fileComment": {
         const file = diff?.files[message.index as number];
@@ -679,13 +750,14 @@ export class ChangeView extends WebView<ChangeVm> {
       return;
     }
     const { left, right, own } = this.fileSides(file, { ...diff, base: diff.base });
+    if (right) {
+      this.filesSeen.watch(right); // read to its end, it is seen
+    }
     if (!left || !right) {
       await vscode.commands.executeCommand("vscode.open", left ?? right);
       return;
     }
     const title = `${path.posix.basename(file.path)} (${ChangeView.range(diff)})`;
-    this.openedHere().add(file.path);
-    this.render(); // Next moves on from it
     await openDiff(left, right, title, markOf(diff, this.model.stack, own));
   }
 
@@ -694,7 +766,7 @@ export class ChangeView extends WebView<ChangeVm> {
    * editor, each file with the sides its own diff has, so comments and language features work there
    * as in the file's diff. Where VS Code has no multi-diff editor (before 1.86), the first file's diff.
    */
-  async openAll(diff: Diff | undefined = this.shownDiff()): Promise<void> {
+  async openAll(diff: Diff | undefined = this.shownDiff(), note?: string): Promise<void> {
     if (!diff || diff.base === null || !diff.files.length) {
       const what = this.target ? `${this.target.title}: ` : "";
       void ui().message("info", `${what}there are no files to show${this.from === "base" ? "" : " for this comparison"}.`, {}, []);
@@ -711,29 +783,31 @@ export class ChangeView extends WebView<ChangeVm> {
       return [vscode.Uri.file(path.join(this.model.repo, file.path)), left, right];
     });
     const number = this.shown?.number ?? this.target?.number;
-    const title = `${number ? `Change ${number}` : (this.shown?.summary ?? "Change")} (${ChangeView.range(diff)})`;
-    if (this.worktreeHolds(diff.commit)) {
+    const title = `${number ? `Change ${number}` : (this.shown?.summary ?? "Change")} (${ChangeView.range(diff)})${note ? ` — ${note}` : ""}`;
+    if (note) {
+      this.ahead.add(title);
+    } else if (this.worktreeHolds(diff.commit)) {
       this.combined.add(title);
     }
-    // All of them are in front of you now: Next has no file left to open.
-    diff.files.forEach((file) => this.openedHere().add(file.path));
-    this.render();
     await vscode.commands.executeCommand("vscode.changes", title, resources);
   }
 
   /** The titles of the combined diffs opened this session: a review that moves on closes them (`closeCombined`). */
   private readonly combined = new Set<string>();
+  /** The titles of combined diffs opened before the checkout of their change (`openAll`'s note): read from git, replaced once it is done. */
+  private readonly ahead = new Set<string>();
 
   /**
    * Close the combined diffs opened of the change a staged review held: their right sides are your
    * files, which hold another change now. VS Code's 1.85 API does not say what a multi-diff tab shows,
    * so they are known by title; single-file diffs go stale on their own (diffTabs.ts).
    */
-  async closeCombined(): Promise<void> {
+  async closeCombined(which: "worktree" | "ahead" = "worktree"): Promise<void> {
+    const titles = which === "ahead" ? this.ahead : this.combined;
     // VS Code titles the tab "<title> (4 files)"; its input (not in the 1.85 API) lists `textDiffs`.
-    const combined = (tab: vscode.Tab) => Boolean((tab.input as { textDiffs?: unknown } | undefined)?.textDiffs) && [...this.combined].some((title) => tab.label.startsWith(title));
+    const combined = (tab: vscode.Tab) => Boolean((tab.input as { textDiffs?: unknown } | undefined)?.textDiffs) && [...titles].some((title) => tab.label.startsWith(title));
     const tabs = vscode.window.tabGroups.all.flatMap((group) => group.tabs).filter(combined);
-    this.combined.clear();
+    titles.clear();
     if (tabs.length) {
       await vscode.window.tabGroups.close(tabs, true);
     }

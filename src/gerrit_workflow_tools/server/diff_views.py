@@ -125,15 +125,44 @@ def patchsets(ctx: Context, req: Request) -> dict[str, Any]:
     }
 
 
-def file(ctx: Context, req: Request) -> dict[str, Any]:
-    """Text of ``path`` at commit ``rev`` (an object id from ``/diff``); ``content`` is ``null`` when absent."""
+def file(cwd: Path, req: Request) -> dict[str, Any]:
+    """Text of ``path`` at commit ``rev`` (an object id from ``/diff``); ``content`` is ``null`` when absent.
+
+    Reads one immutable object, nothing else: it runs beside the request being served (a checkout
+    that moves the working tree cannot change what a commit id names).
+    """
     rev, path = req.one("rev") or "", req.one("path") or ""
     if not OBJECT_ID.fullmatch(rev):
         raise BadRequest("rev must be a commit id, as /diff returns it")
     if not path or path.startswith(("-", "/")) or "\0" in path:
         raise BadRequest("path is missing or not a repository path")
-    content = None if rev == EMPTY_TREE else file_text(ctx.cwd, rev, path)
+    content = None if rev == EMPTY_TREE else file_text(cwd, rev, path)
     return {"rev": rev, "path": path, "content": content}
+
+
+def reviewed(ctx: Context, req: Request) -> dict[str, Any]:
+    """The files of patchset ``patchset`` of change ``change`` (numbers) you marked reviewed on Gerrit."""
+    change, patch_set = _change_patchset(req.number("change"), req.number("patchset"))
+    paths = ctx.service.rest.list_reviewed_files(str(change), patch_set)
+    return {"change": change, "patch_set": patch_set, "reviewed": sorted(paths)}
+
+
+def mark_reviewed(ctx: Context, req: Request) -> dict[str, Any]:
+    """Mark ``path`` of that patchset reviewed on Gerrit (``reviewed`` true, the default), or clear the mark."""
+    change, patch_set = _change_patchset(req.body_field("change", int), req.body_field("patchset", int))
+    path = req.body_field("path", str, required=True)
+    if not path or path.startswith("-") or "\0" in path:
+        raise BadRequest("path is not a repository path")
+    flag = req.body_field("reviewed", bool)
+    ctx.service.rest.set_file_reviewed(str(change), patch_set, path, flag is not False)
+    return {"change": change, "patch_set": patch_set, "path": path, "reviewed": flag is not False}
+
+
+def _change_patchset(change: int | None, patch_set: int | None) -> tuple[int, int]:
+    """Both as Gerrit numbers them, or :class:`BadRequest`: no change is resolved, so it costs one request."""
+    if change is None or change <= 0 or patch_set is None or patch_set <= 0:
+        raise BadRequest("change and patchset are the change's number and a patchset number")
+    return change, patch_set
 
 
 def add_worktree_places(cwd: Path, served: list[dict[str, Any]], chains: Sequence[CommentChain]) -> None:

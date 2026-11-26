@@ -4,7 +4,7 @@
 // chains and CI findings are rows that open what they name.
 
 (function () {
-  const { h, icon, badge, actions, info, post, panel, listen, getState, setState } = window.ger;
+  const { h, icon, badge, actions, info, post, panel, listen, getState, setState, task } = window.ger;
   const root = document.getElementById("root");
 
   let vm = {};
@@ -213,9 +213,20 @@
   }
 
   function fileRow(file, index) {
+    // The tick: seen (shown to its end, or ticked here); a click ticks it or takes it off.
+    const tick = h("button", {
+      class: `seen codicon ${file.seen ? "codicon-pass-filled tone-good" : "codicon-circle-large-outline"}`,
+      title: file.seen ? "Seen (click: not seen)" : "Not seen yet (click: mark it seen)",
+      "aria-label": file.seen ? `${file.name}: seen` : `${file.name}: not seen`,
+      "aria-pressed": file.seen ? "true" : "false",
+      onclick: (event) => {
+        event.stopPropagation();
+        post("seen", { index });
+      },
+    });
     return item(
-      { class: "file", title: file.tooltip, onclick: () => post("file", { index }) },
-      icon("file"),
+      { class: `file${file.seen ? " seen" : ""}`, title: file.tooltip, onclick: () => post("file", { index }) },
+      tick,
       h("span", { class: "label" }, file.name),
       h("span", { class: "detail" }, [file.dir, file.state].filter(Boolean).join(" · ")),
       file.added === null ? h("span", { class: "counts detail" }, "binary") : counts(file.added, file.deleted),
@@ -411,7 +422,7 @@
     const scroll = document.scrollingElement ? document.scrollingElement.scrollTop : 0;
     const plain = vm.waiting || (vm.problem ? { text: vm.problem } : vm.empty ? { text: vm.empty } : null);
     if (plain) {
-      root.replaceChildren(panel(plain.text, plain.link));
+      root.replaceChildren(...(vm.task ? [task(vm.task)] : []), panel(plain.text, plain.link));
       return;
     }
     const key = vm.key;
@@ -422,6 +433,10 @@
       revealed = null;
     }
     const parts = [];
+    // Reviewing: the task header first, the top of the side bar while the lists step aside.
+    if (vm.task) {
+      parts.push(task(vm.task));
+    }
     if (vm.head) {
       const head = vm.head;
       // Votes and comments as badges, drawn as the Local stack draws them; words only when there are none.
@@ -433,7 +448,9 @@
       }
     }
     // Next: the one thing to do now, named on the button; Alt+Enter does the same.
-    if (vm.next) {
+    if (vm.busy) {
+      parts.push(h("div", { class: "next-bar busy" }, icon("loading"), h("span", { class: "busy-text" }, vm.busy)));
+    } else if (vm.next) {
       parts.push(h("div", { class: "next-bar" }, actions([{ label: vm.next.label, title: vm.next.title, command: { id: "ger.next", args: [] }, primary: true }])));
     }
     for (const note of vm.notes || []) {

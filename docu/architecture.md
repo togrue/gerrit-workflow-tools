@@ -477,7 +477,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 |--------|------|
 | `core/run_context.py` | The **run context**: `RunContext` (the repository and the Gerrit service of one command run or one request; `run.cwd`, `run.settings`, `run.worktree` and `run.stack` read through them) |
 | `core/repository.py` | The repository a run works in, each answer read once for the run: `Repository` (its `worktree`, `working_branch`, `stack_branch`, `root` and **stack context**, `stack`) |
-| `core/votes.py` | The vote grammar (`+1` for Code-Review, `CR+1`, `V=-1`): `parse_votes` for every command that votes, `format_votes`, and `votes_ruled_out` against a change's `ChangeView.permitted_votes` |
+| `core/votes.py` | The vote grammar (`+1` for Code-Review, `CR+1`, `V=-1`): `parse_votes` for every command that votes, `format_votes`, `votes_ruled_out` against a change's `ChangeView.permitted_votes`, and `your_votes`, whose votes a change holds |
 | `core/words.py` | How a count is said, for core's messages and render's lines alike: `counted` (`1 draft`, `2 drafts`; never `draft(s)`) and `plural` (the noun alone) |
 | `core/usage.py` | `UsageError`: the command cannot run as asked (bad input, or a state it refuses to start from), exit `USAGE`; `Refusal`: ger will not go on without the user's decision (`ReviewRefusal`, `CheckoutRefusal`, `ReorderRefusal`), exit `REFUSED`, HTTP 409 |
 | `core/git_run.py` | Running git: the subprocess wrapper (`git`, `git_out`, `commit_sha_or_none`, `GitError`) |
@@ -637,11 +637,11 @@ One row per module, by package-relative path. **Owns** is the concept the module
 
 | Module | Owns |
 |--------|------|
-| `server/api.py` | `GerApi`: the route table, the per-request `Context`, `refresh=1`, `handle_unlocked` (the long-poll that must not wait in line) |
+| `server/api.py` | `GerApi`: the route table, the per-request `Context`, `refresh=1`, `handle_unlocked` (the long-poll that must not wait in line, and `/file`: one object read by its id, beside a checkout) |
 | `server/request.py` | `Request` (query, body, path captures), `Context`, `BadRequest`, `safe_rev` (client input never reaches git as an option) |
 | `server/views.py` | Read endpoints: health, overview, stack (with rebase progress and how far the upstream moved), chain, show, review, agent runbook; `error_json` |
 | `server/stack_views.py` | Read endpoints about moving the local stack: stack moves (conflict preview), the upstream and which to offer |
-| `server/diff_views.py` | Read endpoints about what a change changed: diff (a commit, a patchset, the **review delta**, Gerrit against local), patchsets, file |
+| `server/diff_views.py` | Read endpoints about what a change changed: diff (a commit, a patchset, the **review delta**, Gerrit against local), patchsets, file, and Gerrit's per-file *reviewed* flag (`/reviewed`, read and set) |
 | `server/actions.py` | Endpoints that change something: review checkout, draft reply, hold, stack rewrite, reword and their undo |
 | `server/vote.py` | The vote: what it would send (`GET /vote`, with the votes on offer) and sending it (`POST /vote`), through core's `plan_vote` and `send_vote` |
 | `server/httpd.py` | HTTP transport: loopback, bearer token, JSON bodies, `failure_response` (failure to status), a request's trace (`ACTION_HEADER` in, `TRACE_HEADER` out) |

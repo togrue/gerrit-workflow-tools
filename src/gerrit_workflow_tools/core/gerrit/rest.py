@@ -240,6 +240,12 @@ class GerritRest(Protocol):
         those drafts, and an empty one none (a message or vote alone).
         """
 
+    def list_reviewed_files(self, change_id: str, revision: int | str) -> list[str]:
+        """Return the paths the caller marked *reviewed* on *revision* (``files?reviewed``)."""
+
+    def set_file_reviewed(self, change_id: str, revision: int | str, path: str, reviewed: bool) -> None:
+        """Mark *path* of *revision* reviewed by the caller, or clear the mark."""
+
     def get_related(self, change_id: str, revision: int | str = "current") -> dict[str, Any]:
         """Return RelatedChangesInfo: the relation chain of *revision*, newest first."""
 

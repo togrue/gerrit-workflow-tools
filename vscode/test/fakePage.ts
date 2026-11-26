@@ -208,6 +208,7 @@ export function fakePage(view: string, model: unknown) {
     querySelectorAll: (selector: string) => body.querySelectorAll(selector),
     querySelector: (selector: string) => body.querySelector(selector),
     createElement: (tag: string) => new FakeElement(tag.toUpperCase(), state),
+    createElementNS: (_ns: string, tag: string) => new FakeElement(tag, state),
     getElementById: (id: string) => (id === "root" ? root : null),
     addEventListener: (type: string, listener: Listener) => body.addEventListener(type, listener),
   };

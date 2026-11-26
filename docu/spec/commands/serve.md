@@ -83,7 +83,10 @@ trace is on ([`ger.trace`](../../../vscode/README.md#tracing)).
 One request runs at a time, because a request may move the working tree (a reorder, a rebase
 step) under another that reads it. Each request opens its own run: a fresh **Settings**
 snapshot and a fresh read of the repository, so an answer always describes the repository as
-it is now. A slow request (first CI log fetch) delays the next one.
+it is now. A slow request (first CI log fetch) delays the next one. Two run beside it:
+[`/activity`](#get-activity), which waits, and [`/file`](#get-filerevcommitpathpath), which reads
+one object by its id: nothing a request does can change what a commit id names, so a client can
+draw a diff while a checkout runs.
 
 Gerrit data is served through the **trust window**, as for any command; add `refresh=1` to a
 request to bypass it, like `ger --refresh`. What a poll of `/overview` and `/stack` costs the
@@ -182,7 +185,7 @@ a client words its own advice while `message` stays ger's.
 
 ## API version
 
-`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.5.0`); the URL
+`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.6.0`); the URL
 prefix carries only the major (`/api/v1`). It moves on its own, not with ger's package version:
 
 | Bump | When |
@@ -231,7 +234,8 @@ Everything the first screen needs, in one call.
 - `sections` — both **inbox sections**, *to review* then *outgoing* (your open chains): `name`,
   `query`, `summary`, and `chains` in the shape of `ger inbox --json`. Each chain member also
   has `local_sha` — the commit of the **local stack** carrying that **Change-Id**, or `null` —
-  and each chain has `local`.
+  and `your_votes`, your non-zero votes on its current patchset by label (`{"Code-Review": 1}`,
+  `{}` for none), and each chain has `local`.
 - `headline` — the **headline**: `section`, `reason`, its `severity` (`pending` for a chain
   waiting on your review), `chain`, `number`, `subject`, `url` and a sentence in `text`. `null` when nothing wants you. Failed CI is the headline only on a chain
   with a commit of the **local stack**; another chain's failure leaves the headline to the next
@@ -530,7 +534,15 @@ with `number`, `commit` and `created`. Asks Gerrit, outside the trust window.
 ### `GET /file?rev=<commit>&path=<path>`
 
 `content` of a file at a commit id from `/diff`; `null` when the file is not there (added or
-deleted on that side).
+deleted on that side). Not serialised: it runs beside the request being served (one `git show`,
+no run is opened).
+
+### `GET /reviewed?change=<number>&patchset=<n>`
+
+Gerrit's per-file *reviewed* flag: `reviewed`, the paths of that patchset you marked reviewed
+(sorted), with `change` and `patch_set`. Both are numbers, so nothing is resolved: one request
+to Gerrit, outside the trust window (the flag is yours and changes with every file you mark).
+`POST /reviewed` sets it.
 
 ### `GET /agent/runbook`
 
@@ -594,6 +606,7 @@ a vote no change takes is `USAGE`, as on the command line.
 |----------|------|------|
 | `/review/open` | `change`, optional `patchset`, `mode`, `stage`, `force`; or `step` instead of `change` | `ger review CHANGEISH`: the **review checkout**. `step` (`1` or `-1`) is `ger review --next` / `--prev`: the change above or below in the review chain of the review going on, at its current patchset, in that review's mode; at the end of the chain it is `NOT_FOUND`, with `ger review`'s words. Answers `review` (with `chain`) and `moved_from`. |
 | `/review/done` | — | `ger review --done`. |
+| `/reviewed` | `change`, `patchset` (numbers), `path`, optional `reviewed` | Mark `path` of that patchset reviewed on Gerrit (`reviewed` `true`, the default), or clear the mark (`false`): Gerrit's per-file flag, which its own web UI shows as a tick. One request; answers `change`, `patch_set`, `path`, `reviewed`. |
 | `/vote` | `change`, `patch_sets`, optional `chain`, `votes`, `message` | `ger review --vote`: publish your drafts on the change (with `chain`, on every open change of its chain), with `votes` (`{label: value}`; `{}` or none: the drafts go out without a vote, as `ger reply --publish CHANGEISH`) and `message` on each. With `chain`, a change that carries your vote on a label keeps it: the vote goes to the others, and your drafts and the message still go there. `patch_sets` (`{change number: patchset}`) is what `GET /vote` showed: when the changes or a patchset are not that any more, nothing is sent and it is `REFUSED`. A change that rules a vote out is skipped; when none takes it, or there is nothing to send (no draft, no vote, no message), or `GER_NO_PUBLISH` is set, it is `USAGE`. Answers as `ger review --vote --json` for several changes: `changes` (each `change`, `number`, `drafts`, `labels` (the votes that went there), `keeps` (your votes it kept), `message`, `status`) and `skipped` (`change`, `number`, `ruled_out`). |
 | `/comments/reply` | `rev`, `comment_id`, `message`, optional `resolved` | `ger reply`: a **draft** reply in that chain. Publishing stays with `ger push` and `ger review --vote`. |
 | `/comments/new` | `rev`, `location`, `message`, optional `state`, `resolved`, `commit` | `ger comment`: start a chain. `location` is `PATH`, `PATH:LINE`, `PATH:START-END` or `PATH:L.C-L.C`, lines from 1, or one of Gerrit's paths: `/COMMIT_MSG:LINE` (the commit message) and `/PATCHSET_LEVEL` (the change itself), drafts only, as `ger comment` takes them. `state`: `draft` (on Gerrit), `local-draft` or `note` (both only here); the default is a draft where Gerrit has the change, else a local draft. `commit` (a commit id, as `/diff` answers it) is the version of the change whose lines were shown, when a viewer shows another one than `rev` names (an older patchset, or Gerrit's current one beside your rewritten commit): `location` is checked against it and the comment goes on it, a draft on that patchset by default. It is `NOT_FOUND` when it is neither the commit `rev` names nor a patchset Gerrit has of the change. Answers `ger comment --json`. |

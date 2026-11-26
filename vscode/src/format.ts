@@ -120,13 +120,13 @@ export function vote(label: string, value: number | null): string {
   return `${label}${value > 0 ? "+" : ""}${value}`;
 }
 
-/** The share of unresolved comment chains (`💬2/5`, `💬2` when all is not counted), and a small mark for those your drafts answer (`✎1`: they wait on your push). */
+/** The open comment chains in words (`💬2 open`: never `2/5`, which reads as "2 done"), and a small mark for those your drafts answer (`✎1`: they wait on your push). */
 export function commentMarks(item: Commented): string[] {
   const state = commentState(item);
-  return [state?.unresolved ? `💬${state.text}` : "", state?.drafted ? `✎${state.drafted}` : ""].filter(Boolean);
+  return [state?.unresolved ? `💬${state.label}` : "", state?.drafted ? `✎${state.drafted}` : ""].filter(Boolean);
 }
 
-/** The votes that exist and the unresolved comments, e.g. `V+1 CR-1 💬2/5 ✎1`; `no votes` when there is nothing. */
+/** The votes that exist and the unresolved comments, e.g. `V+1 CR-1 💬2 open ✎1`; `no votes` when there is nothing. */
 export function votes(item: { verified: number | null; code_review: number | null } & Commented): string {
   const parts: string[] = [];
   if (item.verified !== null && item.verified !== undefined) {

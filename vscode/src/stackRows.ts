@@ -3,7 +3,8 @@
 // it, the end-to-end suite prints it. Pure: no `vscode`, no I/O.
 
 import { CodeChange, CommitStatus, MoveConflict, Overview, Rebase, RebaseAction, Reviewer, Stack, StackCommit, UpstreamChoice, UpstreamStop } from "./api";
-import { CommentTone, commentState } from "./commentState";
+import { CommentShape, CommentTone, commentState } from "./commentState";
+import type { TaskVm } from "./taskRows";
 import { blockedMove, reasonWords, sentence, wouldConflict } from "./format";
 import { Waiting } from "./state";
 
@@ -70,6 +71,8 @@ export interface Badge {
   text: string;
   title: string;
   stale: boolean;
+  /** Comments only: the open share and the state's shape, which a webview draws as a ring instead of the icon (commentState.ts). */
+  ring?: { share: number; shape: CommentShape };
 }
 
 function signed(value: number): string {
@@ -116,6 +119,7 @@ export function badges(commit: CommitStatus, drafts = 0): (Badge | null)[] {
           text: comments.text,
           title: sentence(comments.words),
           stale: false,
+          ring: { share: comments.share, shape: comments.shape },
         }
       : null,
     review
@@ -211,6 +215,8 @@ export interface StackVm {
   movable: number;
   /** A staged review: the rows are somebody else's commits, and offer review actions only. */
   review?: boolean;
+  /** Reworking: the task header (taskRows.ts) in place of the rebase banner; the rows are its chain. */
+  task?: TaskVm;
 }
 
 /** Where a rebase stopped, in the row's tooltip: why, by core's verdict. */
@@ -529,7 +535,7 @@ export function frozen(stack: Stack): string | null {
 }
 
 /** The view for `local` (the overview's local stack, or why there is none). */
-export function stackVm(local: Overview["local"] | undefined, choice: UpstreamChoice | undefined, conflicts: Conflicts, drafts: (sha: string) => number = () => 0): StackVm {
+export function stackVm(local: Overview["local"] | undefined, choice: UpstreamChoice | undefined, conflicts: Conflicts, drafts: (sha: string) => number = () => 0, task?: TaskVm): StackVm {
   if (!local) {
     return { info: [], rows: [], frozen: null, movable: 0 };
   }
@@ -563,7 +569,8 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
   }
   const info: StackInfo[] = [];
   if (local.rebase_in_progress) {
-    info.push(...rebaseBanner(local.rebase));
+    // The task header says what the banner does, and more: only the conflicted files stay under it.
+    info.push(...(task ? (local.rebase?.unmerged ?? []).map(conflictRow) : rebaseBanner(local.rebase)));
   }
   const upstream = upstreamRow(local);
   if (upstream) {
@@ -577,7 +584,7 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
   const fixed = pinned(local);
   const rows = commits.map((commit, index) => row(commit, local, index, fixed, conflicts, drafts)).reverse();
   const review = Boolean(local.staged_review);
-  return { info, rows, frozen: frozen(local), movable: review ? 0 : commits.length - fixed, review };
+  return { info, rows, frozen: frozen(local), movable: review ? 0 : commits.length - fixed, review, task };
 }
 
 /** Buttons as the transcript shows them: `[Continue] [Abort]`, the one to press now in bold. */

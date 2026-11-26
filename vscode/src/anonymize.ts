@@ -123,7 +123,7 @@ function around(pattern: RegExp, rebuild: (names: Names, ...theirs: string[]) =>
 export const ICONS = [
   ...Object.values(SYNC_ICONS),
   ...ATTENTION_ICONS,
-  ...["beaker", "debug-continue", "edit", "eye", "flame", "git-branch", "history", "list-selection", "loading", "note", "person", "person-add", "target", "thumbsdown", "thumbsup"],
+  ...["beaker", "check", "circle-large-outline", "circle-slash", "comment", "debug-continue", "edit", "error", "eye", "flame", "git-branch", "history", "list-selection", "loading", "note", "person", "person-add", "target", "thumbsdown", "thumbsup"],
   ...Object.values(MODE_ICONS),
 ];
 const ICON = ours(ICONS);
@@ -133,8 +133,9 @@ const COUNT = "\\d{1,6}";
 const AGE = "\\d{1,5}[mhd]";
 const PATCHSET = "\\d{1,4}";
 const NOTE = "( on the last pushed patchset; Gerrit may not keep it for this code)?";
-/** `V+1 CR-2 💬3`, `last pushed V+1`, `no votes` (format.ts, votes and commitVotes). */
-const VOTES = new RegExp(`(last pushed )?(no votes|(V|CR)[+-]?\\d|💬${COUNT})( ((V|CR)[+-]?\\d|💬${COUNT}))*`, "u");
+/** `V+1 CR-2 💬3 open ✎1`, `last pushed V+1`, `no votes` (format.ts, votes and commitVotes). */
+const MARK = `(V|CR)[+-]?\\d|💬(${COUNT} open|all resolved)|✎${COUNT}`;
+const VOTES = new RegExp(`(last pushed )?(no votes|${MARK})( (${MARK}))*`, "u");
 
 /** `CI failed, unresolved comments`: attention reasons in our words (format.ts, reasonWords), as a sentence or not. */
 const reasons = (text: string) => text.split(", ").every((word) => REASON_WORDS.some((known) => known.toLowerCase() === word.toLowerCase()));
@@ -175,9 +176,11 @@ const BADGE: Shape = {
   icon: ICON,
   tone: TONE,
   /** A count of comments, or a vote. */
-  text: ours([new RegExp(`([+-]?${COUNT})?`), new RegExp(`${COUNT}/${COUNT}`)]),
+  text: ours([new RegExp(`([+-]?${COUNT})?`)]),
   title: TOOLTIP,
   stale: KEEP,
+  /** The comment ring: a share and a shape, no words of anybody's. */
+  ring: { share: KEEP, shape: ours(["solid", "dashed", "thin", "tick"]) },
 };
 
 /** A row's key is its Change-Id or its commit: it becomes what that field becomes. */
@@ -207,7 +210,62 @@ const CONFLICT_ROW = {
   conflict: PATH,
 };
 
+/** A change number or a commit id: what it became. */
+const CHANGE_OR_SHA = string((text, names) => (/^\d+$/.test(text) ? names.number(text) : names.hex(text)));
+const CHECKING_OUT = around(/Checking out (\d+)…(.*)/, (names, number, rest) => `Checking out ${names.number(number)}…${rest}`);
+
+/** The task header (taskRows.ts): our words around their names, subjects and numbers. */
+const TASK: Shape = {
+  mode: ours(["review", "rework"]),
+  heading: ours([/Reworking your chain/], around(/(Reviewing|Reworking your chain on) (.+?)('s chain)?/, (names, verb, who, tail) => `${verb} ${tail ? names.person(who) : names.text(who)}${tail ?? ""}`)),
+  title: TEXT,
+  position: ours([new RegExp(`change ${COUNT} of ${COUNT}`), new RegExp(`between changes, ${COUNT} commits? to come`)]),
+  left: each(
+    " · ",
+    ours([
+      new RegExp(`${COUNT} of ${COUNT} to vote on`),
+      new RegExp(`you voted on ${COUNT} of ${COUNT}`),
+      new RegExp(`${COUNT} not ready for review`),
+      new RegExp(`${COUNT} comments? to (read|answer)`),
+      new RegExp(`${COUNT} CI failures?`),
+      new RegExp(`${COUNT} commits? needs? edits`),
+      "its chain is not in your inbox",
+      "nothing left to answer or fix",
+    ]),
+  ),
+  steps: [
+    {
+      key: CHANGE_OR_SHA,
+      position: KEEP,
+      title: TEXT,
+      current: KEEP,
+      marks: [
+        {
+          icon: ICON,
+          text: ours(["reviewing", "to review", "CI failed", "your drafts", "waits on a reply", new RegExp(`you voted [+-]${COUNT}`), new RegExp(`${COUNT} to answer`)], around(/not ready: (.+)/, (names, why) => `not ready: ${names.text(why)}`)),
+          tone: TONE,
+          ring: { share: KEEP, shape: ours(["solid", "dashed", "thin", "tick"]) },
+        },
+      ],
+      /** The subject and the marks: filler. */
+      tooltip: TEXT,
+    },
+  ],
+  actions: [
+    {
+      label: ours(["Leave review", "Continue", "Abort", "Skip"]),
+      detail: ours([/commit this stop as it is.*/, /once the .* resolved/, "put the branch back as it was before the rebase", "leave this commit out and go on", "end the review; its branches go"], around(/back to (.+); the review's branches go/, (names, branch) => `back to ${names.text(branch)}; the review's branches go`)),
+      command: ours(["ger.reviewDone", "ger.rebase.continue", "ger.rebase.abort", "ger.rebase.skip"]),
+      /** Core's words about this repository: filler. */
+      notNow: TEXT,
+    },
+  ],
+  views: { label: ours(["All chains", "Only this task"]), detail: ours([/keep going; show the inbox and Local stack too/, /hide the inbox and Local stack again/]), command: ours(["ger.showAllChains", "ger.focusReview"]) },
+  busy: CHECKING_OUT,
+};
+
 const STACK: Shape = {
+  task: TASK,
   waiting: WAITING,
   info: [
     {
@@ -273,6 +331,8 @@ const FINDING_NOTE = ours(["warning", ...ORIGIN], (value, names, row) => {
 const FINDING: Shape = { icon: ICON, tone: TONE, text: TEXT, notes: [FINDING_NOTE], tooltip: TOOLTIP, path: PATH, line: LINE };
 
 const CHANGE: Shape = {
+  task: TASK,
+  busy: CHECKING_OUT,
   waiting: WAITING,
   /** `Loading <subject>…` has the subject in it: filler. */
   empty: ours([NOTHING_SHOWN]),
@@ -328,7 +388,7 @@ const CHANGE: Shape = {
   files: {
     title: ours(["Files", STOPPED_WORDS.files, "Gerrit vs. local", "Since your review", "Compared", new RegExp(`(Gerrit vs\\. local|Since your review|Compared): patchset ${PATCHSET} → (patchset ${PATCHSET}|local)( \\(rebased\\))?`)]),
     summary: ours([
-      new RegExp(`${COUNT} files?`),
+      new RegExp(`(${COUNT} of )?${COUNT} files?( seen)?`),
       LOADING,
       "could not be compared",
       "you have not reviewed this change yet",
@@ -368,6 +428,7 @@ const CHANGE: Shape = {
         deleted: KEEP,
         /** The path, or `old → new` for a rename. */
         tooltip: each(" → ", PATH),
+        seen: KEEP,
       },
     ],
   },

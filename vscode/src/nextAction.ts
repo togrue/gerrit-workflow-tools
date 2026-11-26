@@ -1,13 +1,14 @@
 // Next: the one thing to do now on the change shown, named on the Change view's primary button and
 // done by one key (`ger.next`). Derived from what ger serve sent and what was already looked at
-// here; the other actions stay where they were. Pure: no `vscode`, no I/O.
+// here; the other actions stay where they were. Pure: no `vscode`, no I/O. The rules, as a table:
+// vscode/README.md, "Next: what it names, and when"; test/next.test.ts checks each row.
 
 import { CommentChain, ShownCommit, Stack } from "./api";
 import { draftsIn, toAnswer } from "./changeRows";
 import { WALK_WORDS, workOnNext } from "./stackRows";
 
 /** What Next does; extension.ts maps each to its command. */
-export type NextKind = "comment" | "file" | "vote" | "nextChange" | "leave" | "workOnNext" | "push" | "review";
+export type NextKind = "comment" | "file" | "vote" | "nextChange" | "leave" | "conflict" | "workOnNext" | "push" | "review";
 
 export interface NextAction {
   kind: NextKind;
@@ -28,7 +29,7 @@ export interface NextState {
   reviewing: boolean;
   /** The chains already gone to on this change. */
   visited: ReadonlySet<string>;
-  /** The files of the comparison shown, and those already opened. */
+  /** The files of the comparison shown, and those seen (Gerrit's reviewed flag, or opened here). */
   files: readonly string[];
   seenFiles: ReadonlySet<string>;
   /** Under review: Gerrit's attention set holds you on it (core's `your_turn`); undefined when not known. */
@@ -49,18 +50,18 @@ function pushable(stack: Stack): boolean {
 }
 
 /**
- * Reviewing: the comments you have not read yet, the files you have not opened, then the vote
- * (while it is your turn, or drafts of yours wait), then the next change of the chain, at its top
- * leaving the review.
+ * Reviewing: the comments yours to read you have not looked at (not those waiting on the author's
+ * reply to you, nor those your draft answers), the files not seen, then the vote (while it is your
+ * turn, or drafts of yours wait), then the next change of the chain, at its top leaving the review.
  */
 function reviewNext(state: NextState): NextAction {
-  const unread = state.chains.filter((chain) => !chain.resolved && !state.visited.has(chain.root_id)).length;
+  const unread = state.chains.filter((chain) => toAnswer(chain) && !state.visited.has(chain.root_id)).length;
   if (unread) {
     return action("comment", "Next comment", `${unread} open comment${unread === 1 ? "" : "s"} not looked at yet`);
   }
-  const unopened = state.files.filter((file) => !state.seenFiles.has(file)).length;
-  if (unopened) {
-    return action("file", "Next file", `${unopened} of ${state.files.length} files not opened yet`);
+  const unseen = state.files.filter((file) => !state.seenFiles.has(file)).length;
+  if (unseen) {
+    return action("file", "Next file", `${unseen} of ${state.files.length} files not seen yet`);
   }
   const drafts = draftsIn(state.chains);
   if (drafts || state.yourTurn !== false) {
@@ -72,13 +73,20 @@ function reviewNext(state: NextState): NextAction {
 }
 
 /**
- * Reworking your own commit: the comments left to answer you have not gone to yet, then the
- * attention walk (Work on Next), then the push once nothing needs edits.
+ * Reworking your own commit: a conflict first, then every comment left to answer (one you went to
+ * and typed a reply into without saving it is still left), then the attention walk (Work on Next),
+ * then the push once nothing needs edits.
  */
 function reworkNext(state: NextState, stack: Stack): NextAction | undefined {
-  const unread = state.chains.filter((chain) => toAnswer(chain) && !state.visited.has(chain.root_id)).length;
-  if (unread) {
-    return action("comment", "Next comment", `${unread} comment${unread === 1 ? "" : "s"} left to answer here`);
+  const conflicted = stack.rebase?.unmerged.length ?? 0;
+  if (conflicted) {
+    return action("conflict", "Resolve the conflict", `${conflicted} file${conflicted === 1 ? " is" : "s are"} still conflicted: open the first`);
+  }
+  const left = state.chains.filter(toAnswer);
+  if (left.length) {
+    const unread = left.filter((chain) => !state.visited.has(chain.root_id)).length;
+    const why = unread ? `${unread} not gone to yet` : "gone to, not answered yet";
+    return action("comment", "Next comment", `${left.length} comment${left.length === 1 ? "" : "s"} left to answer here, ${why}`);
   }
   const plan = workOnNext(stack);
   if (plan.kind === "start" || (plan.kind === "continue" && plan.next)) {

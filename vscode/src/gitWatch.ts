@@ -47,7 +47,11 @@ export interface Timers {
 
 const REAL: Timers = { set: (run, ms) => setTimeout(run, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>), now: () => Date.now() };
 
-/** Runs `run` once, `QUIET_MS` after the last `poke`; `run` is told when that last change was. */
+/**
+ * Runs `run` once, `QUIET_MS` after the last `poke`; `run` is told when the newest change of the
+ * burst was made: the file's own time when the poke knows it (git wrote HEAD then, however late the
+ * event arrives), else when the poke came.
+ */
 export class Quiet {
   private handle: unknown;
   private last = 0;
@@ -58,8 +62,8 @@ export class Quiet {
     private readonly ms = QUIET_MS,
   ) {}
 
-  poke(): void {
-    this.last = this.timers.now();
+  poke(at: number = this.timers.now()): void {
+    this.last = this.handle === undefined ? at : Math.max(this.last, at);
     this.timers.clear(this.handle);
     this.handle = this.timers.set(() => {
       this.handle = undefined;

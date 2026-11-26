@@ -86,7 +86,7 @@ test("a click draws the Change view at once from the Local stack row: what it ne
   assert.deepEqual([vm.files?.note, vm.comments?.summary], ["loading…", "loading…"]);
   assert.equal(vm.key, commit.change_id, "the page keeps what you opened per change from the first frame on");
   assert.deepEqual(changeLines(vm), [
-    "Unresolved comments — V+1 CR+2 💬1",
+    "Unresolved comments — V+1 CR+2 💬1 open",
     "Commit message — loading…",
     "Comparing — Base commit → Local commit extract · default: Against its base commit",
     "Files — loading…",

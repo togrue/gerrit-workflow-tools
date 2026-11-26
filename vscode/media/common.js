@@ -42,7 +42,42 @@
     if (!item) {
       return h("span", { class: cls });
     }
-    return h("span", { class: `${cls} tone-${item.tone}${item.stale ? " stale" : ""}`, title: item.title }, icon(item.icon), item.text);
+    const mark = item.ring ? ring(item.ring.share, item.ring.shape) : icon(item.icon);
+    return h("span", { class: `${cls} tone-${item.tone}${item.stale ? " stale" : ""}`, title: item.title }, mark, item.text);
+  }
+
+  const SVG = "http://www.w3.org/2000/svg";
+  let masks = 0;
+
+  function svg(tag, attrs, ...children) {
+    const element = document.createElementNS(SVG, tag);
+    for (const [name, value] of Object.entries(attrs)) {
+      element.setAttribute(name, String(value));
+    }
+    element.append(...children);
+    return element;
+  }
+
+  /**
+   * The comment ring of src/commentState.ts: the arc is the open share, its shape the state besides
+   * the colour: solid and thick (to answer), dashed (your drafts), thin (waiting on a reply), a full
+   * ring with a tick (all resolved).
+   */
+  function ring(share, shape) {
+    const circle = (attrs) => svg("circle", { cx: 8, cy: 8, r: 6, fill: "none", pathLength: 100, transform: "rotate(-90 8 8)", ...attrs });
+    const arc = Math.max(0, Math.min(1, share)) * 100;
+    const parts = [circle({ class: "ring-track", "stroke-width": shape === "solid" ? 3 : 2 })];
+    if (shape === "tick") {
+      parts.push(svg("path", { class: "ring-tick", d: "M5 8.2l2 2 4-4.2", fill: "none", "stroke-width": 1.6 }));
+    } else if (shape === "dashed") {
+      // Dashes along the open share: the share is a mask over a dashed circle.
+      const id = `ring-mask-${++masks}`;
+      parts.push(svg("mask", { id }, circle({ stroke: "white", "stroke-width": 4, "stroke-dasharray": `${arc} 100` })));
+      parts.push(circle({ class: "ring-arc", "stroke-width": 2, "stroke-dasharray": "7 5", mask: `url(#${id})` }));
+    } else {
+      parts.push(circle({ class: "ring-arc", "stroke-width": shape === "solid" ? 3 : 1.2, "stroke-dasharray": `${arc} 100` }));
+    }
+    return svg("svg", { class: `ring ring-${shape}`, viewBox: "0 0 16 16", width: 14, height: 14, "aria-hidden": "true" }, ...parts);
   }
 
   /** Set once the extension traces (a render carries `trace`): what the page sends then says when (`at`). */
@@ -271,10 +306,86 @@
     return { attributes, keep, wire, select, selectedRows, rowOf, has: (key) => selected.has(key) };
   }
 
+  // --- The task header (src/taskRows.ts) ---------------------------------------------------
+
+  function mark(item) {
+    const glyph = item.ring ? ring(item.ring.share, item.ring.shape) : icon(item.icon);
+    return h("span", { class: `mark${item.tone ? ` tone-${item.tone}` : ""}` }, glyph, h("span", { class: "mark-text" }, item.text));
+  }
+
+  function step(item) {
+    const classes = ["step", item.current ? "current" : "", item.phase ? `phase-${item.phase}` : ""].filter(Boolean).join(" ");
+    const go = () => post("taskStep", { key: item.key });
+    return h(
+      "li",
+      {
+        class: classes,
+        title: item.tooltip,
+        tabindex: "0",
+        role: "button",
+        "aria-current": item.current ? "step" : undefined,
+        onclick: go,
+        onkeydown: (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            go();
+          }
+        },
+      },
+      h("span", { class: "step-position" }, `${item.position}`),
+      h("span", { class: "step-title" }, item.title),
+      h("span", { class: "marks" }, item.marks.map(mark)),
+    );
+  }
+
+  function taskAction(item) {
+    return h(
+      "div",
+      { class: "task-action" },
+      h(
+        "button",
+        { class: "button secondary", disabled: Boolean(item.notNow), title: item.notNow || item.detail, onclick: () => post("command", { command: item.command }) },
+        item.label,
+      ),
+      h("span", { class: "task-detail" }, item.notNow ? `not now: ${item.notNow}` : item.detail),
+    );
+  }
+
+  /**
+   * The task header: the mode in words and where you are, how much is left, the chain's changes
+   * oldest first (each state an icon and a word; a click goes there), and the ways out in words.
+   */
+  function task(vm) {
+    const views = h(
+      "a",
+      {
+        class: "task-views",
+        href: "#",
+        title: vm.views.detail,
+        onclick: (event) => {
+          event.preventDefault();
+          post("command", { command: vm.views.command });
+        },
+      },
+      vm.views.label,
+    );
+    return h(
+      "section",
+      { class: `task task-${vm.mode}`, "aria-label": vm.heading },
+      h("div", { class: "task-heading" }, icon(vm.mode === "review" ? "eye" : "edit"), h("span", { class: "task-mode", title: vm.title }, vm.heading), h("span", { class: "task-position" }, vm.position), views),
+      h("div", { class: "task-left" }, h("span", { class: "task-label" }, "Left: "), vm.left),
+      vm.busy ? h("div", { class: "task-busy" }, icon("loading"), h("span", {}, vm.busy)) : null,
+      vm.steps.length ? h("ol", { class: "steps", "aria-label": `The chain, oldest first: ${vm.title}` }, vm.steps.map(step)) : null,
+      vm.actions.length ? h("div", { class: "task-actions" }, vm.actions.map(taskAction)) : null,
+    );
+  }
+
   window.ger = {
+    task,
     h,
     icon,
     badge,
+    ring,
     actions,
     info,
     post,

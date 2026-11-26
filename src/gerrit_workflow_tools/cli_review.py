@@ -228,7 +228,7 @@ def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: Re
     else:
         if state is None:
             raise ReviewUsageError("no review going on here: name a CHANGEISH first")
-        target, url = review_neighbour(service, cwd, state, 1 if args.next else -1)
+        target, url, chain = review_neighbour(service, cwd, state, 1 if args.next else -1)
         mode = state.mode
     stage = settings.review_stage if args.stage is None else args.stage
     options = CheckoutOptions(mode=mode, stage=stage, force=args.force)

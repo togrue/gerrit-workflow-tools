@@ -109,7 +109,8 @@ test("the scenarios show the states of Local stack that matter for layout", () =
   const info = stacks.flatMap((vm) => vm.info);
   const badges = rows.flatMap((row) => row.badges.flatMap((badge) => (badge ? [badge] : [])));
   assert.deepEqual([...new Set(rows.map((row) => row.sync))].sort(), Object.keys(SYNC_ICONS).sort(), "every sync icon");
-  assert.deepEqual([...new Set(badges.map((badge) => `${badge.icon} ${badge.tone}`))].sort(), ["comment-unresolved warn", "error bad", "pass good", "person-add warn", "thumbsdown bad", "thumbsup good"]);
+  assert.deepEqual([...new Set(badges.map((badge) => `${badge.icon} ${badge.tone}`))].sort(), ["comment info", "comment plain", "comment-unresolved warn", "error bad", "pass good", "person-add warn", "thumbsdown bad", "thumbsup good"]);
+  assert.deepEqual([...new Set(badges.flatMap((badge) => (badge.ring ? [badge.ring.shape] : [])))].sort(), ["dashed", "solid", "thin", "tick"], "every comment state's ring");
   assert.ok(badges.some((badge) => badge.stale), "votes of the last pushed patchset");
   assert.ok(rows.some((row) => row.badges.every(Boolean)), "a row with all three badges");
   assert.deepEqual([...new Set(rows.map((row) => String(row.marker)))].sort(), ["conflict", "null", "rebase"], "a rebase stopped with the commit applied, and on a conflict");

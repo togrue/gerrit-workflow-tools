@@ -5,11 +5,12 @@
 
 import { createHash } from "node:crypto";
 
-import { CommentChain, MoveConflict, RebaseAction, RebaseStop, ShownCommit, Stack, StackCommit } from "../../src/api";
+import { Chain, CommentChain, Member, MoveConflict, Overview, RebaseAction, RebaseStop, ReviewState, Section, ShownCommit, Stack, StackCommit } from "../../src/api";
 import { ChangeState, ChangeVm, changeVm } from "../../src/changeRows";
 import { SNAPSHOT_FORMAT, Snapshot } from "../../src/snapshot";
 import { StackVm, stackVm } from "../../src/stackRows";
 import { waitingFor } from "../../src/state";
+import { TaskVm, taskVm } from "../../src/taskRows";
 import { chain, comment, commit, content, diff, finding, never, patchsets, shown, stack, state } from "../fixtures";
 
 /** A snapshot, and what to press once it is drawn: sections and comments the page only shows opened. */
@@ -71,6 +72,16 @@ function syncStates(): StackVm {
     pushed("Evict stale routes", { patchset_status: "newer", diverged: true, attention_reasons: ["ahead-of-gerrit"] }),
     pushed("Log route misses", { patchset_status: "unknown", attention_reasons: [] }),
     unpushed("Document the routing table", { is_head: true }),
+  ]);
+}
+
+/** The four comment states of commentState.ts, each with its share: to answer, your drafts, waiting, all resolved. */
+function commentStates(): StackVm {
+  return stackOf([
+    pushed("All resolved: a full ring with a tick", { comments_unresolved: 0, comments_total: 4 }),
+    pushed("Waiting on a reply: a thin ring, 1 of 3", { comments_unresolved: 1, comments_awaiting_reply: 1, comments_total: 3 }),
+    pushed("Your drafts answer them: a dashed ring, 2 of 4", { comments_unresolved: 2, comments_drafted: 2, comments_total: 4, attention_reasons: ["drafts-to-publish"] }),
+    pushed("To answer: a thick ring, 3 of 3 open", { comments_unresolved: 3, comments_total: 3, attention_reasons: ["unresolved-comments"] }),
   ]);
 }
 
@@ -156,6 +167,7 @@ function stackScenarios(): Scenario[] {
   return [
     scenario("Stack: every sync state", { stack: syncStates() }),
     scenario("Stack: every badge", { stack: badgeKinds() }),
+    scenario("Stack: every comment state, a ring and a shape each", { stack: commentStates() }),
     scenario("Stack: HEAD, held back, a merge, abandoned", { stack: rowKinds() }),
     scenario("Stack: a rebase in progress", { stack: rebasing("edit") }),
     scenario("Stack: a rebase stopped on a conflict", { stack: rebasing("conflict") }),
@@ -359,7 +371,83 @@ function bothScenarios(): Scenario[] {
   ];
 }
 
+// --- The task header (taskRows.ts) ----------------------------------------------------
+
+/** A chain of Alice's to review: four changes, the second reviewed here, each in another state. */
+function reviewTask(all = false, busy?: string): TaskVm | undefined {
+  const member = (number: number, subject: string, extra: Partial<Member> = {}): Member => ({
+    number,
+    change_id: `I${number}`,
+    subject,
+    verified: 1,
+    code_review: null,
+    comments_unresolved: 0,
+    attention_reasons: [],
+    severity: "ok",
+    url: null,
+    local_sha: null,
+    sha: null,
+    ...extra,
+  });
+  const members = [
+    member(48210, "Add the routing table", { your_votes: { "Code-Review": 1 }, comments_unresolved: 1, comments_awaiting_reply: 1, comments_total: 3 }),
+    member(48211, SUBJECT, { your_turn: true, comments_unresolved: 3, comments_to_answer: 2, comments_drafted: 1, comments_total: 5 }),
+    member(48212, "Cache resolved routes", { your_turn: true, attention_reasons: ["ci-failed"], verified: -1 }),
+    member(48213, "Evict stale routes when the table changes", { not_ready: "WIP" }),
+  ];
+  const chain: Chain = {
+    key: "widget~main~I48213",
+    top: { number: 48213, change_id: "I48213", subject: members[3].subject, url: null },
+    project: "widget",
+    branch: "main",
+    owner: { name: "Alice Arnold", email: null },
+    depth: 4,
+    wait_age_seconds: 0,
+    unreviewed_age_seconds: 0,
+    last_activity: null,
+    verified: -1,
+    code_review: null,
+    comments_unresolved: 4,
+    attention_reasons: ["ci-failed"],
+    severity: "error",
+    partial_chain: false,
+    members,
+  };
+  const review: ReviewState = { number: 48211, patch_set: 5, commit: "5".repeat(40), subject: SUBJECT, staged: true, mode: "branch", worktree: "/src/widget", branch: "change-48211", return_to: "routing" };
+  const overview: Overview = { host: "gerrit.example.org", sections: [{ name: "to-review", query: "", summary: {}, chains: [chain] } as Section], local: local([]) };
+  return taskVm(overview, local([], { staged_review: review }), { all, busy });
+}
+
+/** Your stack, a rebase stopped at its third commit: Local stack with the task header in place of the banner. */
+function reworking(stop: RebaseStop): StackVm {
+  const applied = stop === "edit";
+  const commits = [
+    pushed("Add the routing table", { rebase: "done", code_review: 2, verified: 1 }),
+    pushed("Extract routing into its own module", { rebase: "done", comments_unresolved: 2, comments_total: 3, attention_reasons: ["unresolved-comments"], needs_edit: true }),
+    pushed("Route by longest matching prefix", { rebase: "current", is_head: applied, comments_unresolved: 1, comments_total: 1, needs_edit: true }),
+    pushed("Cache resolved routes", { rebase: "todo", ci_failures: ["Verified"], verified: -1, needs_edit: true }),
+    unpushed("Evict stale routes", { rebase: "todo" }),
+  ];
+  const refused = stop === "conflict" ? { continue: "src/routes.ts is still conflicted: resolve it and git add it first" } : {};
+  const unmerged = stop === "conflict" ? ["src/routes.ts"] : [];
+  const stack = local(commits, { rebase_in_progress: true, rebase: { branch: "routing", onto: null, orig_head: "f".repeat(40), stop, applied, current: null, unmerged, as_before: false, actions: WAYS_ON[stop], refused } });
+  return stackVm(stack, undefined, never, () => 0, taskVm(undefined, stack, { all: false }));
+}
+
+function taskScenarios(): Scenario[] {
+  const files = itsDiff();
+  const seen = new Set(files.files.slice(0, 2).map((file) => file.path));
+  const reviewed = (task: TaskVm | undefined, extra: Partial<ChangeState> = {}): ChangeVm => ({ ...change({ shown: theChange({ own: false }), seen, ...extra }), task });
+  return [
+    scenario("Task: reviewing a chain, the header on the Change view", { change: reviewed(reviewTask()) }),
+    scenario("Task: reviewing, all chains shown again", { change: reviewed(reviewTask(true)) }),
+    scenario("Task: reviewing, the next change checking out", { change: { ...reviewed(reviewTask(false, "Checking out 48212…")), next: undefined, busy: "Checking out 48212… Go to Definition and edits in your files once it is checked out" } }),
+    scenario("Task: reworking, stopped to edit", { stack: reworking("edit") }),
+    scenario("Task: reworking, stopped on a conflict", { stack: reworking("conflict") }),
+  ];
+}
+
 /** Every built-in scenario, in the order the gallery shows them. */
 export function scenarios(): Scenario[] {
-  return [...stackScenarios(), ...changeScenarios(), ...bothScenarios()];
+  return [...taskScenarios(), ...stackScenarios(), ...changeScenarios(), ...bothScenarios()];
 }

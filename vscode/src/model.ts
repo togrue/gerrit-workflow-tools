@@ -2,7 +2,7 @@
 
 import * as vscode from "vscode";
 
-import { GerApiError, GerClient, Headline, MoveConflict, Overview, Stack, UpstreamChoice, isStack } from "./api";
+import { GerApiError, GerClient, Headline, MoveConflict, Overview, ReviewState, Stack, UpstreamChoice, isStack } from "./api";
 import { Seen, blockedSwaps, chainsWithActivity, headlineNews, rememberSeen, swapKey } from "./format";
 import type { RowStatus } from "./changeLoad";
 import { IncompatibleServe } from "./compat";
@@ -124,6 +124,47 @@ export class Model implements vscode.Disposable {
     return this.again;
   }
 
+  /**
+   * Reload only the local stack (`/stack`): after a checkout here, which moves nothing on Gerrit
+   * and nothing in the inbox. Counts as a load for {@link loadedSince}, so the repository watcher
+   * does not reload everything after it.
+   */
+  async refreshLocal(): Promise<void> {
+    if (this.refreshing) {
+      await this.refreshing;
+    }
+    this.loadStartedAt = Date.now();
+    try {
+      const stack = await (await this.client()).stack();
+      this.setStack(stack);
+      this.stackContext();
+    } catch {
+      await this.refresh(); // a whole load says what went wrong, as any refresh does
+    }
+  }
+
+  /**
+   * A review step here has checked out `review` (POST /review/open answered): the stack says so at
+   * once, before `/stack` confirms the rest. Local state the checkout has already made true.
+   */
+  adoptReview(review: ReviewState): void {
+    const stack = this.stack;
+    if (stack?.staged_review && this.overview) {
+      this.overview = { ...this.overview, local: { ...stack, staged_review: { ...stack.staged_review, ...review } } };
+      this.changed.fire();
+    }
+  }
+
+  /** The context keys the stack decides. */
+  private stackContext(): void {
+    // Review Next / Previous Change in Chain, while a staged review sits here (core's fact).
+    void vscode.commands.executeCommand("setContext", "ger.stagedReview", Boolean(this.stack?.staged_review));
+    // Continue, Abort and Skip are in the palette only while there is a rebase to go on with.
+    void vscode.commands.executeCommand("setContext", "ger.rebasing", Boolean(this.stack?.rebase_in_progress));
+    // Skip only where core allows it: at any other stop git would only throw away what is not committed.
+    void vscode.commands.executeCommand("setContext", "ger.rebaseSkippable", Boolean(this.stack?.rebase?.actions.includes("skip")));
+  }
+
   /** Whether a load started at or after `time` (ms since the epoch): it saw whatever happened before. */
   loadedSince(time: number): boolean {
     return this.loadStartedAt >= time;
@@ -148,12 +189,7 @@ export class Model implements vscode.Disposable {
       // Leave Review Checkout is offered only while there is one to leave.
       const review = await client.review().catch(() => null);
       void vscode.commands.executeCommand("setContext", "ger.reviewOpen", Boolean(review));
-      // Review Next / Previous Change in Chain, while a staged review sits here (core's fact).
-      void vscode.commands.executeCommand("setContext", "ger.stagedReview", Boolean(this.stack?.staged_review));
-      // Continue, Abort and Skip are in the palette only while there is a rebase to go on with.
-      void vscode.commands.executeCommand("setContext", "ger.rebasing", Boolean(this.stack?.rebase_in_progress));
-      // Skip only where core allows it: at any other stop git would only throw away what is not committed.
-      void vscode.commands.executeCommand("setContext", "ger.rebaseSkippable", Boolean(this.stack?.rebase?.actions.includes("skip")));
+      this.stackContext();
       const headline = this.overview.headline ?? undefined;
       // Remembered either way: what you caused yourself does not come back as news later.
       const { news, last } = headlineNews(this.lastHeadline, headline, background && !first);
@@ -208,6 +244,12 @@ export class Model implements vscode.Disposable {
   private async loadMoves(): Promise<void> {
     const head = this.stack?.head;
     if (head === this.movesHead) {
+      return;
+    }
+    if (this.stack?.staged_review) {
+      // Somebody else's chain under review: nothing of it is reordered here (core refuses), so nothing to ask.
+      this.blocked = new Map();
+      this.movesHead = head;
       return;
     }
     try {

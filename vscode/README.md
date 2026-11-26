@@ -38,7 +38,7 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
   when it is your turn again. The activity bar's badge counts the chains whose turn is yours.
   *Outgoing*: your open chains.
 - One row per chain, showing its top change, the worst vote cast of each label and what is missing
-  (*V+1 CR+1 💬5 · V missing on 2, CR on 1*; *no votes* only when no change of it has any),
+  (*V+1 CR+1 💬5 open · V missing on 2, CR on 1*; *no votes* only when no change of it has any),
   unresolved comments and age. Expand
   it for the chain's changes: all of them, also those not ready for review yet (greyed out, with
   why: *not verified yet*, *WIP*). A `●` marks new activity.
@@ -49,20 +49,22 @@ The log says so once; regaining focus, *Retry* and a changed `ger.executable` st
   check when nothing does. A *To review* chain with nothing wrong shows an eye while it is your turn, a clock while it waits on its author. The status bar
   uses the same icons for the headline.
 - Changes that are commits of your local stack are marked *in your stack* and open as local commits.
-- **Comments at a glance**: a change's row shows its unresolved comment chains as a share of all
-  of them, *💬2/5* (*💬2* when ger has not counted the resolved ones), and is coloured by where
-  they stand: **yellow** while one waits for your answer, **blue** while drafts of yours wait to be
+- **Comments at a glance**: a change's row says how many comment chains are open, *💬2 open*
+  (never *2/5*, which reads as "2 of 5 done"; the tooltip says *2 of 5 comment chains open*), and
+  is coloured by where they stand: **yellow** while one waits for your answer, **blue** while drafts of yours wait to be
   published (once nothing is left to answer), plain when they wait on the other side or are all
   resolved. The badge at the right says how many are left to answer, or ✎ for drafts. **Hover** the
   row for the comments themselves: who wrote what where and in which state, each with **Go there**
   (the file at the comment, its thread open), **Reply Done** and, on your own commit's suggested
   edit, **Apply**. The hover reads the comments once (or takes them from the Change view when it
   shows that change); the row's colour needs nothing beyond what the list already has.
-- **While you review a chain** (a staged review here), the view shows only that chain: one row per
-  change, newest first, the one under review marked *reviewing* with an eye, the other chains,
-  *Outgoing* and the headline left out. **All chains** (the first row, or the title bar's list icon)
-  brings the full list back for the rest of this review; the eye in the title bar narrows it again.
-  When the review ends, the full list is back by itself.
+- **While you review a chain** (a staged review here) the view steps aside, and so does *Local
+  stack*: the **task header** at the top of the Change view says what *Review chains* said about
+  the chain, and the Change view has the side bar. While you rework your own (a rebase underway)
+  it steps aside too; *Local stack* stays, as it is the chain. **All chains** (in the header) brings
+  them back for the rest of that task; the eye in this view's title bar hides them again. When the
+  task ends they are back by themselves. The change a staged review holds is marked *reviewing*
+  here when you see it.
 - Right-click a change (or a chain, for its top change) › **Copy Change-Id** or **Copy SHA**: the
   local commit for a change in your stack, else the commit of its current patch set.
 - **Sort Chains…** (title bar): *By chain state* — the order `ger inbox` gives, what needs you
@@ -81,8 +83,13 @@ The commits above your upstream, newest first. One row per commit:
   Stack with Agent, Edit Commit Here, squash, drop and rewording are not offered, as core refuses
   them there (`ger review --unstage` to work on the change, or *Leave Review Checkout*).
 
-- The **comment badge** on the right is the same as in *Review chains*: its share (*2/5*) and
-  colour (yellow: something to answer, blue: drafts of yours to publish, plain otherwise). Hover it
+- The **comment badge** on the right (here, in the Change view and in the task header) draws the
+  state so it cannot be misread: the number is how many chains are **open**, a **ring** around it
+  is filled by their share of all chains, and the ring's shape says the state besides its colour:
+  **thick** and yellow while something waits for your answer, **dashed** and blue while drafts of
+  yours wait to be published, **thin** while they wait on the other side, a full ring with a
+  **tick** once all are resolved. The tooltip says it in words (*3 of 5 comment chains open · 1 to
+  answer · 2 answered by your drafts*). Hover it
   a moment for the comments, with *Go there*, *Reply Done* and *Apply*.
 - An **icon** in front says how the commit relates to Gerrit: a **full circle** when it is the
   same as on Gerrit; a **yellow arrow up** in a circle when it is only rebased since the last push
@@ -234,13 +241,11 @@ The commits above your upstream, newest first. One row per commit:
   core cannot tell why it stopped (a resolution committed by hand as another commit, with another
   subject and no Change-Id): Local stack marks the commit it stopped at as stopped, not conflicted.
 - **Next** (the primary button under the change's state, `Alt+Enter`): the one thing to do now,
-  named on it. Reviewing a change: *Next comment* while an open comment was not looked at yet,
-  *Next file* while a file was not opened (Open All Changes opens them all), *Vote and publish*
-  while it is your turn or drafts of yours wait, then *Next change* along the chain, *Leave review*
-  at its top. On your own commit: *Next comment* while one is left to answer and not gone to yet,
-  then *Work on next* (or *Finish the rebase*), then *Push* once nothing needs edits. On somebody's
-  change you only look at: *Review change*. It asks nothing of `ger serve` to decide; every other
-  action stays where it was, in the title bar and its `…` menu.
+  named on it: *Next comment*, *Next file*, *Vote and publish*, *Next change*, *Leave review* while
+  you review; *Resolve the conflict*, *Next comment*, *Work on next*, *Finish the rebase*, *Push*
+  on your own commit; *Review change* on somebody's change you only look at. Which one, when, is
+  the table under [Next: what it names, and when](#next-what-it-names-and-when). It asks nothing of
+  `ger serve` to decide; every other action stays where it was, in the title bar and its `…` menu.
 - **Commit message**: the whole message, its `Change-Id:` trailer shown read-only on a quiet line
   under it (select it to copy). For a commit of your local stack it is a text box without the
   Change-Id: edit it and press **Apply** (`Ctrl+Enter`); *Revert* goes back to the commit's
@@ -267,8 +272,16 @@ The commits above your upstream, newest first. One row per commit:
   hand overrides it for that change only, until you open it again, and the icon dims meanwhile.
   On someone else's change you reviewed before, a line says what is new since, with **Show** to
   switch to it.
-- **Files**: added and removed lines per file, in the colours git gives them. Click for the
-  diff of what is compared; an added or deleted file opens on its own. What your working files
+- **Files**: added and removed lines per file, in the colours git gives them, and a **tick** per
+  file: a filled check once it is **seen**, an empty circle until then. A file is seen when its
+  diff, or the file, was shown to its last line, or when you click its tick (a click again takes
+  it off). The ticks are Gerrit's own per-file *reviewed* flag of the patchset looked at, the one
+  its web UI shows, so they are there again after a reload or on another machine; on a version
+  Gerrit does not have (your local commit) they are kept for the session. On somebody's change the
+  header says how far you are: *2 of 4 files seen*. Inside the combined diff (*Open All Changes*)
+  VS Code reports every file as shown whole wherever it is scrolled, so there only a click ticks
+  one; *Next file* opens the first file not seen on its own, where reading it to the end ticks it.
+  Click a row for the diff of what is compared; an added or deleted file opens on its own. What your working files
   hold diffs against the real file: the commit you are standing on, so you can fix things in the
   diff editor; and in a **staged review** (`ger review`, in the review worktree or in place), the
   change under review, at the patchset checked out, against its base or since your last review.
@@ -374,6 +387,14 @@ The commits above your upstream, newest first. One row per commit:
   (*Open All Changes*), and the combined diff of the change it left closes. At the top of the chain it
   says so and offers what `ger review` suggests there: **Vote on the Chain…** and **Leave Review**.
   With edits of yours in the way, nothing moves, and it says what to do in `ger review`'s words.
+  It answers at once: while you read a change, the one above it is asked for ahead (one request,
+  while ger serve is idle), so *Review Next Change* draws it straight away, its message, files and
+  comments in the Change view and its diff in one editor read from git, titled *checking out…*.
+  The Change view and the header say *Checking out 2156…* in place of Next until the checkout is
+  done; then the diff opens again on your files, where Go to Definition and edits work, and the
+  *checking out…* tab closes. In between, comments and the diff are there to read; language
+  features are not. Without an answer asked ahead (*Previous*, a jump), it waits for the checkout,
+  as before. Only the local stack is read again afterwards: nothing moved on Gerrit.
 - **Update to patchset N**: when the author has pushed since you checked their change out, the
   Change view of the change under review says *Gerrit has a newer patchset than the one checked
   out*, with this button (also *Update the Review to the Newest Patchset* in the palette). It runs
@@ -411,6 +432,58 @@ publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to t
 - CI findings a commit only inherits from the one below are not handed out twice.
 - Afterwards the stack view shows the amended commits; you review, then `ger push` sends the
   patchsets and publishes the draft replies.
+
+### The task header
+
+While you review a chain (a staged review here) or rework your own (a rebase underway), one block
+at the top of the side bar says which task you are in, and the lists that are not about it step
+aside (their `when` clauses read `ger.task` and `ger.taskAll`) so the Change view has the room:
+
+- **Reviewing** (at the top of the Change view; *Review chains* and *Local stack* step aside):
+  *Reviewing Alice's chain · change 2 of 4*, then **Left**: how many changes are still to vote on,
+  how many are not ready for review, how many comments are left to read. Then the chain in reading
+  order, oldest first, one row each: its subject and its state in an icon **and** a word —
+  *reviewing* (an eye, the row barred and bold), *you voted +1* (a thumb), *to review* (an empty
+  circle), *not ready: WIP*, the comment ring with *2 to answer* / *your drafts* / *waits on a
+  reply*, *CI failed*. A click on a row goes there: the change reviewed is shown, the one above or
+  below is *Review Next / Previous Change*, another is *Review Change*. Under it **Leave review**,
+  with where it goes back to.
+- **Reworking** (in place of *Local stack*'s rebase banner; *Review chains* steps aside, *Local
+  stack* stays: its rows are the chain, marked replayed, stopped and to come): *Reworking your chain
+  · change 2 of 5*, **Left** over the whole chain (*3 comments to answer · 1 CI failure · 2 commits
+  need edits*), and **Continue** (*commit this stop as it is, then replay the 3 commits above*) and
+  **Abort** (*put the branch back as it was before the rebase*), **Skip** at a conflict, each with
+  what it does beside it, or why it does not run now in core's words. The conflicted files stay
+  under it.
+- **All chains** (top right of the header) brings the lists back for the rest of the task; there
+  it reads **Only this task**. Something else that needs you stays on the status bar item, which
+  opens it, the lists coming back when it is in one of them.
+
+It is not a view of its own: VS Code gives a view that appears the room the others leave, and
+restores the Change view's stored height, so a separate header took two thirds of the side bar.
+
+### Next: what it names, and when
+
+The first row that holds names the button; `src/nextAction.ts` is this table, and
+`test/next.test.ts` checks each row. *Yours to read / answer* is an open chain somebody started on
+Gerrit whose last published word is not yours and that no draft of yours answers.
+
+| You are | # | When | Next |
+|---|---|---|---|
+| reviewing (a staged review holds the change shown) | 1 | a chain yours to read you have not gone to | *Next comment* |
+| | 2 | a file of the comparison shown is not seen (its tick: shown to its end, or clicked) | *Next file* (the first not seen) |
+| | 3 | drafts of yours wait, or Gerrit's attention set holds you (or ger cannot tell) | *Vote and publish* |
+| | 4 | the chain goes on above the change (or ger cannot tell) | *Next change* |
+| | 5 | the top of the chain | *Leave review* |
+| on your own commit, no staged review | 1 | a rebase stopped on a conflict, files still conflicted | *Resolve the conflict* (the first file) |
+| | 2 | a chain left to answer here, gone to or not (a reply typed into its box but not saved does not answer it) | *Next comment* |
+| | 3 | a commit above the stop needs edits, or (no rebase) any commit does | *Work on next* |
+| | 4 | a rebase underway, nothing above the stop needs edits | *Finish the rebase* |
+| | 5 | something to send (new code, a commit not on Gerrit, drafts of yours) and the push is not refused | *Push* |
+| looking at somebody's change on Gerrit | 1 | always | *Review change* |
+
+Your own published comments waiting on the author never make *Next comment*: a change you voted
+on that waits on its author offers *Next change*.
 
 ## Settings
 
@@ -685,7 +758,11 @@ estimate, the totals per loop and the steps over budget. See
 | `src/follow.ts` | The Change view following its commit through rewrites and amends. |
 | `src/diffTabs.ts`, `src/staleDiffs.ts` | `ger-file:` documents and the diff tabs of them: opening one, knowing it again, marking it stale or closing it once its right side is no longer the commit its title names, unmarking it once it is again (the rule is pure, unit-tested); your files' repository paths; saving before a rebase continues. |
 | `src/changeLoad.ts` | Which change the Change view shows and what of it has come: drawn at once from the clicked row, filled in answer by answer, a stale answer dropped. Pure, unit-tested. |
-| `src/review.ts` | Review Change, Check Out to Work On, Leave Review Checkout, Edit Commit Here. |
+| `src/review.ts` | Review Change, Check Out to Work On, Leave Review Checkout, Edit Commit Here; moving a review along its chain. |
+| `src/reviewWalk.ts`, `src/reviewAhead.ts` | The review walk as the views do it: the change under review shown with all its files; the next one asked ahead and drawn from it before the checkout, its diff from git, then your files. |
+| `src/task.ts`, `src/taskRows.ts` | The task you are in (a review, a rework): its header (pure, unit-tested), and the context keys the lists step aside by. |
+| `src/nextAction.ts` | Next: the one thing to do now on the change shown. Pure, the rules are the table above, unit-tested row by row. |
+| `src/commentState.ts` | A change's comments at a glance: the state, the open count, the share for the ring, the words. Pure, unit-tested. |
 | `src/walk.ts` | Work on Next: the attention walk (`ger edit -n`) from the views, and what follows once it has stopped or the rebase is finished. |
 | `src/vote.ts`, `src/voteText.ts` | Vote and Publish, Publish Drafts: the questions, around `GET /vote` and `POST /vote`; their words (pure, unit-tested). |
 | `src/upstream.ts` | Giving the branch an upstream. |

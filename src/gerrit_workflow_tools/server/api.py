@@ -34,13 +34,14 @@ ROUTES: tuple[tuple[str, str, Endpoint], ...] = (
     ("GET", "/show", views.show),
     ("GET", "/diff", diff_views.diff),
     ("GET", "/patchsets", diff_views.patchsets),
-    ("GET", "/file", diff_views.file),
+    ("GET", "/reviewed", diff_views.reviewed),
     ("GET", "/review", views.review),
     ("GET", "/agent/runbook", views.agent_runbook),
     ("GET", "/vote", vote.vote_plan),
     ("POST", "/review/open", actions.review_open),
     ("POST", "/review/done", actions.review_done),
     ("POST", "/vote", vote.vote),
+    ("POST", "/reviewed", diff_views.mark_reviewed),
     ("POST", "/comments/reply", actions.reply),
     ("POST", "/comments/new", actions.new_comment),
     ("POST", "/comments/edit", actions.edit_own_comment),
@@ -53,15 +54,21 @@ ROUTES: tuple[tuple[str, str, Endpoint], ...] = (
 )
 
 
-def _activity(activity: Activity, req: Request) -> dict[str, Any]:
+def _activity(api: GerApi, req: Request) -> dict[str, Any]:
     """``activity`` and ``events`` once the activity sequence moves past ``since``, or after ``wait`` seconds."""
-    activity.wait(req.number("since"), req.number("wait") or 0)
-    return activity.json()
+    api.activity.wait(req.number("since"), req.number("wait") or 0)
+    return api.activity.json()
 
 
-# Calls that may wait, so they must not queue behind the serialised ones: no Context, no git, no Gerrit.
-UNLOCKED_ROUTES: tuple[tuple[str, str, Callable[[Activity, Request], dict[str, Any]]], ...] = (
+def _file(api: GerApi, req: Request) -> dict[str, Any]:
+    return diff_views.file(api.cwd, req)
+
+
+# Calls that must not queue behind the serialised ones: no Context, no Gerrit. `/activity` waits and
+# touches nothing; `/file` reads one object by its id, which no other request can change.
+UNLOCKED_ROUTES: tuple[tuple[str, str, Callable[[GerApi, Request], dict[str, Any]]], ...] = (
     ("GET", "/activity", _activity),
+    ("GET", "/file", _file),
 )
 
 
@@ -96,7 +103,7 @@ class GerApi:
         """Answer a call of :data:`UNLOCKED_ROUTES`, beside the request being served; ``None`` for any other."""
         for route_method, route, endpoint in UNLOCKED_ROUTES:
             if method == route_method and path.rstrip("/") == f"{PREFIX}{route}":
-                return endpoint(self.activity, Request(query=query or {}))
+                return endpoint(self, Request(query=query or {}))
         return None
 
     def handle(

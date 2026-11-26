@@ -48,6 +48,7 @@ def member_json(member: ChainMember, *, to_review: bool = False) -> dict[str, ob
         "url": member.url,
         "sha": member.sha,
         "your_turn": member.your_turn,
+        "your_votes": dict(member.your_votes),
         "not_ready": not_ready_why(member) if to_review and not member.matched else None,
     }
 

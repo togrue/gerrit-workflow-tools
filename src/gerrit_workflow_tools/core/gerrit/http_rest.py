@@ -351,6 +351,18 @@ class HttpGerritRest:
         path = _change_path(change_id, "/revisions/current/review")
         return self._request_dict("publish drafts", path, method="POST", json_body=review)
 
+    def list_reviewed_files(self, change_id: str, revision: int | str) -> list[str]:
+        """GET ``changes/<id>/revisions/<rev>/files?reviewed``: the paths, not FileInfo rows."""
+        data = self._request_json(_change_path(change_id, f"/revisions/{revision}/files/"), params={"reviewed": "true"})
+        if not isinstance(data, list):
+            raise GerritApiError("unexpected reviewed files response")
+        return [path for path in data if isinstance(path, str)]
+
+    def set_file_reviewed(self, change_id: str, revision: int | str, path: str, reviewed: bool) -> None:
+        """PUT (mark) or DELETE (clear) ``changes/<id>/revisions/<rev>/files/<path>/reviewed``."""
+        suffix = f"/revisions/{revision}/files/{encode_gerrit_path_segment(path)}/reviewed"
+        self._request_json(_change_path(change_id, suffix), method="PUT" if reviewed else "DELETE")
+
     def get_related(self, change_id: str, revision: int | str = "current") -> dict[str, Any]:
         """GET ``changes/<id>/revisions/<rev>/related``."""
         return self._request_dict("related changes", _change_path(change_id, f"/revisions/{revision}/related"))
