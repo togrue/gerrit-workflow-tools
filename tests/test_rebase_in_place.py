@@ -54,3 +54,15 @@ def test_no_note_while_the_upstream_has_not_moved(stack_repo: Path, monkeypatch:
     code, _out, err = run_cli(stack_repo, rebase_main, [], monkeypatch)
     assert code == 0, err
     assert "note:" not in err
+
+
+def test_a_branch_behind_its_upstream_stays_where_it_is(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No commits of its own: a rebase in place must not fast-forward it onto the upstream."""
+    git("reset", "-q", "--hard", "origin/main", cwd=stack_repo)
+    _upstream_moves_on(stack_repo)
+    head = git_out("rev-parse", "HEAD", cwd=stack_repo)
+    monkeypatch.setenv("GIT_EDITOR", "true")
+    code, _out, err = run_cli(stack_repo, rebase_main, [], monkeypatch)
+    assert code == 0, err
+    assert git_out("rev-parse", "HEAD", cwd=stack_repo) == head
+    assert "origin/main has 1 new commit" in err
