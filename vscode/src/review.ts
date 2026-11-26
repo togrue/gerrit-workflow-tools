@@ -90,12 +90,20 @@ export async function leaveReview(model: Model): Promise<void> {
 
 /** What moving a staged review along its chain needs from the rest of the extension. */
 export interface ReviewWalk {
-  /** Show the change the staged review holds now, with all its files. */
+  /** Show the change the staged review holds now, with all its files; says when it is done (`busy`). */
   show(): Promise<void>;
   /** Close what showed the change it left (its combined diffs: their right side is your file). */
   leave(): Promise<void>;
   /** Vote and Publish on every open change of the chain of `number`. */
   voteChain(number: number): Promise<void>;
+  /**
+   * Before the checkout: leave the change, and show the one `step` goes to from what is in hand
+   * (asked ahead: reviewAhead.ts), its diff read from git. Its number when it could; else nothing
+   * is shown and the checkout is waited for, as before.
+   */
+  ahead?(step: 1 | -1): Promise<number | undefined>;
+  /** Say what is under way while the checkout runs; `undefined` once the change is ready to work in. */
+  busy?(text: string | undefined): void;
 }
 
 const VOTE_CHAIN = "Vote on the Chain…";
@@ -114,11 +122,24 @@ export async function stepReview(model: Model, step: 1 | -1, walk: ReviewWalk): 
     return;
   }
   let moved: ReviewState;
+  let early: number | undefined;
+  const which = step > 0 ? "next" : "previous";
   try {
     const client = await model.client();
-    const which = step > 0 ? "next" : "previous";
-    moved = await ui().progress(vscode.ProgressLocation.Notification, `Checking out the ${which} change of ${here.number}'s chain`, () => client.reviewStep(step));
+    // Drawn now from what was asked ahead; the checkout runs behind it.
+    early = await walk.ahead?.(step);
+    const checkout = () => client.reviewStep(step);
+    if (early) {
+      walk.busy?.(`Checking out ${early}… Go to Definition and edits in your files once it is checked out`);
+      moved = await checkout();
+    } else {
+      moved = await ui().progress(vscode.ProgressLocation.Notification, `Checking out the ${which} change of ${here.number}'s chain`, checkout);
+    }
   } catch (error) {
+    walk.busy?.(undefined);
+    if (early) {
+      await walk.show(); // the review still holds the change it was on: back to it
+    }
     if (error instanceof GerApiError && error.reason === "chain-end") {
       const buttons = step > 0 ? [VOTE_CHAIN, LEAVE] : [];
       const picked = await ui().message("info", `${capitalized(error.message)}.`, {}, buttons);
@@ -132,10 +153,16 @@ export async function stepReview(model: Model, step: 1 | -1, walk: ReviewWalk): 
     void ui().message("warning", `The review did not move on: ${describeError(error)}`, {}, []);
     return;
   }
-  await walk.leave();
-  await model.refresh();
+  if (!early) {
+    await walk.leave();
+  }
+  // The checkout is done: the stack says so at once; /stack confirms the rest behind it. Nothing
+  // moved on Gerrit, so the inbox is not asked again.
+  model.adoptReview(moved);
   feedback(`Reviewing ${moved.number}: ${moved.subject} (patchset ${moved.patch_set})`, { icon: "eye" });
+  const local = model.refreshLocal();
   await walk.show();
+  await local;
 }
 
 const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);

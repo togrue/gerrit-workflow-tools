@@ -1,15 +1,14 @@
 // "Review chains": the headline, then both inbox sections. A chain row shows its top change;
-// expanding it lists the chain's changes, base first. While a staged review is open here, only the
-// chain under review: one row per change, the one reviewed marked (`reviewFocus`), until you ask
-// for all chains or the review ends. A change row is coloured by its comment state, and its hover
-// lists the comments (commentHover.ts).
+// expanding it lists the chain's changes, base first, the one a staged review holds here marked
+// *reviewing*. While you review or rework a chain the view steps aside for the task header
+// (task.ts) until you ask for all chains. A change row is coloured by its comment state, and
+// its hover lists the comments (commentHover.ts).
 
 import * as vscode from "vscode";
 
 import { Chain, Headline, Member, Section, Stack } from "./api";
 import { ChangeComments, commentResource, commentTooltip } from "./commentHover";
 import { commentState } from "./commentState";
-import { ReviewFocus, reviewFocus } from "./reviewFocus";
 import { memberTarget } from "./changeLoad";
 import { CHAIN_SORTS, ChainSort, chainDescription, plural, reasonWords, sentence, sortedChains, votes } from "./format";
 import { attentionThemeIcon, icon } from "./icons";
@@ -22,7 +21,7 @@ type Node =
   | { kind: "section"; section: Section }
   | { kind: "waiting"; section: Section; chains: Chain[] }
   | { kind: "chain"; chain: Chain; section: Section }
-  | { kind: "member"; member: Member; chain: Chain; section: Section; reviewed?: boolean }
+  | { kind: "member"; member: Member; chain: Chain; section: Section }
   | { kind: "info"; text: string; detail?: string; icon?: vscode.ThemeIcon; command?: vscode.Command };
 
 const SORT_KEY = "ger.chainSort";
@@ -50,8 +49,6 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this.changed.event;
 
-  /** The chain whose review you asked to see all chains during: its focus stays off, moving along it too, until another review. */
-  private unfocused: string | undefined;
   /** Where hovers get the comments from. Set by the extension. */
   comments: ChangeComments = { chains: () => Promise.resolve(undefined), drafts: () => 0 };
 
@@ -59,39 +56,12 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
     private readonly model: Model,
     private readonly memento: vscode.Memento,
   ) {
-    model.onDidChange(() => this.refocus());
+    model.onDidChange(() => this.changed.fire());
   }
 
-  /** The review the list is narrowed to, unless you asked for all chains during it. */
-  get focus(): ReviewFocus | undefined {
-    const focus = reviewFocus(this.model.overview, this.model.stack);
-    return focus && focusKey(focus) !== this.unfocused ? focus : undefined;
-  }
-
-  /** Redraw, and say in the title bar which way back there is: All Chains while focused, Focus on the Review otherwise during one. */
-  refocus(): void {
-    const available = reviewFocus(this.model.overview, this.model.stack);
-    if (!available) {
-      this.unfocused = undefined; // the review ended: the next one is focused again
-    }
-    void vscode.commands.executeCommand("setContext", "ger.reviewFocus", Boolean(this.focus));
-    void vscode.commands.executeCommand("setContext", "ger.reviewFocusOff", Boolean(available) && !this.focus);
+  /** Redraw: what the Change view learnt of the change shown (your drafts) colours its row. */
+  redraw(): void {
     this.changed.fire();
-  }
-
-  /** All Chains: the full list again, for the rest of this review. */
-  showAll(): void {
-    const focus = this.focus;
-    if (focus) {
-      this.unfocused = focusKey(focus);
-      this.refocus();
-    }
-  }
-
-  /** Back to the chain under review. */
-  focusReview(): void {
-    this.unfocused = undefined;
-    this.refocus();
   }
 
   /** How the chains of each section are ordered; remembered per workspace. */
@@ -147,10 +117,6 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
     if (!overview) {
       return []; // the welcome text for the model's state says why, and what to do
     }
-    const focus = this.focus;
-    if (focus) {
-      return this.focused(focus);
-    }
     const nodes: Node[] = [];
     if (overview.headline) {
       // A rebase underway still leads when the inbox cannot be read.
@@ -166,23 +132,6 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
     const order = ["to-review", "outgoing"];
     const sections = [...(overview.sections ?? [])].sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
     return nodes.concat(sections.map((section) => ({ kind: "section", section })));
-  }
-
-  /**
-   * The chain under review alone, newest first as an expanded chain reads, and above it the way back
-   * to every chain. No headline: it is about the others.
-   */
-  private focused({ chain, section, number }: ReviewFocus): Node[] {
-    const others = (this.model.overview?.sections ?? []).reduce((count, s) => count + s.chains.length, 0) - 1;
-    const back: Node = {
-      kind: "info",
-      text: "All chains",
-      detail: others > 0 ? `back to the full list: ${plural(others, "more chain")}` : "back to the full list",
-      icon: icon("arrow-left"),
-      command: { command: "ger.showAllChains", title: "All Chains" },
-    };
-    const members = [...chain.members].reverse().map((member): Node => ({ kind: "member", member, chain, section, reviewed: member.number === number }));
-    return [back, ...members];
   }
 
   getTreeItem(node: Node): vscode.TreeItem {
@@ -222,7 +171,7 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
       case "chain":
         return this.chainItem(node.chain, node.section);
       case "member":
-        return this.memberItem(node.member, node.chain, node.section, node.reviewed);
+        return this.memberItem(node.member, node.chain, node.section);
       case "info": {
         const item = new vscode.TreeItem(node.text);
         item.description = node.detail;
@@ -281,7 +230,8 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
     return item;
   }
 
-  private memberItem(member: Member, chain: Chain, section: Section, reviewed = false): vscode.TreeItem {
+  private memberItem(member: Member, chain: Chain, section: Section): vscode.TreeItem {
+    const reviewed = member.number === this.model.stack?.staged_review?.number;
     // The change under review stands out: its subject highlighted, and it says so first.
     const item = new vscode.TreeItem(reviewed ? { label: member.subject, highlights: [[0, member.subject.length]] } : member.subject);
     item.id = `${chain.key}/${member.number}`;
@@ -339,9 +289,6 @@ export class OverviewView implements vscode.TreeDataProvider<Node> {
     return undefined;
   }
 }
-
-/** Which review a focus is about: its chain, whichever change of it the review has moved to. */
-const focusKey = (focus: ReviewFocus) => focus.chain.key;
 
 /** The inbox section a row sits in. */
 function section(node: Node): string | undefined {

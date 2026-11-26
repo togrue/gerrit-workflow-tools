@@ -292,7 +292,82 @@
     return { attributes, keep, wire, select, selectedRows, rowOf, has: (key) => selected.has(key) };
   }
 
+  // --- The task header (src/taskRows.ts) ---------------------------------------------------
+
+  function mark(item) {
+    const glyph = item.ring ? ring(item.ring.share, item.ring.shape) : icon(item.icon);
+    return h("span", { class: `mark${item.tone ? ` tone-${item.tone}` : ""}` }, glyph, h("span", { class: "mark-text" }, item.text));
+  }
+
+  function step(item) {
+    const classes = ["step", item.current ? "current" : "", item.phase ? `phase-${item.phase}` : ""].filter(Boolean).join(" ");
+    const go = () => post("taskStep", { key: item.key });
+    return h(
+      "li",
+      {
+        class: classes,
+        title: item.tooltip,
+        tabindex: "0",
+        role: "button",
+        "aria-current": item.current ? "step" : undefined,
+        onclick: go,
+        onkeydown: (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            go();
+          }
+        },
+      },
+      h("span", { class: "step-position" }, `${item.position}`),
+      h("span", { class: "step-title" }, item.title),
+      h("span", { class: "marks" }, item.marks.map(mark)),
+    );
+  }
+
+  function taskAction(item) {
+    return h(
+      "div",
+      { class: "task-action" },
+      h(
+        "button",
+        { class: "button secondary", disabled: Boolean(item.refused), title: item.refused || item.detail, onclick: () => post("command", { command: item.command }) },
+        item.label,
+      ),
+      h("span", { class: "task-detail" }, item.refused ? `not now: ${item.refused}` : item.detail),
+    );
+  }
+
+  /**
+   * The task header: the mode in words and where you are, how much is left, the chain's changes
+   * oldest first (each state an icon and a word; a click goes there), and the ways out in words.
+   */
+  function task(vm) {
+    const views = h(
+      "a",
+      {
+        class: "task-views",
+        href: "#",
+        title: vm.views.detail,
+        onclick: (event) => {
+          event.preventDefault();
+          post("command", { command: vm.views.command });
+        },
+      },
+      vm.views.label,
+    );
+    return h(
+      "section",
+      { class: `task task-${vm.mode}`, "aria-label": vm.heading },
+      h("div", { class: "task-heading" }, icon(vm.mode === "review" ? "eye" : "edit"), h("span", { class: "task-mode", title: vm.title }, vm.heading), h("span", { class: "task-position" }, vm.position), views),
+      h("div", { class: "task-left" }, h("span", { class: "task-label" }, "Left: "), vm.left),
+      vm.busy ? h("div", { class: "task-busy" }, icon("loading"), h("span", {}, vm.busy)) : null,
+      vm.steps.length ? h("ol", { class: "steps", "aria-label": `The chain, oldest first: ${vm.title}` }, vm.steps.map(step)) : null,
+      vm.actions.length ? h("div", { class: "task-actions" }, vm.actions.map(taskAction)) : null,
+    );
+  }
+
   window.ger = {
+    task,
     h,
     icon,
     badge,

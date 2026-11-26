@@ -9,6 +9,7 @@ import { attentionIcon, commitVotes, fileState, plural, reasonWords, sentence } 
 import { Badge, SYNC_WORDS, StackAction, StackInfo, Tone, actionsText, badges, sync, conflictRow, rebaseButtons } from "./stackRows";
 import { Waiting } from "./state";
 import { latestSuggestion } from "./suggestions";
+import type { TaskVm } from "./taskRows";
 
 /** The newer side, the version looked at ("To"): your commit, Gerrit's current patchset, or patchset `n`. */
 export type Version = "local" | "current" | number;
@@ -257,6 +258,10 @@ export interface ChangeVm {
   comments?: { summary: string; open: boolean; threads: ThreadRow[] };
   /** Next: the one thing to do now, its button's text and why (nextAction.ts). */
   next?: { label: string; title: string };
+  /** Something under way the view waits on (a checkout of the change shown), said in place of Next. */
+  busy?: string;
+  /** Reviewing: the task header (taskRows.ts), drawn above the change. */
+  task?: TaskVm;
   /** `noLinks`: what to say when no build log was found; empty when that is not to be said. */
   ci?: { summary: string; state: CiView["state"]; error: string; noLinks: string; links: CiLinkRow[] };
 }

@@ -4,7 +4,7 @@
 // chains and CI findings are rows that open what they name.
 
 (function () {
-  const { h, icon, badge, actions, info, post, panel, listen, getState, setState } = window.ger;
+  const { h, icon, badge, actions, info, post, panel, listen, getState, setState, task } = window.ger;
   const root = document.getElementById("root");
 
   let vm = {};
@@ -411,7 +411,7 @@
     const scroll = document.scrollingElement ? document.scrollingElement.scrollTop : 0;
     const plain = vm.waiting || (vm.problem ? { text: vm.problem } : vm.empty ? { text: vm.empty } : null);
     if (plain) {
-      root.replaceChildren(panel(plain.text, plain.link));
+      root.replaceChildren(...(vm.task ? [task(vm.task)] : []), panel(plain.text, plain.link));
       return;
     }
     const key = vm.key;
@@ -422,6 +422,10 @@
       revealed = null;
     }
     const parts = [];
+    // Reviewing: the task header first, the top of the side bar while the lists step aside.
+    if (vm.task) {
+      parts.push(task(vm.task));
+    }
     if (vm.head) {
       const head = vm.head;
       // Votes and comments as badges, drawn as the Local stack draws them; words only when there are none.
@@ -433,7 +437,9 @@
       }
     }
     // Next: the one thing to do now, named on the button; Alt+Enter does the same.
-    if (vm.next) {
+    if (vm.busy) {
+      parts.push(h("div", { class: "next-bar busy" }, icon("loading"), h("span", { class: "busy-text" }, vm.busy)));
+    } else if (vm.next) {
       parts.push(h("div", { class: "next-bar" }, actions([{ label: vm.next.label, title: vm.next.title, command: { id: "ger.next", args: [] }, primary: true }])));
     }
     for (const note of vm.notes || []) {

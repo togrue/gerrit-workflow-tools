@@ -100,12 +100,14 @@
       "ger": [
         {
           "id": "ger.overview",
-          "name": "Review chains"
+          "name": "Review chains",
+          "when": "!ger.task || ger.taskAll"
         },
         {
           "id": "ger.stack",
           "name": "Local stack",
-          "type": "webview"
+          "type": "webview",
+          "when": "ger.task != review || ger.taskAll"
         },
         {
           "id": "ger.change",
@@ -199,7 +201,7 @@
       { "command": "ger.copySha", "title": "Copy SHA", "category": "ger" },
       { "command": "ger.sortChains", "title": "Sort Chains…", "category": "ger", "icon": "$(sort-precedence)" },
       { "command": "ger.showAllChains", "title": "All Chains", "category": "ger", "icon": "$(list-flat)" },
-      { "command": "ger.focusReview", "title": "Only the Chain Under Review", "category": "ger", "icon": "$(eye)" },
+      { "command": "ger.focusReview", "title": "Only This Task (Hide the Other Lists)", "category": "ger", "icon": "$(eye)" },
       { "command": "ger.openDiff", "title": "Open Diff", "category": "ger" },
       { "command": "ger.openLocation", "title": "Go to Location", "category": "ger" },
       { "command": "ger.nextComment", "title": "Next Unresolved Comment", "category": "ger", "icon": "$(arrow-down)" },
@@ -278,8 +280,8 @@
         { "command": "ger.copyChangeId", "when": "ger.ready && ger.changeShown" },
         { "command": "ger.copySha", "when": "ger.ready && ger.changeShown" },
         { "command": "ger.sortChains", "when": "ger.ready" },
-        { "command": "ger.showAllChains", "when": "ger.ready && ger.reviewFocus" },
-        { "command": "ger.focusReview", "when": "ger.ready && ger.reviewFocusOff" },
+        { "command": "ger.showAllChains", "when": "ger.ready && ger.task && !ger.taskAll" },
+        { "command": "ger.focusReview", "when": "ger.ready && ger.task && ger.taskAll" },
         { "command": "ger.reply", "when": "false" },
         { "command": "ger.hold", "when": "false" },
         { "command": "ger.release", "when": "false" },
@@ -333,8 +335,7 @@
         { "command": "ger.refresh", "when": "view == ger.overview", "group": "navigation@1" },
         { "command": "ger.markSeen", "when": "view == ger.overview && ger.ready", "group": "navigation@2" },
         { "command": "ger.sortChains", "when": "view == ger.overview && ger.ready", "group": "navigation@3" },
-        { "command": "ger.showAllChains", "when": "view == ger.overview && ger.ready && ger.reviewFocus", "group": "navigation@0" },
-        { "command": "ger.focusReview", "when": "view == ger.overview && ger.ready && ger.reviewFocusOff", "group": "navigation@0" },
+        { "command": "ger.focusReview", "when": "view == ger.overview && ger.ready && ger.task && ger.taskAll", "group": "navigation@0" },
         { "command": "ger.reportIssue", "when": "view == ger.overview", "group": "9_help@1" },
         { "command": "ger.agentWalk", "when": "view == ger.stack && ger.ready && !ger.stagedReview", "group": "navigation@0" },
         { "command": "ger.refresh", "when": "view == ger.stack", "group": "navigation@9" },

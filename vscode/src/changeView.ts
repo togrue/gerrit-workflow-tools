@@ -18,6 +18,7 @@ import { NextAction, nextAction } from "./nextAction";
 import { focusedMember, reviewFocus } from "./reviewFocus";
 import { markOf } from "./staleDiffs";
 import { ui } from "./ui";
+import { TaskVm } from "./taskRows";
 import { Message, WebView } from "./webview";
 
 /** What the comment commands take: the chain a row of the view stands for. */
@@ -75,6 +76,9 @@ export class ChangeView extends WebView<ChangeVm> {
 
   /** Next on the change shown: what its button names and `ger.next` does. Asks nothing of ger serve. */
   next(): NextAction | undefined {
+    if (this.busyText) {
+      return undefined;
+    }
     const stack = this.model.stack;
     const focus = this.holdsReview() ? reviewFocus(this.model.overview, stack) : undefined;
     const { member, above } = focus ? focusedMember(focus) : { member: undefined, above: undefined };
@@ -202,6 +206,41 @@ export class ChangeView extends WebView<ChangeVm> {
     const load = () => (this.detail.current(token) ? this.load(target, token, signal) : undefined);
     this.loading = this.loading.then(load, load);
     return this.loading;
+  }
+
+  /**
+   * Show `target` from answers already in hand (`shown` with its `files`): the next change of a
+   * review, asked while you read the one before it. Drawn at once; nothing is asked of ger serve.
+   */
+  prefill(target: ChangeTarget, shown: ShownCommit, files: Diff): void {
+    this.patchsets = undefined;
+    const token = this.supersede(() => this.detail.select(target, false));
+    this.startOn(target);
+    this.ci = { state: "closed" };
+    this.detail.arrive(token, "commit", shown);
+    this.detail.arrive(token, "base", files);
+    void vscode.commands.executeCommand("setContext", "ger.changeShown", true);
+    void vscode.commands.executeCommand("setContext", "ger.changeIsLocal", Boolean(target.local));
+    this.offerNewComment();
+    this.render();
+    this.loaded.fire();
+  }
+
+  /**
+   * The change drawn, under the target it has now (checked out here: your files hold it): kept as
+   * drawn while it reloads, its sides picked anew for that target.
+   */
+  adopt(target: ChangeTarget): Promise<void> {
+    this.startOn(target);
+    return this.open(target, true);
+  }
+
+  /** What is under way that the view waits on (a checkout of the change shown): said in place of Next. */
+  private busyText: string | undefined;
+
+  busy(text: string | undefined): void {
+    this.busyText = text;
+    this.render();
   }
 
   /** The changeish the patchset endpoints take; undefined before the first push. */
@@ -481,10 +520,10 @@ export class ChangeView extends WebView<ChangeVm> {
       reviewing: this.reviewing(),
     });
     if (!state) {
-      return { empty: this.target && this.detail.loading() ? `Loading ${this.target.title}…` : NOTHING_SHOWN };
+      return { empty: this.target && this.detail.loading() ? `Loading ${this.target.title}…` : NOTHING_SHOWN, task: this.task() };
     }
-    const next = this.next();
-    return { ...changeVm(state), next: next && { label: next.label, title: next.title } };
+    const next = this.busyText ? undefined : this.next();
+    return { ...changeVm(state), next: next && { label: next.label, title: next.title }, busy: this.busyText, task: this.task() };
   }
 
   /** The view as text, with the CI findings fetched: for the end-to-end suite. */
@@ -500,7 +539,7 @@ export class ChangeView extends WebView<ChangeVm> {
     this.heading = changeHeading(commit?.number ?? this.target?.number);
     view.title = this.heading;
     // Alt+Enter does what the button names, while there is one.
-    void vscode.commands.executeCommand("setContext", "ger.nextAction", Boolean(this.target && this.next()));
+    void vscode.commands.executeCommand("setContext", "ger.nextAction", Boolean(this.target && !this.busyText && this.next()));
   }
 
   /** Scroll to a comment chain and mark it, without taking the keyboard. */
@@ -518,9 +557,15 @@ export class ChangeView extends WebView<ChangeVm> {
     this.post({ type: "reveal", id: chain.root_id, open: true });
   }
 
+  /** The task header to draw at the top (reviewing), and what a click on its chain does. Set by the extension. */
+  task: () => TaskVm | undefined = () => undefined;
+  taskStep: (key: string) => unknown = () => undefined;
+
   protected receive(message: Message): unknown {
     const diff = this.shownDiff();
     switch (message.type) {
+      case "taskStep":
+        return this.taskStep(String(message.key));
       case "file": {
         const file = diff?.files[message.index as number];
         return file ? this.openDiff(file, diff) : undefined;
@@ -694,7 +739,7 @@ export class ChangeView extends WebView<ChangeVm> {
    * editor, each file with the sides its own diff has, so comments and language features work there
    * as in the file's diff. Where VS Code has no multi-diff editor (before 1.86), the first file's diff.
    */
-  async openAll(diff: Diff | undefined = this.shownDiff()): Promise<void> {
+  async openAll(diff: Diff | undefined = this.shownDiff(), note?: string): Promise<void> {
     if (!diff || diff.base === null || !diff.files.length) {
       const what = this.target ? `${this.target.title}: ` : "";
       void ui().message("info", `${what}there are no files to show${this.from === "base" ? "" : " for this comparison"}.`, {}, []);
@@ -711,8 +756,10 @@ export class ChangeView extends WebView<ChangeVm> {
       return [vscode.Uri.file(path.join(this.model.repo, file.path)), left, right];
     });
     const number = this.shown?.number ?? this.target?.number;
-    const title = `${number ? `Change ${number}` : (this.shown?.summary ?? "Change")} (${ChangeView.range(diff)})`;
-    if (this.worktreeHolds(diff.commit)) {
+    const title = `${number ? `Change ${number}` : (this.shown?.summary ?? "Change")} (${ChangeView.range(diff)})${note ? ` — ${note}` : ""}`;
+    if (note) {
+      this.ahead.add(title);
+    } else if (this.worktreeHolds(diff.commit)) {
       this.combined.add(title);
     }
     // All of them are in front of you now: Next has no file left to open.
@@ -723,17 +770,20 @@ export class ChangeView extends WebView<ChangeVm> {
 
   /** The titles of the combined diffs opened this session: a review that moves on closes them (`closeCombined`). */
   private readonly combined = new Set<string>();
+  /** The titles of combined diffs opened before the checkout of their change (`openAll`'s note): read from git, replaced once it is done. */
+  private readonly ahead = new Set<string>();
 
   /**
    * Close the combined diffs opened of the change a staged review held: their right sides are your
    * files, which hold another change now. VS Code's 1.85 API does not say what a multi-diff tab shows,
    * so they are known by title; single-file diffs go stale on their own (diffTabs.ts).
    */
-  async closeCombined(): Promise<void> {
+  async closeCombined(which: "worktree" | "ahead" = "worktree"): Promise<void> {
+    const titles = which === "ahead" ? this.ahead : this.combined;
     // VS Code titles the tab "<title> (4 files)"; its input (not in the 1.85 API) lists `textDiffs`.
-    const combined = (tab: vscode.Tab) => Boolean((tab.input as { textDiffs?: unknown } | undefined)?.textDiffs) && [...this.combined].some((title) => tab.label.startsWith(title));
+    const combined = (tab: vscode.Tab) => Boolean((tab.input as { textDiffs?: unknown } | undefined)?.textDiffs) && [...titles].some((title) => tab.label.startsWith(title));
     const tabs = vscode.window.tabGroups.all.flatMap((group) => group.tabs).filter(combined);
-    this.combined.clear();
+    titles.clear();
     if (tabs.length) {
       await vscode.window.tabGroups.close(tabs, true);
     }

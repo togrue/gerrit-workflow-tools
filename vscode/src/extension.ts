@@ -23,12 +23,14 @@ import { Poller } from "./poller";
 import { openConflict, push, rebaseOntoUpstream, rebaseStep } from "./rebase";
 import { RepoWatcher } from "./repoWatcher";
 import { reportIssue } from "./reportIssue";
-import { ReviewWalk, checkout, editCommit, leaveReview, review, stepReview, updateReview } from "./review";
+import { checkout, editCommit, leaveReview, review, stepReview, updateReview } from "./review";
+import { reviewWalk } from "./reviewWalk";
 import { waitsOnYou } from "./rows";
 import { GerProcess } from "./server";
 import { CommitArg, StackView, commitTarget } from "./stackView";
 import { waitsForYou } from "./state";
 import { statusBar } from "./statusBar";
+import { Task } from "./task";
 import { Ui, feedback, saveReplyResolved, ui, useUi } from "./ui";
 import { setUpstream } from "./upstream";
 import { voteAndPublish } from "./vote";
@@ -83,6 +85,7 @@ export interface ExtensionApi {
   overviewView: OverviewView;
   stackView: StackView;
   changeView: ChangeView;
+  task: Task;
   threads: CommentThreads;
   statusItem: vscode.StatusBarItem;
   events: EventFollower;
@@ -118,6 +121,15 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   const overviewView = new OverviewView(model, context.workspaceState);
   const stackView = new StackView(context.extensionUri, model);
   const changeView = new ChangeView(context.extensionUri, model, context.globalState);
+  const task = new Task(model);
+  // The task header is drawn where the task is worked: the Change view reviewing, Local stack reworking.
+  changeView.task = () => (task.mode === "review" ? task.vm() : undefined);
+  stackView.task = () => (task.mode === "rework" ? task.vm() : undefined);
+  changeView.taskStep = stackView.taskStep = (key) => (task.mode ? task.go(task.mode, key) : undefined);
+  task.onDidChange(() => {
+    changeView.render();
+    stackView.render();
+  });
 
   const overviewTree = vscode.window.createTreeView("ger.overview", { treeDataProvider: overviewView });
   // Kept while hidden: the selection in the stack, and a commit message you are still typing.
@@ -206,7 +218,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   // What the Change view learns of the change shown (your drafts on it) colours its Review chains row.
   context.subscriptions.push(
     changeView.onDidLoad(() => {
-      overviewView.refocus();
+      overviewView.redraw();
       stackView.render();
     }),
   );
@@ -249,29 +261,24 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     await model.refresh({ fromGerrit: true });
     await changeView.open();
   };
-  /** The change a staged review holds here, shown (the keyboard stays where it is); with `all`, all its files in one editor. */
-  const showReview = async (all: boolean) => {
-    const review = model.stack?.staged_review;
-    const commit = review && model.stack?.commits.find((c) => c.sha === review.commit);
-    if (!commit) {
-      return;
-    }
-    await openChange(commitTarget(commit), true);
-    await changeView.idle();
-    // Reviewed at an earlier patchset: what is new since is what to read, in the view and the combined diff.
-    await changeView.preferReviewDelta();
-    await changeView.idle();
-    if (all) {
-      await changeView.openAll();
-    }
-  };
-  const reviewWalk: ReviewWalk = {
-    show: () => showReview(true),
-    leave: () => changeView.closeCombined(),
+  const walking = reviewWalk({
+    model,
+    changeView,
+    task,
+    open: (target) => openChange(target, true),
     voteChain: (number) => {
       const shown = changeView.target?.number === number ? changeView.target : { rev: `change:${number}`, title: String(number), number, local: false };
       return voteAndPublish(model, shown, { chain: true, after: afterVote });
     },
+  });
+  const { walk: reviewSteps, show: showReview } = walking;
+  /** A click on a change in the task header: reviewing, that change; reworking, that commit shown. */
+  task.go = (mode, key) => {
+    if (mode === "review") {
+      return walking.go(Number(key));
+    }
+    const commit = model.stack?.commits.find((c) => c.sha === key);
+    return commit ? openChange(commitTarget(commit), true) : undefined;
   };
   /**
    * A window opened on a staged review (Open Review Worktree, or a reload there) opens on it: the
@@ -305,7 +312,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       return undefined;
     }
     return index < chain.length - 1
-      ? { label: "Next Change", run: () => stepReview(model, 1, reviewWalk) }
+      ? { label: "Next Change", run: () => stepReview(model, 1, reviewSteps) }
       : { label: "Leave Review", run: () => leaveReview(model) };
   };
   /** A chain row of Review chains votes on its whole chain. */
@@ -325,7 +332,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     comment: () => threads.stepUnread(),
     file: () => changeView.openNextFile(),
     vote: () => vscode.commands.executeCommand("ger.vote"),
-    nextChange: () => stepReview(model, 1, reviewWalk),
+    nextChange: () => stepReview(model, 1, reviewSteps),
     leave: () => leaveReview(model),
     conflict: () => {
       const first = model.stack?.rebase?.unmerged[0];
@@ -333,7 +340,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     },
     workOnNext: () => walk.next(),
     push: () => push(model),
-    review: () => review(model, changeView.target, reviewWalk),
+    review: () => review(model, changeView.target, reviewSteps),
   };
 
   const commands: Record<string, (...args: never[]) => unknown> = {
@@ -366,10 +373,16 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.openHeadline": async () => {
       // A rebase underway is finished in Local stack, where it shows where it stopped.
       if (model.overview?.headline?.section === "local") {
+        if (task.mode === "review") {
+          task.showAll(); // something else needs you: the lists the task header hides come back
+        }
         await vscode.commands.executeCommand("ger.stack.focus");
         return;
       }
       const target = headlineTarget(model);
+      if (!target && task.focused) {
+        task.showAll();
+      }
       await (target ? openChange(target) : vscode.commands.executeCommand("ger.overview.focus"));
     },
     "ger.markSeen": async () => {
@@ -386,7 +399,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       }
       return undefined;
     },
-    "ger.review": (arg: unknown) => review(model, targetOf(arg), reviewWalk),
+    "ger.review": (arg: unknown) => review(model, targetOf(arg), reviewSteps),
     "ger.checkout": (arg: unknown) => checkout(model, targetOf(arg)),
     "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg)),
     "ger.setUpstream": (upstream?: unknown) => setUpstream(model, typeof upstream === "string" ? upstream : undefined),
@@ -395,9 +408,9 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       const target = targetOf(arg);
       return voteAndPublish(model, target, { chain: isChainRow(arg), after: afterVote, next: isChainRow(arg) ? undefined : nextAfterVote(target) });
     },
-    "ger.reviewUpdate": () => updateReview(model, reviewWalk),
-    "ger.reviewNext": () => stepReview(model, 1, reviewWalk),
-    "ger.reviewPrev": () => stepReview(model, -1, reviewWalk),
+    "ger.reviewUpdate": () => updateReview(model, reviewSteps),
+    "ger.reviewNext": () => stepReview(model, 1, reviewSteps),
+    "ger.reviewPrev": () => stepReview(model, -1, reviewSteps),
     "ger.publishDrafts": (arg: unknown) => voteAndPublish(model, targetOf(arg), { draftsOnly: true, after: afterVote }),
     "ger.push": () => push(model),
     "ger.rebase.continue": async () => {
@@ -435,8 +448,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       const action = changeView.next();
       return action ? next[action.kind]() : undefined;
     },
-    "ger.showAllChains": () => overviewView.showAll(),
-    "ger.focusReview": () => overviewView.focusReview(),
+    "ger.showAllChains": () => task.showAll(),
+    "ger.focusReview": () => task.focus(),
     "ger.comment.goto": async (link: CommentLink) => {
       const chain = await chainOf(link);
       return chain ? threads.goTo(chain) : undefined;
@@ -525,6 +538,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     overviewTree,
     stackPane,
     changePane,
+    task,
+    walking.disposable,
     threads,
     follower,
     walk,
@@ -553,7 +568,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     }),
   );
   void model.refresh();
-  return { model, overviewView, stackView, changeView, threads, statusItem, events, diffTabs, useUi };
+  return { model, overviewView, stackView, changeView, task, threads, statusItem, events, diffTabs, useUi };
 }
 
 export function deactivate(): void {

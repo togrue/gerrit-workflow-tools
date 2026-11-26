@@ -12,6 +12,7 @@ import { openConflict } from "./rebase";
 import { StackVm, frozen, pinned, pinnedWhy, stackLines, stackVm, stackWhere } from "./stackRows";
 import { waitingFor } from "./state";
 import { feedback, ui } from "./ui";
+import { TaskVm } from "./taskRows";
 import { Message, WebView } from "./webview";
 
 const STASH = "Stash and Continue";
@@ -46,7 +47,7 @@ export class StackView extends WebView<StackVm> {
 
   vm(): StackVm {
     const waiting = this.model.overview ? undefined : waitingFor(this.model.state, "Your local stack", this.model.incompatible, this.model.failure);
-    const vm = stackVm(this.model.overview?.local, this.model.upstreamChoice, (lower, upper) => this.model.swapConflict(lower, upper), this.drafts);
+    const vm = stackVm(this.model.overview?.local, this.model.upstreamChoice, (lower, upper) => this.model.swapConflict(lower, upper), this.drafts, this.task());
     return waiting ? { ...vm, waiting } : vm;
   }
 
@@ -79,7 +80,14 @@ export class StackView extends WebView<StackVm> {
     return commit ? commitTarget(commit) : undefined;
   }
 
+  /** The task header to draw at the top (reworking), and what a click on its chain does. Set by the extension. */
+  task: () => TaskVm | undefined = () => undefined;
+  taskStep: (key: string) => unknown = () => undefined;
+
   protected receive(message: Message): unknown {
+    if (message.type === "taskStep") {
+      return this.taskStep(String(message.key));
+    }
     switch (message.type) {
       case "open": {
         const target = this.target(message.sha as string);

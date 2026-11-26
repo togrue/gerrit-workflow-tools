@@ -3,10 +3,25 @@
 // says nothing about local git. So watch HEAD, the branches and the rebase state, and refresh
 // (locally: no Gerrit reads are forced) once things have been quiet for a moment.
 
+import * as fs from "node:fs";
+import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { Quiet, indexWatch, watches } from "./gitWatch";
 import { GitDirs } from "./workspace";
+
+/**
+ * When git wrote the file: its modification time; for one deleted, its directory's (a branch
+ * deleted takes its entry out of `refs/heads`). A refresh the extension started right after its own
+ * checkout already saw it, though the event arrives later. Unknown: now.
+ */
+function changedAt(uri: vscode.Uri, deleted = false): number | undefined {
+  try {
+    return fs.statSync(deleted ? path.dirname(uri.fsPath) : uri.fsPath).mtimeMs;
+  } catch {
+    return undefined;
+  }
+}
 
 export class RepoWatcher implements vscode.Disposable {
   private readonly watchers: vscode.FileSystemWatcher[];
@@ -17,9 +32,10 @@ export class RepoWatcher implements vscode.Disposable {
     this.quiet = new Quiet(changed);
     this.watchers = watches(dirs).map(({ base, pattern }) => {
       const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(base), pattern));
-      for (const event of [watcher.onDidCreate, watcher.onDidChange, watcher.onDidDelete]) {
-        event(() => this.quiet.poke());
+      for (const event of [watcher.onDidCreate, watcher.onDidChange]) {
+        event((uri) => this.quiet.poke(changedAt(uri)));
       }
+      watcher.onDidDelete((uri) => this.quiet.poke(changedAt(uri, true)));
       return watcher;
     });
     const { base, pattern } = indexWatch(dirs);

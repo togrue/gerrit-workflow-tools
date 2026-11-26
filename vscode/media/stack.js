@@ -4,7 +4,7 @@
 // (`webview/context` in package.json).
 
 (function () {
-  const { h, icon, info, post, panel, listen, rowSelection } = window.ger;
+  const { h, icon, info, post, panel, listen, rowSelection, task } = window.ger;
   const root = document.getElementById("root");
 
   let vm = { info: [], rows: [], frozen: null, movable: 0 };
@@ -158,7 +158,8 @@
       line,
     );
     wire(list);
-    root.replaceChildren(h("div", { class: "infos" }, vm.info.map(info)), list);
+    // Reworking: the task header in place of the rebase banner; the rows under it are its chain.
+    root.replaceChildren(...(vm.task ? [task(vm.task)] : []), h("div", { class: "infos" }, vm.info.map(info)), list);
     if (document.scrollingElement) {
       document.scrollingElement.scrollTop = scroll;
     }

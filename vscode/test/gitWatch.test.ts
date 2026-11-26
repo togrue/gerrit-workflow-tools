@@ -92,6 +92,21 @@ test("a change after the quiet makes another run, and disposing cancels a pendin
   assert.equal(runs.length, 2);
 });
 
+test("a change is dated by the file git wrote, not by when its event arrived: an own refresh after it already saw it", () => {
+  const { timers, advance } = clock();
+  const runs: number[] = [];
+  const quiet = new Quiet((last) => runs.push(last), timers, 750);
+  advance(1000);
+  // HEAD written at 400 (the checkout the extension asked for), its event at 1000; a ref at 600.
+  quiet.poke(400);
+  quiet.poke(600);
+  advance(750);
+  assert.deepEqual(runs, [600], "the newest of the burst, by the files' own times");
+  quiet.poke(); // unknown (gone again): now
+  advance(750);
+  assert.deepEqual(runs, [600, 1750]);
+});
+
 test("the index is its own watch, in the worktree's own git directory, for a rebase to follow git add", () => {
   assert.deepEqual(indexWatch({ gitDir: "/r/.git/worktrees/w", commonDir: "/r/.git" }), { base: "/r/.git/worktrees/w", pattern: "index" });
 });
