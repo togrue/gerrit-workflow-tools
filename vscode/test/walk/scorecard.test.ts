@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { readTrace, renderScorecard, scorecard } from "./scorecard";
+import { PROCESS_BUDGET, readTrace, renderScorecard, scorecard } from "./scorecard";
 
 const step = (n: number, title: string, budget: string, t: number, reached: number, extra: object = {}) => ({
   kind: "step",
@@ -67,4 +67,13 @@ test("each step is joined to what happened in its time, and judged by its budget
   const text = renderScorecard(card);
   assert.match(text, /\| 2 \| Show the change \| change \| real \| 1 \(1\/0\/0\) \| 1 \| 305 ms \| 1405 ms \| 1 \| 5 \| 2 \| 1805 ms \| \*\*over\*\* \|/);
   assert.match(text, /## Five slowest steps\n\n- \*\*rework 3\. Work on Next\*\*/);
+  assert.doesNotMatch(text, /loop\*\*: \d+ subprocesses/, "both loops within their pin");
+});
+
+test("a loop that starts more subprocesses than its pin is over budget", () => {
+  const card = scorecard(readTrace(trace.map((r) => JSON.stringify(r)).join("\n")), { processMs: 80 });
+  const [review] = card.loops;
+  assert.equal(review.process_budget, PROCESS_BUDGET.review);
+  const more = { ...card, loops: card.loops.map((l) => (l.loop === "review" ? { ...l, subprocesses: PROCESS_BUDGET.review + 1 } : l)) };
+  assert.match(renderScorecard(more), new RegExp(`- \\*\\*review loop\\*\\*: ${PROCESS_BUDGET.review + 1} subprocesses > ${PROCESS_BUDGET.review}`));
 });

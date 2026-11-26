@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 import { CommentChain, Rebase, RebaseAction, StackCommit } from "../src/api";
 import { ChangeState, READ_ONLY, answeredByDraft, changeHeading, changeLines, changeVm, replyName, toAnswer } from "../src/changeRows";
-import { fitSides, modeSides, modesFor } from "../src/compareRows";
+import { atDefault, fitSides, modeSides, modesFor } from "../src/compareRows";
 import { attentionIcon, reasonWords, votes } from "../src/format";
 import { commentState } from "../src/commentState";
 import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, workOnNext, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, rebaseNotNowFresh, reviewerWords, skipQuestion, stackLines, stoppedAt, sync, stackVm, stackWhere } from "../src/stackRows";
@@ -767,4 +767,13 @@ test("the reply box names whom it answers only where that is sure: the chain gon
   assert.equal(replyName([alice, bob], bob), "pg-bob", "the chain gone to, or the cursor is in: its last word on Gerrit");
   assert.equal(replyName([bob], { ...bob, comments: [...bob.comments, comment("Draft", { state: "draft", author: undefined, comment_id: "d" })] }), "pg-bob", "your draft is not who it answers");
   assert.equal(replyName([]), undefined);
+});
+
+test("From and To at the default mode's sides are told without the patchsets: the folded line needs no list", () => {
+  const sides = { pushed: true, local: true, patchsets: undefined, mode: "base" as const };
+  const own = modeSides("base", { pushed: true, local: true });
+  assert.ok(atDefault({ ...sides, from: own.from, version: own.to }));
+  assert.ok(!atDefault({ ...sides, from: "reviewed", version: "local" }), "picked by hand: the pickers stay open, their list is asked");
+  const patchsets = { number: 7, current: 3, reviewed: 2, patchsets: [] };
+  assert.ok(atDefault({ pushed: true, local: false, patchsets, mode: "base", from: "base", version: 3 }), "patchset 3 is current once the list says so");
 });

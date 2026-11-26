@@ -13,6 +13,13 @@ export type Budget = "walk" | "change" | "slow";
 
 export const BUDGET_MS = { first: 100, settled: 1000 };
 
+/**
+ * The subprocesses (git) a loop may start, at most: what the walk measured on the playground once
+ * the duplicate reads were gone (test/walk/README.md). Each one costs ~80 ms on Windows; a change
+ * that needs more says why, and raises the pin.
+ */
+export const PROCESS_BUDGET: Record<Loop, number> = { review: 218, rework: 328 };
+
 export interface StepRecord {
   kind: "step";
   loop: Loop;
@@ -121,6 +128,8 @@ export interface LoopTotals {
   subprocesses: number;
   gerrit: number;
   over: number;
+  /** PROCESS_BUDGET of the loop. */
+  process_budget: number;
 }
 
 export interface Scorecard {
@@ -236,6 +245,7 @@ export function scorecard(records: Rec[], options: { processMs: number }): Score
         subprocesses: sum((s) => s.subprocesses),
         gerrit: sum((s) => s.gerrit),
         over: own.filter((s) => s.over.length).length,
+        process_budget: PROCESS_BUDGET[loop],
       };
     })
     .filter((totals) => totals.steps > 0);
@@ -295,9 +305,12 @@ export function renderScorecard(card: Scorecard): string {
       "",
     );
   }
-  const over = card.steps.filter((s) => s.over.length);
+  const over = card.steps.filter((s) => s.over.length).map((s) => `- **${s.loop} ${s.n}. ${escape(s.title)}**: ${s.over.join("; ")}`);
+  // A loop's subprocesses over its pin (a scorecard written before it had one says nothing).
+  const loopsOver = card.loops.filter((l) => l.process_budget !== undefined && l.subprocesses > l.process_budget);
+  over.push(...loopsOver.map((l) => `- **${l.loop} loop**: ${l.subprocesses} subprocesses > ${l.process_budget}`));
   lines.push("## Over budget", "");
-  lines.push(...(over.length ? over.map((s) => `- **${s.loop} ${s.n}. ${escape(s.title)}**: ${s.over.join("; ")}`) : ["None."]), "");
+  lines.push(...(over.length ? over : ["None."]), "");
   const slowest = [...card.steps].filter((s) => s.settled_ms !== null).sort((a, b) => (b.settled_ms ?? 0) - (a.settled_ms ?? 0)).slice(0, 5);
   lines.push("## Five slowest steps", "");
   for (const s of slowest) {

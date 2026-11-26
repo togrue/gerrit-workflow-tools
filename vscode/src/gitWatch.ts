@@ -1,6 +1,8 @@
 // What to watch in a git directory so the views follow the repository, and how to calm a burst
-// of changes into one refresh. No `vscode` import: unit-tested. The watcher itself is repoWatcher.ts.
+// of changes into one refresh: one `GET /stack` for one state of the repository. No `vscode`
+// import: unit-tested. The watcher itself is repoWatcher.ts.
 
+import * as fs from "node:fs";
 import * as path from "node:path";
 
 import type { GitDirs } from "./workspace";
@@ -96,5 +98,113 @@ export class Quiet {
   dispose(): void {
     this.timers.clear(this.handle);
     this.handle = undefined;
+  }
+}
+
+/**
+ * Where the repository stands, as far as `GET /stack` would see it, read without starting a
+ * process: HEAD's text, and when git last wrote (and how big) the branch HEAD names, the index,
+ * the rebase state, the step outcome, packed-refs and the config (an upstream set). Two equal
+ * stamps: a read at one stands for the other, but for the work tree, which git does not write
+ * down: {@link StackReads} is told of that apart. Unreadable files count as missing.
+ */
+export function repoStamp({ gitDir, commonDir }: GitDirs): string {
+  const stat = (file: string) => {
+    try {
+      const { mtimeMs, ctimeMs, size } = fs.statSync(file);
+      return `${mtimeMs}/${ctimeMs}/${size}`;
+    } catch {
+      return "-";
+    }
+  };
+  let head = "";
+  try {
+    head = fs.readFileSync(path.join(gitDir, "HEAD"), "utf8").trim();
+  } catch {
+    // no HEAD to read: "-" below says as much
+  }
+  const branch = head.startsWith("ref: ") ? [path.join(commonDir, head.slice(5))] : [];
+  const rebase = ["rebase-merge", "rebase-merge/done", "rebase-merge/msgnum", "rebase-merge/amend", "rebase-merge/stopped-sha", "rebase-apply", "rebase-apply/next"];
+  const own = ["index", "ORIG_HEAD", "MERGE_HEAD", "CHERRY_PICK_HEAD", "REBASE_HEAD", "ger-outcome.json", ...rebase].map((file) => path.join(gitDir, file));
+  const shared = ["packed-refs", "config"].map((file) => path.join(commonDir, file));
+  return [head || "-", ...[...branch, ...own, ...shared].map(stat)].join(" ");
+}
+
+/** The stamp of the repository in `dirs`; without a git directory, one that never repeats (no two moments are known to be the same). */
+export function stamper(dirs: GitDirs | undefined): () => string {
+  let unknown = 0;
+  return dirs ? () => repoStamp(dirs) : () => `unknown ${unknown++}`;
+}
+
+/** A read of the stack: the repository's stamp and the time when it began. */
+export interface Moment {
+  stamp: string;
+  at: number;
+}
+
+/**
+ * One `GET /stack` for one state of the repository. An ask while a read is under way joins it when
+ * nothing changed since that read began (same stamp, no work tree change after it), else waits for
+ * one more read after it, which every later ask joins. With `ifChanged` (an outside event that may
+ * already have been seen: the end of a terminal command, the watcher) an ask is dropped when the
+ * last read that came back still stands for now. A whole load, which carries the stack too, counts
+ * as a read (`saw`).
+ */
+export class StackReads {
+  private running: (Moment & { done: Promise<void> }) | undefined;
+  private queued: Promise<void> | undefined;
+  private last: Moment | undefined;
+  private treeAt = -Infinity;
+
+  constructor(
+    private readonly read: () => Promise<void>,
+    private readonly stamp: () => string,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  /** The work tree changed at `at` (the file's own time, when known): a read begun before then does not stand for now. */
+  touched(at: number = this.now()): void {
+    this.treeAt = Math.max(this.treeAt, at);
+  }
+
+  /** Now, as a read begun now would stand for it. */
+  moment(): Moment {
+    return { stamp: this.stamp(), at: this.now() };
+  }
+
+  /** A read begun at `moment` came back. */
+  saw(moment: Moment): void {
+    if (!this.last || moment.at >= this.last.at) {
+      this.last = moment;
+    }
+  }
+
+  ask({ ifChanged = false }: { ifChanged?: boolean } = {}): Promise<void> {
+    const stamp = this.stamp();
+    const standsForNow = (read: Moment | undefined) => read !== undefined && read.stamp === stamp && this.treeAt < read.at;
+    const running = this.running;
+    if (running) {
+      if (standsForNow(running)) {
+        return running.done;
+      }
+      this.queued ??= running.done.then(() => {
+        this.queued = undefined;
+        return this.ask();
+      });
+      return this.queued;
+    }
+    return ifChanged && standsForNow(this.last) ? Promise.resolve() : this.start();
+  }
+
+  private start(): Promise<void> {
+    const moment = this.moment();
+    const done = this.read()
+      .then(() => this.saw(moment))
+      .catch(() => undefined)
+      .finally(() => {
+        this.running = undefined;
+      });
+    this.running = { ...moment, done };
+    return done;
   }
 }

@@ -181,12 +181,13 @@ test("CI that could not be fetched offers Try Again; a failed build without a lo
 test("in a task, From and To at their default are one line that says what is compared; Change opens the pickers", () => {
   const task = { mode: "rework", heading: "Reworking your chain", title: "t", position: "change 1 of 1", left: "", steps: [], actions: [], views: { label: "All chains", detail: "", command: "ger.showAllChains" } } as const;
   const view = { ...changeVm(state({})), task: { ...task, steps: [], actions: [] } };
-  const { root } = changePage(view);
+  const { root, posted } = changePage(view);
   assert.equal(root.all((element) => element.tagName === "SELECT").length, 0, "folded");
   const line = root.all(byClass("compare-line"))[0];
   assert.match(line.textContent, /→/);
   button(root, "Change").click();
   assert.equal(root.all((element) => element.tagName === "SELECT").length, 2, "opened");
+  assert.deepEqual(posted.at(-1), { type: "pickers" }, "Gerrit's list of patchsets is asked only now");
   const byHand = changePage({ ...view, compare: { ...view.compare!, mode: { ...view.compare!.mode, active: false } } });
   assert.equal(byHand.root.all((element) => element.tagName === "SELECT").length, 2, "picked by hand: they stay open");
   assert.equal(changePage(changeVm(state({}))).root.all((element) => element.tagName === "SELECT").length, 2, "outside a task: as before");

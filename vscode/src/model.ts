@@ -4,12 +4,15 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { ApiError, GerApiError, GerClient, Headline, MoveConflict, Overview, ReviewState, Stack, UpstreamChoice, isStack } from "./api";
-import { Seen, blockedSwaps, chainsWithActivity, currentHeadline, headlineNews, rememberSeen, swapKey } from "./format";
+import { Seen, chainsWithActivity, currentHeadline, headlineNews, rememberSeen } from "./format";
+import { MovePreview } from "./movePreview";
 import type { RowStatus } from "./changeLoad";
 import { IncompatibleServe } from "./compat";
 import { GerProcess, ServeFailed } from "./server";
 import { GerState, failureState, staleReason } from "./state";
 import { gerritAway } from "./problemRows";
+import { StackReads, stamper } from "./gitWatch";
+import { gitDirs } from "./workspace";
 
 const SEEN_KEY = "ger.seen";
 
@@ -78,21 +81,27 @@ export class Model implements vscode.Disposable {
   /** Fires when a background refresh brings a headline that was not the headline before. Not on the first load. */
   readonly onDidGetNewHeadline = this.news.event;
   private lastHeadline: string | undefined;
-  /** Neighbours of the local stack that cannot swap places, for the stack whose head is `movesHead`. */
-  private blocked = new Map<string, MoveConflict>();
-  movesHead: string | null | undefined;
+  /** Local stack's conflict preview: which neighbours cannot swap places. */
+  private readonly moves = new MovePreview(
+    () => this.client(),
+    () => this.stack,
+    () => this.changed.fire(),
+  );
   /** What to offer as upstream while the branch has none (and so no stack to show). */
   upstreamChoice: UpstreamChoice | undefined;
   private refreshing: Promise<void> | undefined;
   private loadStartedAt = 0;
   private again: Promise<void> | undefined;
   private againOptions: Required<RefreshOptions> | undefined;
+  /** The `/stack` reads: one for one state of the repository. */
+  readonly reads: StackReads;
 
   constructor(
     private readonly process: GerProcess,
     private readonly memento: vscode.Memento,
     readonly repo: string,
   ) {
+    this.reads = new StackReads(() => this.readStack(), stamper(gitDirs(repo)));
     // ger serve died under the views: start it again now (quietly, as any background refresh). A
     // restart that fails leaves the last answer marked out of date, with the reason and Restart.
     process.onDied = () => void this.refresh({ background: true });
@@ -179,14 +188,18 @@ export class Model implements vscode.Disposable {
   }
 
   /**
-   * Reload only the local stack (`/stack`): after a checkout here, which moves nothing on Gerrit
-   * and nothing in the inbox. Counts as a load for {@link loadedSince}, so the repository watcher
-   * does not reload everything after it.
+   * Reload only the local stack (`/stack`): after a checkout here, which moves nothing on Gerrit or in the inbox.
+   * One read per state of the repository ({@link StackReads}; `ifChanged`: none while the last still stands).
+   * Counts as a load for {@link loadedSince}, so the repository watcher does not reload everything after it.
    */
-  async refreshLocal(): Promise<void> {
+  async refreshLocal(options: { ifChanged?: boolean } = {}): Promise<void> {
     if (this.refreshing) {
       await this.refreshing;
     }
+    return this.reads.ask(options);
+  }
+
+  private async readStack(): Promise<void> {
     this.loadStartedAt = Date.now();
     try {
       const stack = await (await this.client()).stack();
@@ -237,6 +250,7 @@ export class Model implements vscode.Disposable {
 
   private async load({ fromGerrit, background }: Required<RefreshOptions>): Promise<void> {
     this.loadStartedAt = Date.now();
+    const moment = this.reads.moment();
     // A repository can make git run its own code (hooks, fsmonitor, its .vscode settings): not before you trust it.
     if (!vscode.workspace.isTrusted) {
       await this.setState("untrusted");
@@ -255,6 +269,7 @@ export class Model implements vscode.Disposable {
         this.changed.fire();
       }
       this.overview = await client.overview(fromGerrit);
+      this.reads.saw(moment); // the overview carries the stack
       this.early = undefined;
       for (const member of (this.overview.sections ?? []).flatMap((section) => section.chains.flatMap((chain) => chain.members))) {
         this.subjects.set(member.number, member.subject);
@@ -315,7 +330,7 @@ export class Model implements vscode.Disposable {
     }
     this.changed.fire();
     await this.loadUpstreamChoice();
-    await this.loadMoves();
+    await this.moves.load();
   }
 
   /** Without an upstream there is no stack to show: fetch what to suggest, so the view can offer it in one click. */
@@ -334,34 +349,9 @@ export class Model implements vscode.Disposable {
     this.changed.fire();
   }
 
-  /** The conflict preview for the stack as it is now. Best effort: without it every move is offered. */
-  private async loadMoves(): Promise<void> {
-    const head = this.stack?.head;
-    if (head === this.movesHead) {
-      return;
-    }
-    if (this.stack?.staged_review) {
-      // Somebody else's chain under review: nothing of it is reordered here (core refuses), so nothing to ask.
-      this.blocked = new Map();
-      this.movesHead = head;
-      return;
-    }
-    try {
-      const moves = head ? await (await this.client()).moves() : undefined;
-      if (this.stack?.head !== head) {
-        return; // the stack moved on meanwhile: the next load asks again
-      }
-      this.blocked = blockedSwaps(moves);
-      this.movesHead = head;
-    } catch {
-      this.blocked = new Map();
-    }
-    this.changed.fire();
-  }
-
   /** Why the stack commits `lower` and `upper` (neighbours) cannot swap places, if they cannot. */
   swapConflict(lower: string | null, upper: string | null): MoveConflict | undefined {
-    return lower && upper && this.stack?.head === this.movesHead ? this.blocked.get(swapKey(lower, upper)) : undefined;
+    return this.moves.conflict(lower, upper);
   }
 
   /** The local stack changed here (a reorder): show it without waiting for Gerrit. */
@@ -369,7 +359,7 @@ export class Model implements vscode.Disposable {
     if (this.overview) {
       this.overview = { ...this.overview, local: stack };
       this.changed.fire();
-      void this.loadMoves();
+      void this.moves.load();
     }
   }
 
