@@ -28,6 +28,7 @@ from prompt_toolkit.validation import ValidationError, Validator
 
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy, branch_reviewers, resolve_push_reviewers
+from gerrit_workflow_tools.core.step_outcome import record_outcome
 from gerrit_workflow_tools.push_input_line import (
     KEYWORDS_HINT,
     KW_CHAIN_REVIEWERS,
@@ -278,6 +279,9 @@ def prompt_push_options_line(
     room = prompt_room(shutil.get_terminal_size((80, 24)).lines)
     if room.note:
         print(room.note, file=sys.stderr)
+        # Said as the step's outcome too: an editor that started the push makes its terminal taller.
+        if cwd is not None:
+            record_outcome(cwd, "push", PUSH_WAITS, ok=False)
     bindings = _history_bindings(HistoryCursor(display_history, initial))
 
     @bindings.add("enter", filter=Condition(lambda: not preview_fits(get_app().output.get_size().rows)))
@@ -313,6 +317,9 @@ class PromptRoom:
     note: str | None = None
     """Said before the prompt when the terminal is too short for the preview and the prompt together."""
 
+
+PUSH_WAITS = "push waits: the terminal is too low to show what is pushed"
+"""The step outcome while the confirmation waits for room for the preview (``GET /stack``'s ``last_outcome``)."""
 
 _FULL_ROOM = 12
 """Rows the prompt takes with its completion menu (8) and the toolbar, and a few of the preview above it."""

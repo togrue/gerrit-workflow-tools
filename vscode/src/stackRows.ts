@@ -236,6 +236,9 @@ export const MARKER_WORDS = {
 };
 
 /** The banner above a stack a rebase is underway on. */
+/** What `ger push` leaves as its outcome while its terminal is too low to show the preview (push_input_prompt.py's PUSH_WAITS). */
+export const PUSH_WAITS = "push waits: the terminal is too low to show what is pushed";
+
 export const REBASE_WORDS = {
   progress: "A rebase is in progress",
   conflict: "A rebase stopped on a conflict",

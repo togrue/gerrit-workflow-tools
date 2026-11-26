@@ -290,6 +290,8 @@ export interface StepOutcome {
   at: number;
   /** HEAD then: once it moved on, the outcome is history. */
   head: string | null;
+  /** The files whose changes it kept in a stash (API 1.10): once they have changes again, core serves it no more. */
+  kept?: string[];
 }
 
 /** What `ger rebase --abort` would throw away from the stop (`GET /rebase/refusal?action=abort`, API 1.8). */

@@ -199,6 +199,8 @@ def test_enter_does_not_push_while_the_terminal_is_too_low_to_show_the_preview(
     from gerrit_workflow_tools.core.config import Settings
 
     rows = [2]
+    told: list[tuple[str, str]] = []
+    monkeypatch.setattr(pip, "record_outcome", lambda _cwd, command, text, **_kw: told.append((command, text)))
 
     class Sized(DummyOutput):
         def get_size(self) -> Size:
@@ -214,6 +216,7 @@ def test_enter_does_not_push_while_the_terminal_is_too_low_to_show_the_preview(
             keys.send_text("\r")
 
         threading.Thread(target=press, daemon=True).start()
-        res = pip.prompt_push_options_line(default="", settings=Settings.from_map({}))
+        res = pip.prompt_push_options_line(default="", settings=Settings.from_map({}), cwd=Path("."))
+    assert told == [("push", pip.PUSH_WAITS)], "an editor that started it is told, and makes the terminal taller"
     assert res.valid_for_apply and res.state.answer is None, "the empty line, accepted once the panel was taller"
     assert capsys.readouterr().err.count("too low to show what is pushed") == 2, "said before, and at the refused Enter"

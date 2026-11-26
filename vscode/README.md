@@ -284,7 +284,10 @@ The commits above your upstream, newest first. One row per commit:
   as the push does.
 - **A detached HEAD** says *Detached HEAD: commits made here belong to no branch*, with **Create
   Branch Here…** (VS Code's *Git: Create Branch…*).
-- Push (`ger push` in the *ger* terminal, where it can ask you). During a rebase, when `ger push`
+- Push (`ger push` in the *ger* terminal, where it can ask you). A push is never confirmed with
+  its preview off screen: in a terminal too low to show it, Enter does not push, `ger push` says so,
+  and the extension makes the panel taller and puts the keyboard there (it reads `ger push`'s
+  outcome *push waits: the terminal is too low to show what is pushed*). During a rebase, when `ger push`
   would refuse (the branch still points at the commits from before it), Push says *Finish the
   rebase first*, in `ger push`'s own words, and offers the ways on instead (Abort, and Continue
   once nothing is conflicted); during a

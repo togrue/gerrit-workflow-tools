@@ -20,7 +20,7 @@ const EDIT_START_MS = 20_000;
  * the next action (`pressed`: the last step's outcome is history), and Local stack says it is starting
  * until the rebase has stopped.
  */
-export function editCommit(model: Model, target: ChangeTarget | undefined, pressed?: () => void): void {
+export function editCommit(model: Model, target: ChangeTarget | undefined, pressed?: () => void, stopped?: () => unknown): void {
   if (!target) {
     return;
   }
@@ -28,7 +28,10 @@ export function editCommit(model: Model, target: ChangeTarget | undefined, press
   runInTerminal(model.repo, ["edit", target.rev]);
   // It runs in the terminal: say what to do once it stopped, not that it already has.
   feedback(`ger edit runs in the ger terminal: once the rebase stops at "${target.title}", amend it, then ger rebase --continue`, { icon: "terminal", milliseconds: 12000 });
-  void ui().progress({ viewId: "ger.stack" }, `Starting ger edit of "${target.title}" in the ger terminal…`, () => rebaseStarted(model, EDIT_START_MS));
+  void ui()
+    .progress({ viewId: "ger.stack" }, `Starting ger edit of "${target.title}" in the ger terminal…`, () => rebaseStarted(model, EDIT_START_MS))
+    // Local stack, where the press was, steps aside for the task header: the keyboard follows to it (state 24).
+    .then(() => (model.stack?.rebase_in_progress ? stopped?.() : undefined));
 }
 
 /** Resolves once a rebase is underway (or after `ms`). */
@@ -49,12 +52,12 @@ function rebaseStarted(model: Model, ms: number): Promise<void> {
  * tracks its target branch, so it is your local stack. It may ask (update to the newest patchset?),
  * so it runs in a terminal; the views follow once it moves HEAD (repoWatcher.ts), as the terminal does not say when it ends.
  */
-export function checkout(model: Model, target: ChangeTarget | undefined, pressed?: () => void): void {
+export function checkout(model: Model, target: ChangeTarget | undefined, pressed?: () => void, stopped?: () => unknown): void {
   if (!target) {
     return;
   }
   if (target.local) {
-    editCommit(model, target, pressed); // already in your stack: nothing to fetch, edit it where it is
+    editCommit(model, target, pressed, stopped); // already in your stack: nothing to fetch, edit it where it is
     return;
   }
   runInTerminal(model.repo, ["checkout", target.rev]);

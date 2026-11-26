@@ -7,7 +7,7 @@ import { handToAgent, runAgent } from "./agent";
 import { CommentChain, Diff, FileChange, Health } from "./api";
 import { sameChange } from "./changeLoad";
 import { NextKind, pushable } from "./nextAction";
-import { titleOffers } from "./stackRows";
+import { PUSH_WAITS, titleOffers } from "./stackRows";
 import { gerritOffers } from "./changeScreen";
 import { ChangeView, Location, ThreadArg } from "./changeView";
 import { draftsIn } from "./changeRows";
@@ -355,6 +355,9 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     }
   };
 
+  /** A rewrite started from Local stack has stopped: Local stack steps aside for the task, so the keyboard goes to the Change view. */
+  const focusTask = () => (task.focused ? vscode.commands.executeCommand("ger.change.focus") : undefined);
+
   /** What Next does, by what the Change view's button names. */
   const next: Record<NextKind, () => unknown> = {
     comment: () => threads.stepUnread(),
@@ -453,8 +456,8 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       return undefined;
     },
     "ger.review": (arg: unknown) => review(model, targetOf(arg), reviewSteps),
-    "ger.checkout": (arg: unknown) => checkout(model, targetOf(arg), () => task.pressed()),
-    "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg), () => task.pressed()),
+    "ger.checkout": (arg: unknown) => checkout(model, targetOf(arg), () => task.pressed(), focusTask),
+    "ger.stack.edit": (arg: unknown) => editCommit(model, targetOf(arg), () => task.pressed(), focusTask),
     "ger.setUpstream": (upstream?: unknown) => setUpstream(model, typeof upstream === "string" ? upstream : undefined),
     "ger.reviewDone": () => leaveReview(model, reviewSteps),
     "ger.vote": (arg: unknown) => {
@@ -593,9 +596,23 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
         },
         // What a stop or a review says of the files (changed, not amended; staged): the stack alone, one request.
         treeChanged: (lastChange) => (model.state === "ready" && !model.loadedSince(lastChange) ? void model.refreshLocal() : undefined),
-        following: () => Boolean(model.stack?.rebase || model.stack?.staged_review),
+        // Also while an outcome says changes were kept in a stash: `git stash apply` brings them back, and the line goes.
+        following: () => Boolean(model.stack?.rebase || model.stack?.staged_review || model.stack?.last_outcome?.kept?.length),
       })
     : undefined;
+  // ger push waits because its terminal is too low to show what it would push (state 19): the panel is made
+  // taller, with the keyboard in it, where Enter confirms once the preview is on screen. Once per push.
+  let sized = 0;
+  const sizeForPush = model.onDidChange(async () => {
+    const last = model.stack?.last_outcome;
+    if (last?.command === "push" && last.text === PUSH_WAITS && last.at > sized) {
+      sized = last.at;
+      await vscode.commands.executeCommand("workbench.action.terminal.focus");
+      for (let step = 0; step < 4; step++) {
+        await vscode.commands.executeCommand("workbench.action.terminal.resizePaneUp");
+      }
+    }
+  });
   // A command of ours ended in the ger terminal: look at once (the step outcome, a refusal that moved nothing).
   const terminalEnded = onTerminalCommandEnd((name) => {
     if (name === GER_TERMINAL && model.state === "ready") {
@@ -623,6 +640,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   const describing = vscode.Disposable.from(model.onDidChange(describeTree), events.onDidChange(describeTree), { dispose: () => clearInterval(describeEvery) });
   context.subscriptions.push(
     terminalEnded,
+    sizeForPush,
     model,
     overviewTree,
     stackPane,
