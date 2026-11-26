@@ -103,6 +103,8 @@ def build_details_by_change_id(
             status=str(ov.get("status", "NEW")),
             revision_number=int(ov.get("revision_number", 1)),
         )
+        if "total_comment_count" in ov:
+            detail["total_comment_count"] = int(ov["total_comment_count"])
         out[str(detail["id"])] = detail
     return out
 

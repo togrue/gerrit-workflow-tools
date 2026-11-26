@@ -50,6 +50,8 @@ class ChainMember:  # pylint: disable=too-many-instance-attributes
     comments_drafted: int = 0
     """Of :attr:`comments_unresolved`, the chains a draft of yours answers (``ChainTurn.DRAFT``):
     they wait on you to publish it."""
+    comments_total: int | None = 0
+    """Every comment chain, resolved or not; ``None`` when there are some and they were not counted."""
     your_turn: bool = False
     """It is your turn to review it (:func:`your_turn_since`), and the query matched it; never on a
     change of yours."""
@@ -233,6 +235,7 @@ def _to_member(
         updated_by_you=change.updated_by(self_account_id),
         comments_awaiting_reply=known.theirs,
         comments_drafted=known.drafted,
+        comments_total=known.total if turns else change.comments_total,
         your_turn=matched and your_turn_since(change, self_account_id) is not None,
         matched=matched,
     )

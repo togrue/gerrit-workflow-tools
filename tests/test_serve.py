@@ -148,7 +148,7 @@ def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monk
     assert list(stack["summary"]) == ["commits", "ready", "attention", "needs_edit", "not_on_gerrit"]
     shared = [
         *("sha", "change_id", "summary", "pushed", "patchset_status", "verified", "code_review"),
-        *("comments_unresolved", "comments_awaiting_reply", "comments_drafted", "comments_to_answer"),
+        *("comments_unresolved", "comments_awaiting_reply", "comments_drafted", "comments_to_answer", "comments_total"),
         *("ci_failures", "ci_links", "ci_pipelines"),
         *(
             "gerrit_url",
@@ -1067,7 +1067,7 @@ def _http(
 def test_http_answers_only_with_the_token_on_a_loopback_host(served: GerHttpServer) -> None:
     status, body = _http(served, f"{V1}/health")
     assert status == 200
-    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.4.0", "feature", "g.example")
+    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.5.0", "feature", "g.example")
     assert _http(served, f"{V1}/health", token=None)[0] == 401
     assert _http(served, f"{V1}/health", token="wrong")[0] == 401
     # A page that rebinds its own name to 127.0.0.1 still sends its name as Host.

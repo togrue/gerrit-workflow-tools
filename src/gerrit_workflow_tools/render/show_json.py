@@ -54,6 +54,7 @@ def comment_json_payload(
                 "path": chain.path,
                 "line": chain.line,
                 "start_line": chain.start_line,
+                "range": chain.comment_range.as_gerrit() if chain.comment_range else None,
                 "url": None if chain.local else gerrit_inline_comment_url(gerrit_url, chain.root_id),
                 "resolved": chain.resolved,
                 "anchor_moved": chain.anchor_moved,
@@ -92,6 +93,7 @@ def log_commit_json(commit: LogCommit) -> dict[str, object]:
         "comments_awaiting_reply": commit.comments_awaiting_reply,
         "comments_drafted": commit.comments_drafted,
         "comments_to_answer": commit.comments_to_answer,
+        "comments_total": commit.comments_total,
         "ci_failures": commit.ci_failures,
         "ci_links": [
             {

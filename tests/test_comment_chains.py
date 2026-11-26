@@ -66,7 +66,8 @@ def test_collect_unresolved_skips_resolved_chain_tail() -> None:
         ]
     }
     assert collect_comment_chains(file_map, comments="unresolved") == []
-    assert chain_turns(file_map, None) == ChainTurns(0, 0)
+    # Resolved, it still counts among the change's chains: the share the unresolved ones are of.
+    assert chain_turns(file_map, None) == ChainTurns(0, 0, total=1)
 
 
 def test_collect_unresolved_includes_open_chain() -> None:
@@ -85,7 +86,7 @@ def test_collect_unresolved_includes_open_chain() -> None:
     chains = collect_comment_chains(file_map, comments="unresolved")
     assert len(chains) == 1
     assert chains[0].resolved is False
-    assert chain_turns(file_map, None) == ChainTurns(1, 0)
+    assert chain_turns(file_map, None) == ChainTurns(1, 0, total=1)
 
 
 def test_multiple_independent_chains() -> None:
@@ -99,7 +100,7 @@ def test_multiple_independent_chains() -> None:
     file_map["a.py"][1]["line"] = 5
     chains = build_comment_chains(file_map)
     assert len(chains) == 2
-    assert chain_turns(file_map, None) == ChainTurns(1, 0)
+    assert chain_turns(file_map, None) == ChainTurns(1, 0, total=2)
 
 
 def test_orphan_reply_becomes_own_chain() -> None:
@@ -163,6 +164,14 @@ def test_range_comment_keeps_its_first_line() -> None:
     chain = build_comment_chains({"s3.txt": [comment]})[0]
     assert (chain.start_line, chain.line) == (2, 4)
     assert chain_location(chain) == "s3.txt:2-4"
+    assert chain.comment_range is None, "a range without its characters is only lines"
+
+
+def test_range_comment_keeps_the_characters_it_was_aimed_at() -> None:
+    aimed = {"start_line": 2, "start_character": 4, "end_line": 4, "end_character": 9}
+    comment = {"id": "c1", "line": 4, "range": aimed, "unresolved": True}
+    chain = build_comment_chains({"s3.txt": [comment]})[0]
+    assert chain.comment_range is not None and chain.comment_range.as_gerrit() == aimed
 
 
 def _draft(cid: str, *, in_reply_to: str | None, unresolved: bool, updated: str = "", message: str = "Done") -> dict:
@@ -216,7 +225,7 @@ def test_turn_follows_the_last_published_comment() -> None:
     }
     turns = {chain.root_id: chain.turn for chain in build_comment_chains(file_map, me=ME)}
     assert turns == {"asked": ChainTurn.THEIRS, "open": ChainTurn.YOURS}
-    assert chain_turns(file_map, ME) == ChainTurns(2, 1)
+    assert chain_turns(file_map, ME) == ChainTurns(2, 1, total=2)
 
 
 def test_a_draft_answer_is_still_your_turn_to_publish() -> None:
@@ -241,12 +250,12 @@ def test_turns_count_the_chains_your_drafts_answer_apart_from_those_left_to_answ
     }
     turns = chain_turns(published, ME, drafts)
     # Your new chain of drafts only is not on Gerrit yet: not among Gerrit's unresolved ones.
-    assert turns == ChainTurns(3, theirs=1, drafted=1) and turns.yours == 1
-    # Under Gerrit's count the others never exceed it.
-    assert ChainTurns(3, 2, 2).within(2) == ChainTurns(2, 2, 0)
+    assert turns == ChainTurns(3, theirs=1, drafted=1, total=3) and turns.yours == 1
+    # Under Gerrit's count the others never exceed it; the total stays.
+    assert ChainTurns(3, 2, 2, 5).within(2) == ChainTurns(2, 2, 0, 5)
 
 
 def test_without_knowing_who_you_are_no_chain_has_a_turn() -> None:
     file_map = {"a.py": [_by("said", ME)]}
     assert [chain.turn for chain in build_comment_chains(file_map)] == [None]
-    assert chain_turns(file_map, None) == ChainTurns(1, 0)
+    assert chain_turns(file_map, None) == ChainTurns(1, 0, total=1)

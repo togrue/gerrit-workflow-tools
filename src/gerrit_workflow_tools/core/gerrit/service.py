@@ -222,6 +222,7 @@ class GerritService:
             turns = self.comments.turns(change, me, drafted)
             commit.comments_unresolved = turns.unresolved
             commit.comments_awaiting_reply, commit.comments_drafted = turns.theirs, turns.drafted
+            commit.comments_total = turns.total
 
         def _checks() -> None:
             commit.ci_failures, commit.ci_links, commit.ci_pipelines = self._fetch_ci_result(

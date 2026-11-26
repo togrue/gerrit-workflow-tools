@@ -24,6 +24,7 @@ from gerrit_workflow_tools.core.reviewer import ReviewerAccount
 
 if TYPE_CHECKING:
     from gerrit_workflow_tools.core.anchor_mapping import AnchorPlacement
+    from gerrit_workflow_tools.core.comment_anchor import CommentRange
     from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
     from gerrit_workflow_tools.core.stack import Commit
     from gerrit_workflow_tools.core.suggested_edits import SuggestedEdit
@@ -113,6 +114,8 @@ class CommentChain:
     """Gerrit's published state: the flag of the last *published* comment."""
     start_line: int | None = None
     """First line of a range comment; ``line`` is then its last line."""
+    comment_range: CommentRange | None = None
+    """The characters a range comment was aimed at (Gerrit's ``range``); ``None`` for a line comment."""
     on_parent: bool = False
     """The chain sits on the parent side of the diff (Gerrit ``side: PARENT``)."""
     anchor: AnchorPlacement | None = None
@@ -223,6 +226,8 @@ class LogCommit:  # pylint: disable=too-many-instance-attributes
     comments_drafted: int = 0
     """Of :attr:`comments_unresolved`, the chains a draft of yours answers (:attr:`ChainTurn.DRAFT`):
     they wait on your push, which publishes it."""
+    comments_total: int | None = 0
+    """Every comment chain, resolved or not; ``None`` when there are some and they were not counted."""
     blocks_chain: bool = False
     """The first commit that holds the changes above it back (they carry ``chain-blocked``):
     attention's verdict, and :func:`core.attention.blocking_reason` says why."""
@@ -363,6 +368,7 @@ def build_log_commit(
             verified=None if votes_moved_on else change.verified,
             code_review=None if votes_moved_on else change.code_review,
             comments_unresolved=change.unresolved_comments or 0,
+            comments_total=change.comments_total,
             gerrit_url=change.url(web_base),
             number=change.number,
             last_pushed_votes=(change.verified, change.code_review) if votes_moved_on else None,
