@@ -325,7 +325,9 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     if (!review || review.number !== target?.number) {
       return undefined;
     }
-    const chain = (await (await model.client()).review(true))?.chain ?? [];
+    // The vote's refresh (afterVote) has just read the chain of this review: asked again only when it could not.
+    const known = model.review?.number === review.number && model.review.patch_set === review.patch_set ? model.reviewChain : undefined;
+    const chain = known ?? (await (await model.client()).review(true))?.chain ?? [];
     const index = chain.indexOf(review.number);
     if (index < 0) {
       return undefined;
