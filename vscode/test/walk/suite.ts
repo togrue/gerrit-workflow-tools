@@ -296,6 +296,18 @@ export async function run(): Promise<void> {
   const bottom = chain?.members[0];
   note(`review: chain ${chain?.key ?? "none"} "${chain?.top.subject ?? ""}", bottom ${bottom?.number ?? "-"}`);
   const only = process.env.GER_WALK_ONLY;
+  // Gerrit's reviewed flags of the chain (the files a step ticks): what they were, so they are put back after.
+  const flags = async () => {
+    const client = await api.model.client();
+    const all = await Promise.all(
+      (chain?.members ?? []).map(async (m) => {
+        const ps = (await client.show([`change:${m.number}`], {}).catch(() => []))[0]?.current_patch_set ?? null;
+        return { number: m.number, ps, paths: ps ? await client.reviewedFiles(m.number, ps).catch(() => [] as string[]) : [] };
+      }),
+    );
+    return all;
+  };
+  const flagsBefore = only === "rework" ? [] : await flags();
   if (chain && bottom && only !== "rework") {
     await step({ loop: "review", title: "Open the review queue", budget: "walk", where: ["activity bar", "Review chains"], until: async () => Boolean(await treeRow("Review chains", "To review")) }, async (input) => {
       if (!(await input.click(await window.boxOf(`return [...document.querySelectorAll(".activitybar .action-item .action-label")].find((a) => (a.getAttribute("aria-label") || "").startsWith("Gerrit"));`), "the Gerrit icon in the activity bar"))) {
@@ -476,9 +488,22 @@ export async function run(): Promise<void> {
       const text = suggestion.comments[0].message.split("\n")[0].slice(0, 30);
       const dirty = () => vscode.workspace.textDocuments.some((d) => d.isDirty && d.uri.path.endsWith(suggestion.path));
       await step({ loop: "rework", title: "Apply the suggested edit", budget: "walk", where: ["Change view", "editor"], until: dirty }, async (input) => {
-        if (!(await input.click(await threadButton(text, "Apply Suggested Edit"), "Apply Suggested Edit on the comment row"))) {
-          await input.command("ger.applySuggestion", "no Apply button found", "click", { kind: "thread", chain: suggestion });
+        // The Change view's list is an index: its row opens the thread in the editor, whose title has Apply.
+        if (await input.click(await threadButton(text, "Apply Suggested Edit"), "Apply Suggested Edit on the comment row")) {
+          return;
         }
+        if (await input.click(await inChange(threadRow(text)), "the suggestion's row in the Change view")) {
+          const apply = `return [...document.querySelectorAll(".review-widget .action-label, .comment-title .action-label")].find((a) => (a.getAttribute("aria-label") || a.title || "").startsWith("Apply Suggested Edit") && a.getBoundingClientRect().width > 0);`;
+          let box: Box | null = null;
+          for (let i = 0; i < 40 && !box; i++) {
+            box = await window.boxOf(apply);
+            if (!box) await wait(100);
+          }
+          if (await input.click(box, "Apply Suggested Edit in the comment thread's title")) {
+            return;
+          }
+        }
+        await input.command("ger.applySuggestion", "no Apply button found", "click", { kind: "thread", chain: suggestion });
       });
       // Apply may ask whether to answer the comment too: that answer is the Reply Done.
       const asked = await dialogButton("Reply Done");
@@ -574,6 +599,18 @@ export async function run(): Promise<void> {
     await wait(1000);
     if (stopped()) {
       await vscode.commands.executeCommand("ger.rebase.abort").then(undefined, () => undefined);
+    }
+  }
+  // Not a step: the reviewed flags the walk set on the chain taken off again, as found.
+  if (flagsBefore.length) {
+    const client = await api.model.client();
+    for (const now of await flags()) {
+      const before = flagsBefore.find((b) => b.number === now.number && b.ps === now.ps)?.paths ?? [];
+      const added = now.paths.filter((p) => !before.includes(p));
+      if (now.ps && added.length) {
+        for (const file of added) await client.markReviewed(now.number, now.ps, file, false).catch(() => undefined);
+        note(`reset: ${now.number}/${now.ps}: the walk's reviewed flags taken off: ${added.join(", ")}`);
+      }
     }
   }
   // The terminals' text, for run.ts to look for a traceback from ger in.

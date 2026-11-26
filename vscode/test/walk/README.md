@@ -38,8 +38,9 @@ Next named. Each step's record keeps what Next named before and after it.
   Vote and Publish (Next, else the title button; +1, the message, Publish), next change (Next,
   else the notification's Next Change). Then, not measured, Leave Review.
 - **Rework loop**: Work on Next (Local stack's button; `ger edit` runs in the terminal), the
-  next comment twice (Next comment, else Alt+F9), apply the suggested edit (the comment row's
-  button), Reply Done, save the file (its tab, Ctrl+S), the next stop (Next's *Work on next*,
+  next comment twice (Next comment, else Alt+F9), apply the suggested edit (the Change view's
+  list is an index: its row opens the thread in the editor, then Apply in the thread's title),
+  Reply Done, save the file (its tab, Ctrl+S), the next stop (Next's *Work on next*,
   else Local stack's button; it refuses while the fix is saved and not amended, and offers no
   way on, so the walk does what a user must: Ctrl+` to the terminal, `git commit -a --amend
   --no-edit`, Enter, Work on Next again), and the push preview (Continue in the task header,
@@ -96,8 +97,10 @@ lines up with the one it replaced (both titles are shown).
 The walk acts on Gerrit as the user of the checkout (`pg-you`): it votes +1 on the reviewed
 change and publishes its draft comment there, and Reply Done saves drafts. Afterwards
 `gerritReset.ts` undoes what it can, so the next run starts where this one did: the vote is
-removed, the change put back in the user's attention set, and drafts that did not exist before
-the run are deleted (a draft that existed and was only changed stays). The published comment
+removed, the change put back in the user's attention set, drafts that did not exist before
+the run are deleted (a draft that existed and was only changed stays), and Gerrit's reviewed flags
+the walk set on the chain's files (a tick, Mark seen) are taken off again by the suite, which
+read them before the first step. The published comment
 cannot be deleted (only an administrator can): it is resolved with a reply, so the change does
 not wait on its author, and each run leaves one resolved thread there. `GER_WALK_RESET=0` leaves
 everything as the walk left it. Compare scorecards of runs against the same playground state.
