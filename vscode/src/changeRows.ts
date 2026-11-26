@@ -560,7 +560,8 @@ export function changeVm(state: ChangeState): ChangeVm {
     head: {
       ...(unsure ? { icon: "loading" } : headIcon(commit)),
       text: words || (commit.submittable ? "Ready to submit" : unsure ? "Loading…" : quietStop ? NOTHING_FROM_GERRIT : "Nothing to do"),
-      detail: commit.pushed ? commitVotes(commit) : "not on Gerrit",
+      // "Not pushed" says it already: no second "not on Gerrit" beside it.
+      detail: commit.pushed ? commitVotes(commit) : /not pushed/i.test(words) ? "" : "not on Gerrit",
       badges: commit.pushed ? badges(commit, loading?.commit ? 0 : draftsIn(chains)).filter((badge): badge is Badge => badge !== null) : [],
       ...(stopped && !quietStop ? stoppedHead(stopped) : {}),
     },
