@@ -213,9 +213,20 @@
   }
 
   function fileRow(file, index) {
+    // The tick: seen (shown to its end, or ticked here); a click ticks it or takes it off.
+    const tick = h("button", {
+      class: `seen codicon ${file.seen ? "codicon-pass-filled tone-good" : "codicon-circle-large-outline"}`,
+      title: file.seen ? "Seen (click: not seen)" : "Not seen yet (click: mark it seen)",
+      "aria-label": file.seen ? `${file.name}: seen` : `${file.name}: not seen`,
+      "aria-pressed": file.seen ? "true" : "false",
+      onclick: (event) => {
+        event.stopPropagation();
+        post("seen", { index });
+      },
+    });
     return item(
-      { class: "file", title: file.tooltip, onclick: () => post("file", { index }) },
-      icon("file"),
+      { class: `file${file.seen ? " seen" : ""}`, title: file.tooltip, onclick: () => post("file", { index }) },
+      tick,
       h("span", { class: "label" }, file.name),
       h("span", { class: "detail" }, [file.dir, file.state].filter(Boolean).join(" · ")),
       file.added === null ? h("span", { class: "counts detail" }, "binary") : counts(file.added, file.deleted),

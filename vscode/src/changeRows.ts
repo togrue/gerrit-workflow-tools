@@ -137,6 +137,8 @@ export interface ChangeState {
    * checked out, `newest` its number when known.
    */
   reviewing?: { behind: boolean; newest: number | null };
+  /** The files of the comparison shown that were seen (Gerrit's reviewed flag, or ticked here). */
+  seen?: ReadonlySet<string>;
   /** What has not come yet; absent once everything has. */
   loading?: Loading;
 }
@@ -158,6 +160,8 @@ export interface FileRow {
   added: number | null;
   deleted: number | null;
   tooltip: string;
+  /** Seen: shown to its end, or ticked. */
+  seen: boolean;
 }
 
 export interface ReplyRow {
@@ -470,11 +474,16 @@ function files(state: ChangeState): NonNullable<ChangeVm["files"]> {
       added: file.insertions,
       deleted: file.deletions,
       tooltip: file.old_path ? `${file.old_path} → ${file.path}` : file.path,
+      seen: Boolean(state.seen?.has(file.path)),
     };
   });
   const sum = (pick: (row: FileRow) => number | null) => rows.reduce((total, row) => total + (pick(row) ?? 0), 0);
   const [added, deleted] = [sum((row) => row.added), sum((row) => row.deleted)];
-  return { title, summary: note || plural(rows.length, "file"), added, deleted, note, tooltip, rows };
+  const seen = rows.filter((row) => row.seen).length;
+  // How much is left on somebody's change: `2 of 4 files seen`; on yours only once you tick one.
+  const tracked = rows.length > 0 && (seen > 0 || state.shown?.own === false);
+  const summary = note || (tracked ? `${seen} of ${plural(rows.length, "file")} seen` : plural(rows.length, "file"));
+  return { title, summary, added, deleted, note, tooltip, rows };
 }
 
 /** `applies`: an edit a comment suggests may be written into your file (your own local commit). */
@@ -734,7 +743,7 @@ export function changeLines(vm: ChangeVm): string[] {
   if (vm.files) {
     add(0, vm.files.title, vm.files.note || `${vm.files.rows.length} · +${vm.files.added} −${vm.files.deleted}`);
     for (const file of vm.files.rows) {
-      add(1, file.name, `${file.dir ? `${file.dir} · ` : ""}${file.state} ${file.added === null ? "binary" : `+${file.added} −${file.deleted}`}`);
+      add(1, `${file.seen ? "✓ " : ""}${file.name}`, `${file.dir ? `${file.dir} · ` : ""}${file.state} ${file.added === null ? "binary" : `+${file.added} −${file.deleted}`}`);
     }
   }
   if (vm.comments) {
@@ -759,4 +768,30 @@ export function changeLines(vm: ChangeVm): string[] {
     }
   }
   return lines;
+}
+
+// --- Files seen (filesSeen.ts keeps the ticks) ------------------------------------------
+
+/** Which version's files: Gerrit's change and patchset when it has them, else only a key here. */
+export interface SeenWhere {
+  key: string;
+  number?: number;
+  patchSet?: number;
+}
+
+/**
+ * Where the ticks of the version looked at are kept: Gerrit's patchset when the version is one
+ * (the change a staged review holds is its patchset), else only here, under the change and version.
+ */
+export function seenWhere(
+  target: { number?: number; changeId?: string | null; rev: string; local: boolean } | undefined,
+  version: string | number,
+  patchSet: { staged?: number; current?: number | null },
+): SeenWhere | undefined {
+  if (!target) {
+    return undefined;
+  }
+  const number = target.number;
+  const ps = typeof version === "number" ? version : patchSet.staged ?? (target.local ? undefined : (patchSet.current ?? undefined));
+  return number && ps ? { key: `${number}/${ps}`, number, patchSet: ps } : { key: `${target.changeId ?? target.rev}/${version}` };
 }

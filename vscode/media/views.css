@@ -914,3 +914,19 @@ select:focus {
 .next-bar.busy .codicon-loading {
   animation: spin 1.2s linear infinite;
 }
+
+/* Change: a file's tick, seen or not. The icon's shape says it, not only its colour. */
+.file .seen {
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+.file .seen.tone-good {
+  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+}
+.file.seen .label {
+  opacity: 0.8;
+}

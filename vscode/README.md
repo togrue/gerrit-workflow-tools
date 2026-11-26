@@ -272,8 +272,16 @@ The commits above your upstream, newest first. One row per commit:
   hand overrides it for that change only, until you open it again, and the icon dims meanwhile.
   On someone else's change you reviewed before, a line says what is new since, with **Show** to
   switch to it.
-- **Files**: added and removed lines per file, in the colours git gives them. Click for the
-  diff of what is compared; an added or deleted file opens on its own. What your working files
+- **Files**: added and removed lines per file, in the colours git gives them, and a **tick** per
+  file: a filled check once it is **seen**, an empty circle until then. A file is seen when its
+  diff, or the file, was shown to its last line, or when you click its tick (a click again takes
+  it off). The ticks are Gerrit's own per-file *reviewed* flag of the patchset looked at, the one
+  its web UI shows, so they are there again after a reload or on another machine; on a version
+  Gerrit does not have (your local commit) they are kept for the session. On somebody's change the
+  header says how far you are: *2 of 4 files seen*. Inside the combined diff (*Open All Changes*)
+  VS Code reports every file as shown whole wherever it is scrolled, so there only a click ticks
+  one; *Next file* opens the first file not seen on its own, where reading it to the end ticks it.
+  Click a row for the diff of what is compared; an added or deleted file opens on its own. What your working files
   hold diffs against the real file: the commit you are standing on, so you can fix things in the
   diff editor; and in a **staged review** (`ger review`, in the review worktree or in place), the
   change under review, at the patchset checked out, against its base or since your last review.
@@ -463,7 +471,7 @@ Gerrit whose last published word is not yours and that no draft of yours answers
 | You are | # | When | Next |
 |---|---|---|---|
 | reviewing (a staged review holds the change shown) | 1 | a chain yours to read you have not gone to | *Next comment* |
-| | 2 | a file of the comparison shown is not seen (Gerrit's *reviewed* flag, or opened here) | *Next file* (the first not seen) |
+| | 2 | a file of the comparison shown is not seen (its tick: shown to its end, or clicked) | *Next file* (the first not seen) |
 | | 3 | drafts of yours wait, or Gerrit's attention set holds you (or ger cannot tell) | *Vote and publish* |
 | | 4 | the chain goes on above the change (or ger cannot tell) | *Next change* |
 | | 5 | the top of the chain | *Leave review* |

@@ -1,0 +1,111 @@
+// Files seen, as the Change view ticks them: Gerrit's per-file *reviewed* flag of the patchset
+// looked at (`/reviewed`, ger serve 1.6), so a tick is there in Gerrit's web UI and after a reload
+// too; a version Gerrit does not have (your local commit) is kept here for the session. A file is
+// seen once its diff, or the file, was shown to its end, or by a click on its tick.
+//
+// The combined diff (Open All Changes) does not count: VS Code reports every file in it as shown
+// whole, wherever it is scrolled, so only its ticks mark them there.
+
+import * as vscode from "vscode";
+
+import { GerClient } from "./api";
+import { SeenWhere } from "./changeRows";
+
+export class FilesSeen implements vscode.Disposable {
+  private readonly sets = new Map<string, Set<string>>();
+  /** Asked of Gerrit already, or not to be asked (no patchset, or a ger serve before 1.6). */
+  private readonly asked = new Set<string>();
+  private readonly changed = new vscode.EventEmitter<void>();
+  readonly onDidChange = this.changed.event;
+  private readonly subscriptions: vscode.Disposable[] = [];
+
+  /**
+   * `fileOf` names the file of the version looked at that `uri` shows on its right side (your file
+   * when the working files hold it), and where its ticks are kept; undefined for anything else.
+   */
+  constructor(
+    private readonly client: () => Promise<GerClient>,
+    private readonly fileOf: (uri: vscode.Uri) => { where: SeenWhere; path: string } | undefined,
+  ) {
+    const look = (editor: vscode.TextEditor) => this.look(editor);
+    this.subscriptions.push(
+      vscode.window.onDidChangeTextEditorVisibleRanges((event) => look(event.textEditor)),
+      vscode.window.onDidChangeVisibleTextEditors((editors) => editors.forEach(look)),
+    );
+  }
+
+  /** The files seen of `where`; the first time, Gerrit is asked once and `onDidChange` fires with its answer. */
+  seen(where: SeenWhere): ReadonlySet<string> {
+    const set = this.set(where);
+    if (!this.asked.has(where.key)) {
+      this.asked.add(where.key);
+      void this.load(where, set);
+    }
+    return set;
+  }
+
+  /** Tick `path` of `where`, or take the tick off: here at once, on Gerrit behind it. */
+  async mark(where: SeenWhere, path: string, seen = true): Promise<void> {
+    const set = this.set(where);
+    if (set.has(path) === seen) {
+      return;
+    }
+    if (seen) {
+      set.add(path);
+    } else {
+      set.delete(path);
+    }
+    this.changed.fire();
+    if (where.number && where.patchSet) {
+      await (await this.client()).markReviewed(where.number, where.patchSet, path, seen).catch(() => undefined);
+    }
+  }
+
+  private set(where: SeenWhere): Set<string> {
+    const set = this.sets.get(where.key) ?? new Set<string>();
+    this.sets.set(where.key, set);
+    return set;
+  }
+
+  private async load(where: SeenWhere, set: Set<string>): Promise<void> {
+    if (!where.number || !where.patchSet) {
+      return;
+    }
+    try {
+      const reviewed = await (await this.client()).reviewedFiles(where.number, where.patchSet);
+      const before = set.size;
+      reviewed.forEach((path) => set.add(path));
+      if (set.size !== before) {
+        this.changed.fire();
+      }
+    } catch {
+      // A ger serve before API 1.6, or Gerrit said no: the ticks are kept here for the session.
+    }
+  }
+
+  /** An editor showing a file of the version looked at, scrolled to its last line: seen. Not inside the combined diff. */
+  private look(editor: vscode.TextEditor): void {
+    const file = this.fileOf(editor.document.uri);
+    const last = editor.visibleRanges.at(-1);
+    if (!file || !last || inCombinedDiff(editor) || this.sets.get(file.where.key)?.has(file.path)) {
+      return;
+    }
+    if (last.end.line >= editor.document.lineCount - 1) {
+      void this.mark(file.where, file.path);
+    }
+  }
+
+  dispose(): void {
+    this.subscriptions.forEach((subscription) => subscription.dispose());
+    this.changed.dispose();
+  }
+}
+
+/** Whether `editor` is one file of a combined diff: the tab its group shows is one (its input lists `textDiffs`). */
+function inCombinedDiff(editor: vscode.TextEditor): boolean {
+  if (editor.viewColumn === undefined) {
+    return true; // an editor inside another (the combined diff's) has no column of its own
+  }
+  const group = vscode.window.tabGroups.all.find((g) => g.viewColumn === editor.viewColumn);
+  return Boolean((group?.activeTab?.input as { textDiffs?: unknown } | undefined)?.textDiffs);
+}

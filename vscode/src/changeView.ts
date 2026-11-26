@@ -9,8 +9,9 @@ import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerClient, Patchsets, ShownCommit } from "./api";
 import { ChangeDetail, ciRevs, sameChange, stoppedHere } from "./changeLoad";
-import { ChangeState, ChangeVm, CiView, From, MODES, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Sides, Version, changeHeading, changeLines, changeVm, fitSides, isYours, modeSides, toAnswer } from "./changeRows";
-import { fileUri, openDiff } from "./diffTabs";
+import { ChangeState, ChangeVm, SeenWhere, seenWhere, CiView, From, MODES, Mode, NOTHING_SHOWN, NOT_FILES, READ_ONLY, Sides, Version, changeHeading, changeLines, changeVm, fitSides, isYours, modeSides, toAnswer } from "./changeRows";
+import { FILE_SCHEME, filePath, fileUri, openDiff } from "./diffTabs";
+import { FilesSeen } from "./filesSeen";
 import { ChangeTarget, Model, describeError } from "./model";
 import { openConflict } from "./rebase";
 import { waitingFor } from "./state";
@@ -60,18 +61,35 @@ export class ChangeView extends WebView<ChangeVm> {
 
   /** The chains already gone to on the change shown (CommentThreads keeps them). Set by the extension. */
   visited: () => ReadonlySet<string> = () => new Set();
-  /** The files opened of each change this session, by its Change-Id (else its commit): what Next file has left. */
-  private readonly opened = new Map<string, Set<string>>();
+  /** The files seen of each version: Gerrit's reviewed flag where the version is a patchset. */
+  readonly filesSeen: FilesSeen;
 
   get target(): ChangeTarget | undefined {
     return this.detail.target;
   }
 
-  private openedHere(): Set<string> {
-    const key = this.target?.changeId ?? this.target?.rev ?? "";
-    const files = this.opened.get(key) ?? new Set<string>();
-    this.opened.set(key, files);
-    return files;
+  /** Where the ticks of the version looked at are kept. */
+  private seenWhere(): SeenWhere | undefined {
+    const review = this.holdsReview() ? this.model.stack?.staged_review?.patch_set : undefined;
+    const version = this.version === "current" && this.patchsets?.current ? this.patchsets.current : this.version;
+    return seenWhere(this.target, version, { staged: review, current: this.shown?.current_patch_set ?? this.patchsets?.current });
+  }
+
+  /** The files of the comparison shown that were seen. */
+  private seenHere(): ReadonlySet<string> {
+    const where = this.seenWhere();
+    return where ? this.filesSeen.seen(where) : new Set();
+  }
+
+  /** The file of the comparison shown that `uri` shows on its right side, and where its tick is kept. */
+  private fileOf(uri: vscode.Uri): { where: SeenWhere; path: string } | undefined {
+    const [diff, where] = [this.shownDiff(), this.seenWhere()];
+    if (!diff || !where) {
+      return undefined;
+    }
+    const own = uri.scheme === "file" && (this.worktreeHolds(diff.commit) || this.showsLocal());
+    const name = own ? path.relative(this.model.repo, uri.fsPath).split(path.sep).join("/") : uri.scheme === FILE_SCHEME && uri.query === diff.commit ? filePath(uri, this.model.repo) : undefined;
+    return name && diff.files.some((file) => file.path === name && file.status !== "D") ? { where, path: name } : undefined;
   }
 
   /** Next on the change shown: what its button names and `ger.next` does. Asks nothing of ger serve. */
@@ -90,16 +108,16 @@ export class ChangeView extends WebView<ChangeVm> {
       reviewing: this.holdsReview(),
       visited: this.visited(),
       files: (this.shownDiff()?.files ?? []).map((file) => file.path),
-      seenFiles: this.openedHere(),
+      seenFiles: this.seenHere(),
       yourTurn: member?.your_turn,
       above: focus ? above : undefined,
     });
   }
 
-  /** Next file: the first file of the comparison shown that was not opened yet, in the Files list's order. */
+  /** Next file: the first file of the comparison shown that was not seen yet, in the Files list's order. */
   async openNextFile(): Promise<void> {
     const diff = this.shownDiff();
-    const seen = this.openedHere();
+    const seen = this.seenHere();
     const file = diff?.files.find((f) => !seen.has(f.path));
     if (file) {
       await this.openDiff(file, diff);
@@ -142,6 +160,8 @@ export class ChangeView extends WebView<ChangeVm> {
     private readonly memory: vscode.Memento,
   ) {
     super(extensionUri, "change");
+    this.filesSeen = new FilesSeen(() => model.client(), (uri) => this.fileOf(uri));
+    this.filesSeen.onDidChange(() => this.render());
     // The view says why nothing is shown while ger is not running, and whether a rebase keeps the message read-only.
     model.onDidChange(() => this.render());
   }
@@ -518,6 +538,7 @@ export class ChangeView extends WebView<ChangeVm> {
       // Which commit a rebase stopped at is in the stack ger serve sent: the Change view reads it there, as Local stack does.
       stopped: this.target && stoppedHere(this.target, this.model.stack),
       reviewing: this.reviewing(),
+      seen: this.seenHere(),
     });
     if (!state) {
       return { empty: this.target && this.detail.loading() ? `Loading ${this.target.title}…` : NOTHING_SHOWN, task: this.task() };
@@ -569,6 +590,10 @@ export class ChangeView extends WebView<ChangeVm> {
       case "file": {
         const file = diff?.files[message.index as number];
         return file ? this.openDiff(file, diff) : undefined;
+      }
+      case "seen": {
+        const [file, where] = [diff?.files[message.index as number], this.seenWhere()];
+        return file && where ? this.filesSeen.mark(where, file.path, !this.seenHere().has(file.path)) : undefined;
       }
       case "fileComment": {
         const file = diff?.files[message.index as number];
@@ -729,8 +754,6 @@ export class ChangeView extends WebView<ChangeVm> {
       return;
     }
     const title = `${path.posix.basename(file.path)} (${ChangeView.range(diff)})`;
-    this.openedHere().add(file.path);
-    this.render(); // Next moves on from it
     await openDiff(left, right, title, markOf(diff, this.model.stack, own));
   }
 
@@ -762,9 +785,6 @@ export class ChangeView extends WebView<ChangeVm> {
     } else if (this.worktreeHolds(diff.commit)) {
       this.combined.add(title);
     }
-    // All of them are in front of you now: Next has no file left to open.
-    diff.files.forEach((file) => this.openedHere().add(file.path));
-    this.render();
     await vscode.commands.executeCommand("vscode.changes", title, resources);
   }
 

@@ -331,7 +331,7 @@ const CHANGE: Shape = {
   files: {
     title: ours(["Files", STOPPED_WORDS.files, "Gerrit vs. local", "Since your review", "Compared", new RegExp(`(Gerrit vs\\. local|Since your review|Compared): patchset ${PATCHSET} → (patchset ${PATCHSET}|local)( \\(rebased\\))?`)]),
     summary: ours([
-      new RegExp(`${COUNT} files?`),
+      new RegExp(`(${COUNT} of )?${COUNT} files?( seen)?`),
       LOADING,
       "could not be compared",
       "you have not reviewed this change yet",
@@ -371,6 +371,7 @@ const CHANGE: Shape = {
         deleted: KEEP,
         /** The path, or `old → new` for a rename. */
         tooltip: each(" → ", PATH),
+        seen: KEEP,
       },
     ],
   },
