@@ -19,7 +19,13 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from gerrit_workflow_tools.cli_common import ExitCode, failure_exit
-from gerrit_workflow_tools.core.call_trace import format_call_trace_summary, reset_call_trace
+from gerrit_workflow_tools.core.call_trace import (
+    CallTraceEntry,
+    call_trace_json,
+    collect_calls,
+    format_call_trace_summary,
+    reset_call_trace,
+)
 from gerrit_workflow_tools.core.review_checkout import ReviewChainEndError
 from gerrit_workflow_tools.server.api import GerApi
 from gerrit_workflow_tools.server.request import BadRequest, NoRoute
@@ -31,6 +37,10 @@ logger = logging.getLogger(__name__)
 LOOPBACK = "127.0.0.1"
 MAX_BODY_BYTES = 1_000_000
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "[::1]"})
+ACTION_HEADER = "X-Ger-Action"
+"""A client's name for the user action a request serves; the answer then carries :data:`TRACE_HEADER`."""
+TRACE_HEADER = "X-Ger-Trace"
+"""How the request went: run and queue time, its git and Gerrit calls (``call_trace.call_trace_json``)."""
 
 # One failure reason, one status: the shared exit code decides, as it does for the CLI.
 _STATUS_BY_EXIT = {
@@ -66,12 +76,13 @@ def failure_response(error: BaseException) -> tuple[int, dict[str, Any]]:
     return _STATUS_BY_EXIT.get(failure[0], 500), {"error": error_json(error)}
 
 
-def _log_timing(method: str, path: str, *, queued: float, took: float) -> None:
+def _log_timing(method: str, path: str, calls: list[CallTraceEntry], *, queued: float, took: float) -> None:
     """With ``--debug-log``: how long one request queued and ran, and its git and Gerrit calls."""
+    # What a background thread recorded meanwhile is dropped: the list must not grow while serving.
+    reset_call_trace()
     if not logger.isEnabledFor(logging.DEBUG):
         return
-    trace = format_call_trace_summary()
-    reset_call_trace()
+    trace = format_call_trace_summary(calls)
     logger.debug(
         "%s %s: %.0f ms, after %.0f ms queued%s",
         method,
@@ -144,29 +155,39 @@ class _Handler(BaseHTTPRequestHandler):
         if refusal is not None:
             self._send(refusal[0], {"error": {"code": "FORBIDDEN", "message": refusal[1]}}, close=True)
             return
-        try:
-            url = urlsplit(self.path)
-            body = self._body() if method == "POST" else {}
-            unlocked = self.server.api.handle_unlocked(method, unquote(url.path), parse_qs(url.query))
-            if unlocked is not None:
-                payload = unlocked
-            else:
-                asked = time.perf_counter()
-                with self.server.api_lock:
-                    if method == "GET" and self._caller_left():
-                        # Called off while it queued (the Change view moved on): nobody reads the answer.
-                        self.close_connection = True
-                        return
-                    started = time.perf_counter()
-                    reset_call_trace()
-                    try:
+        asked = started = time.perf_counter()
+        trace: dict[str, Any] | None = None
+        action = self.headers.get(ACTION_HEADER)
+        unlocked: dict[str, Any] | None = None
+        with collect_calls() as calls:
+            try:
+                url = urlsplit(self.path)
+                body = self._body() if method == "POST" else {}
+                unlocked = self.server.api.handle_unlocked(method, unquote(url.path), parse_qs(url.query))
+                if unlocked is not None:
+                    payload = unlocked
+                else:
+                    with self.server.api_lock:
+                        if method == "GET" and self._caller_left():
+                            # Called off while it queued (the Change view moved on): nobody reads the answer.
+                            self.close_connection = True
+                            return
+                        started = time.perf_counter()
                         payload = self.server.api.handle(method, unquote(url.path), parse_qs(url.query), body)
-                    finally:
-                        _log_timing(method, url.path, queued=started - asked, took=time.perf_counter() - started)
-            status = 200
-        except Exception as error:  # pylint: disable=broad-exception-caught
-            status, payload = failure_response(error)
-        self._send(status, payload)
+                status = 200
+            except Exception as error:  # pylint: disable=broad-exception-caught
+                status, payload = failure_response(error)
+        took = time.perf_counter() - started
+        if unlocked is None:
+            _log_timing(method, urlsplit(self.path).path, calls, queued=started - asked, took=took)
+        if action is not None:
+            trace = {
+                "action": action[:64],
+                "ms": round(took * 1000, 1),
+                "queued_ms": round((started - asked) * 1000, 1),
+            }
+            trace.update(call_trace_json(calls))
+        self._send(status, payload, trace=trace)
 
     def _caller_left(self) -> bool:
         """Whether the client closed the connection: it then reads as at end, with no next request."""
@@ -176,12 +197,16 @@ class _Handler(BaseHTTPRequestHandler):
         except OSError:
             return True
 
-    def _send(self, status: int, payload: dict[str, Any], *, close: bool = False) -> None:
+    def _send(
+        self, status: int, payload: dict[str, Any], *, close: bool = False, trace: dict[str, Any] | None = None
+    ) -> None:
         data = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
+        if trace is not None:
+            self.send_header(TRACE_HEADER, json.dumps(trace, separators=(",", ":")))
         if close:
             self.send_header("Connection", "close")
             self.close_connection = True

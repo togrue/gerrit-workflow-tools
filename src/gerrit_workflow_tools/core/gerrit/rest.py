@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import json
 import logging
 import re
@@ -159,14 +160,19 @@ def parallel_map(
     *,
     max_workers: int = 8,
 ) -> list[_T]:
-    """Run blocking REST callables concurrently and preserve input order."""
+    """Run blocking REST callables concurrently and preserve input order.
+
+    Each runs in a copy of the caller's context, so the calls it makes count to the caller's
+    (``call_trace.collect_calls``).
+    """
 
     jobs = list(callables)
     if not jobs:
         return []
     workers = min(max_workers, len(jobs))
+    contexts = [contextvars.copy_context() for _ in jobs]
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        return list(ex.map(lambda fn: fn(), jobs))
+        return list(ex.map(lambda context, fn: context.run(fn), contexts, jobs))
 
 
 class GerritRest(Protocol):

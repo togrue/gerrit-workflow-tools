@@ -45,7 +45,7 @@ until it is set (`ger setup`).
 |--------|---------|
 | `--port N` | Listen on port `N`. Default: any free port (read it from the JSON line). |
 | `--exit-with-stdin` | Stop when stdin closes, so the service ends with the process that started it. The service keeps that stdin to itself: the git processes it runs get an empty one. |
-| `--debug-log` | Standard helpers: diagnostics to stderr. In `ger serve` that is the requests and their git and Gerrit calls. Each request gets one line with how long it ran and how long it queued behind the one before it ([Requests are serialised](#requests-are-serialised)), followed by its git and Gerrit calls with their times. The call lines are approximate when work overlaps: calls run in parallel inside a request (its comments and drafts) each show their own time, not a share of the request's; and a call a background thread makes meanwhile (following the event stream, loading the reviewer catalog) can be listed under the request running at that moment. The request's own line, its run and queue times, is exact. |
+| `--debug-log` | Standard helpers: diagnostics to stderr. In `ger serve` that is the requests and their git and Gerrit calls. Each request gets one line with how long it ran and how long it queued behind the one before it ([Requests are serialised](#requests-are-serialised)), followed by its git and Gerrit calls with their times. Calls run in parallel inside a request (its comments and drafts) each show their own time, not a share of the request's; a call a background thread makes meanwhile (following the event stream, loading the reviewer catalog) is not listed. |
 
 ### Access
 
@@ -56,6 +56,26 @@ reach it:
 - Every request carries `Authorization: Bearer <token>`; the token is new on every start.
 - The `Host` header must name loopback, which stops a web page that rebinds its own name.
 - A request body must be `application/json`, which a cross-site form cannot send.
+
+### Tracing a request
+
+A request that carries `X-Ger-Action: <id>` (the client's name for the user action it serves,
+at most 64 characters kept) is answered with an `X-Ger-Trace` header: one JSON object on how
+it went, the same whether it succeeded or failed.
+
+```json
+{"action": "a12", "ms": 182.4, "queued_ms": 0.1,
+ "git": {"count": 9, "ms": 61.0}, "gerrit": {"count": 2, "ms": 97.3},
+ "calls": [["git", "git rev-parse HEAD", 4.2], ["gerrit", "GET changes/?q=… (3 refs)", 80.1]],
+ "calls_left_out": 0}
+```
+
+`ms` is how long it ran, `queued_ms` how long it waited for the request before it
+([Requests are serialised](#requests-are-serialised)). `git` and `gerrit` count every git
+subprocess and Gerrit round trip the request made, and their time; `calls` lists the 40
+slowest of them in the order made, and `calls_left_out` how many more there were. Calls a
+background thread makes are not the request's. Without the header nothing is collected beyond
+a context lookup per call, and no header is sent.
 
 ### Requests are serialised
 

@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import threading
+
 from gerrit_workflow_tools.core.call_trace import (
+    CallTraceEntry,
+    call_trace_json,
+    collect_calls,
     format_call_trace_summary,
     gerrit_request_label,
     gerrit_request_label_from_url,
@@ -10,6 +15,7 @@ from gerrit_workflow_tools.core.call_trace import (
     reset_call_trace,
     set_call_trace_enabled,
 )
+from gerrit_workflow_tools.core.gerrit.rest import parallel_map
 
 
 def test_gerrit_request_label_summarizes_batch_query() -> None:
@@ -77,3 +83,35 @@ def test_format_call_trace_summary_normalizes_change_paths() -> None:
         reset_call_trace()
 
     assert "35ms x2  GET changes/{change}/reviewers/" in summary
+
+
+def test_collect_calls_sees_its_own_context_and_its_parallel_workers_only() -> None:
+    """A ``ger serve`` request's calls: its own and its ``parallel_map`` workers', not a background thread's."""
+
+    background = threading.Thread(target=lambda: record_call("git", "git fetch", 0.5))
+    with collect_calls() as calls:
+        record_call("git", "git status", 0.01)
+        parallel_map(
+            [
+                lambda: record_call("gerrit", "GET changes/1/", 0.02),
+                lambda: record_call("gerrit", "GET changes/2/", 0.03),
+            ]
+        )
+        background.start()
+        background.join()
+        assert calls == [], "filled when the block ends"
+    assert sorted(entry.label for entry in calls) == ["GET changes/1/", "GET changes/2/", "git status"]
+    record_call("git", "git log", 0.01)
+    assert len(calls) == 3, "nothing is recorded outside the block"
+    assert format_call_trace_summary() == "", "collected calls do not reach the --debug-log list"
+
+
+def test_call_trace_json_counts_all_and_lists_the_slowest_in_order() -> None:
+
+    entries = [CallTraceEntry("git", f"git {n}", n / 1000) for n in (5, 1, 9, 3)]
+    entries.append(CallTraceEntry("gerrit", "GET changes/", 0.1))
+    shaped = call_trace_json(entries, limit=3)
+    assert shaped["git"] == {"count": 4, "ms": 18.0}
+    assert shaped["gerrit"] == {"count": 1, "ms": 100.0}
+    assert shaped["calls"] == [["git", "git 5", 5.0], ["git", "git 9", 9.0], ["gerrit", "GET changes/", 100.0]]
+    assert shaped["calls_left_out"] == 2
