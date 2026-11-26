@@ -594,8 +594,10 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
             void model.refresh();
           }
         },
-        // What a stop or a review says of the files (changed, not amended; staged): the stack alone, one request.
-        treeChanged: (lastChange) => (model.state === "ready" && !model.loadedSince(lastChange) ? void model.refreshLocal() : undefined),
+        // What a stop or a review says of the files (changed, not amended; staged): the stack alone, one request,
+        // none when a read begun since already saw it (the end of the terminal command that wrote the index).
+        treeChanged: () => (model.state === "ready" ? void model.refreshLocal({ ifChanged: true }) : undefined),
+        touched: (at) => model.reads.touched(at),
         // Also while an outcome says changes were kept in a stash: `git stash apply` brings them back, and the line goes.
         following: () => Boolean(model.stack?.rebase || model.stack?.staged_review || model.stack?.last_outcome?.kept?.length),
       })
@@ -613,10 +615,11 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       }
     }
   });
-  // A command of ours ended in the ger terminal: look at once (the step outcome, a refusal that moved nothing).
+  // A command of ours ended in the ger terminal: look at once (the step outcome, a refusal that moved nothing),
+  // unless a read begun since its last write (the watcher's) already saw it.
   const terminalEnded = onTerminalCommandEnd((name) => {
     if (name === GER_TERMINAL && model.state === "ready") {
-      void model.refreshLocal();
+      void model.refreshLocal({ ifChanged: true });
     }
   });
   const poller = new Poller(() => void model.refresh({ background: true }), events, () => {

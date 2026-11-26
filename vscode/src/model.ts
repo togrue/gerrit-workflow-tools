@@ -11,6 +11,8 @@ import { IncompatibleServe } from "./compat";
 import { GerProcess, ServeFailed } from "./server";
 import { GerState, failureState, staleReason } from "./state";
 import { gerritAway } from "./problemRows";
+import { StackReads, stamper } from "./gitWatch";
+import { gitDirs } from "./workspace";
 
 const SEEN_KEY = "ger.seen";
 
@@ -91,12 +93,15 @@ export class Model implements vscode.Disposable {
   private loadStartedAt = 0;
   private again: Promise<void> | undefined;
   private againOptions: Required<RefreshOptions> | undefined;
+  /** The `/stack` reads: one for one state of the repository. */
+  readonly reads: StackReads;
 
   constructor(
     private readonly process: GerProcess,
     private readonly memento: vscode.Memento,
     readonly repo: string,
   ) {
+    this.reads = new StackReads(() => this.readStack(), stamper(gitDirs(repo)));
     // ger serve died under the views: start it again now (quietly, as any background refresh). A
     // restart that fails leaves the last answer marked out of date, with the reason and Restart.
     process.onDied = () => void this.refresh({ background: true });
@@ -183,14 +188,18 @@ export class Model implements vscode.Disposable {
   }
 
   /**
-   * Reload only the local stack (`/stack`): after a checkout here, which moves nothing on Gerrit
-   * and nothing in the inbox. Counts as a load for {@link loadedSince}, so the repository watcher
-   * does not reload everything after it.
+   * Reload only the local stack (`/stack`): after a checkout here, which moves nothing on Gerrit or in the inbox.
+   * One read per state of the repository ({@link StackReads}; `ifChanged`: none while the last still stands).
+   * Counts as a load for {@link loadedSince}, so the repository watcher does not reload everything after it.
    */
-  async refreshLocal(): Promise<void> {
+  async refreshLocal(options: { ifChanged?: boolean } = {}): Promise<void> {
     if (this.refreshing) {
       await this.refreshing;
     }
+    return this.reads.ask(options);
+  }
+
+  private async readStack(): Promise<void> {
     this.loadStartedAt = Date.now();
     try {
       const stack = await (await this.client()).stack();
@@ -241,6 +250,7 @@ export class Model implements vscode.Disposable {
 
   private async load({ fromGerrit, background }: Required<RefreshOptions>): Promise<void> {
     this.loadStartedAt = Date.now();
+    const moment = this.reads.moment();
     // A repository can make git run its own code (hooks, fsmonitor, its .vscode settings): not before you trust it.
     if (!vscode.workspace.isTrusted) {
       await this.setState("untrusted");
@@ -259,6 +269,7 @@ export class Model implements vscode.Disposable {
         this.changed.fire();
       }
       this.overview = await client.overview(fromGerrit);
+      this.reads.saw(moment); // the overview carries the stack
       this.early = undefined;
       for (const member of (this.overview.sections ?? []).flatMap((section) => section.chains.flatMap((chain) => chain.members))) {
         this.subjects.set(member.number, member.subject);

@@ -697,6 +697,13 @@ too: a file you save, or one changed elsewhere (a terminal, an agent), and the i
 the stop's *changed, not amended* and *staged* files, and Continue's words, within a moment, one
 `GET /stack` for each burst of changes (VS Code's own save and file events; git is not polled). A
 refused Continue or Work on Next reads the stack again too, so the buttons under the refusal agree with it.
+One state of the repository is read once: the end of a command in the *ger* terminal and the watcher's events for
+the files it wrote share one `GET /stack`. A trigger while a read is under way joins it when nothing changed since it
+began, else one more read follows it; the end of a command or a watcher event after a read that already saw
+everything asks nothing. "Nothing changed" is read without starting git: HEAD, the branch it names, the index, the
+rebase state, the step outcome, `packed-refs` and the config are as git last wrote them, and no file of the work tree
+was written since. Local stack's conflict preview (`GET /stack/moves`) is asked once per head, and not while a rebase
+is underway or a review is staged here, as nothing moves then.
 
 These are VS Code settings. How ger itself behaves (`ger.reviewCheckout`, `ger.webUrl` and
 the rest) is git configuration, the same for the extension and the command line: see
@@ -971,7 +978,7 @@ estimate, the totals per loop and the steps over budget. See
 | `src/workspace.ts`, `src/state.ts` | Which checkout is served; the state the views' welcome texts follow (`ger.state`). |
 | `src/ui.ts` | Everything said to the user or done outside the views; the e2e suite scripts it. |
 | `src/poller.ts` | Background refresh from Gerrit: on a timer while focused, and on regaining focus. |
-| `src/gitWatch.ts`, `src/repoWatcher.ts` | The views following local git: what to watch (pure, unit-tested), the debounce, the watcher. |
+| `src/gitWatch.ts`, `src/repoWatcher.ts` | The views following local git: what to watch, the debounce, one `GET /stack` per state of the repository (its stamp, read without git) (pure, unit-tested); the watcher. |
 | `src/extension.ts` | Wiring: views and commands. |
 | `src/trace.ts`, `src/tracing.ts` | Tracing (`ger.trace`): the record of each user action and the requests it caused (no `vscode` import, unit-tested); switching it on and hooking it to what VS Code shows. |
 | `src/snapshot.ts` | The snapshot file: the view models of the two webview views at one moment. Read by the gallery. No `vscode` import, unit-tested. |
