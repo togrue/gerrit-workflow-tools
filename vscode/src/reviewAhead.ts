@@ -28,6 +28,11 @@ export class ReviewAhead {
     this.asked.set(member.number, { sha: member.sha, answer });
   }
 
+  /** Whether `member` was asked for at its patchset (answered or on its way). */
+  has(member: Member): boolean {
+    return this.asked.get(member.number)?.sha === member.sha;
+  }
+
   /** What was asked for `member`, if it is still that patchset; undefined when it was not asked or failed. */
   async take(member: Member): Promise<Ahead | undefined> {
     const known = this.asked.get(member.number);
