@@ -75,6 +75,16 @@ function syncStates(): StackVm {
   ]);
 }
 
+/** The four comment states of commentState.ts, each with its share: to answer, your drafts, waiting, all resolved. */
+function commentStates(): StackVm {
+  return stackOf([
+    pushed("All resolved: a full ring with a tick", { comments_unresolved: 0, comments_total: 4 }),
+    pushed("Waiting on a reply: a thin ring, 1 of 3", { comments_unresolved: 1, comments_awaiting_reply: 1, comments_total: 3 }),
+    pushed("Your drafts answer them: a dashed ring, 2 of 4", { comments_unresolved: 2, comments_drafted: 2, comments_total: 4, attention_reasons: ["drafts-to-publish"] }),
+    pushed("To answer: a thick ring, 3 of 3 open", { comments_unresolved: 3, comments_total: 3, attention_reasons: ["unresolved-comments"] }),
+  ]);
+}
+
 function badgeKinds(): StackVm {
   return stackOf([
     pushed("Nothing to say yet"),
@@ -157,6 +167,7 @@ function stackScenarios(): Scenario[] {
   return [
     scenario("Stack: every sync state", { stack: syncStates() }),
     scenario("Stack: every badge", { stack: badgeKinds() }),
+    scenario("Stack: every comment state, a ring and a shape each", { stack: commentStates() }),
     scenario("Stack: HEAD, held back, a merge, abandoned", { stack: rowKinds() }),
     scenario("Stack: a rebase in progress", { stack: rebasing("edit") }),
     scenario("Stack: a rebase stopped on a conflict", { stack: rebasing("conflict") }),

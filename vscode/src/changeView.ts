@@ -750,6 +750,9 @@ export class ChangeView extends WebView<ChangeVm> {
       return;
     }
     const { left, right, own } = this.fileSides(file, { ...diff, base: diff.base });
+    if (right) {
+      this.filesSeen.watch(right); // read to its end, it is seen
+    }
     if (!left || !right) {
       await vscode.commands.executeCommand("vscode.open", left ?? right);
       return;

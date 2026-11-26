@@ -1,7 +1,8 @@
 // Files seen, as the Change view ticks them: Gerrit's per-file *reviewed* flag of the patchset
 // looked at (`/reviewed`, ger serve 1.6), so a tick is there in Gerrit's web UI and after a reload
 // too; a version Gerrit does not have (your local commit) is kept here for the session. A file is
-// seen once its diff, or the file, was shown to its end, or by a click on its tick.
+// seen once its diff, opened from the Change view (a click, Next file), was shown to its end, or by
+// a click on its tick.
 //
 // The combined diff (Open All Changes) does not count: VS Code reports every file in it as shown
 // whole, wherever it is scrolled, so only its ticks mark them there.
@@ -18,6 +19,8 @@ export class FilesSeen implements vscode.Disposable {
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changed.event;
   private readonly subscriptions: vscode.Disposable[] = [];
+  /** The documents whose diff the Change view opened on their own: only they are looked at. */
+  private readonly watched = new Set<string>();
 
   /**
    * `fileOf` names the file of the version looked at that `uri` shows on its right side (your file
@@ -28,10 +31,17 @@ export class FilesSeen implements vscode.Disposable {
     private readonly fileOf: (uri: vscode.Uri) => { where: SeenWhere; path: string } | undefined,
   ) {
     const look = (editor: vscode.TextEditor) => this.look(editor);
+    // A file that fits on the screen never scrolls: look again once a new editor has been laid out.
+    // Not at once: the tabs say what an editor is part of only once it is laid out.
     this.subscriptions.push(
       vscode.window.onDidChangeTextEditorVisibleRanges((event) => look(event.textEditor)),
-      vscode.window.onDidChangeVisibleTextEditors((editors) => editors.forEach(look)),
+      vscode.window.onDidChangeVisibleTextEditors((editors) => setTimeout(() => editors.forEach(look), 400)),
     );
+  }
+
+  /** The diff of the document `uri` was opened on its own: shown to its end, it is seen. */
+  watch(uri: vscode.Uri): void {
+    this.watched.add(uri.toString());
   }
 
   /** The files seen of `where`; the first time, Gerrit is asked once and `onDidChange` fires with its answer. */
@@ -85,7 +95,7 @@ export class FilesSeen implements vscode.Disposable {
 
   /** An editor showing a file of the version looked at, scrolled to its last line: seen. Not inside the combined diff. */
   private look(editor: vscode.TextEditor): void {
-    const file = this.fileOf(editor.document.uri);
+    const file = this.watched.has(editor.document.uri.toString()) ? this.fileOf(editor.document.uri) : undefined;
     const last = editor.visibleRanges.at(-1);
     if (!file || !last || inCombinedDiff(editor) || this.sets.get(file.where.key)?.has(file.path)) {
       return;
@@ -101,11 +111,14 @@ export class FilesSeen implements vscode.Disposable {
   }
 }
 
-/** Whether `editor` is one file of a combined diff: the tab its group shows is one (its input lists `textDiffs`). */
+/**
+ * Whether `editor` is one file of a combined diff (a tab whose input lists `textDiffs`). An editor
+ * with no column of its own is inside another: a side of a diff, or a file of a combined diff.
+ */
 function inCombinedDiff(editor: vscode.TextEditor): boolean {
+  const combined = (group: vscode.TabGroup | undefined) => Boolean((group?.activeTab?.input as { textDiffs?: unknown } | undefined)?.textDiffs);
   if (editor.viewColumn === undefined) {
-    return true; // an editor inside another (the combined diff's) has no column of its own
+    return vscode.window.tabGroups.all.some(combined);
   }
-  const group = vscode.window.tabGroups.all.find((g) => g.viewColumn === editor.viewColumn);
-  return Boolean((group?.activeTab?.input as { textDiffs?: unknown } | undefined)?.textDiffs);
+  return combined(vscode.window.tabGroups.all.find((g) => g.viewColumn === editor.viewColumn));
 }
