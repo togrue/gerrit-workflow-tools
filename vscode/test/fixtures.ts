@@ -97,7 +97,7 @@ export function diff(extra: Partial<Diff> = {}): Diff {
 
 /** What the Change view is built from: a commit of your stack, everything arrived, nothing compared but its parent. */
 export function state(extra: Partial<ChangeState> = {}): ChangeState {
-  return { local: true, shown: shown(), chains: [], base: diff(), delta: undefined, patchsets: undefined, version: "local", mode: "base", readOnly: "", ci: { state: "closed" }, ...extra };
+  return { local: true, shown: shown(), chains: [], base: diff(), delta: undefined, patchsets: undefined, version: "local", from: "base", mode: "base", readOnly: "", ci: { state: "closed" }, ...extra };
 }
 
 export const patchsets: Patchsets = { number: 1, current: 3, reviewed: 2, patchsets: [1, 2, 3].map((number) => ({ number, commit: String(number).repeat(40), created: null })) };

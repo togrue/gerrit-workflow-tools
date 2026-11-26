@@ -14,7 +14,8 @@ from typing import Any
 import pytest
 
 from gerrit_workflow_tools.core.ci_http import UrllibCiHttp, authorization_header
-from gerrit_workflow_tools.core.gerrit.http_rest import GerritAuth, HttpGerritRest
+from gerrit_workflow_tools.core.gerrit.credentials import GerritAuth
+from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
 from gerrit_workflow_tools.core.http_connect import origin
 
 

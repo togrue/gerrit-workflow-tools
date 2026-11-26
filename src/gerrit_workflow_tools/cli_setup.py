@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -12,7 +14,7 @@ from urllib.parse import urlparse
 from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli_command
 from gerrit_workflow_tools.cli_terminal import confirm, prompt_toolkit_can_run
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.config_keys import ConfigScope, legacy_key
+from gerrit_workflow_tools.core.config_keys import ConfigScope, gerrit_host_key, legacy_key
 from gerrit_workflow_tools.core.config_write import ConfigWrite, apply_config_write
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit_setup import (
@@ -30,16 +32,16 @@ from gerrit_workflow_tools.render.wrap import say
 
 
 _WHAT = {
-    "ger.webUrl": "The web URL of your Gerrit server (e.g. https://gerrit.your.domain).",
-    "ger.user": "Your Gerrit username.",
-    "ger.token": "An HTTP password for the Gerrit REST API (Gerrit's web UI: Settings, HTTP Credentials).",
+    "webUrl": "The web URL of your Gerrit server (e.g. https://gerrit.your.domain).",
+    "user": "Your Gerrit username.",
+    "token": "An HTTP password for the Gerrit REST API (Gerrit's web UI: Settings, HTTP Credentials).",
 }
 _INSECURE = "ger.allowInsecureHttp"
 
 
 @dataclass
 class _Values:
-    """What setup is about to save: the three keys, and the http opt-in when it was given."""
+    """What setup is about to save: the URL, that host's user and token (#111), and the http opt-in when given."""
 
     url: str = ""
     user: str = ""
@@ -47,8 +49,12 @@ class _Values:
     insecure: bool = False
 
     def as_config(self) -> dict[str, str]:
-        values = {"ger.webUrl": self.url, "ger.user": self.user, "ger.token": self.token}
+        values = {"ger.webUrl": self.url, self.key("user"): self.user, self.key("token"): self.token}
         return {**values, _INSECURE: "true"} if self.insecure else values
+
+    def key(self, name: str) -> str:
+        """``ger.<webUrl>.<name>``: where this host's *name* (``user``, ``token``) is saved."""
+        return gerrit_host_key(self.url, name)
 
 
 class _Aborted(Refusal):
@@ -71,6 +77,16 @@ def _git_config_get(*, global_config: bool, key: str, cwd: Path | None) -> str |
     return None
 
 
+def _saved(url: str, *, global_config: bool, cwd: Path | None) -> tuple[str, str]:
+    """The user and token saved for *url* at the setup scope: the host's, else the unscoped ones."""
+
+    def get(name: str) -> str:
+        keys = (gerrit_host_key(url, name), f"ger.{name}") if url else (f"ger.{name}",)
+        return next((v for key in keys if (v := _git_config_get(global_config=global_config, key=key, cwd=cwd))), "")
+
+    return get("user"), get("token")
+
+
 def _ask(session: Any, label: str, *, default: str = "", secret: bool = False, keep: bool = False) -> str:
     """One answer from the prompt session; empty (unless *keep*: then the existing value stays) aborts."""
     try:
@@ -84,7 +100,7 @@ def _ask(session: Any, label: str, *, default: str = "", secret: bool = False, k
 
 def _ask_url(session: Any, settings: Settings, start: _Values) -> tuple[str, bool]:
     """The web URL, asked until it will do; with whether plain http was allowed for it here."""
-    print(_WHAT["ger.webUrl"], file=sys.stderr)
+    print(_WHAT["webUrl"], file=sys.stderr)
     default = start.url
     while True:
         url = normalize_web_url(_ask(session, "webUrl", default=default))
@@ -101,8 +117,10 @@ def _ask_url(session: Any, settings: Settings, start: _Values) -> tuple[str, boo
         default = "https://" + url.removeprefix("http://")
 
 
-def _ask_values(settings: Settings, existing: dict[str, str | None], start: _Values, *, url: bool = True) -> _Values:
-    """The values from the prompts, *start* (what was typed or saved before) as the defaults.
+def _ask_values(
+    settings: Settings, saved: Callable[[str], tuple[str, str]], start: _Values, *, url: bool = True
+) -> _Values:
+    """The values from the prompts, *start* (what was typed before), else what is *saved* for the URL, as the defaults.
 
     Not the URL when *url* is false: Gerrit answered there, only the credentials were refused.
     """
@@ -112,23 +130,26 @@ def _ask_values(settings: Settings, existing: dict[str, str | None], start: _Val
     values = _Values(url=start.url, insecure=start.insecure)
     if url:
         values.url, values.insecure = _ask_url(session, settings, start)
-    print(_WHAT["ger.user"], file=sys.stderr)
-    values.user = _ask(session, "user", default=start.user)
-    kept = start.token or existing.get("ger.token") or ""
-    print("Leave it empty to keep the token you have." if kept else _WHAT["ger.token"], file=sys.stderr)
+    saved_user, saved_token = saved(values.url)
+    print(_WHAT["user"], file=sys.stderr)
+    values.user = _ask(session, "user", default=start.user or saved_user)
+    kept = start.token or saved_token
+    print("Leave it empty to keep the token you have." if kept else _WHAT["token"], file=sys.stderr)
     values.token = _ask(session, "token", secret=True, keep=bool(kept)) or kept
     return values
 
 
-def _flag_values(args: argparse.Namespace, existing: dict[str, str | None]) -> _Values:
+def _flag_values(args: argparse.Namespace, saved_url: str, saved: Callable[[str], tuple[str, str]]) -> _Values:
     """The values from the flags, else as saved; refused, before anything is saved, when one is missing or wrong."""
     token = Path(args.token_file).read_text(encoding="utf-8") if args.token_file not in (None, "-") else None
     if args.token_file == "-":
         token = sys.stdin.read()
+    url = normalize_web_url(args.url or saved_url)
+    saved_user, saved_token = saved(url)
     values = _Values(
-        url=normalize_web_url(args.url or existing.get("ger.webUrl") or ""),
-        user=(args.user or existing.get("ger.user") or "").strip(),
-        token=(token or existing.get("ger.token") or "").strip(),
+        url=url,
+        user=(args.user or saved_user).strip(),
+        token=(token or saved_token).strip(),
         insecure=args.allow_insecure_http,
     )
     missing = [
@@ -146,36 +167,55 @@ def _flag_values(args: argparse.Namespace, existing: dict[str, str | None]) -> _
     return values
 
 
-def _save(values: _Values, *, global_config: bool, cwd: Path | None) -> str:
-    """Write the values at the setup scope; the words saying where."""
+def _save(values: _Values, *, global_config: bool, cwd: Path | None) -> None:
+    """Write the values at the setup scope, say where, and move the unscoped secrets to the host."""
     scope = ConfigScope.GLOBAL if global_config else ConfigScope.LOCAL
     for key, value in values.as_config().items():
         apply_config_write(cwd, ConfigWrite(key, "set", value, scope))
-    keys = ", ".join(key for key in values.as_config() if key != "ger.token")
-    return f"saved to your {'global' if global_config else 'repository'} git config: {keys} and ger.token"
+    keys = ", ".join(key for key in values.as_config() if key != values.key("token"))
+    where = "global" if global_config else "repository"
+    print(f"saved to your {where} git config: {keys} and {values.key('token')}", file=sys.stderr)
+    _scope_unscoped_secrets(values.url, scope=scope, cwd=cwd)
+
+
+def _scope_unscoped_secrets(web_url: str, *, scope: ConfigScope, cwd: Path | None) -> None:
+    """Remove ``ger.token`` / ``ger.password`` (and old names) at *scope*: they go to any host.
+
+    The token was just written for the host; a password moves to ``ger.<webUrl>.password``
+    unless the host has one, so no secret is lost.
+    """
+    global_config = scope is ConfigScope.GLOBAL
+    for name in ("token", "password"):
+        unscoped = _git_config_get(global_config=global_config, key=f"ger.{name}", cwd=cwd)
+        if not unscoped:
+            continue
+        host_key = gerrit_host_key(web_url, name)
+        if name == "password" and not _git_config_get(global_config=global_config, key=host_key, cwd=cwd):
+            apply_config_write(cwd, ConfigWrite(host_key, "set", unscoped, scope))
+        apply_config_write(cwd, ConfigWrite(f"ger.{name}", "unset", scope=scope))
+        print(f"Moved the unscoped ger.{name} to {host_key}: it went to any host ger.webUrl named.", file=sys.stderr)
 
 
 def _run_setup(args: argparse.Namespace, run: RunContext, gerrit: GerritRest | None) -> int:
     global_config = not args.local
     cwd = run.cwd
-    existing = {key: _git_config_get(global_config=global_config, key=key, cwd=cwd) for key in _WHAT}
+    saved_url = _git_config_get(global_config=global_config, key="ger.webUrl", cwd=cwd) or ""
+    saved = partial(_saved, global_config=global_config, cwd=cwd)
     flags_given = bool(args.url and args.user and args.token_file)
     interactive = not flags_given and prompt_toolkit_can_run()
     if interactive:
         where = "your global" if global_config else "this repository's"
         print(f"Configure ger for your Gerrit ({where} git config).", file=sys.stderr)
         print("An empty answer stops; nothing is saved until Gerrit accepts the credentials.\n", file=sys.stderr)
-        values = _Values(
-            existing.get("ger.webUrl") or "", existing.get("ger.user") or "", insecure=args.allow_insecure_http
-        )
+        values = _Values(saved_url, insecure=args.allow_insecure_http)
     else:
-        values = _flag_values(args, existing)
+        values = _flag_values(args, saved_url, saved)
         if needs_insecure_opt_in(values.url, run.settings) and not values.insecure:
             raise UsageError(f"{INSECURE_HTTP}; to use it anyway, add --allow-insecure-http ({_INSECURE} true)")
     ask_url = True
     while True:
         if interactive:
-            values = _ask_values(run.settings, existing, values, url=ask_url)
+            values = _ask_values(run.settings, saved, values, url=ask_url)
         checked = run_with(cwd, run.settings, values.as_config(), gerrit=gerrit)
         if args.no_check:
             break
@@ -198,7 +238,7 @@ def _run_setup(args: argparse.Namespace, run: RunContext, gerrit: GerritRest | N
         email = f" <{account.email}>" if account.email else ""
         print(f"Signed in as {who}{email} on {values.url}", file=sys.stderr)
         break
-    print(_save(values, global_config=global_config, cwd=cwd), file=sys.stderr)
+    _save(values, global_config=global_config, cwd=cwd)
     say("next: `ger log` shows your stack and its reviews; `ger inbox` the changes waiting for you")
     return int(ExitCode.OK)
 
@@ -207,8 +247,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ger setup",
         description=(
-            "Configure ger.webUrl, ger.user and ger.token in git config (what every Gerrit command needs), "
-            "and check them with Gerrit before saving. Asks in a terminal; without one, takes the flags."
+            "Configure ger.webUrl and that host's user and token (ger.<webUrl>.user, ger.<webUrl>.token) in git "
+            "config (what every Gerrit command needs), and check them with Gerrit before saving. Asks in a "
+            "terminal; without one, takes the flags."
         ),
     )
     parser.add_argument(

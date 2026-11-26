@@ -114,6 +114,7 @@ def log_commit_json(commit: LogCommit) -> dict[str, object]:
         ],
         "gerrit_url": commit.gerrit_url,
         "number": commit.number,
+        "current_patch_set": commit.current_patch_set,
         "last_pushed_votes": (
             {"verified": commit.last_pushed_votes[0], "code_review": commit.last_pushed_votes[1]}
             if commit.last_pushed_votes

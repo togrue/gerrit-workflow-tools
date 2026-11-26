@@ -379,16 +379,28 @@ export async function run(): Promise<void> {
       exec("ger.openChange", await stackRow("Extract command routing")),
     );
     await press(
-      "Change › Compare › Gerrit vs. local",
-      "The files list becomes what your commit changes compared with Gerrit's patchset: nothing, as the commit is the pushed one.",
-      () => api.changeView.choose("local", "gerrit"),
+      "Change › From › Patchset 1 (current)",
+      "From Gerrit's current patchset to your commit: the files list becomes what your commit changes compared with it — nothing, as the commit is the pushed one. The mode toggle goes dim: picked by hand.",
+      () => api.changeView.choose("1", "local"),
     );
     await press(
-      "Change › Show › Gerrit's current patchset",
-      "The view shows patchset 1 as Gerrit has it, against its base; its message is read-only.",
-      () => api.changeView.choose("current", "base"),
+      "Change › To › Patchset 1 (current)",
+      "To at From's patchset: From goes back to the base commit. The view shows patchset 1 as Gerrit has it, against its base; its message is read-only.",
+      () => api.changeView.choose("1", "1"),
     );
-    await press("Change › Show › Local commit", "Back on your commit: the message is editable again.", () => api.changeView.choose("local", "base"));
+    await press("Change › To › Local commit", "Back on your commit: the message is editable again.", () => api.changeView.choose("base", "local"));
+    await press(
+      "Change › default mode toggle (to Gerrit vs. local)",
+      "The default becomes Gerrit vs. local and the change shown follows it: Gerrit's current patchset against your commit, the toggle lit.",
+      () => api.changeView.setMode("gerrit"),
+    );
+    await press("Change › From › Base commit", "Picked by hand: the change's files against its base, the default still Gerrit vs. local.", () => api.changeView.choose("base", "local"));
+    await press(
+      "Click \"Extract command routing\" in Local stack again",
+      "Opened anew, the pick by hand is gone: the change starts on the remembered default, Gerrit vs. local.",
+      exec("ger.openChange", await stackRow("Extract command routing")),
+    );
+    await press("Change › default mode toggle (Against its base commit)", "The default is the base comparison again: base commit → your commit.", () => api.changeView.setMode("base"));
     await press("Change › Next Unresolved Comment (Alt+F9)", "b.txt opens at line 1, the first thread expands, the status bar says Comment 1 of 2.", exec("ger.nextComment"));
     await press("Next Unresolved Comment again", "The second thread: Comment 2 of 2.", exec("ger.nextComment"));
     await press("Next Unresolved Comment a third time", "It wraps around to Comment 1 of 2.", exec("ger.nextComment"));

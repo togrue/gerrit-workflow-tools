@@ -14,7 +14,8 @@ from gerrit_workflow_tools.core.gerrit.cache import DEFAULT_CHANGE_TRUST_WINDOW_
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
 from gerrit_workflow_tools.core.gerrit.changes import ChangeApi
 from gerrit_workflow_tools.core.gerrit.comments import CommentApi, DraftedChanges
-from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest, gerrit_auth_from_settings
+from gerrit_workflow_tools.core.gerrit.credentials import gerrit_auth_from_settings, gerrit_user_for
+from gerrit_workflow_tools.core.gerrit.http_rest import HttpGerritRest
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritRest,
@@ -118,7 +119,7 @@ class GerritService:
         """
         if self._self_account_id is not None:
             return self._self_account_id
-        user = self.settings.get("ger.user") or ""
+        user = gerrit_user_for(self.settings, self.web_base) or ""
         known = None if self.refresh else self.cache.account_id(user)
         if known is not None:
             self._self_account_id = known

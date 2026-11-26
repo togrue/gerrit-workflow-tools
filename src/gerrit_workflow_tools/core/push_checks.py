@@ -13,6 +13,7 @@ from gerrit_workflow_tools.core.change_id import parse_change_id_footer, validat
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.fixups import is_unsquashed_fixup
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
+from gerrit_workflow_tools.core.gerrit.credentials import gerrit_user_for
 from gerrit_workflow_tools.core.gerrit.rest import (
     GerritApiError,
     GerritUnavailableError,
@@ -270,7 +271,7 @@ def check_existing_changes(run: RunContext, commits: Sequence[Commit]) -> Existi
             diverged.append(DivergedChange(commit.short_sha, view.number, view.current_revision_number))
         built_on_outdated += (BuiltOnOutdated(commit.short_sha, change) for change in below)
         below.clear()
-    you = run.settings.get("ger.user")
+    you = gerrit_user_for(run.settings, run.settings.gerrit_web_url)
     return ExistingChanges(
         tuple(warnings),
         tuple(unchanged),

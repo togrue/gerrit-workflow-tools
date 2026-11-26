@@ -37,6 +37,9 @@ from gerrit_workflow_tools.core.git_run import git
 
 logger = logging.getLogger(__name__)
 
+_OLD_NAMES = "<old key names>"
+"""The :meth:`Settings.warn_once` key of the one line about every old key name a snapshot answers from."""
+
 
 class ConfigError(ValueError):
     """Required git configuration is missing or unusable.
@@ -90,7 +93,7 @@ class Settings:
 
     values: Mapping[str, str]
     scopes: Mapping[str, ConfigScope] = field(default_factory=dict)
-    # Old key names already warned about: one warning per key per snapshot, not per read.
+    # Keys already warned about (:meth:`warn_once`): one warning per key per snapshot, not per read.
     _warned: set[str] = field(default_factory=set, init=False, compare=False, repr=False)
 
     @classmethod
@@ -135,12 +138,18 @@ class Settings:
         old_canon = canonical_cfg_key(old) if old else canon
         if old is None or self._value(canon) is not None or self._value(old_canon) is None:
             return canon
-        if not self._warned:
-            standing_in = legacy_keys_standing_in(self.values, self.scopes)
-            self._warned.update(standing_in)
-            # A notice for the user, not a diagnostic: shown as one plain line (cli_logging).
-            logger.warning("%s", legacy_keys_warning(standing_in), extra={"notice": True})
+        if _OLD_NAMES not in self._warned:
+            self.warn_once(_OLD_NAMES, legacy_keys_warning(legacy_keys_standing_in(self.values, self.scopes)))
         return old_canon
+
+    def warn_once(self, key: str, message: str) -> None:
+        """Log *message* as a warning about *key*, once per snapshot however often it is read.
+
+        A notice for the user, not a diagnostic: shown as one plain line (cli_logging).
+        """
+        if key not in self._warned:
+            self._warned.add(key)
+            logger.warning("%s", message, extra={"notice": True})
 
     def get(self, key: str) -> str | None:
         """Return the value for *key*, stripped, or ``None`` when unset or blank.
@@ -204,21 +213,6 @@ class Settings:
         Domain registries live at ``<scriptsDir>/<domain>/registry.py``.
         """
         return self.get("ger.scriptsDir") or DEFAULT_SCRIPTS_DIR
-
-    @property
-    def gerrit_user(self) -> str | None:
-        """``ger.user`` for HTTP Basic auth, if set."""
-        return self.get("ger.user")
-
-    @property
-    def gerrit_password(self) -> str | None:
-        """``ger.password`` for HTTP Basic auth, if set."""
-        return self.get("ger.password")
-
-    @property
-    def gerrit_token(self) -> str | None:
-        """``ger.token``, preferred over password for Basic auth, if set."""
-        return self.get("ger.token")
 
     # -- Branch-scoped ------------------------------------------------------------
 

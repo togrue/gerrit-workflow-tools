@@ -114,7 +114,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   const model = new Model(new GerProcess(repo, gerProgram, logLine, served), context.workspaceState, repo);
   const overviewView = new OverviewView(model, context.workspaceState);
   const stackView = new StackView(context.extensionUri, model);
-  const changeView = new ChangeView(context.extensionUri, model);
+  const changeView = new ChangeView(context.extensionUri, model, context.globalState);
 
   const overviewTree = vscode.window.createTreeView("ger.overview", { treeDataProvider: overviewView });
   // Kept while hidden: the selection in the stack, and a commit message you are still typing.
