@@ -471,6 +471,13 @@ test("a change checked out for review reads as theirs: behind Gerrit, Update to 
   assert.equal(unknown.notes?.[0].actions?.[0].label, "Update to the newest patchset");
   const current = changeVm(state({ reviewing: { behind: false, newest: 3 }, delta: diff({ since }) }));
   assert.deepEqual(current.hint, { text: "Since your review: patchset 2 → 3 · 2 files", show: true });
+  // Nothing differs since the review: no line. A staged review compares your checkout, where core's up_to_date is false.
+  const one = changeVm(state({ reviewing: { behind: false, newest: 1 }, delta: diff({ since: { ...since, patch_set: 1, current_patch_set: 1 }, files: [] }) }));
+  assert.equal(one.hint, undefined, "patchset 1 → 1 · 0 files says nothing");
+  const sameFiles = changeVm(state({ local: false, version: "current", delta: diff({ since: { ...since, to_patch_set: 3 }, files: [] }) }));
+  assert.equal(sameFiles.hint, undefined, "no file differs");
+  const upToDate = changeVm(state({ local: false, version: "current", delta: diff({ since: { ...since, patch_set: 3, to_patch_set: 3, up_to_date: true } }) }));
+  assert.equal(upToDate.hint, undefined, "you reviewed the current patchset");
 });
 
 test("the message box holds what core serves without the Change-Id footer; the Change-Id is said beside it", () => {

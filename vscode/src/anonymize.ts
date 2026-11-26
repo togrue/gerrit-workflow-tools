@@ -387,7 +387,7 @@ const CHANGE: Shape = {
     },
   },
   hint: {
-    text: ours([new RegExp(`Nothing new since your review of patchset ${PATCHSET}`), new RegExp(`Since your review: patchset ${PATCHSET} → ${PATCHSET} · ${COUNT} files?( · rebased)?`)]),
+    text: ours([new RegExp(`Since your review: patchset ${PATCHSET} → ${PATCHSET} · ${COUNT} files?( · rebased)?`)]),
     show: KEEP,
   },
   files: {

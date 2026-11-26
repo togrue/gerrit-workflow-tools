@@ -283,7 +283,8 @@ The commits above your upstream, newest first. One row per commit:
   The default is remembered and every change you open starts on it; picking *From* or *To* by
   hand overrides it for that change only, until you open it again, and the icon dims meanwhile.
   On someone else's change you reviewed before, a line says what is new since, with **Show** to
-  switch to it.
+  switch to it. When nothing is (you reviewed the current patchset, or no file differs), there is
+  no such line.
 - **Files**: added and removed lines per file, in the colours git gives them, and a **tick** per
   file: a filled check once it is **seen**, an empty circle until then. A file is seen when its
   diff, or the file, was shown to its last line, or when you click its tick (a click again takes

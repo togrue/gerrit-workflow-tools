@@ -498,7 +498,11 @@ export function changeVm(state: ChangeState): ChangeVm {
   const since = state.delta?.since;
   // Someone's change, also one checked out for review (unless it is behind: the update says it).
   const theirs = !state.local || (state.reviewing !== undefined && !state.reviewing.behind);
+  // What is new since your review, when something is (P4: no line that says nothing). Core's
+  // `up_to_date` holds only when a patchset is compared; a staged review compares your checkout,
+  // so the patchset you reviewed being the current one, or no file differing, says it too.
   const reviewed = theirs && state.from === "base" && since && since.patch_set !== null;
+  const somethingNew = reviewed && !since.up_to_date && !since.identical && since.patch_set! < since.current_patch_set && (state.delta?.files.length ?? 0) > 0;
   const left = chainCounts(chains);
   const [open, fromGerrit] = [left.comments_unresolved, left.comments_total];
   const yours = chains.length - fromGerrit;
@@ -532,13 +536,8 @@ export function changeVm(state: ChangeState): ChangeVm {
         }
       : undefined,
     compare: compareVm(state),
-    hint: reviewed
-      ? {
-          text: since.up_to_date
-            ? `Nothing new since your review of patchset ${since.patch_set}`
-            : `Since your review: patchset ${since.patch_set} → ${since.current_patch_set} · ${plural(state.delta?.files.length ?? 0, "file")}${since.rebased ? " · rebased" : ""}`,
-          show: !since.up_to_date,
-        }
+    hint: somethingNew
+      ? { text: `Since your review: patchset ${since.patch_set} → ${since.current_patch_set} · ${plural(state.delta?.files.length ?? 0, "file")}${since.rebased ? " · rebased" : ""}`, show: true }
       : undefined,
     files: files(state),
     comments: loading?.commit
