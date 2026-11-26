@@ -161,10 +161,14 @@ function reviewTask(overview: Overview | undefined, stack: Stack, options: TaskO
   const others = (options.chain ?? []).filter((number) => number !== review.number);
   const focus = reviewFocus(overview, stack) ?? others.map((number) => reviewFocus(overview, { ...stack, staged_review: { ...review, number } })).find(Boolean);
   const listed = focus?.chain.members ?? [];
+  // A change of the chain the inbox lists in a chain of its own (its base is an older patchset of the one below).
+  const inbox = (overview?.sections ?? []).flatMap((section) => section.chains.flatMap((chain) => chain.members));
   // The chain as core has it at the reviewed patchset: members the inbox lost are kept, in their place.
-  const members: Member[] = (options.chain ?? []).length > 1
-    ? options.chain!.map((number) => listed.find((member) => member.number === number) ?? unlisted(number, number === review.number ? review.subject : options.subjects?.get(number), options.inboxUnknown))
+  const known: Member[] = (options.chain ?? []).length > 1
+    ? options.chain!.map((number) => (listed.find((member) => member.number === number) ?? inbox.find((member) => member.number === number)) ?? unlisted(number, number === review.number ? review.subject : options.subjects?.get(number), options.inboxUnknown))
     : listed;
+  // Core's chain holds open changes only: the change under review, closed meanwhile, is still the one reviewed.
+  const members = known.length && !known.some((member) => member.number === review.number) ? [unlisted(review.number, review.subject, options.inboxUnknown), ...known] : known;
   const comments = (member: Member) => counted(member, String(member.number), options);
   const at = members.findIndex((member) => member.number === review.number);
   const steps: TaskStep[] = members.map((member, index) => {

@@ -365,13 +365,15 @@ export class CommentThreads implements vscode.Disposable {
   /** The chain of the thread whose lines hold `editor`'s cursor; none when it is in no thread. */
   private threadAt(editor: vscode.TextEditor): CommentChain | undefined {
     const [uri, line] = [editor.document.uri.toString(), editor.selection.active.line];
-    for (const [thread, anchor] of this.anchors) {
-      if (thread.uri.toString() === uri && thread.range && line >= thread.range.start.line && line <= thread.range.end.line) {
-        return anchor.chain;
-      }
-    }
-    return undefined;
+    const here = [...this.anchors]
+      .filter(([thread]) => thread.uri.toString() === uri && thread.range && line >= thread.range.start.line && line <= thread.range.end.line)
+      .map(([, anchor]) => anchor.chain);
+    // Several threads on one line (one written on an earlier patchset): the one just gone to is the one meant.
+    return here.find((chain) => chain.root_id === this.goneTo?.root_id) ?? here[0];
   }
+
+  /** The chain last gone to (Next comment, a click): the reply box names whom it answers. */
+  private goneTo: CommentChain | undefined;
 
   /**
    * Say in the reply box whom it answers (`replyName`): the chain `at`, else the one person every
@@ -381,7 +383,12 @@ export class CommentThreads implements vscode.Disposable {
     if (this.boxes.size) {
       return;
     }
-    const options = BOX.reply(replyName([...this.anchors.values()].map((anchor) => anchor.chain), at));
+    // VS Code fixes a reply box's text when its editor draws the threads, not when one is opened: a
+    // name is said only where every thread of that file answers the same person (W10: Bob's thread
+    // read "Reply to Alice" beside hers), else nobody is named.
+    const chains = [...this.anchors.values()].map((anchor) => anchor.chain);
+    const sameFile = at ? chains.filter((chain) => chain.path === at.path) : chains;
+    const options = BOX.reply(replyName(sameFile));
     if (options.prompt !== this.controller.options?.prompt) {
       this.controller.options = options;
     }
@@ -456,6 +463,7 @@ export class CommentThreads implements vscode.Disposable {
    */
   async show(chain: CommentChain): Promise<void> {
     // The reply box of the thread it opens answers the last of them who spoke.
+    this.goneTo = chain;
     this.nameReplies(chain);
     this.seen(chain);
     const editor = await this.view.openLocation({ path: chain.path, line: this.view.placeOf(chain).line });

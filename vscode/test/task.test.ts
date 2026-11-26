@@ -90,6 +90,18 @@ test("a change of the chain the inbox no longer lists stays in the header, marke
   assert.deepEqual(taskLines(vm).slice(1, 4), ["Left: 2 of 2 to vote on · 1 not in your inbox now", "▸ 1. parser — reviewing · not in your inbox now", "  2. change 103 — to review"]);
 });
 
+test("a change of the chain the inbox lists apart (on an older base) is shown as the inbox has it, not as missing", () => {
+  const apart: Overview = { host: "g", sections: [{ name: "to-review", query: "", summary: {}, chains: [chainOf([member(102, { your_turn: true })]), chainOf([member(103, { your_turn: true })])] } as Section], local: stack([]) };
+  const vm = taskVm(apart, stack([], { staged_review: review }), { all: false, chain: [102, 103] })!;
+  assert.deepEqual(taskLines(vm).slice(1, 4), ["Left: 2 of 2 to vote on", "▸ 1. change 102 — reviewing · to review", "  2. change 103 — to review"]);
+});
+
+test("the change under review stays in the header when core's chain (open changes only) leaves it out: abandoned meanwhile", () => {
+  const vm = taskVm(overview([member(103, { your_turn: true })]), stack([], { staged_review: review }), { all: false, chain: [103, 104] })!;
+  assert.equal(vm.position, "change 1 of 3");
+  assert.equal(taskLines(vm)[2], "▸ 1. parser — reviewing · not in your inbox now");
+});
+
 test("while Gerrit refuses, the header keeps the chain it knew and says what is left is unknown, never 'not in your inbox' (W2)", () => {
   const away: Overview = { host: "g", error: { code: "GERRIT", message: "rejected", reason: "credentials" }, local: stack([]) };
   const vm = taskVm(away, stack([], { staged_review: review }), { all: false, chain: [101, 102, 103], inboxUnknown: true, subjects: new Map([[101, "lexer"]]) })!;
