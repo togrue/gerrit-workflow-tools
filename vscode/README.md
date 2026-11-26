@@ -31,9 +31,10 @@ stack draws what git alone knows at once (`/stack?local=1`). Then *Review chains
 reason with the ways on as rows (*Check Credentials (ger setup)…* for refused credentials, else
 *Retry*, *Check the Gerrit Address (ger setup)…*), *Show Log*, and that local work goes on; Local
 stack says once *Gerrit state unknown: …* with *Retry*; the Change view says the change's state,
-votes and comments are unknown (never *not on Gerrit* or *none*), keeps the task header and its
+votes and comments are unknown, once (never *not on Gerrit* or *none*), keeps the task header and its
 exit, and Next names the fix instead of the vote. The status bar item wears an error icon, never
-the check; Refresh answers *Not refreshed from Gerrit: …* with the ways on; a file marked seen is
+the check; Refresh answers *Not refreshed from Gerrit: …* in the status bar, not in a toast that
+would offer the views' ways on a second time; a file marked seen is
 ticked only once Gerrit took it (a refusal is said, once per reason); a vote, a draft, an edit or
 a delete that did not reach Gerrit is said as not done, with *Check Credentials* / *Retry* where
 that is the fix. While the views cannot follow Gerrit's event stream, the status bar's tooltip

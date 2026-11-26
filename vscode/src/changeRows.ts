@@ -641,10 +641,13 @@ export function changeVm(state: ChangeState): ChangeVm {
   };
 }
 
-/** What the Change view says while Gerrit cannot be asked: unknown, never none. */
+/**
+ * What the Change view says while Gerrit cannot be asked: unknown, never none. The head says
+ * "Gerrit state unknown" once; the note under it says why, and what that covers.
+ */
 export const UNKNOWN_WORDS = {
-  note: "Gerrit could not be asked: what it says of this change (state, votes, comments) is unknown",
-  comments: "unknown: Gerrit could not be asked",
+  note: "Gerrit could not be asked for this change's state, votes or comments",
+  comments: "unknown",
 };
 
 /** The view's title bar: `Change <number>`. The subject is not repeated there: the commit message says it. */

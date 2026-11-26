@@ -8,6 +8,7 @@ import { CommentChain, Diff, FileChange, Health } from "./api";
 import { sameChange } from "./changeLoad";
 import { NextKind, pushable } from "./nextAction";
 import { titleOffers } from "./stackRows";
+import { gerritOffers } from "./changeScreen";
 import { ChangeView, Location, ThreadArg } from "./changeView";
 import { draftsIn } from "./changeRows";
 import { CommentLink, commentDecorations } from "./commentHover";
@@ -268,11 +269,10 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   // Vote and Publish is the reviewer's: offered in the Change view for a change on Gerrit that is not yours.
   context.subscriptions.push(
     changeView.onDidLoad(() => {
-      const shown = changeView.target ? changeView.shown : undefined;
-      void vscode.commands.executeCommand("setContext", "ger.changeOnGerrit", Boolean(shown?.pushed));
-      // Not on a closed change: Gerrit takes no vote there (Next names the way on instead).
-      const open = !shown?.change_status || shown.change_status === "NEW";
-      void vscode.commands.executeCommand("setContext", "ger.changeVotable", Boolean(shown?.pushed) && shown?.own === false && open);
+      // Not on a closed change (Gerrit takes no vote there), nor on one that could not be read.
+      const offers = gerritOffers(changeView.target ? changeView.shown : undefined, changeView.failed);
+      void vscode.commands.executeCommand("setContext", "ger.changeOnGerrit", offers.onGerrit);
+      void vscode.commands.executeCommand("setContext", "ger.changeVotable", offers.votable);
     }),
   );
   /** What was published shows at once: Review chains (it may leave *To review*), the change and its threads. */
@@ -410,8 +410,9 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       } else if (model.state === "ready") {
         const away = model.gerritAway();
         if (away) {
-          // The local stack was read again, Gerrit was not: say so, with the ways on, never a tick.
-          void offerWaysOn("warning", `Not refreshed from Gerrit: ${away.message}`, gerritProblem(away).actions);
+          // The local stack was read again, Gerrit was not: said as a failure, never a tick. The views
+          // say it with the ways on (Check Credentials, Retry): a toast would offer them a second time.
+          feedback(`Not refreshed from Gerrit: ${away.message}`, { icon: "warning" });
         } else {
           feedback("Refreshed from Gerrit");
         }

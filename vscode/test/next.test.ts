@@ -188,9 +188,11 @@ test("the Change view says unknown, with why, where Gerrit could not be asked: n
   const away = { code: "GERRIT", message: "Gerrit unreachable at g:8099 (connection refused)", reason: "unreachable" };
   const vm = changeVm(fixtureState({ shown: shown({ pushed: false, patchset_status: "unknown", attention_reasons: ["gerrit-unknown"], gerrit_unavailable: away }) }));
   assert.equal(vm.head?.detail, "");
-  assert.equal(vm.comments?.summary, "unknown: Gerrit could not be asked");
+  assert.equal(vm.comments?.summary, "unknown");
   const note = vm.notes?.find((n) => n.raw === away.message);
   assert.ok(note, "the reason is said once, under the head");
+  // "unknown" once on the view's top: in the head, not again in the note under it.
+  assert.equal([vm.head?.text, note?.text].join(" ").match(/unknown/g)?.length, 1, `${vm.head?.text} / ${note?.text}`);
   assert.deepEqual(note?.actions?.map((a) => [a.label, a.primary ?? false]), [["Retry", false], ["Check the Gerrit Address (ger setup)…", false], ["Show Log", false]]);
 });
 

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { changeVm } from "../src/changeRows";
-import { changeScreen } from "../src/changeScreen";
+import { changeScreen, gerritOffers } from "../src/changeScreen";
 import { FakeElement, fakePage } from "./fakePage";
 import { scenarios } from "./gallery/scenarios";
 import { shown, state } from "./fixtures";
@@ -106,4 +106,13 @@ test("with Next drawn, every other button is plain; reworking, the head holds no
   assert.equal(running.task?.busy, "Continuing the rebase in the ger terminal…");
   const checkout = changeScreen(stopped, { task: { ...reworkTask(), busy: "Checking out 2156…" }, busy: "Checking out 2156… Go to Definition once it is checked out" });
   assert.equal(checkout.task?.busy, undefined, "said once, in Next's place");
+});
+
+test("the title bar offers Vote and Publish only for a change read now: not after /show failed (P6)", () => {
+  const theirs = { pushed: true, own: false, change_status: "NEW" };
+  assert.deepEqual(gerritOffers(theirs, false), { onGerrit: true, votable: true });
+  assert.deepEqual(gerritOffers(theirs, true), { onGerrit: false, votable: false }, "a 401 on /show: the change shown before is not this answer");
+  assert.deepEqual(gerritOffers({ ...theirs, change_status: "ABANDONED" }, false), { onGerrit: true, votable: false });
+  assert.deepEqual(gerritOffers({ ...theirs, own: true }, false), { onGerrit: true, votable: false });
+  assert.deepEqual(gerritOffers(undefined, false), { onGerrit: false, votable: false });
 });

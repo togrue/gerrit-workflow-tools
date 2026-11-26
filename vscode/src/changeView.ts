@@ -180,6 +180,11 @@ export class ChangeView extends WebView<ChangeVm> {
     }
   }
 
+  /** The change selected could not be read: the view says why, and nothing shown before stands for it. */
+  get failed(): boolean {
+    return Boolean(this.detail.problem);
+  }
+
   /** `/show`'s answer for the change selected; undefined until it has come. */
   get shown(): ShownCommit | undefined {
     return this.detail.shown;
