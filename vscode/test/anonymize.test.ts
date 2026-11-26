@@ -371,7 +371,8 @@ test("a sentence with their words in it goes whole; a tooltip keeps the lines th
   const lines = second.tooltip.split("\n");
   assert.ok(lines.includes("the same as on Gerrit") === false, "\"Change 74212: the same as on Gerrit\" has the change number in it");
   assert.match(second.tooltip, /^[a-z \n]+$/, "the subject, the number, an unknown reason, the reviewers and the files of a conflict: all filler");
-  assert.deepEqual(second.badges.map((badge) => badge?.title.split("\n")[0]), ["3 unresolved comments", "Code-Review -1", second.badges[2]?.title]);
+  assert.deepEqual(second.badges.map((badge) => badge?.title.split("\n")[0]), [second.badges[0]?.title.split("\n")[0], "Code-Review -1", second.badges[2]?.title]);
+  assert.match(second.badges[0]?.title ?? "", /^3 comment chains unresolved/, "the comment words are ours");
   assert.match(second.badges[2]?.title ?? "", /^[a-z ]+$/, "CI failed: <the builds' names>");
   assert.match(second.badges[1]?.title.split("\n")[1] ?? "", /^[a-z ]+$/, "Reviewers: <names>");
   assert.equal(out.rows[0].tooltip.split("\n")[1], "not on Gerrit");

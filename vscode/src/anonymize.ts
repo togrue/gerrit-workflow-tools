@@ -14,6 +14,7 @@
 
 import { randomInt } from "node:crypto";
 
+import { commentPhrases } from "./commentState";
 import { DISCARD, LOADING, MODES, NOTHING_SHOWN, NOT_FILES, NO_CI_LINK, READ_ONLY, REVIEW_UPDATE, STOPPED_WORDS, YOURS } from "./changeRows";
 import { Names, Random } from "./fakes";
 import { ATTENTION_ICONS, FILE_STATES, REASON_WORDS } from "./format";
@@ -125,7 +126,7 @@ export const ICONS = [
   ...["beaker", "debug-continue", "edit", "eye", "flame", "git-branch", "history", "list-selection", "loading", "note", "person", "person-add", "target", "thumbsdown", "thumbsup"],
 ];
 const ICON = ours(ICONS);
-const TONE = ours(["good", "bad", "warn", "plain", "dim"]);
+const TONE = ours(["good", "bad", "warn", "info", "plain", "dim"]);
 
 const COUNT = "\\d{1,6}";
 const AGE = "\\d{1,5}[mhd]";
@@ -161,6 +162,7 @@ const TOOLTIP_LINE = ours([
   REBASE_WORDS.resolve,
   "The log was cut: findings may be incomplete.",
   new RegExp(`${COUNT} unresolved comments?`),
+  new RegExp(`(${commentPhrases(COUNT).join("|")})( · (${commentPhrases(COUNT).join("|")}))*`),
   "No reviewers assigned: nobody is asked to review it",
   new RegExp(`(Code-Review|Verified) [+-]\\d${NOTE}`),
   new RegExp(`CI failed${NOTE}`),
@@ -172,7 +174,7 @@ const BADGE: Shape = {
   icon: ICON,
   tone: TONE,
   /** A count of comments, or a vote. */
-  text: ours([new RegExp(`([+-]?${COUNT})?`)]),
+  text: ours([new RegExp(`([+-]?${COUNT})?`), new RegExp(`${COUNT}/${COUNT}`)]),
   title: TOOLTIP,
   stale: KEEP,
 };

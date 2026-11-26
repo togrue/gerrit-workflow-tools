@@ -576,21 +576,31 @@ test("a comment chain whose last published word is yours waits on a reply: a pla
   const [mine] = changeVm(state({ chains: [{ ...theirs, turn: "yours" }] })).comments?.threads ?? [];
   assert.deepEqual([mine.icon, mine.waiting], ["comment-unresolved", false]);
   const badge = (extra: Partial<StackCommit>) => badges(shown(extra))[0];
-  assert.deepEqual([badge({ comments_unresolved: 2, comments_awaiting_reply: 2 })?.icon, badge({ comments_unresolved: 2, comments_awaiting_reply: 2 })?.title], ["comment", "2 comments wait on a reply"]);
-  assert.deepEqual([badge({ comments_unresolved: 2, comments_awaiting_reply: 1 })?.icon, badge({ comments_unresolved: 2, comments_awaiting_reply: 1 })?.title], ["comment-unresolved", "1 of 2 comments to answer"]);
+  const waiting = badge({ comments_unresolved: 2, comments_awaiting_reply: 2 });
+  assert.deepEqual([waiting?.icon, waiting?.tone, waiting?.title], ["comment", "plain", "2 comment chains unresolved · 2 waiting on a reply"]);
+  const open = badge({ comments_unresolved: 2, comments_awaiting_reply: 1, comments_total: 5 });
+  assert.deepEqual([open?.icon, open?.tone, open?.text, open?.title], ["comment-unresolved", "warn", "2/5", "2 of 5 comment chains unresolved · 1 to answer · 1 waiting on a reply"]);
   assert.equal(reasonWords(["awaiting-reply"]), "comments wait on a reply");
 });
 
-test("a row counts what is left to answer; chains your drafts answer are a small mark, waiting on your push", () => {
-  const badge = (extra: Partial<StackCommit>) => badges(shown(extra))[0];
-  const done = badge({ comments_unresolved: 3, comments_drafted: 3, comments_to_answer: 0, attention_reasons: ["drafts-to-publish"] });
-  assert.deepEqual([done?.icon, done?.tone, done?.text, done?.title], ["edit", "plain", "draft", "3 answered by your drafts: push publishes them"]);
+test("a row shows its comments as a share, blue while drafts of yours wait, yellow while one waits for your answer", () => {
+  const badge = (extra: Partial<StackCommit>, drafts = 0) => badges(shown(extra), drafts)[0];
+  const done = badge({ comments_unresolved: 3, comments_drafted: 3, comments_to_answer: 0, comments_total: 4, attention_reasons: ["drafts-to-publish"] });
+  assert.deepEqual([done?.icon, done?.tone, done?.text, done?.title], ["comment", "info", "3/4", "3 of 4 comment chains unresolved · 3 answered by your drafts"]);
+  // Something left to answer leads: the drafts are said in the tooltip.
   const mixed = badge({ comments_unresolved: 3, comments_drafted: 1, comments_to_answer: 2 });
-  assert.deepEqual([mixed?.icon, mixed?.text, mixed?.title], ["comment-unresolved", "2 · draft", "2 of 3 comments to answer; 1 answered by your draft: push publishes it"]);
+  assert.deepEqual([mixed?.icon, mixed?.tone, mixed?.text, mixed?.title], ["comment-unresolved", "warn", "3", "3 comment chains unresolved · 2 to answer · 1 answered by your drafts"]);
+  // All resolved: a plain bubble with its share; drafts of yours on it (known to the Change view) turn it blue.
+  assert.deepEqual([badge({ comments_unresolved: 0, comments_total: 2 })?.tone, badge({ comments_unresolved: 0, comments_total: 2 })?.text], ["plain", "0/2"]);
+  assert.deepEqual([badge({ comments_unresolved: 0, comments_total: 0 }, 1)?.tone, badge({ comments_unresolved: 0, comments_total: 0 }, 1)?.title], ["info", "A draft of yours not published"]);
+  assert.deepEqual([badge({ comments_unresolved: 0, comments_total: null })?.text, badge({ comments_unresolved: 0, comments_total: null })?.title], ["", "Every comment chain resolved"]);
+  // None at all, or a ger serve before API 1.5 that does not count them: no badge for nothing.
+  assert.equal(badge({ comments_unresolved: 0, comments_total: 0 }), null);
+  assert.equal(badge({ comments_unresolved: 0 }), null);
   // A ger serve before API 1.4 sends no drafted count: every chain not waiting on a reply is left to answer.
-  assert.equal(badge({ comments_unresolved: 3, comments_awaiting_reply: 1 })?.text, "2");
-  assert.equal(votes({ verified: 1, code_review: null, comments_unresolved: 3, comments_drafted: 1, comments_to_answer: 2 }), "V+1 💬2 ✎1");
-  assert.equal(votes({ verified: null, code_review: null, comments_unresolved: 3, comments_drafted: 3, comments_to_answer: 0 }), "✎3");
+  assert.equal(badge({ comments_unresolved: 3, comments_awaiting_reply: 1 })?.title, "3 comment chains unresolved · 2 to answer · 1 waiting on a reply");
+  assert.equal(votes({ verified: 1, code_review: null, comments_unresolved: 3, comments_drafted: 1, comments_to_answer: 2 }), "V+1 💬3 ✎1");
+  assert.equal(votes({ verified: null, code_review: null, comments_unresolved: 3, comments_drafted: 3, comments_to_answer: 0, comments_total: 5 }), "💬3/5 ✎3");
   assert.equal(reasonWords(["drafts-to-publish"]), "drafts to publish with the push");
 });
 

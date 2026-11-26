@@ -1,6 +1,7 @@
 // How review state is put into words; how urgent it is, core says (`severity`). Pure: no `vscode`, no I/O.
 
 import { Attended, Chain, CommitStatus, EventsStatus, Headline, MoveConflict, Overview, Rebase, RebaseHeadline, RebaseStop, ReviewState, Severity, StackMoves } from "./api";
+import { Commented, commentState } from "./commentState";
 
 /** Every reason core names (`Attention`, core/attention.py), in words: test/format.test.ts checks them against test/attention.json, which tests/test_attention_severity.py checks against core. */
 const WORDS: Record<string, string> = {
@@ -119,23 +120,13 @@ export function vote(label: string, value: number | null): string {
   return `${label}${value > 0 ? "+" : ""}${value}`;
 }
 
-type Commented = { comments_unresolved: number; comments_awaiting_reply?: number; comments_drafted?: number; comments_to_answer?: number };
-
-/** How a row's unresolved comment chains split: left to answer, answered by your drafts, waiting on a reply (core's counts). */
-export function commentTurns(item: Commented): { count: number; left: number; drafted: number; awaiting: number } {
-  const count = item.comments_unresolved;
-  const awaiting = Math.min(item.comments_awaiting_reply ?? 0, count);
-  const drafted = Math.min(item.comments_drafted ?? 0, count - awaiting);
-  return { count, left: item.comments_to_answer ?? count - awaiting - drafted, drafted, awaiting };
-}
-
-/** The comments left to answer (`💬2`), and a small mark for those your drafts answer (`✎1`: they wait on your push). */
+/** The share of unresolved comment chains (`💬2/5`, `💬2` when all is not counted), and a small mark for those your drafts answer (`✎1`: they wait on your push). */
 export function commentMarks(item: Commented): string[] {
-  const { left, drafted } = commentTurns(item);
-  return [left > 0 ? `💬${left}` : "", drafted > 0 ? `✎${drafted}` : ""].filter(Boolean);
+  const state = commentState(item);
+  return [state?.unresolved ? `💬${state.text}` : "", state?.drafted ? `✎${state.drafted}` : ""].filter(Boolean);
 }
 
-/** The votes that exist and the comments left to answer, e.g. `V+1 CR-1 💬2 ✎1`; `no votes` when there is nothing. */
+/** The votes that exist and the unresolved comments, e.g. `V+1 CR-1 💬2/5 ✎1`; `no votes` when there is nothing. */
 export function votes(item: { verified: number | null; code_review: number | null } & Commented): string {
   const parts: string[] = [];
   if (item.verified !== null && item.verified !== undefined) {
