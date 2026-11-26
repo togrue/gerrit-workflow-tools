@@ -9,7 +9,7 @@ from enum import Enum
 from pathlib import Path
 from typing import NamedTuple
 
-from gerrit_workflow_tools.core.change_id import parse_change_id_footer, validate_change_id_value
+from gerrit_workflow_tools.core.change_id import parse_change_id_footer
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.fixups import is_unsquashed_fixup
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
@@ -35,6 +35,7 @@ from gerrit_workflow_tools.core.push_reviewers import chain_people
 from gerrit_workflow_tools.core.push_targets import NextPatchset, next_patchsets
 from gerrit_workflow_tools.core.push_unchanged import AbandonedChange, OutdatedChange, UnchangedChange
 from gerrit_workflow_tools.core.ready_calc import ReadyResult, compute_ready
+from gerrit_workflow_tools.core.ready_strategy import lacks_change_id
 from gerrit_workflow_tools.core.rebase_next_step import FINISH
 from gerrit_workflow_tools.core.rebase_state import AM_UNDERWAY, am_underway, rebase_underway
 from gerrit_workflow_tools.core.reword import add_missing_change_ids
@@ -363,16 +364,15 @@ def push_boundary(cwd: Path, ready: ReadyResult, *, head: str) -> PushBoundary:
     count = git_or_none(cwd, "rev-list", "--count", f"{sha}..{head}") if sha else None
     # The boundary commit itself is held back too, and `sha..head` leaves it out.
     held = int(count) + 1 if count and count.isdigit() else 0
-    missing = sha is not None and not ready.all_lifts_boundary and _lacks_change_id(cwd, sha)
+    missing = sha is not None and not ready.all_lifts_boundary and _lacks_change_id(cwd, sha, subject or "")
     fix = _boundary_fix(subject or "", ready, missing=missing) if sha else None
     return PushBoundary(sha, ready.boundary_reason, short_sha, subject, held, fix, ready.all_lifts_boundary, missing)
 
 
-def _lacks_change_id(cwd: Path, sha: str) -> bool:
-    """Whether *sha*'s message has no Change-Id footer at all (not a malformed one)."""
+def _lacks_change_id(cwd: Path, sha: str, subject: str) -> bool:
+    """Whether *sha* is a commit ``ger push`` adds a Change-Id to (:func:`lacks_change_id`)."""
     message = git_or_none(cwd, "show", "-s", "--format=%B", sha) or ""
-    found, malformed = validate_change_id_value(parse_change_id_footer(message))
-    return not found and not malformed
+    return lacks_change_id(parse_change_id_footer(message), subject)
 
 
 def _boundary_fix(subject: str, ready: ReadyResult, *, missing: bool) -> str | None:

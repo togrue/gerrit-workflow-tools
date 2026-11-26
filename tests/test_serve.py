@@ -180,6 +180,7 @@ def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monk
     assert list(stack["commits"][0]) == [
         *shared,
         *("short_sha", "abandoned", "diverged", "merge", "pinned", "rebase", "updated", "is_head", "held_back"),
+        "adds_change_id",
         *("needs_edit", "fixup_of"),
     ]
     assert (log["stack"], log["upstream"], log["rebase"]) == (stack["stack"], stack["upstream"], stack["rebase"])
@@ -1413,3 +1414,13 @@ def test_your_unpublished_comments_can_be_edited_and_discarded(stack_repo: Path)
     assert store.calls_to("publish_drafts") == []
     with pytest.raises(ChangeResolutionError):
         _post(api, "/comments/discard", {"rev": "HEAD", "comment_id": note["id"]})
+
+
+def test_stack_says_which_commits_push_gives_a_change_id_and_holds_none_back(stack_repo: Path) -> None:
+    """State 19 of the outside-the-happy-path run: the rows said "held back", the push sent them as new changes."""
+    store = _gerrit(stack_repo)[0]
+    git("commit", "--allow-empty", "-q", "-m", "no change id", cwd=stack_repo)
+    git("commit", "--allow-empty", "-q", "-m", "no change id either", cwd=stack_repo)
+    git("config", "ger.stopPattern", "^nothing-matches$", cwd=stack_repo)
+    stack = _get(GerApi(stack_repo, gerrit=store), "/stack")
+    assert [(c["held_back"], c["adds_change_id"]) for c in stack["commits"]][-2:] == [(False, True), (False, True)]

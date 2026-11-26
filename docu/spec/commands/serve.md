@@ -267,7 +267,9 @@ so it always counts as news.
 ### `GET /stack`
 
 The **annotated stack** of the working branch: `ger log --json`, plus per commit `short_sha`,
-`updated`, `is_head`, `held_back` (at or above the **ready boundary**) and
+`updated`, `is_head`, `held_back` (at or above the **ready boundary**), `adds_change_id` (below
+it, with no valid Change-Id: `ger push` gives it one before it sends it, as a new change, so the
+local commit changes; only on the branch checked out, where the push does that) and
 `needs_edit` (edit attention). `summary` counts `commits`, `ready`, `attention`, `needs_edit`
 and `not_on_gerrit`. `pipelines=1` adds `ci_pipelines`. When Gerrit could not be asked at all,
 the commits still come back with `patchset_status: "unknown"`, and `gerrit_unavailable` is the

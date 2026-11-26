@@ -141,6 +141,7 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
             "updated": iso_utc(parse_gerrit_time(c.updated)),
             "is_head": c.sha == head,
             "held_back": c.sha in blocked,
+            "adds_change_id": c.sha in overview.adds_change_id,
             "needs_edit": commit_needs_edit_attention(c),
             "fixup_of": fixups.get(c.sha),
             **({"resolution_note": view.notes_by_sha[c.sha]} if c.sha in view.notes_by_sha else {}),

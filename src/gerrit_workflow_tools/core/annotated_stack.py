@@ -33,7 +33,7 @@ from gerrit_workflow_tools.core.gerrit.rest import GerritUnavailableError
 from gerrit_workflow_tools.core.gerrit.service import GerritService
 from gerrit_workflow_tools.core.gerrit_change_status import LogCommit, PatchsetStatus, local_log_commit
 from gerrit_workflow_tools.core.git_run import GitError, git
-from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack
+from gerrit_workflow_tools.core.ready_strategy import blocked_shas_for_stack, change_ids_push_adds
 from gerrit_workflow_tools.core.rebase_state import RebaseProgress, rebase_progress
 from gerrit_workflow_tools.core.rebasing_stack import RebasingStack, load_rebasing_stack
 from gerrit_workflow_tools.core.run_context import RunContext
@@ -281,6 +281,8 @@ class StackOverview:
     whole_stack: bool = False
     """The commits are the local stack of the checked-out branch, no rebase underway: what
     ``ger checkout --update`` alone brings to Gerrit's current patchsets."""
+    adds_change_id: frozenset[str] = frozenset()
+    """Commits ``ger push`` gives a Change-Id before it sends them (``change_ids_push_adds``)."""
 
     @property
     def ready(self) -> int:
@@ -373,6 +375,10 @@ def load_stack_overview(
     """:func:`load_annotated_stack`, with the ready boundary ``ger push`` stops at, the rebase and the upstream."""
     view = load_annotated_stack(run, rev_range, first_parent=first_parent, fetch_ci_pipelines=fetch_ci_pipelines)
     settings = run.settings
+    progress = view.rebase.rebase if view.rebase else rebase_progress(run.cwd, repo_dir=run.worktree.repository_dir)
+    on_stack = rev_range is None and progress is None
+    # On the branch checked out, `ger push` adds the missing Change-Ids: they hold nothing back.
+    adds = change_ids_push_adds(view.rows) if on_stack and run.worktree.branch else frozenset[str]()
     blocked = (
         blocked_shas_for_stack(
             run.repo.root,
@@ -381,17 +387,12 @@ def load_stack_overview(
             stop_pattern=settings.stop_pattern,
             settings=settings,
             web_base=settings.gerrit_web_url,
+            change_ids_added=bool(adds),
         )
         if view.rows
         else frozenset[str]()
     )
-    progress = view.rebase.rebase if view.rebase else rebase_progress(run.cwd, repo_dir=run.worktree.repository_dir)
-    on_stack = rev_range is None and progress is None
-    branch = run.repo.working_branch
-    moved = (
-        upstream_moved(run.cwd, branch, view.rows, settings=settings, merged=merged_same(view.commits))
-        if on_stack
-        else None
-    )
-    whole = on_stack and run.worktree.branch is not None
-    return StackOverview(view, blocked, progress, moved, whole_stack=whole)
+    branch, whole = run.repo.working_branch, on_stack and run.worktree.branch is not None
+    merged = merged_same(view.commits)
+    moved = upstream_moved(run.cwd, branch, view.rows, settings=settings, merged=merged) if on_stack else None
+    return StackOverview(view, blocked, progress, moved, whole_stack=whole, adds_change_id=adds - blocked)

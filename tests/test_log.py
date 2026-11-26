@@ -14,6 +14,7 @@ import pytest
 
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_log import main as log_main
+from gerrit_workflow_tools.cli_push import main as push_main
 from gerrit_workflow_tools.cli_show import main as show_main
 from gerrit_workflow_tools.core.annotated_stack import resolve_rev_range
 from gerrit_workflow_tools.core.attention import determine_attention
@@ -827,9 +828,13 @@ def test_log_ready_count_agrees_with_the_push_boundary(stack_repo: Path, monkeyp
     store = ChangeStore(build_details_by_change_id(rows))
 
     _code, out, _err = run_cli(stack_repo, log_main, [], monkeypatch, gerrit=store)
+    _code, push_out, _err = run_cli(stack_repo, push_main, ["--dry-run"], monkeypatch, gerrit=store)
 
-    assert f"{len(rows) - ready.pushable_count} held back" in strip_ansi(out)
+    # The ready boundary alone stops at the first: `ger push` gives both a Change-Id and sends them,
+    # so `ger log` says they go up (state 19 of the outside-the-happy-path run: the view said "held back").
     assert ready.pushable_count == len(rows) - 2
+    assert "held back" not in strip_ansi(out) and "2 to upload" in strip_ansi(out)
+    assert "adds the missing Change-Ids first, and pushes those commits too" in push_out
 
 
 def test_log_does_not_show_old_votes_on_a_rewritten_commit(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

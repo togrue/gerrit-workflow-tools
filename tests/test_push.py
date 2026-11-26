@@ -19,8 +19,10 @@ from gerrit_workflow_tools.cli_push import main as push_main
 from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.git_state import git_dir
 from gerrit_workflow_tools.core.ready_calc import compute_ready
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range
+from gerrit_workflow_tools.core.step_outcome import last_outcome
 from gerrit_workflow_tools.push_input_line import parse as parse_push_options_line
 from gerrit_workflow_tools.push_options_history import load_push_options_history
 from gerrit_workflow_tools.render.style import ANSI_YELLOW
@@ -1509,11 +1511,31 @@ def test_push_adds_the_missing_change_ids_and_pushes_those_commits(
     monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     code, out, err = run_cli(stack_repo, push_main, ["--all", "-y"], monkeypatch)
     assert code == 0, err
-    assert 'Added a Change-Id to 1 commit, as a commit-msg hook would: "no footer yet"' in out
+    assert 'Adds a Change-Id to 1 commit, as a commit-msg hook would: "no footer yet" (kept only if you push)' in out
     head = git("rev-parse", "HEAD", cwd=stack_repo).stdout.strip()
     assert "Change-Id: I" in git("show", "-s", "--format=%B", "HEAD", cwd=stack_repo).stdout
     pushes = [call.args[0] for call in mock_run.call_args_list if call.args[0][:2] == ["git", "push"]]
     assert any(head in argv[-1] for argv in pushes), (pushes, "the push sends the commit with its new Change-Id")
+
+
+def test_a_push_not_sent_takes_the_change_ids_it_added_back(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """State 19 of the outside-the-happy-path run: a cancelled push had rewritten two commits for good."""
+    git("commit", "--allow-empty", "-m", "no footer yet", cwd=stack_repo)
+    head = git("rev-parse", "HEAD", cwd=stack_repo).stdout.strip()
+    mock_run = MagicMock(return_value=MagicMock(returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_push.confirm_gerrit_push", lambda *_a, **_k: int(ExitCode.OK))
+
+    code, out, err = run_cli(stack_repo, push_main, ["--all"], monkeypatch)
+
+    assert code == 0, err
+    assert "(kept only if you push)" in out
+    assert "The Change-Ids added to 1 commit are taken back: your commits are as before." in out
+    assert git("rev-parse", "HEAD", cwd=stack_repo).stdout.strip() == head
+    assert not [call for call in mock_run.call_args_list if call.args[0][:2] == ["git", "push"]]
+    outcome = last_outcome(git_dir(stack_repo))
+    assert outcome is not None and (outcome.command, outcome.ok) == ("push", False)
+    assert outcome.text == "push cancelled: nothing sent; the Change-Ids added to 1 commit are taken back"
 
 
 def test_push_wip_from_above_the_ready_boundary_names_it_and_all(
