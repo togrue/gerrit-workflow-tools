@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from collections.abc import Callable
+from pathlib import Path
 
 from gerrit_workflow_tools.cli_args import (
     add_branch_arg,
@@ -19,17 +21,20 @@ from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, require
 from gerrit_workflow_tools.cli_terminal import assume_yes, confirm, stdin_is_terminal
 from gerrit_workflow_tools.core.gerrit.comments import PUBLISH_GUARD_ENV, publish_blocked
 from gerrit_workflow_tools.core.gerrit.rest import GerritRest
+from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name, ger_push_mode
 from gerrit_workflow_tools.core.push import PushPlan, PushRefusal, changes_nothing, execute, prepare, prepare_vanilla
-from gerrit_workflow_tools.core.push_checks import add_change_ids_for_push, resolve_push_branch
+from gerrit_workflow_tools.core.push_checks import PushBoundary, add_change_ids_for_push, resolve_push_branch
 from gerrit_workflow_tools.core.review_checkout import staged_review_refusal
 from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
+from gerrit_workflow_tools.core.reword import take_back
 from gerrit_workflow_tools.core.run_context import RunContext
-from gerrit_workflow_tools.core.upstream import missing_upstream_error
+from gerrit_workflow_tools.core.step_outcome import record_outcome, refusal_recorded
+from gerrit_workflow_tools.core.upstream import gone_upstream, missing_upstream_error
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.push_confirm import confirm_gerrit_push, prompt_initial_options
-from gerrit_workflow_tools.push_outcome import finish_push, print_refusal
+from gerrit_workflow_tools.push_outcome import finish_and_record, finish_push, print_refusal
 from gerrit_workflow_tools.push_preview import print_nothing_to_push
 from gerrit_workflow_tools.render.style import ANSI_DIM_GRAY, color_text
 from gerrit_workflow_tools.summary_highlight import branch_summary_highlighter
@@ -229,31 +234,92 @@ def _push_gerrit(run: RunContext, args: argparse.Namespace, *, branch: str) -> i
 
     prepared = prepare_push()
     # No commit-msg hook adds Change-Ids (ger setup installs none): the push adds the missing ones,
-    # as the hook would have at commit time, says so before its preview, and goes on with them.
+    # as the hook would have at commit time, says so before its preview, and goes on with them. They
+    # stay only once the push is sent: a push not sent takes them back (`_ChangeIds.take_back`).
+    added = _ChangeIds(cwd)
     if args.dry_run and prepared.boundary is not None and prepared.boundary.missing_change_id:
         print("ger push (without --dry-run) adds the missing Change-Ids first, and pushes those commits too.")
-    elif added := add_change_ids_for_push(cwd, branch, prepared.boundary):
-        named = ", ".join(f'"{commit.subject}"' for commit in added)
-        print(f"Added a Change-Id to {counted(len(added), 'commit')}, as a commit-msg hook would: {named}")
+    elif added.add(branch, prepared.boundary):
         prepared = prepare_push()
+    try:
+        return _confirm_and_push(run, args, prepared, prepare_push, added, branch=branch)
+    finally:
+        added.take_back()
+
+
+class _ChangeIds:
+    """The Change-Ids a push added for its preview: kept once it is sent, else taken back."""
+
+    def __init__(self, cwd: Path) -> None:
+        self.cwd = cwd
+        self.count = 0
+        self.before: str | None = None
+        self.after: str | None = None
+        self.sent = False
+
+    def add(self, branch: str, boundary: PushBoundary | None) -> bool:
+        before = commit_sha_or_none(self.cwd, "HEAD")
+        added = add_change_ids_for_push(self.cwd, branch, boundary)
+        if not added:
+            return False
+        self.count, self.before, self.after = len(added), before, commit_sha_or_none(self.cwd, "HEAD")
+        named = ", ".join(f'"{commit.subject}"' for commit in added)
+        print(
+            f"Adds a Change-Id to {counted(len(added), 'commit')}, as a commit-msg hook would: {named} "
+            "(kept only if you push)"
+        )
+        return True
+
+    def take_back(self) -> str:
+        """Put the branch back where it was, unless the push was sent; what a push not sent says of it."""
+        if self.sent or not (self.before and self.after):
+            return ""
+        before, self.before = self.before, None
+        if not take_back(self.cwd, before, self.after, why="ger push: not sent, Change-Ids taken back"):
+            return ""
+        said = f"the Change-Ids added to {counted(self.count, 'commit')} are taken back"
+        print(f"{said[0].upper()}{said[1:]}: your commits are as before.")
+        return f"; {said}"
+
+
+def _confirm_and_push(
+    run: RunContext,
+    args: argparse.Namespace,
+    prepared: PushPlan | PushRefusal,
+    prepare_push: Callable[[], PushPlan | PushRefusal],
+    added: _ChangeIds,
+    *,
+    branch: str,
+) -> int:
+    """The preview, the question and the push, each way it can end left as the **step outcome**."""
+    cwd, settings = run.cwd, run.settings
+    first_parent = not args.follow_merges
     if isinstance(prepared, PushRefusal):
         print_refusal(cwd, branch, prepared, first_parent=first_parent, settings=settings)
+        note = added.take_back()  # first: the outcome names HEAD as it is left
+        record_outcome(cwd, "push", f"refused: {prepared.message.removeprefix('error: ')}{note}", ok=False)
         return int(ExitCode.REFUSED)
     for warning in prepared.warnings:
         print(warning, file=sys.stderr)
     asked = prompt_initial_options(cwd, prepared, args, settings=settings) if args.i else prepared
     if asked is None:
         print("Push cancelled.", file=sys.stderr)
+        note = added.take_back()  # first: the outcome names HEAD as it is left
+        record_outcome(cwd, "push", f"push cancelled: nothing sent{note}", ok=False)
         return int(ExitCode.OK)
     plan = asked
     highlighter = branch_summary_highlighter(cwd, plan.branch, first_parent=first_parent, settings=settings)
     if changes_nothing(plan) and not args.dry_run:  # nothing to confirm, so -y is not needed either
         print_nothing_to_push(plan, summary_highlighter=highlighter)
-        return finish_push(execute(run, plan), plan)
+        return finish_and_record(cwd, execute(run, plan), plan)
     confirmed = confirm_gerrit_push(run, plan, args, summary_highlighter=highlighter)
     if isinstance(confirmed, int):
+        if not args.dry_run:
+            note = added.take_back()  # first: the outcome names HEAD as it is left
+            record_outcome(cwd, "push", f"push cancelled: nothing sent{note}", ok=False)
         return confirmed
-    code = finish_push(execute(run, confirmed), confirmed)
+    added.sent = True
+    code = finish_and_record(cwd, execute(run, confirmed), confirmed)
     if code == 0 and confirmed.options != prepared.options:
         from gerrit_workflow_tools.push_options_history import remember_push_options
 
@@ -293,6 +359,12 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         parser.error(f"--publish-comments is blocked: {PUBLISH_GUARD_ENV} is set in the environment")
     if args.i and not stdin_is_terminal():
         raise UsageError("-i requires an interactive terminal (stdin is not a TTY)")
+    with refusal_recorded(cwd, "push"):
+        return _push(run, args)
+
+
+def _push(run: RunContext, args: argparse.Namespace) -> int:
+    cwd, settings = run.cwd, run.settings
 
     # A staged review makes its change-<n> the working branch: a push without --branch would send it.
     if not args.branch and (refusal := staged_review_refusal(run.worktree.repository_dir, cwd)):
@@ -302,10 +374,11 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
     mode = ger_push_mode(cwd, branch, settings=settings)
     if not args.yes and not args.dry_run and mode in ("gerrit", None) and (args.branch or not detached):
         if not require_branch_upstream(cwd, branch, settings=settings):
+            record_outcome(cwd, "push", f"refused: {branch} has no upstream to push to", ok=False)
             return int(ExitCode.REFUSED)
         mode = ger_push_mode(cwd, branch, settings=settings)
     if mode is None:  # Already asked above, or chose not to (--yes, --dry-run, detached HEAD).
-        raise missing_upstream_error(branch, askable=False)
+        raise missing_upstream_error(branch, askable=False, gone=gone_upstream(cwd, branch))
     if args.i and mode == "vanilla":
         raise UsageError("-i applies only to Gerrit push (upstream on ger.remote)")
     if mode == "vanilla":

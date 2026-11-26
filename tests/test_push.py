@@ -19,8 +19,10 @@ from gerrit_workflow_tools.cli_push import main as push_main
 from gerrit_workflow_tools.core.config_write import set_branch_config
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.git_state import git_dir
 from gerrit_workflow_tools.core.ready_calc import compute_ready
 from gerrit_workflow_tools.core.stack import Commit, commits_in_range
+from gerrit_workflow_tools.core.step_outcome import last_outcome
 from gerrit_workflow_tools.push_input_line import parse as parse_push_options_line
 from gerrit_workflow_tools.push_options_history import load_push_options_history
 from gerrit_workflow_tools.render.style import ANSI_YELLOW
@@ -403,6 +405,27 @@ def test_push_rejected_by_gerrit_keeps_gits_output_and_adds_gerrits_reason(
         "nosuch does not identify a registered user or group\n"
     )
     assert not ref_exists(stack_repo, "refs/heads/lastPush/feature")
+
+
+def test_gerrits_refusal_of_a_missing_branch_is_the_step_outcome_with_the_way_on(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """State 19 of the outside-the-happy-path run: the refusal reached only the terminal."""
+    rejected = (
+        " ! [remote rejected] tip -> refs/for/main (branch no-such-branch not found)\n"
+        "error: failed to push some refs to 'ssh://g.example.test/proj'\n"
+    )
+    mock_run = MagicMock(return_value=subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr=rejected))
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+
+    code, _out, _err = run_cli(stack_repo, push_main, ["-y"], monkeypatch)
+
+    outcome = last_outcome(git_dir(stack_repo))
+    assert code != 0 and outcome is not None and (outcome.command, outcome.ok) == ("push", False)
+    assert outcome.text == "Gerrit rejected the push: branch no-such-branch not found"
+    assert outcome.more == (
+        "next: Gerrit has no branch no-such-branch: make one it has the upstream (`git branch --set-upstream-to=…`)",
+    )
 
 
 def test_push_does_not_list_a_commit_of_an_abandoned_change_as_sent(
@@ -1509,11 +1532,32 @@ def test_push_adds_the_missing_change_ids_and_pushes_those_commits(
     monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
     code, out, err = run_cli(stack_repo, push_main, ["--all", "-y"], monkeypatch)
     assert code == 0, err
-    assert 'Added a Change-Id to 1 commit, as a commit-msg hook would: "no footer yet"' in out
+    assert 'Adds a Change-Id to 1 commit, as a commit-msg hook would: "no footer yet" (kept only if you push)' in out
     head = git("rev-parse", "HEAD", cwd=stack_repo).stdout.strip()
     assert "Change-Id: I" in git("show", "-s", "--format=%B", "HEAD", cwd=stack_repo).stdout
     pushes = [call.args[0] for call in mock_run.call_args_list if call.args[0][:2] == ["git", "push"]]
     assert any(head in argv[-1] for argv in pushes), (pushes, "the push sends the commit with its new Change-Id")
+
+
+def test_a_push_not_sent_takes_the_change_ids_it_added_back(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """State 19 of the outside-the-happy-path run: a cancelled push had rewritten two commits for good."""
+    git("commit", "--allow-empty", "-m", "no footer yet", cwd=stack_repo)
+    head = git("rev-parse", "HEAD", cwd=stack_repo).stdout.strip()
+    mock_run = MagicMock(return_value=MagicMock(returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr("gerrit_workflow_tools.core.push.run_git_push", mock_run)
+    monkeypatch.setattr("gerrit_workflow_tools.cli_push.confirm_gerrit_push", lambda *_a, **_k: int(ExitCode.OK))
+
+    code, out, err = run_cli(stack_repo, push_main, ["--all"], monkeypatch)
+
+    assert code == 0, err
+    assert "(kept only if you push)" in out
+    assert "The Change-Ids added to 1 commit are taken back: your commits are as before." in out
+    assert git("rev-parse", "HEAD", cwd=stack_repo).stdout.strip() == head
+    assert not [call for call in mock_run.call_args_list if call.args[0][:2] == ["git", "push"]]
+    outcome = last_outcome(git_dir(stack_repo))
+    assert outcome is not None and (outcome.command, outcome.ok) == ("push", False)
+    assert outcome.text == "push cancelled: nothing sent; the Change-Ids added to 1 commit are taken back"
+    assert outcome.head == head  # recorded once the branch is back: the views show it while HEAD stays there
 
 
 def test_push_wip_from_above_the_ready_boundary_names_it_and_all(

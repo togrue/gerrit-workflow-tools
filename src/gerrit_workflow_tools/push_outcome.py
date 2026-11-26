@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -13,6 +14,8 @@ from gerrit_workflow_tools.core.push_result import NOTHING_TO_PUSH, PushResult
 from gerrit_workflow_tools.core.push_reviewers import ReviewerApplyChangeOutcome, ReviewerApplyResult
 from gerrit_workflow_tools.core.push_targets import PushedChange
 from gerrit_workflow_tools.core.push_unchanged import StateUpdateFailure
+from gerrit_workflow_tools.core.step_outcome import record_outcome
+from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.push_preview import (
     print_not_sent,
     print_ready_boundary_notice,
@@ -149,6 +152,29 @@ def finish_push(result: PushResult, plan: PushPlan | None) -> int:
     _emit_push_output(result)
     print_push_outcome(result, plan)
     return int(ExitCode.GERRIT) if result.gerrit_failed else result.returncode
+
+
+def finish_and_record(cwd: Path, result: PushResult, plan: PushPlan) -> int:
+    """:func:`finish_push`, and the push's **step outcome** in one line: sent, Gerrit's refusal, nothing."""
+    code = finish_push(result, plan)
+    if result.error_message:
+        missing = re.search(r"branch (\S+) not found", result.error_message)
+        more = (
+            [
+                f"next: Gerrit has no branch {missing[1]}: "
+                "make one it has the upstream (`git branch --set-upstream-to=…`)"
+            ]
+            if missing
+            else []
+        )
+        record_outcome(cwd, "push", result.error_message.removeprefix("error: "), ok=False, more=more)
+    elif result.pushed:
+        changes = ", ".join(str(change.number) for change in result.pushed)
+        sent = f"pushed {counted(len(result.pushed), 'commit')} to refs/for/{plan.push_branch}: change {changes}"
+        record_outcome(cwd, "push", sent, ok=code == 0)
+    else:
+        record_outcome(cwd, "push", NOTHING_TO_PUSH if result.set_nothing else "push done", ok=code == 0)
+    return code
 
 
 def print_refusal(

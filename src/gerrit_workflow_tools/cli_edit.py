@@ -45,6 +45,7 @@ from gerrit_workflow_tools.core.review_checkout import staged_review_refusal
 from gerrit_workflow_tools.core.rewrite_refusal import closed_change_refusal
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import merge_base_with_target
+from gerrit_workflow_tools.core.step_outcome import refusal_recorded
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.rebase_run import go_on_with_rebase, require_history_rewrite, run_interactive_rebase
 from gerrit_workflow_tools.render.status_fmt import attention_text
@@ -233,7 +234,8 @@ def _continue_stopped_rebase(run: RunContext) -> int:
     """
     cwd = run.cwd
     print("continuing the rebase", file=sys.stderr)
-    code = go_on_with_rebase(run, RebaseAction.CONTINUE, walk_on=_WALK_ON)  # says `rebase finished: …`
+    with refusal_recorded(cwd, "edit -n"):
+        code = go_on_with_rebase(run, RebaseAction.CONTINUE, walk_on=_WALK_ON)  # says `rebase finished: …`
     if not rebase_in_progress(cwd):
         return code
     if code == 0:

@@ -143,7 +143,17 @@ def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monk
     assert code == ExitCode.OK
     assert list(log) == ["stack", "rebase", "upstream", "commits", "next"]
     assert list(stack) == [
-        *("branch", "head", "rebase_in_progress", "rebase", "upstream", "push_blocked", "staged_review", "stack"),
+        *(
+            "branch",
+            "head",
+            "rebase_in_progress",
+            "rebase",
+            "upstream",
+            "push_blocked",
+            "staged_review",
+            "last_outcome",
+            "stack",
+        ),
         *("summary", "commits"),
         "next",
     ]
@@ -170,6 +180,7 @@ def test_ger_log_json_and_stack_keep_their_keys_and_agree(stack_repo: Path, monk
     assert list(stack["commits"][0]) == [
         *shared,
         *("short_sha", "abandoned", "diverged", "merge", "pinned", "rebase", "updated", "is_head", "held_back"),
+        "adds_change_id",
         *("needs_edit", "fixup_of"),
     ]
     assert (log["stack"], log["upstream"], log["rebase"]) == (stack["stack"], stack["upstream"], stack["rebase"])
@@ -1077,8 +1088,10 @@ def test_rebase_refusal_is_the_check_every_go_on_makes_unstaged_changes_too(stac
     (stack_repo / "a.txt").write_text("edited at the stop\n", encoding="utf-8")
     refused = _get(api, "/rebase/refusal")["refused"]
     assert refused.startswith("you have unstaged changes to a.txt; amend them in (`git commit --amend -a`)")
-    # The stack's own `refused` is told from the stop alone: it does not look at the work tree.
-    assert "continue" not in _get(api, "/stack")["rebase"]["refused"]
+    # The stack says it too, with the files, before anybody presses Continue: one verdict, one wording.
+    rebase = _get(api, "/stack")["rebase"]
+    assert (rebase["uncommitted"], rebase["actions"]) == (["a.txt"], ["abort"])
+    assert rebase["refused"]["continue"] == refused
     with pytest.raises(BadRequest, match="action must be one of continue, abort, skip"):
         _get(api, "/rebase/refusal", action="onward")
 
@@ -1122,7 +1135,7 @@ def _http(
 def test_http_answers_only_with_the_token_on_a_loopback_host(served: GerHttpServer) -> None:
     status, body = _http(served, f"{V1}/health")
     assert status == 200
-    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.7.0", "feature", "g.example")
+    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.8.0", "feature", "g.example")
     assert _http(served, f"{V1}/health", token=None)[0] == 401
     assert _http(served, f"{V1}/health", token="wrong")[0] == 401
     # A page that rebinds its own name to 127.0.0.1 still sends its name as Host.
@@ -1401,3 +1414,13 @@ def test_your_unpublished_comments_can_be_edited_and_discarded(stack_repo: Path)
     assert store.calls_to("publish_drafts") == []
     with pytest.raises(ChangeResolutionError):
         _post(api, "/comments/discard", {"rev": "HEAD", "comment_id": note["id"]})
+
+
+def test_stack_says_which_commits_push_gives_a_change_id_and_holds_none_back(stack_repo: Path) -> None:
+    """State 19 of the outside-the-happy-path run: the rows said "held back", the push sent them as new changes."""
+    store = _gerrit(stack_repo)[0]
+    git("commit", "--allow-empty", "-q", "-m", "no change id", cwd=stack_repo)
+    git("commit", "--allow-empty", "-q", "-m", "no change id either", cwd=stack_repo)
+    git("config", "ger.stopPattern", "^nothing-matches$", cwd=stack_repo)
+    stack = _get(GerApi(stack_repo, gerrit=store), "/stack")
+    assert [(c["held_back"], c["adds_change_id"]) for c in stack["commits"]][-2:] == [(False, True), (False, True)]

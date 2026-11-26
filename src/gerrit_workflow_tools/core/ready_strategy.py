@@ -8,7 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from gerrit_workflow_tools.core.change_id import validate_change_id_value
 from gerrit_workflow_tools.core.config import Settings
+from gerrit_workflow_tools.core.fixups import is_unsquashed_fixup
 from gerrit_workflow_tools.core.ger_registry import ExtensionRegistry
 from gerrit_workflow_tools.core.stack import Commit
 
@@ -68,8 +70,14 @@ def blocked_shas_for_stack(
     settings: Settings | None = None,
     web_base: str | None = None,
     overlay: dict[str, LogCommit] | None = None,
+    change_ids_added: bool = False,
 ) -> frozenset[str]:
-    """Return SHAs at or after the ready boundary (non-pushable stack tail)."""
+    """Return SHAs at or after the ready boundary (non-pushable stack tail).
+
+    *change_ids_added*: ``ger push`` gives the commits without a Change-Id one before it pushes
+    (:func:`change_ids_push_adds`), so no Change-Id error holds them back: the boundary is the
+    strategy's or the stop pattern's alone, as the push finds it once they have one.
+    """
 
     # Imported lazily to avoid a ready_strategy ↔ ready_calc import cycle at module load.
     from gerrit_workflow_tools.core.ready_calc import compose_ready_boundary
@@ -83,10 +91,39 @@ def blocked_shas_for_stack(
         settings=settings,
         web_base=web_base,
     )
-    boundary = compose_ready_boundary(strategy, commits)
+    boundary = strategy if change_ids_added else compose_ready_boundary(strategy, commits)
     if boundary.block_index is None:
         return frozenset()
     return frozenset(row.sha for row in commits[boundary.block_index :])
+
+
+def lacks_change_id(footer: str | None, subject: str) -> bool:
+    """A commit ``ger push`` adds a Change-Id to: no footer at all (not a malformed one), and not a ``fixup!``
+    commit, which is squashed before it is pushed."""
+    return validate_change_id_value(footer) == (False, False) and not is_unsquashed_fixup(subject)
+
+
+def change_ids_push_adds(commits: list[Commit]) -> frozenset[str]:
+    """The commits ``ger push`` gives a Change-Id before its preview, on the branch checked out.
+
+    It does where the first Change-Id error of the stack (oldest first) is a commit without any
+    Change-Id footer (``add_change_ids_for_push``), and then it fixes every one: each commit
+    without a valid Change-Id, and the newer of two that carry the same one. A malformed footer
+    or an unsquashed ``fixup!`` first holds the push back instead.
+    """
+    from gerrit_workflow_tools.core.ready_calc import change_id_boundary_for_commits
+
+    first = change_id_boundary_for_commits(commits).block_index
+    if first is None or not lacks_change_id(commits[first].change_id, commits[first].subject):
+        return frozenset()
+    seen: set[str] = set()
+    adds: set[str] = set()
+    for commit in commits:
+        valid = (commit.valid_change_id or "").lower()
+        if not valid or valid in seen:
+            adds.add(commit.sha)
+        seen.add(valid)
+    return frozenset(adds)
 
 
 def find_ready_boundary_via_registry(

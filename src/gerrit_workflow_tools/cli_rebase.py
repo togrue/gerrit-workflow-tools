@@ -15,6 +15,7 @@ from gerrit_workflow_tools.core.git_state import resolve_rebase_onto_remote_ref
 from gerrit_workflow_tools.core.rebase_state import RebaseAction
 from gerrit_workflow_tools.core.review_checkout import staged_review_refusal
 from gerrit_workflow_tools.core.stack import merge_base_with_target
+from gerrit_workflow_tools.core.step_outcome import refusal_recorded
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.rebase_run import go_on_with_rebase, require_history_rewrite, run_interactive_rebase
 from gerrit_workflow_tools.upstream_interactive import require_branch_upstream
@@ -125,7 +126,8 @@ def _run(argv: list[str] | None, *, gerrit: GerritRest | None) -> int:
         switches = (args.onto_remote, args.drop_merged_equivalent, args.autosquash)
         if args.rev or any(switch is not None for switch in switches):
             p.error(f"--{args.go_on} goes on with the rebase underway: it takes no REV and no other option")
-        return go_on_with_rebase(run, RebaseAction(args.go_on))
+        with refusal_recorded(cwd, f"rebase --{args.go_on}"):
+            return go_on_with_rebase(run, RebaseAction(args.go_on))
     if args.onto_remote and args.rev:
         p.error("cannot combine --onto-remote with a REV argument")
 

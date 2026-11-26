@@ -11,6 +11,7 @@ import { unsavedInRepo } from "./diffTabs";
 import { runInTerminal } from "./launch";
 import { Model } from "./model";
 import { push, refusedNow } from "./rebase";
+import { pushable } from "./nextAction";
 import { WALK_WORDS, workOnNext } from "./stackRows";
 import { saveBeforeContinue } from "./staleDiffs";
 import { feedback, ui } from "./ui";
@@ -32,6 +33,8 @@ interface Pending {
 
 export class AttentionWalk implements vscode.Disposable {
   private pending: Pending | undefined;
+  /** What the task header is told: a press (the last outcome is history), a refusal. Set by the extension. */
+  hooks: { pressed?(): void; refused?(text: string): void } = {};
   private readonly subscription: vscode.Disposable;
 
   /** `arrive` shows a commit the walk stopped at, its first comment to answer (or CI finding) opened. */
@@ -48,6 +51,7 @@ export class AttentionWalk implements vscode.Disposable {
     if (!stack) {
       return;
     }
+    this.hooks.pressed?.();
     const plan = workOnNext(stack);
     if (plan.kind === "review") {
       await ui().message("info", WALK_WORDS.review, {}, []);
@@ -57,11 +61,30 @@ export class AttentionWalk implements vscode.Disposable {
       this.start(null, true, false);
       runInTerminal(this.model.repo, ["edit"]);
       feedback(WALK_WORDS.starts, { icon: "terminal", milliseconds: 8000 });
+      // At once in the view too, until the rebase has stopped (or ended, or the walk gave up): not 2 s of nothing.
+      void ui().progress({ viewId: "ger.stack" }, WALK_WORDS.starting, () => this.underway());
     } else if (await this.mayContinue()) {
       this.start(stack.rebase?.current ?? null, plan.next !== undefined, false);
       runInTerminal(this.model.repo, ["edit", "-n"]);
       feedback(plan.next ? WALK_WORDS.continues(plan.next.summary) : WALK_WORDS.last, { icon: "terminal", milliseconds: 8000 });
     }
+  }
+
+  /** Resolves once the walk just started has stopped somewhere, or is no longer followed. */
+  private underway(): Promise<void> {
+    return new Promise((resolve) => {
+      const done = () => !this.pending || Boolean(this.model.stack?.rebase_in_progress) || Date.now() > this.pending.until;
+      const listener = this.model.onDidChange(() => {
+        if (done()) {
+          listener.dispose();
+          resolve();
+        }
+      });
+      setTimeout(() => {
+        listener.dispose();
+        resolve();
+      }, FOLLOW_MS);
+    });
   }
 
   /** Continue ran in the terminal: once the rebase is finished, say so and offer the way on. */
@@ -78,7 +101,7 @@ export class AttentionWalk implements vscode.Disposable {
    * (asked, as Continue asks), then core's check, unstaged changes included, said here if it refuses.
    */
   private async mayContinue(): Promise<boolean> {
-    return (await saveBeforeContinue(ui(), unsavedInRepo(this.model.repo))) && !(await refusedNow(this.model, "continue", WALK_WORDS.notContinued));
+    return (await saveBeforeContinue(ui(), unsavedInRepo(this.model.repo))) && !(await refusedNow(this.model, "continue", WALK_WORDS.notContinued, this.hooks));
   }
 
   /** The stack moved: where the step started in the terminal has got to. */
@@ -109,8 +132,11 @@ export class AttentionWalk implements vscode.Disposable {
     await this.offerPush(left ? WALK_WORDS.finishedMore(left) : WALK_WORDS.finished, left ? [WALK_WORDS.title] : []);
   }
 
+  /** Says `text`, offering Push only where a push would send something (P6: nothing offered that would refuse). */
   private async offerPush(text: string, more: string[]): Promise<void> {
-    const picked = await ui().message("info", text, {}, [...more, PUSH]);
+    const stack = this.model.stack;
+    const offer = stack && pushable(stack) ? [PUSH] : [];
+    const picked = await ui().message("info", offer.length || more.length ? text : `${text} ${WALK_WORDS.nothingToPush}`, {}, [...more, ...offer]);
     if (picked === PUSH) {
       await push(this.model);
     } else if (picked === WALK_WORDS.title) {

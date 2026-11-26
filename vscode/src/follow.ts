@@ -9,6 +9,9 @@ import { StackCommit } from "./api";
 import { ChangeView } from "./changeView";
 import { ChangeTarget, Model } from "./model";
 
+/** What the Change view says once the commit it showed is in no local stack here any more. */
+export const LEFT_THE_STACK = (title: string) => `"${title}" is not in the local stack any more (a checkout, a drop or a squash).`;
+
 export class ShownCommitFollower implements vscode.Disposable {
   private lost: { target: ChangeTarget; changeId: string } | undefined;
   /** The commit the rebase underway stopped at, by Change-Id (an amend there keeps it), when last looked; undefined without one. */
@@ -50,6 +53,11 @@ export class ShownCommitFollower implements vscode.Disposable {
   private follow(): void {
     const target = this.changeView.target;
     const stack = this.model.stack;
+    if (!stack && target?.local && this.model.overview?.local && "error" in this.model.overview.local) {
+      // The checkout has no local stack to show now (no upstream, a gone one): the commit shown is in none.
+      this.changeView.close(LEFT_THE_STACK(target.title));
+      return;
+    }
     if (!stack || this.followStop()) {
       return;
     }
@@ -76,7 +84,7 @@ export class ShownCommitFollower implements vscode.Disposable {
       void this.changeView.open({ ...target, rev: moved.sha, title: moved.summary, known: moved }, true);
     } else {
       this.lost = changeId ? { target, changeId } : undefined;
-      this.changeView.close();
+      this.changeView.close(LEFT_THE_STACK(target.title));
     }
   }
 

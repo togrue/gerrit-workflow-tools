@@ -18,7 +18,7 @@ from gerrit_workflow_tools.core.git_run import (
     unknown_revision_error,
 )
 from gerrit_workflow_tools.core.git_state import configured_upstream_abbrev, resolve_branch_for_branch_config
-from gerrit_workflow_tools.core.upstream import missing_upstream_error
+from gerrit_workflow_tools.core.upstream import gone_upstream, missing_upstream_error
 
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ def upstream_tracking_tip_and_display(
         upstream_sym = f"{b}@{{upstream}}" if b != "HEAD" else "@{upstream}"
         upstream_name = git("rev-parse", "--abbrev-ref", upstream_sym, cwd=cwd, check=False)
         if upstream_name.returncode != 0:
-            raise missing_upstream_error(b)
+            raise missing_upstream_error(b, gone=gone_upstream(cwd, b))
         display = upstream_name.stdout.strip()
     upstream_ref = git("rev-parse", "--verify", display, cwd=cwd, check=False)
     if upstream_ref.returncode != 0:

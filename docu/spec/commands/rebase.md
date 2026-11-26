@@ -136,6 +136,34 @@ editor. The refusals name the same commands (`ger rebase --skip goes on from HEA
 every history-moving command a rebase underway stops (`a rebase is already in progress; finish it
 (`ger rebase --continue`) or `ger rebase --abort` first`).
 
+
+#### What `--abort` keeps, and what it names
+
+git's abort resets the work tree to the branch as it was, so two kinds of work would go with it
+unsaid. `ger rebase --abort` keeps the first and names the second, after the `rebase aborted:`
+line (no question: the extension's *Abort* asks before it runs, where something cannot be got
+back in one step):
+
+```
+rebase aborted: s14-mixed is at d66fc18 calc: add extra module, as before the rebase
+kept: your changes to calc/ops.py, not amended, in stash@{0}; `git stash apply` brings them back
+gone from the branch: 46e97e7 ops: note on add, made in this rebase; `git show 46e97e7`
+```
+
+- **Changes not committed** at a stop with the commit applied (`edit`, `split`, `paused`: a fix
+  saved, not amended), staged or not, go into a stash before git runs (`git stash create` and
+  `store`, named `ger rebase --abort: not amended at <sha> <subject>`); untracked files are left
+  alone, as git's abort leaves them. At a stop on a conflict the files hold the commit's own
+  half-applied change: nothing is stashed there.
+- **Commits made in this rebase** whose change or message the branch before it does not have (an
+  amend, a conflict resolved, a commit made at a split), compared by patch id and message: they
+  are gone from the branch and stay reachable by their id while git keeps its reflog. A commit
+  only replayed onto a new base is not named: the branch still has it.
+- At a conflict resolved and added, `gone: the conflict resolution of the commit it stopped at`.
+
+[`GET /rebase/refusal?action=abort`](serve.md#get-rebaserefusalactioncontinue) serves the same
+as `discards`, before the abort, so a client can say it and ask.
+
 ### After a rebase finishes
 
 Git's `Successfully rebased and updated refs/heads/…` is not shown. Every ger-started

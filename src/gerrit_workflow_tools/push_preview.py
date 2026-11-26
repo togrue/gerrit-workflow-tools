@@ -253,7 +253,11 @@ def print_plan_status(plan: PushPlan) -> None:
         )
     print(color_text("  |  ", ANSI_DIM).join(f"{color_text(label, ANSI_DIM)} {value}" for label, value in fields))
     if stuck:
-        print(color_text(f"drafts on {', '.join(stuck)} stay drafts: Gerrit gets no new patchset there", ANSI_DIM))
+        # publish-drafts publishes with a new patchset only: say so where it was asked for and cannot reach them.
+        reach = ", so publish-drafts does not reach them" if options.publish_comments else ""
+        print(
+            color_text(f"drafts on {', '.join(stuck)} stay drafts: Gerrit gets no new patchset there{reach}", ANSI_DIM)
+        )
 
 
 def print_dry_run(plan: PushPlan) -> None:

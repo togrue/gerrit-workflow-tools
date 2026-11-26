@@ -185,7 +185,7 @@ a client words its own advice while `message` stays ger's.
 
 ## API version
 
-`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.7.0`); the URL
+`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.8.0`); the URL
 prefix carries only the major (`/api/v1`). It moves on its own, not with ger's package version:
 
 | Bump | When |
@@ -267,7 +267,9 @@ so it always counts as news.
 ### `GET /stack`
 
 The **annotated stack** of the working branch: `ger log --json`, plus per commit `short_sha`,
-`updated`, `is_head`, `held_back` (at or above the **ready boundary**) and
+`updated`, `is_head`, `held_back` (at or above the **ready boundary**), `adds_change_id` (below
+it, with no valid Change-Id: `ger push` gives it one before it sends it, as a new change, so the
+local commit changes; only on the branch checked out, where the push does that) and
 `needs_edit` (edit attention). `summary` counts `commits`, `ready`, `attention`, `needs_edit`
 and `not_on_gerrit`. `pipelines=1` adds `ci_pipelines`. When Gerrit could not be asked at all,
 the commits still come back with `patchset_status: "unknown"`, and `gerrit_unavailable` is the
@@ -322,6 +324,11 @@ The top-level `rebase` is `null` without a rebase, else:
 - `unmerged` — the paths the index holds as unresolved conflicts, at whatever stop (a `git stash
   pop` at an `edit` stop can leave some). Each is the literal path relative to the worktree's top,
   as the file is named (`café.txt`), never git's C-quoted form (`"caf\303\251.txt"`).
+- `uncommitted` — at a stop with the commit applied (`edit`, `split`, `paused`): the tracked
+  files changed in the work tree and not staged, compared by content (a fix saved, not amended).
+  `git rebase --continue` refuses over them (what is staged it amends in), and `git rebase
+  --abort` would throw them away (`ger rebase --abort` keeps them in a stash). `[]` otherwise,
+  and at a stop on a conflict. Cost: one `git diff` while a rebase is stopped.
 - `as_before` — `true` when the stack is the branch as it was before the rebase: a rebase git
   runs through `am` (`git rebase --apply`, `rebase-apply`) keeps no todo, so no commit carries
   a `rebase` step. It still stops only on a conflict, and `stop`, `applied` and `unmerged` say
@@ -329,14 +336,14 @@ The top-level `rebase` is `null` without a rebase, else:
   now either way.
 - `actions` — the ways on from this stop, in order, by the verdict `ger rebase` refuses by
   (`RebaseProgress.actions`; `ger rebase --continue|--skip` and `ger edit -n` judge the stop as
-  this serves it, `stopped_rebase`): `continue` unless paths are still unmerged, `abort` always,
+  this serves it, `stopped_rebase`): `continue` unless paths are still unmerged or `uncommitted` holds a file, `abort` always,
   `skip` at a `conflict` or `resolved` stop, where it leaves out the commit not applied yet (at
   an `edit`, `split` or `paused` stop the commit is in, and `git rebase --skip` would only throw
   away what is not committed). At a `null` stop where the conflict was committed by hand,
   `skip` once the index and work tree hold nothing it would throw away: it keeps `HEAD` and goes
   on. Then a rebase through `am` has nothing left to continue with (git would stop again, "No
-  changes"), so `continue` is left out there. A client offers these and no others. `continue`
-  can still be refused over unstaged changes, which this does not look at:
+  changes"), so `continue` is left out there. A client offers these and no others. At a stop on a
+  conflict `continue` can still be refused over unstaged changes, which this does not look at:
   [`GET /rebase/refusal`](#get-rebaserefusalactioncontinue) does, when asked.
 - `refused` — for each way on `actions` leaves out, the refusal `ger rebase --<action>` prints
   for it, by action (`{"skip": "--skip leaves out …"}`): what a client says when one is asked for
@@ -380,6 +387,15 @@ with it as a `next:` line.
 `git am` underway), and `message` is the refusal `ger push` prints. A client asks it before it
 starts `ger push`, so it can offer to finish the rebase instead.
 
+`last_outcome` is the **step outcome** the last `ger rebase --continue|--skip|--abort`, `ger edit -n`
+or `ger push` left in this worktree, or `null`: `command` (`rebase --abort`, `push`), `ok` (`false` for
+a refusal, a failure or a cancel), `text` (the one line of what happened, in the command's words:
+`rebase aborted: s14 is at d66fc18 …, as before the rebase`, `refused: you have unstaged changes …`,
+`push cancelled: nothing sent`), `more` (the lines after it: what was kept and where, the `next:`
+step), `at` (seconds since the epoch) and `head` (`HEAD` then). A client that ran the step in a
+terminal takes a newer `at` as the step's end and shows `text`; once `HEAD` is not `head` any
+more, the outcome is history. It is written to the file ger-outcome.json in the worktree's git dir.
+
 `staged_review` is the **staged review** in this checkout, or `null`: the **review state** as
 [`GET /review`](#get-review) has it (`chain` and `url` `null`), while HEAD still sits at the
 change's parent and its `change-<number>` branch on the change. The stack is then somebody
@@ -408,7 +424,9 @@ the same answer from one `merge-tree` per pick, which grows with the stack.
 ### `GET /stack/upstream`
 
 The working branch's upstream, and what to offer when it has none — `ger` cannot show a
-local stack without one. `branch` (`null` on a detached HEAD), `upstream` (now, or `null`),
+local stack without one. `branch` (`null` on a detached HEAD), `upstream` (now, or `null`), `gone`
+(the upstream it is configured with when that remote-tracking branch is gone, `origin/no-such-branch`:
+the error then says so instead of "No upstream configured"; else `null`),
 `suggested` and `why`, and `candidates`: the suggestion first, then upstreams you picked
 before, then every remote-tracking branch, at most 200.
 
@@ -422,12 +440,20 @@ ahead plus behind. Two git calls: all remote branches are measured by one `for-e
 Why `ger rebase --<action>` (`continue`, `abort` or `skip`; `continue` when not given) would
 refuse now, in its words, as `refused`; `null` when it would run. This is the one check every ger
 "go on" makes before git runs (`ger rebase --continue|--skip`, `ger edit -n`): the stop as
-`rebase.refused` judges it, and for `continue` also the work tree, which `GET /stack` does not
-look at: unstaged changes to tracked files (`you have unstaged changes to a.txt; amend them in
+`rebase.refused` judges it (unstaged changes at an applied stop included, as `uncommitted`), and
+for `continue` also the work tree afresh, with the index refreshed as git does: unstaged changes to tracked files (`you have unstaged changes to a.txt; amend them in
 (…) or git stash them, then ger rebase --continue`). Without a rebase it says there is none. A
 client asks it just before it starts the step in a terminal, so a refusal is said where the
 client is, not only in the terminal. Cost: two git calls (`update-index --refresh`, `diff-files`)
 beyond reading the stop.
+
+With `action=abort` and a rebase underway it also says what the abort would throw away, as
+`discards` ([rebase](rebase.md#what---abort-keeps-and-what-it-names)): `uncommitted` (files changed
+and not committed at a stop with the commit applied: `ger rebase --abort` keeps them in a stash),
+`rewritten` (`[{sha, short_sha, summary}]`, the commits made in this rebase that the branch before
+it does not have: gone from the branch), `resolution` (`true` at a conflict resolved and added),
+and `asks`: `true` when `rewritten` or `resolution` hold something, which no stash keeps, so a client
+asks before it aborts. Cost: four git calls more.
 
 ### `GET /chains/<number>`
 

@@ -479,7 +479,7 @@
         : null;
     // The files still conflicted, as under Local stack's banner: a click opens one to resolve.
     const conflicts = vm.conflicts
-      ? section("conflicts", "Conflicts", h("span", { class: "detail" }, vm.conflicts.summary), true, () => h("div", {}, vm.conflicts.rows.map(info)))
+      ? section("conflicts", vm.conflicts.title || "Conflicts", h("span", { class: "detail" }, vm.conflicts.summary), true, () => h("div", {}, vm.conflicts.rows.map(info)))
       : null;
     // In a task, what to do now comes right under its header: Next, and the conflicts it walks.
     if (vm.task) {

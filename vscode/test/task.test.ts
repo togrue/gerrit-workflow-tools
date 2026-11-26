@@ -94,7 +94,7 @@ test("reworking, the header says which change of how many, what is left over the
   const vm = taskVm(undefined, stack(commits, { rebase_in_progress: true, rebase }), { all: false })!;
   assert.deepEqual(taskLines(vm), [
     "Reworking your chain on feature: top — change 2 of 4  [All chains]",
-    "Left: 2 comments to answer · CI failed on 1 commit · 2 commits need edits",
+    "Left: 2 comments to answer · CI failed on 1 commit · 2 commits need edits · 2 commits to replay",
     "  1. base — replayed",
     "▸ 2. stop — stopped here · 2 to answer · needs edits",
     "  3. next — to come · needs edits · CI failed",
@@ -107,7 +107,7 @@ test("reworking, the header says which change of how many, what is left over the
   // The Change view's count of the commit it shows wins over the served one: the header and the view say one number.
   const shown = { key: commits[1].sha, counts: { comments_unresolved: 2, comments_to_answer: 1, comments_drafted: 1, comments_awaiting_reply: 0, comments_total: 3 } };
   const counted = taskVm(undefined, stack(commits, { rebase_in_progress: true, rebase }), { all: false, shown })!;
-  assert.equal(taskLines(counted)[1], "Left: 1 comment to answer · CI failed on 1 commit · 2 commits need edits");
+  assert.equal(taskLines(counted)[1], "Left: 1 comment to answer · CI failed on 1 commit · 2 commits need edits · 2 commits to replay");
   assert.equal(taskLines(counted)[3], "▸ 2. stop — stopped here · 1 to answer · needs edits");
   // A step running in the terminal: the header says so, and its buttons wait for it.
   const busy = taskVm(undefined, stack(commits, { rebase_in_progress: true, rebase }), { all: false, busy: "Continuing the rebase in the ger terminal…" })!;
@@ -116,14 +116,40 @@ test("reworking, the header says which change of how many, what is left over the
     "[Continue] (not now: the step before it is still running)",
     "[Abort] (not now: the step before it is still running)",
   ]);
-  // A conflict: Continue says why it does not run, in core's words.
-  const conflict = { ...rebase, stop: "conflict", actions: ["abort", "skip"], refused: { continue: "a.py is still conflicted" }, unmerged: ["a.py"] } as unknown as Rebase;
+  // A conflict: Continue says why it does not run in one line; core's whole refusal, commands and all, is its tooltip.
+  const refusal = "the index has unresolved conflicts; resolve the conflicts in a.py, `git add` them, then `ger rebase --continue` to finish";
+  const conflict = { ...rebase, stop: "conflict", actions: ["abort", "skip"], refused: { continue: refusal }, unmerged: ["a.py"] } as unknown as Rebase;
   const stopped = taskVm(undefined, stack(commits, { rebase_in_progress: true, rebase: conflict }), { all: false })!;
   assert.deepEqual(taskLines(stopped).slice(6), [
-    "[Continue] (not now: a.py is still conflicted)",
+    "[Continue] (not now: resolve a.py first)",
     "[Abort] put the branch back as it was before the rebase",
     "[Skip] leave this commit out and go on",
   ]);
+  assert.equal(stopped.actions[0].tooltip, refusal);
+  // State 17 of the outside-the-happy-path run: "nothing left to answer or fix" sat over an open conflict, C still to come.
+  assert.equal(taskLines(stopped)[1], "Left: 1 conflict to resolve · 2 comments to answer · CI failed on 1 commit · 2 commits need edits · 2 commits to replay");
+});
+
+test("at an edit stop with a fix saved and not amended, the header says it, and Continue waits for it before it is pressed", () => {
+  // State 16 of the outside-the-happy-path run: only the commit's file was listed, and Continue offered to "commit this stop as it is".
+  const refusal = "you have unstaged changes to calc/ops.py; amend them in (`git commit --amend -a`) or `git stash` them, then `ger rebase --continue`";
+  const rebase = { stop: "edit", actions: ["abort"], refused: { continue: refusal }, unmerged: [], uncommitted: ["calc/ops.py"] } as unknown as Rebase;
+  const commits = [commit("stop", { rebase: "current" })];
+  const vm = taskVm(undefined, stack(commits, { rebase_in_progress: true, rebase }), { all: false })!;
+  assert.equal(taskLines(vm)[1], "Left: calc/ops.py not amended");
+  assert.deepEqual(vm.actions.map((action) => [action.label, action.notNow]), [
+    ["Continue", "calc/ops.py changed, not amended: amend or stash it first"],
+    ["Abort", undefined],
+  ]);
+  assert.equal(vm.actions[0].tooltip, refusal);
+});
+
+test("how the last step ended is said in the header until the next action, in ger's words, and not while a step runs", () => {
+  const rebase = { stop: "conflict", actions: ["abort", "skip"], refused: {}, unmerged: ["a.py"] } as unknown as Rebase;
+  const commits = [commit("stop", { rebase: "current" })];
+  const outcome = { text: "refused: you have unstaged changes to a.py", ok: false, more: ["next: `git add` it"] };
+  const vm = taskVm(undefined, stack(commits, { rebase_in_progress: true, rebase }), { all: false, outcome })!;
+  assert.deepEqual(taskLines(vm).slice(2, 4), ["⚠ refused: you have unstaged changes to a.py", "  next: `git add` it"]);
 });
 
 test("the header and the Change view say one number of comments for the change shown: the view's count wins over the served one", () => {

@@ -86,6 +86,15 @@ def move_head(cwd: Path | str, new_head: str) -> None:
         )
 
 
+def take_back(cwd: Path | str, before: str, after: str, *, why: str) -> bool:
+    """Put the checked-out branch back at *before* where it is still at *after*: a message-only rewrite
+    (:func:`add_missing_change_ids`) undone, the index and work tree untouched (the trees are the same).
+    ``False`` when the branch moved on meanwhile: it is left where it is."""
+    branch = current_branch(cwd)
+    ref = "HEAD" if branch == "HEAD" else f"refs/heads/{branch}"
+    return git("update-ref", "-m", why, ref, before, after, cwd=cwd, check=False).returncode == 0
+
+
 def reword_commit(
     cwd: Path | str, rev: str, message: str, *, settings: Settings, keep_change_id: bool = False
 ) -> StackRewrite:

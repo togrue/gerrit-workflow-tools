@@ -9,7 +9,10 @@ history, and Up/Down recall (:class:`HistoryCursor`) when no completion menu is 
 from __future__ import annotations
 
 import contextlib
+import shutil
+import sys
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
@@ -272,6 +275,9 @@ def prompt_push_options_line(
         on_update=_invalidate_prompt,
     )
     completion_candidates = catalog.completion_candidates()
+    room = prompt_room(shutil.get_terminal_size((80, 24)).lines)
+    if room.note:
+        print(room.note, file=sys.stderr)
     session: PromptSession[str] = PromptSession(
         message=message,
         lexer=PushOptionsLexer(),
@@ -280,13 +286,42 @@ def prompt_push_options_line(
         completer=PushOptionsCompleter(completion_candidates, catalog=catalog),
         complete_while_typing=True,
         key_bindings=_history_bindings(HistoryCursor(display_history, initial)),
-        bottom_toolbar=lambda: _bottom_toolbar(session.default_buffer.text, catalog),
+        bottom_toolbar=(lambda: _bottom_toolbar(session.default_buffer.text, catalog)) if room.toolbar else None,
+        reserve_space_for_menu=room.menu,
     )
     try:
         raw = session.prompt(default=initial)
     finally:
         catalog.close()
     return parse(raw)
+
+
+@dataclass(frozen=True)
+class PromptRoom:
+    """How much of the push-options prompt fits a terminal *rows* high."""
+
+    menu: int
+    """Rows kept free under the line for the completion menu."""
+    toolbar: bool
+    note: str | None = None
+    """Said before the prompt when the terminal is too short for the preview and the prompt together."""
+
+
+_FULL_ROOM = 12
+"""Rows the prompt takes with its completion menu (8) and the toolbar, and a few of the preview above it."""
+
+
+def prompt_room(rows: int) -> PromptRoom:
+    """The prompt as a terminal *rows* high takes it: in full, or one line without menu and toolbar.
+
+    prompt_toolkit draws only "Window too small..." when its layout does not fit, so a short
+    terminal (a panel dragged low) gets the bare line, and is told where the preview is.
+    """
+    if rows >= _FULL_ROOM:
+        return PromptRoom(menu=8, toolbar=True)
+    high = f"{rows} row{'' if rows == 1 else 's'} high"
+    note = f"(the terminal is {high}: the preview is above, scroll up or make it taller)"
+    return PromptRoom(menu=0, toolbar=False, note=note)
 
 
 def prompt_branch_push_options(

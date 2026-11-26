@@ -6,6 +6,7 @@ Spec: docu/spec/commands/serve.md.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import asdict
 from datetime import datetime, timezone
 from functools import partial
 from typing import Any, TypeVar, cast
@@ -27,6 +28,7 @@ from gerrit_workflow_tools.core.gerrit_show import load_shown_commits, resolve_s
 from gerrit_workflow_tools.core.git_run import commit_sha_or_none
 from gerrit_workflow_tools.core.inbox import RebaseHeadline, load_inbox, pick_headline, project_scope
 from gerrit_workflow_tools.core.push_checks import push_blocked
+from gerrit_workflow_tools.core.rebase_abort import abort_loss
 from gerrit_workflow_tools.core.rebase_next_step import go_on_refusal
 from gerrit_workflow_tools.core.rebase_state import RebaseAction, rebase_underway
 from gerrit_workflow_tools.core.rebasing_stack import stopped_rebase
@@ -34,6 +36,7 @@ from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import find_review, staged_review
 from gerrit_workflow_tools.core.review_target import drafts_published_by, related_chain_numbers
 from gerrit_workflow_tools.core.stack import merge_commits, pinned_below
+from gerrit_workflow_tools.core.step_outcome import StepOutcome, last_outcome
 from gerrit_workflow_tools.core.upstream import branch_has_upstream
 from gerrit_workflow_tools.render.agent_runbook import runbook_json
 from gerrit_workflow_tools.render.review_json import (
@@ -57,7 +60,7 @@ from gerrit_workflow_tools.server.diff_views import add_worktree_places, commit_
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
 
-API_VERSION = "1.7.0"
+API_VERSION = "1.8.0"
 """The serve contract's version, ``MAJOR.MINOR.PATCH`` (bump rules: ``docu/spec/commands/serve.md``)."""
 _T = TypeVar("_T")
 _NOT_ON_GERRIT = frozenset({Attention.NOT_PUSHED, Attention.AHEAD_OF_GERRIT, Attention.DIVERGED})
@@ -102,7 +105,17 @@ def rebase_refusal(ctx: Context, req: Request) -> dict[str, Any]:
         action = RebaseAction(req.one("action", RebaseAction.CONTINUE.value))
     except ValueError as exc:
         raise BadRequest(f"action must be one of {', '.join(a.value for a in RebaseAction)}") from exc
-    return {"action": action.value, "refused": go_on_refusal(ctx.cwd, action, stopped_rebase(ctx.cwd))}
+    progress = stopped_rebase(ctx.cwd)
+    answer: dict[str, Any] = {"action": action.value, "refused": go_on_refusal(ctx.cwd, action, progress)}
+    if action is RebaseAction.ABORT and progress is not None:
+        loss = abort_loss(ctx.cwd, progress)
+        answer["discards"] = {
+            "uncommitted": list(loss.uncommitted),
+            "rewritten": [{"sha": c.sha, "short_sha": c.short_sha, "summary": c.subject} for c in loss.rewritten],
+            "resolution": loss.resolution,
+            "asks": loss.asks,
+        }
+    return answer
 
 
 def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline | None]:
@@ -128,6 +141,7 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
             "updated": iso_utc(parse_gerrit_time(c.updated)),
             "is_head": c.sha == head,
             "held_back": c.sha in blocked,
+            "adds_change_id": c.sha in overview.adds_change_id,
             "needs_edit": commit_needs_edit_attention(c),
             "fixup_of": fixups.get(c.sha),
             **({"resolution_note": view.notes_by_sha[c.sha]} if c.sha in view.notes_by_sha else {}),
@@ -147,6 +161,7 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
         "upstream": upstream_json(overview.moved),
         "push_blocked": _push_blocked_json(ctx),
         "staged_review": _staged_review_json(ctx),
+        "last_outcome": _outcome_json(last_outcome(ctx.run.worktree.repository_dir)),
         "stack": {
             "project": context.project,
             "target_branch": context.target_branch or None,
@@ -164,6 +179,13 @@ def _stack(ctx: Context, req: Request) -> tuple[dict[str, Any], RebaseHeadline |
         **({"gerrit_unavailable": error_json(view.gerrit_unavailable)} if view.gerrit_unavailable else {}),
     }
     return answer, rebase
+
+
+def _outcome_json(outcome: StepOutcome | None) -> dict[str, object] | None:
+    """The **step outcome** the last rebase step or push left, or ``None``."""
+    if outcome is None:
+        return None
+    return {**asdict(outcome), "more": list(outcome.more)}
 
 
 def _staged_review_json(ctx: Context) -> dict[str, object] | None:

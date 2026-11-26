@@ -18,8 +18,9 @@ from gerrit_workflow_tools.cli_terminal import stdin_is_terminal
 from gerrit_workflow_tools.core.fixups import UNSQUASHED_FIXUP_ADVICE
 from gerrit_workflow_tools.core.git_editor import module_editor_command
 from gerrit_workflow_tools.core.git_run import git, git_out
+from gerrit_workflow_tools.core.rebase_abort import abort_loss, keep_uncommitted
 from gerrit_workflow_tools.core.rebase_next_step import ABORT, go_on_refusal, stop_next_step, where_head_is
-from gerrit_workflow_tools.core.rebase_state import RebaseAction, RebaseStop
+from gerrit_workflow_tools.core.rebase_state import RebaseAction, RebaseProgress, RebaseStop
 from gerrit_workflow_tools.core.rebasing_stack import stopped_rebase
 from gerrit_workflow_tools.core.rewrite_outcome import (
     DroppedCommit,
@@ -31,6 +32,7 @@ from gerrit_workflow_tools.core.rewrite_outcome import (
 from gerrit_workflow_tools.core.rewrite_refusal import history_rewrite_refusal
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.stack import read_commit_rows
+from gerrit_workflow_tools.core.step_outcome import record_outcome
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.render.wrap import say
@@ -142,23 +144,65 @@ def go_on_with_rebase(run: RunContext, action: RebaseAction, *, walk_on: str | N
     assert progress is not None  # go_on_refusal refuses without one
     before = stack_before(run, progress.orig_head) if progress.orig_head else None
     env = None if stdin_is_terminal() or "GIT_EDITOR" in os.environ else {"GIT_EDITOR": "true"}
-    code = _git_rebase(cwd, f"--{action.value}", env=env)
+    command = "edit -n" if walk_on else f"rebase --{action.value}"
     if action is RebaseAction.ABORT:
-        if code == 0:
-            print(f"rebase aborted: {where_head_is(cwd)}, as before the rebase", file=sys.stderr)
-        return code
+        return _abort(cwd, progress, env)
+    code = _git_rebase(cwd, f"--{action.value}", env=env)
     now = stopped_rebase(cwd)
+    said: list[str] = []
     if now is not None:
         skipped = action is RebaseAction.SKIP and progress.current and now.current != progress.current
         if skipped and progress.current and not progress.committed_by_hand:
-            print_dropped(dropped_commit(run, progress.current), undo="cherry-pick", still_underway=True)
-        print_stop(cwd, walk_on)
+            print_dropped(dropped_commit(run, progress.current), undo="cherry-pick", still_underway=True, said=said)
+        print_stop(cwd, walk_on, said=said)
     elif code == 0 and before is not None:
-        print_outcome(rewrite_outcome(run, before), walk_on=walk_on, undo="cherry-pick")
+        print_outcome(rewrite_outcome(run, before), walk_on=walk_on, undo="cherry-pick", said=said)
+    # The stop or the finish leads; what was dropped and the next step follow it.
+    lead = next((line for line in said if line.startswith(("stopped", "rebase finished"))), None)
+    if lead:
+        # A stop on a conflict is no failure, but not done either: git's code says which (a warning, not a tick).
+        record_outcome(cwd, command, lead, ok=code == 0, more=[x for x in said if x != lead])
+    else:
+        record_outcome(cwd, command, f"git rebase --{action.value} failed (exit {code}); see the terminal", ok=False)
     return code
 
 
-def print_stop(cwd: Path, walk_on: str | None) -> bool:
+def _abort(cwd: Path, progress: RebaseProgress, env: dict[str, str] | None) -> int:
+    """``git rebase --abort``, the uncommitted changes stashed first; then what it kept and threw away."""
+    loss = abort_loss(cwd, progress)
+    stopped_at = git_out("log", "-1", "--format=%h %s", "HEAD", cwd=cwd)
+    stash = keep_uncommitted(cwd, loss, stopped_at)
+    code = _git_rebase(cwd, "--abort", env=env)
+    if code != 0:
+        kept = f"; your changes are kept in {stash}" if stash else ""
+        record_outcome(cwd, "rebase --abort", f"git rebase --abort failed (exit {code}){kept}", ok=False)
+        return code
+    said = [f"rebase aborted: {where_head_is(cwd)}, as before the rebase"]
+    if stash:
+        said.append(
+            f"kept: your changes to {', '.join(loss.uncommitted)}, not amended, in {stash}; "
+            "`git stash apply` brings them back"
+        )
+    said += [
+        f"gone from the branch: {commit.short_sha} {commit.subject}, made in this rebase; `git show {commit.short_sha}`"
+        for commit in loss.rewritten
+    ]
+    if loss.resolution:
+        said.append("gone: the conflict resolution of the commit it stopped at")
+    for line in said:
+        say(line)
+    record_outcome(cwd, "rebase --abort", said[0], ok=True, more=said[1:])
+    return code
+
+
+def _told(said: list[str] | None, line: str) -> None:
+    """:func:`say` *line*, and keep it in *said* when given: the step's outcome is recorded from it."""
+    say(line)
+    if said is not None:
+        said.append(line)
+
+
+def print_stop(cwd: Path, walk_on: str | None, *, said: list[str] | None = None) -> bool:
     """Where the rebase underway stopped, and the next step; ``False``, and nothing said, when none is underway."""
     if (progress := stopped_rebase(cwd)) is None:
         return False
@@ -167,10 +211,10 @@ def print_stop(cwd: Path, walk_on: str | None) -> bool:
         conflict = " (conflict, resolved by git rerere)" if progress.reused and not progress.unmerged else conflict
         if progress.folding_into and (target := read_commit_rows(cwd, "--no-walk", progress.folding_into)):
             fixup = git_out("log", "-1", "--format=%h", progress.current, cwd=cwd)
-            say(f"stopped while folding fixup {fixup} into {target[0].short_sha} {target[0].subject}{conflict}")
+            _told(said, f"stopped while folding fixup {fixup} into {target[0].short_sha} {target[0].subject}{conflict}")
         else:
-            say(f"stopped at {git_out('log', '-1', '--format=%h %s', progress.current, cwd=cwd)}{conflict}")
-    say(f"next: {stop_next_step(progress, walk_on=walk_on)}")
+            _told(said, f"stopped at {git_out('log', '-1', '--format=%h %s', progress.current, cwd=cwd)}{conflict}")
+    _told(said, f"next: {stop_next_step(progress, walk_on=walk_on)}")
     return True
 
 
@@ -179,7 +223,12 @@ Undo = Literal["cherry-pick", "reset"]
 
 
 def print_dropped(
-    dropped: DroppedCommit, *, undo: Undo, previous_head: str | None = None, still_underway: bool = False
+    dropped: DroppedCommit,
+    *,
+    undo: Undo,
+    previous_head: str | None = None,
+    still_underway: bool = False,
+    said: list[str] | None = None,
 ) -> None:
     """The two lines every ger command says of a commit it dropped: which one, and how to get it back.
 
@@ -188,14 +237,14 @@ def print_dropped(
     once the rebase finished when it is *still_underway*.
     """
     change = f"; its change {dropped.change_number} stays open on Gerrit" if dropped.change_number else ""
-    say(f"dropped {dropped.short_sha} {dropped.subject}{change}")
+    _told(said, f"dropped {dropped.short_sha} {dropped.subject}{change}")
     if undo == "reset" and previous_head:
         back = f"git reset --keep {previous_head}"
     elif still_underway:
         back = f"once the rebase is finished, git cherry-pick {dropped.short_sha} (or {ABORT} now)"
     else:
         back = f"git cherry-pick {dropped.short_sha}"
-    say(f"to get it back: {back}")
+    _told(said, f"to get it back: {back}")
 
 
 def print_outcome(
@@ -205,20 +254,21 @@ def print_outcome(
     undo: Undo,
     previous_head: str | None = None,
     done: str = "rebase finished",
+    said: list[str] | None = None,
 ) -> None:
     """ger's closing lines after a rewrite finished: what it dropped, what it did in words, and the next step.
 
     No ``next:`` during an attention walk (*walk_on*): the walk goes on to its next stop.
     """
     for dropped in outcome.dropped:
-        print_dropped(dropped, undo=undo, previous_head=previous_head)
-    say(f"{done}: {outcome_text(outcome)}")
+        print_dropped(dropped, undo=undo, previous_head=previous_head, said=said)
+    _told(said, f"{done}: {outcome_text(outcome)}")
     if walk_on:
         return
     if outcome.fixups_left:
-        say(f"next: {UNSQUASHED_FIXUP_ADVICE}")
+        _told(said, f"next: {UNSQUASHED_FIXUP_ADVICE}")
     elif outcome.rewritten or outcome.dropped:
-        say("next: `ger push` uploads the stack as it is now")
+        _told(said, "next: `ger push` uploads the stack as it is now")
 
 
 def outcome_text(outcome: RewriteOutcome) -> str:

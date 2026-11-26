@@ -164,6 +164,7 @@ const TOOLTIP_LINE = ours([
   "It stays where it is: git rebase cannot replay a merge, so the newest merge and what is below it are not moved, folded or dropped.",
   REBASE_WORDS.tooltip,
   REBASE_WORDS.resolve,
+  STOPPED_WORDS.notAmendedTooltip,
   "The log was cut: findings may be incomplete.",
   new RegExp(`${COUNT} unresolved comments?`),
   new RegExp(`(${commentPhrases(COUNT).join("|")})( · (${commentPhrases(COUNT).join("|")}))*`),
@@ -205,7 +206,7 @@ const ACTIONS: Shape = [
 const CONFLICT_ROW = {
   // It says its path: it becomes what its `conflict` becomes.
   text: string((text, names, info) => String((text === info.conflict ? PATH : INFO_TEXT)(text, names, info))),
-  detail: ours([REBASE_WORDS.ready, REBASE_WORDS.onTop, REBASE_WORDS.asBefore, REBASE_WORDS.conflicted]),
+  detail: ours([REBASE_WORDS.ready, REBASE_WORDS.onTop, REBASE_WORDS.asBefore, REBASE_WORDS.conflicted, STOPPED_WORDS.notAmended]),
   icon: ICON,
   tone: TONE,
   tooltip: TOOLTIP,
@@ -235,7 +236,9 @@ const TASK: Shape = {
       new RegExp(`${COUNT} commits? needs? edits`),
       "its chain is not in your inbox",
       "nothing left to answer or fix",
-    ]),
+      new RegExp(`${COUNT} conflicts? to resolve`),
+      new RegExp(`${COUNT} commits? to replay`),
+    ], around(/(.+) not amended/, (names, files) => `${names.text(files)} not amended`)),
   ),
   steps: [
     {
@@ -263,11 +266,14 @@ const TASK: Shape = {
       command: ours(["ger.reviewDone", "ger.rebase.continue", "ger.rebase.abort", "ger.rebase.skip"]),
       /** Core's words about this repository: filler. */
       notNow: TEXT,
+      tooltip: TEXT,
       primary: KEEP,
     },
   ],
   views: { label: ours(["All chains", "Only this task"]), detail: ours([/keep going; show the inbox and Local stack too/, /hide the inbox and Local stack again/]), command: ours(["ger.showAllChains", "ger.focusReview"]) },
   busy: ours([/(Continuing the rebase|Aborting the rebase|Skipping the commit) in the ger terminal…/], CHECKING_OUT),
+  /** ger's closing words about this repository (commits, branches, files): filler. */
+  outcome: { text: TEXT, ok: KEEP, more: [TEXT] },
 };
 
 const STACK: Shape = {
@@ -297,7 +303,7 @@ const STACK: Shape = {
       pinned: KEEP,
       /** Our words, and the short commit id. */
       /** Our words, the short commit id, and the commit a fixup folds into (its change number or short id). */
-      notes: [ours(["HEAD", "under review", "merge", "code changed", "held back", "abandoned", new RegExp(`${COUNT} fixups? pending`)], FIXUP_OR_SHA)],
+      notes: [ours(["HEAD", "under review", "merge", "code changed", "held back", "push adds a Change-Id", "abandoned", new RegExp(`${COUNT} fixups? pending`)], FIXUP_OR_SHA)],
       badges: [BADGE],
       tooltip: TOOLTIP,
       squash: KEEP,
@@ -357,7 +363,7 @@ const CHANGE: Shape = {
     badges: [BADGE],
     actions: ACTIONS,
   },
-  conflicts: { summary: ours([new RegExp(`${COUNT} files?`)]), rows: [CONFLICT_ROW] },
+  conflicts: { title: ours([STOPPED_WORDS.notAmendedTitle]), summary: ours([new RegExp(`${COUNT} files?`)]), rows: [CONFLICT_ROW] },
   /** Next (nextAction.ts): our names for it, a conflicted file's path made up; why, with subjects and paths in it: filler. */
   next: {
     label: ours(

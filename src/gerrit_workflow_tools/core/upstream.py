@@ -14,6 +14,7 @@ from pathlib import Path
 from gerrit_workflow_tools.core.config import ConfigError, Settings
 from gerrit_workflow_tools.core.config_keys import LEGACY_KEYS
 from gerrit_workflow_tools.core.git_run import UnknownRevisionError, commit_sha_or_none, git
+from gerrit_workflow_tools.core.git_state import configured_upstream_abbrev
 
 
 logger = logging.getLogger(__name__)
@@ -34,13 +35,23 @@ class NeedsUpstreamError(Exception):
 class MissingUpstreamError(NeedsUpstreamError, ConfigError):
     """*branch* has no upstream, and the command needs it (exit ``CONFIG``)."""
 
+    gone: str | None = None
+    """The upstream it is configured with, gone from the remote-tracking branches; ``None`` when none is set."""
+
 
 def missing_upstream_error(
-    branch: str, *, askable: bool = True, suggested: str | None = None, why: str | None = None
+    branch: str,
+    *,
+    askable: bool = True,
+    suggested: str | None = None,
+    why: str | None = None,
+    gone: str | None = None,
 ) -> MissingUpstreamError:
     """The one error, and the one hint, every command gives for a branch with no upstream.
 
     With *suggested* (:func:`upstream_choice`'s guess, and *why*), the hint is that very command.
+    *gone* is the upstream the branch is configured with when no such remote-tracking branch is
+    there any more (:func:`gone_upstream`): said as it is, not as "no upstream".
     """
     if suggested:
         reason = f"  # {why}" if why else ""
@@ -51,9 +62,32 @@ def missing_upstream_error(
             "  git branch --set-upstream-to=<remote>/<branch>\n"
             "Fetch from your Gerrit remote first if the tracking branch is missing."
         )
-    return MissingUpstreamError(
-        f"No upstream configured for branch {branch!r}.\n{hint}", branch=branch, askable=askable
+    first = (
+        f"The upstream {gone} of branch {branch!r} is gone: it is configured, but no such remote-tracking "
+        "branch is there (deleted on the remote, or pruned)."
+        if gone
+        else f"No upstream configured for branch {branch!r}."
     )
+    error = MissingUpstreamError(f"{first}\n{hint}", branch=branch, askable=askable)
+    error.gone = gone
+    return error
+
+
+def gone_upstream(cwd: Path | str | None, branch: str, *, settings: Settings | None = None) -> str | None:
+    """The upstream *branch* is configured with (``origin/no-such-branch``) when it has no such
+    remote-tracking branch any more; ``None`` when it has one, or none is configured. One git call
+    where one is configured (two more without *settings*)."""
+    if settings is not None:
+        name = configured_upstream_abbrev(settings, branch)
+    else:
+        remote = git("config", "--get", f"branch.{branch}.remote", cwd=cwd, check=False).stdout.strip()
+        merge = git("config", "--get", f"branch.{branch}.merge", cwd=cwd, check=False).stdout.strip()
+        ok = remote and remote != "." and merge.startswith("refs/heads/")
+        name = f"{remote}/{merge.removeprefix('refs/heads/')}" if ok else None
+    if not name:
+        return None
+    found = git("rev-parse", "--verify", "--quiet", f"refs/remotes/{name}", cwd=cwd, check=False)
+    return None if found.returncode == 0 else name
 
 
 _RECENT_UPSTREAM_KEY = "ger.recentUpstreamAbbrev"
@@ -242,6 +276,8 @@ class UpstreamChoice:
     branch: str
     current: str | None
     """The upstream it has now, if any."""
+    gone: str | None
+    """The upstream it is configured with when that remote-tracking branch is gone (:func:`gone_upstream`)."""
     suggested: str | None
     why: str | None
     """Why *suggested*, in a few words."""
@@ -266,6 +302,7 @@ def upstream_choice(cwd: Path | str | None, branch: str, *, settings: Settings) 
     return UpstreamChoice(
         branch=branch,
         current=current.stdout.strip() if current.returncode == 0 else None,
+        gone=None if current.returncode == 0 else gone_upstream(cwd, branch, settings=settings),
         suggested=suggested,
         why=why if suggested else None,
         candidates=ordered[:_CANDIDATE_LIMIT],

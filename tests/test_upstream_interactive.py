@@ -137,3 +137,25 @@ def test_off_windows_a_tty_is_trusted_without_asking_the_console_api(monkeypatch
     monkeypatch.setattr(sys, "platform", "linux")
 
     assert _is_windows_console(cast(TextIO, _NoConsoleApi()))
+
+
+def test_an_upstream_that_is_configured_and_gone_is_said_as_gone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """State 20 of the outside-the-happy-path run: git said "[origin/no-such-branch: gone]", ger "no upstream"."""
+    from gerrit_workflow_tools.core.upstream import upstream_choice
+
+    repo = _make_repo_with_origin(tmp_path)
+    git("config", "branch.feature.remote", "origin", cwd=repo)
+    git("config", "branch.feature.merge", "refs/heads/no-such-branch", cwd=repo)
+    monkeypatch.setattr(sys, "stdin", _StdinNonTTY())
+
+    with pytest.raises(ConfigError) as caught:
+        require_branch_upstream(repo, "feature", settings=Settings.from_cwd(repo))
+
+    assert str(caught.value).startswith(
+        "The upstream origin/no-such-branch of branch 'feature' is gone: it is configured, but no such "
+        "remote-tracking branch is there (deleted on the remote, or pruned)."
+    )
+    choice = upstream_choice(repo, "feature", settings=Settings.from_cwd(repo))
+    assert (choice.current, choice.gone) == (None, "origin/no-such-branch")

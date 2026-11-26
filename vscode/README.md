@@ -135,7 +135,13 @@ The commits above your upstream, newest first. One row per commit:
   (`ger rebase --continue`, `--abort`, `--skip`, in the *ger* terminal, also in the palette while a
   rebase is underway, Skip only where it is offered). Skip asks first, and says what it throws
   away: the commit and the conflict resolution done so far, staged or not; Abort brings back the
-  branch as it was before the rebase, not the resolution. At an edit stop, or once you split a
+  branch as it was before the rebase, not the resolution. **Abort asks first where it throws away
+  what no stash keeps** — the commits made in this rebase that the branch before it does not have
+  (an amend, a resolved conflict, a split: by patch id and message, so a commit only replayed is
+  not one), named with their ids, and a resolved conflict (`GET /rebase/refusal?action=abort`'s
+  `discards`). A fix saved and not amended is no reason to ask: `ger rebase --abort` puts it in a
+  stash before git resets the tree, and says so (*kept: your changes to calc/ops.py, not amended,
+  in stash@{0}; `git stash apply` brings them back*). Where nothing is lost it does not ask. At an edit stop, or once you split a
   commit there, there is nothing to skip: the commit is already in, and `git rebase --skip` would
   only throw away what is not committed yet, so `ger rebase --skip` refuses there too. Run from
   the palette where it is not offered, a way on says why not in `ger rebase`'s own words
@@ -159,7 +165,10 @@ The commits above your upstream, newest first. One row per commit:
   saves them; saved edits are not part of the rebase yet, so core's check before every "go on"
   (`GET /rebase/refusal`) then refuses, and a warning says what they need (`git add` them at a
   conflict, amend them in at an edit stop, or `git stash` them), with nothing run in the terminal.
-  So does Continue whenever files of the repository are changed and not amended or added. **Continue without saving** runs it with the edits left in the
+  So does Continue whenever files of the repository are changed and not amended or added. At an
+  edit stop that is said before the press: core serves the files changed and not staged with the
+  stop (`rebase.uncommitted`), Continue is drawn disabled with why, and the Change view of the
+  commit lists them under **Changed, not amended** (a click opens one). **Continue without saving** runs it with the edits left in the
   editor: git rewrites the files under them, and VS Code says so when you save. Cancel runs
   nothing. Nothing is saved unasked.
 - **Work on Next** (the step-over icon in *Local stack*'s and the Change view's title bars, the
@@ -210,6 +219,26 @@ The commits above your upstream, newest first. One row per commit:
   `git rebase` cannot replay a merge, so the newest merge and the commits below it stay where
   they are — the view says so when you try to move, squash or drop one; `ger rebase` does it by
   hand. The commits above it reorder, squash and drop as usual. Rewording works everywhere.
+- **How the last step ended** (Continue, Abort, Skip, Work on Next's `ger edit -n`, Push, run in the
+  terminal) is said in ger's words, kept until the next action: in the task header while one is
+  shown, else as Local stack's first row (*rebase aborted: s14 is at d66fc18 …, as before the
+  rebase*, with what was kept or is gone after it; *push cancelled: nothing sent*; *Gerrit rejected
+  the push: branch no-such-branch not found*, with **Choose Upstream…** where ger's next step is
+  another upstream), and once in the status bar. It comes from core's **step outcome** (`GET /stack`'s
+  `last_outcome`), which each of those commands leaves in the git dir; the view looks again as soon
+  as the command in the terminal ends (VS Code's shell integration) or the file changes. Once `HEAD`
+  moves on, the outcome is history and goes.
+- **The title bar offers Work on Next and Push only where they would do something** (P6): Work on
+  Next while a commit needs edits and nothing blocks the rebase underway (no conflict, no fix
+  left unamended), Push while a push would send something (new code, a commit not on Gerrit,
+  drafts) and nothing blocks it (a rebase, `git am`, no upstream). An empty stack shows neither;
+  Work on Next on a stack with nothing to edit no longer offers a Push that would refuse.
+- **A commit without a Change-Id** on the branch checked out reads *push adds a Change-Id*, not
+  *held back*: `ger push` gives it one before its preview and sends it as a new change (and takes
+  the ids back when the push is not sent). Core's `adds_change_id`; the ready boundary is judged
+  as the push does.
+- **A detached HEAD** says *Detached HEAD: commits made here belong to no branch*, with **Create
+  Branch Here…** (VS Code's *Git: Create Branch…*).
 - Push (`ger push` in the *ger* terminal, where it can ask you). During a rebase, when `ger push`
   would refuse (the branch still points at the commits from before it), Push says *Finish the
   rebase first*, in `ger push`'s own words, and offers the ways on instead (Abort, and Continue
@@ -218,7 +247,8 @@ The commits above your upstream, newest first. One row per commit:
   starts runs in that one terminal, shown when it starts; closed or exited, the next command opens it
   again. When a command still runs there (VS Code 1.93+ can tell), a new *ger* terminal takes over.
 - **No upstream** (typical after checking a change out with Gerrit's download commands; `ger
-  checkout` and *Check Out to Work On* set it): the view says so and offers **Track origin/…** in one click — the branch it was created from, else
+  checkout` and *Check Out to Work On* set it), or **one configured and gone** (deleted on the
+  remote, or pruned: *The upstream origin/no-such-branch of s19 is gone*, core's `gone`): the view says so and offers **Track origin/…** in one click — the branch it was created from, else
   the remote branch nearest to it — or **Choose another upstream branch…**. Later changes:
   *Set Upstream Branch…* in the view's `…` menu.
 - **The stack could not be read** (git refused, an upstream branch that is gone): the view says so
@@ -258,7 +288,7 @@ The commits above your upstream, newest first. One row per commit:
 - **Next** (the primary button under the change's state, `Alt+Enter`): the one thing to do now,
   named on it: *Update to patchset N*, *Next comment*, *Next file*, *Vote and publish*, *Next change*,
   *Leave review* while you review; *Resolve src/routes.ts* (the first file still conflicted, then
-  the next), *Continue*, *Next comment*, *Work on next*, *Finish the rebase*, *Push* on your own commit; *Review change* on somebody's change you only look at. Which one, when, is
+  the next), *Continue*, *Next comment*, *Work on next*, *Push* on your own commit; *Review change* on somebody's change you only look at. Which one, when, is
   the table under [Next: what it names, and when](#next-what-it-names-and-when). It asks nothing of
   `ger serve` to decide; every other action stays where it was, in the title bar and its `…` menu.
 - **Commit message**: the whole message, its `Change-Id:` trailer shown read-only on a quiet line
@@ -486,14 +516,23 @@ aside (their `when` clauses read `ger.task` and `ger.taskAll`) so the Change vie
   beside it, or why it does not run now in core's words: a button refused now is drawn disabled
   (dimmed, it does nothing), *not now: …* beside it, also while the step before it still runs.
   Continue is the primary button once it is the next step (the conflicts resolved); otherwise Next,
-  under the header, is. They are shown only here: the Change
+  under the header, is. *not now* is one line (*resolve calc/ops.py first*, *calc/ops.py changed, not
+  amended: amend or stash it first*); core's whole refusal, with the commands, is its tooltip.
+  **Left** counts what the rebase itself still needs first: *1 conflict to resolve*, *calc/ops.py
+  not amended*, then the comments, CI and edits, then *2 commits to replay*; *nothing left to answer
+  or fix* only when none of these is left. They are shown only here: the Change
   view's head of a commit stopped on a conflict says what Gerrit has without them, no note says the
   commit is *ahead of Gerrit* (every commit a rebase replays is: the push says what it sends), and the
   message box says only why it cannot be edited now, and *Local stack*,
   when *All chains* shows it, leaves out its rebase banner (the conflicted files stay there). They
-  run in the ger terminal; from the click until the stack moves on (another stop, or the rebase
-  over) the header says *Continuing the rebase in the ger terminal…*, its buttons wait, and Next is
-  not offered (nor `Alt+Enter`), so nothing starts over the step that runs.
+  run in the ger terminal; once the step is sent (its question, if it has one, answered: nothing
+  reads as under way while Skip's or Abort's question is open, and a question cancelled leaves no
+  trace) until its step outcome is served or the stack moves on (another stop, or the rebase over)
+  the header says *Continuing the rebase in the ger terminal…*, its buttons wait, and Next is not
+  offered (nor `Alt+Enter`), so nothing starts over the step that runs. A step refused before it
+  runs (core's check, the files to save) says why in the header at once, *⚠ ger rebase --continue
+  did not run: …*, and nothing is under way. Then the header says how the step ended, until the
+  next action.
 - **All chains** (top right of the header) brings the lists back for the rest of the task; there
   it reads **Only this task**. Something else that needs you stays on the status bar item, which
   opens it, the lists coming back when it is in one of them.
@@ -520,7 +559,8 @@ Gerrit whose last published word is not yours and that no draft of yours answers
 | | 2 | stopped on a conflict, none left | *Continue* |
 | | 3 | a chain left to answer here, gone to or not (a reply typed into its box but not saved does not answer it) | *Next comment* |
 | | 4 | a commit above the stop needs edits, or (no rebase) any commit does | *Work on next* |
-| | 5 | a rebase underway, nothing above the stop needs edits | *Finish the rebase* |
+| | 5 | a rebase underway, nothing above the stop needs edits | *Continue*: the task header's own button, by its name (one action, one name) |
+| | – | at an edit stop, a file changed and not amended (core's `uncommitted`) | none: Continue would refuse; the stop lists it under *Changed, not amended*, and amending is the terminal's (`git commit --amend -a`) until issue 132 |
 | | 6 | something to send (new code, a commit not on Gerrit, drafts of yours) and the push is not refused | *Push* |
 | looking at somebody's change on Gerrit | 1 | always | *Review change* |
 

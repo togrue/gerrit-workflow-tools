@@ -211,6 +211,7 @@ def rebase_json(stack: AnnotatedStack, progress: RebaseProgress | None) -> dict[
         "folding_into": progress.folding_into,
         "reused": list(progress.reused),
         "unmerged": list(progress.unmerged),
+        "uncommitted": list(progress.uncommitted),
         "as_before": not progress.keeps_todo,
         "actions": [action.value for action in progress.actions],
         "refused": {action.value: why for action in RebaseAction if (why := stop_refusal(progress, action))},

@@ -855,6 +855,14 @@ select:focus {
   gap: 6px;
 }
 
+.task-outcome {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
 .task-busy .codicon-loading {
   animation: spin 1.2s linear infinite;
 }

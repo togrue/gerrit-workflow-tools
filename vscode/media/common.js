@@ -353,6 +353,12 @@
     );
   }
 
+  /** How the last step ended, in ger's words: its line, the lines after it on hover; tone and icon, never the colour alone. */
+  function outcome(item) {
+    const title = [item.text, ...item.more].join("\n");
+    return h("div", { class: "task-outcome", role: "status", title }, icon(item.ok ? "check" : "warning", item.ok ? "good" : "warn"), h("span", {}, item.text));
+  }
+
   /** A way on in the task header: what it does beside it; refused now, drawn and behaving disabled, with why beside it. */
   function taskAction(item) {
     return h(
@@ -364,12 +370,12 @@
           class: `button${item.primary && !item.notNow ? "" : " secondary"}`,
           disabled: Boolean(item.notNow),
           "aria-disabled": item.notNow ? "true" : undefined,
-          title: item.notNow ? `Not now: ${item.notNow}` : item.detail,
+          title: item.tooltip ? `Not now: ${item.tooltip}` : item.notNow ? `Not now: ${item.notNow}` : item.detail,
           onclick: () => post("command", { command: item.command }),
         },
         item.label,
       ),
-      h("span", { class: "task-detail" }, item.notNow ? `not now: ${item.notNow}` : item.detail),
+      h("span", { class: "task-detail", title: item.tooltip }, item.notNow ? `not now: ${item.notNow}` : item.detail),
     );
   }
 
@@ -397,6 +403,7 @@
       h("div", { class: "task-heading" }, icon(vm.mode === "review" ? "eye" : "edit"), h("span", { class: "task-mode", title: vm.title }, vm.heading), h("span", { class: "task-position" }, vm.position), views),
       h("div", { class: "task-left" }, h("span", { class: "task-label" }, "Left: "), vm.left),
       vm.busy ? h("div", { class: "task-busy" }, icon("loading"), h("span", {}, vm.busy)) : null,
+      !vm.busy && vm.outcome ? outcome(vm.outcome) : null,
       vm.steps.length ? h("ol", { class: "steps", "aria-label": `The chain, oldest first: ${vm.title}` }, vm.steps.map(step)) : null,
       vm.actions.length ? h("div", { class: "task-actions" }, vm.actions.map(taskAction)) : null,
     );
@@ -404,6 +411,7 @@
 
   window.ger = {
     task,
+    outcome,
     h,
     icon,
     badge,

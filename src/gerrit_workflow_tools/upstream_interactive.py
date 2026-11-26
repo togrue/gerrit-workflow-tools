@@ -13,6 +13,7 @@ from gerrit_workflow_tools.core.upstream import (
     MissingUpstreamError,
     NeedsUpstreamError,
     branch_has_upstream,
+    gone_upstream,
     local_branch_exists,
     missing_upstream_error,
     set_branch_upstream,
@@ -29,8 +30,11 @@ def prompt_upstream_abbrev_interactive(cwd: Path | str | None, branch: str, *, s
     default = choice_.suggested or (candidates[0] if candidates else "")
     completer = WordCompleter(candidates, ignore_case=False, sentence=True)
     session: PromptSession[str] = PromptSession()
+    gone = choice_.gone
     print(
-        f"No upstream configured for branch {branch!r}.",
+        f"The upstream {gone} of branch {branch!r} is gone."
+        if gone
+        else f"No upstream configured for branch {branch!r}.",
         file=sys.stderr,
     )
     if default:
@@ -93,11 +97,11 @@ def require_branch_upstream(
     if branch_has_upstream(cwd, branch):
         return True
     if not interactive:
-        raise missing_upstream_error(branch)
+        raise missing_upstream_error(branch, gone=gone_upstream(cwd, branch))
     if ensure_branch_upstream_interactive(cwd, branch, settings=settings):
         return True
     if not prompt_toolkit_can_run():
-        raise missing_upstream_error(branch)
+        raise missing_upstream_error(branch, gone=gone_upstream(cwd, branch))
     return False
 
 
@@ -131,4 +135,6 @@ def with_suggested_upstream(error: NeedsUpstreamError) -> NeedsUpstreamError:
         return error
     if not choice.suggested:
         return error
-    return missing_upstream_error(error.branch, askable=error.askable, suggested=choice.suggested, why=choice.why)
+    return missing_upstream_error(
+        error.branch, askable=error.askable, suggested=choice.suggested, why=choice.why, gone=choice.gone or error.gone
+    )

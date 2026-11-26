@@ -44,11 +44,12 @@ def stack_upstream(ctx: Context, _req: Request) -> dict[str, Any]:
     """The working branch's upstream, and which to offer when it has none: the best guess first."""
     branch = ctx.run.worktree.branch
     if branch is None:
-        return {"branch": None, "upstream": None, "suggested": None, "why": None, "candidates": []}
+        return {"branch": None, "upstream": None, "gone": None, "suggested": None, "why": None, "candidates": []}
     choice = upstream_choice(ctx.cwd, branch, settings=ctx.settings)
     return {
         "branch": branch,
         "upstream": choice.current,
+        "gone": choice.gone,
         "suggested": choice.suggested,
         "why": choice.why,
         "candidates": choice.candidates,

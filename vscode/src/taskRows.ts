@@ -39,8 +39,10 @@ export interface TaskAction {
   /** What it does, in words, beside the button: no need to hover. */
   detail: string;
   command: string;
-  /** Why it would not run now (core's words): drawn disabled, with the reason as its detail. */
+  /** Why it would not run now, in one line: drawn disabled, with the reason as its detail. */
   notNow?: string;
+  /** The whole of it on hover: core's refusal, with the commands (`git add`, `ger rebase --continue`). */
+  tooltip?: string;
   /** The next step on the screen (changeScreen.ts): drawn as the one primary button. */
   primary?: boolean;
 }
@@ -61,6 +63,15 @@ export interface TaskVm {
   views: TaskAction;
   /** Something under way that the screen is waiting on: "Checking out 2156…". */
   busy?: string;
+  /** How the last step ended, in ger's words, until the next action (core's step outcome, or a refusal said here). */
+  outcome?: Outcome;
+}
+
+/** A finished step's one line, and the lines after it (what was kept, what is gone, the next step) for the tooltip. */
+export interface Outcome {
+  text: string;
+  ok: boolean;
+  more: string[];
 }
 
 /** What the header knows beyond the served state. */
@@ -69,6 +80,8 @@ export interface TaskOptions {
   all: boolean;
   /** A step of the review is under way: what it says while it runs. */
   busy?: string;
+  /** How the last step ended: said until the next action. */
+  outcome?: Outcome;
   /**
    * The change the Change view shows, with its comments counted from its chains (`chainCounts`):
    * taken over the served counts for that change, so the header and the view say the same number.
@@ -171,6 +184,7 @@ function reviewTask(overview: Overview | undefined, stack: Stack, options: TaskO
       { label: "Leave review", detail: back ? `back to ${back}; the review's branches go` : "end the review; its branches go", command: "ger.reviewDone" },
     ],
     busy: options.busy,
+    ...(options.outcome ? { outcome: options.outcome } : {}),
   };
 }
 
@@ -182,20 +196,24 @@ function reworkTask(stack: Stack, options: TaskOptions): TaskVm {
   // Counted by commit, as the rows show it: the findings are known only once a log is fetched.
   const failed = commits.filter(failedCi).length;
   const edits = commits.filter((commit) => commit.needs_edit).length;
+  const above = at >= 0 ? commits.length - at - 1 : commits.filter((commit) => commit.rebase === "todo").length;
+  const unmerged = rebase?.unmerged.length ?? 0;
+  const uncommitted = rebase?.uncommitted ?? [];
+  // What the rebase itself still needs first: the conflict, the fix not amended, then the commits to replay.
   const left = [
+    unmerged ? `${plural(unmerged, "conflict")} to resolve` : "",
+    uncommitted.length ? `${uncommitted.join(", ")} not amended` : "",
     toAnswer ? `${plural(toAnswer, "comment")} to answer` : "",
     failed ? `CI failed on ${plural(failed, "commit")}` : "",
     edits ? `${plural(edits, "commit")} need${edits === 1 ? "s" : ""} edits` : "",
+    above ? `${plural(above, "commit")} to replay` : "",
   ].filter(Boolean);
-  const above = at >= 0 ? commits.length - at - 1 : commits.filter((commit) => commit.rebase === "todo").length;
-  const unmerged = rebase?.unmerged.length ?? 0;
-  const go = (action: "continue" | "abort" | "skip", detail: string): TaskAction => ({
-    label: REBASE_ACTIONS[action].label,
-    detail,
-    command: REBASE_ACTIONS[action].command,
+  const go = (action: "continue" | "abort" | "skip", detail: string): TaskAction => {
+    const refused = rebase && !rebase.actions.includes(action) ? (rebase.refused?.[action] ?? "not now") : undefined;
     // While a step runs in the terminal, a second press would run another over it.
-    notNow: options.busy ? "the step before it is still running" : rebase && !rebase.actions.includes(action) ? (rebase.refused?.[action] ?? "not now") : undefined,
-  });
+    const notNow = options.busy ? "the step before it is still running" : refused ? notNowLine(rebase, action, refused) : undefined;
+    return { label: REBASE_ACTIONS[action].label, detail, command: REBASE_ACTIONS[action].command, ...(notNow ? { notNow } : {}), ...(refused && !options.busy ? { tooltip: refused } : {}) };
+  };
   const actions = [
     go("continue", unmerged ? `once the ${plural(unmerged, "conflict")} ${unmerged === 1 ? "is" : "are"} resolved` : above ? `commit this stop as it is, then replay the ${plural(above, "commit")} above` : "commit this stop as it is and finish the rebase"),
     go("abort", "put the branch back as it was before the rebase"),
@@ -208,12 +226,28 @@ function reworkTask(stack: Stack, options: TaskOptions): TaskVm {
     title,
     position: at >= 0 ? `change ${at + 1} of ${commits.length}` : `between changes, ${plural(above, "commit")} to come`,
     left: left.join(" · ") || "nothing left to answer or fix",
+    ...(options.outcome ? { outcome: options.outcome } : {}),
     // The chain, oldest first as while reviewing: Local stack steps aside, so the Change view has the room.
     steps: commits.map((commit, index) => reworkStep(commit, index, options)),
     actions,
     views: options.all ? VIEWS.only : VIEWS.all,
     busy: options.busy,
   };
+}
+
+/**
+ * Why a way on is not to run now, in one line beside its button: the files in the way, by core's
+ * structured verdict (`unmerged`, `uncommitted`); else core's refusal up to its first command. The
+ * whole refusal, commands and all, is the tooltip.
+ */
+export function notNowLine(rebase: Stack["rebase"], action: "continue" | "abort" | "skip", refused: string): string {
+  if (action === "continue" && rebase?.unmerged.length) {
+    return `resolve ${rebase.unmerged.join(", ")} first`;
+  }
+  if (action === "continue" && rebase?.uncommitted?.length) {
+    return `${rebase.uncommitted.join(", ")} changed, not amended: amend or stash ${rebase.uncommitted.length === 1 ? "it" : "them"} first`;
+  }
+  return refused.split(/; |: `| \(`/)[0];
 }
 
 const PHASE_MARKS: Record<"done" | "current" | "todo", TaskMark> = {
@@ -261,6 +295,7 @@ export function taskLines(vm: TaskVm | undefined): string[] {
     `${vm.heading}: ${vm.title} — ${vm.position}  [${vm.views.label}]`,
     `Left: ${vm.left}`,
     ...(vm.busy ? [`… ${vm.busy}`] : []),
+    ...(vm.outcome ? [`${vm.outcome.ok ? "✓" : "⚠"} ${vm.outcome.text}`, ...vm.outcome.more.map((line) => `  ${line}`)] : []),
     ...vm.steps.map((step) => `${step.current ? "▸" : " "} ${step.position}. ${step.title} — ${step.marks.map((mark) => mark.text).join(" · ")}`),
     ...vm.actions.map((action) => `${action.primary ? `[**${action.label}**]` : `[${action.label}]`} ${action.notNow ? `(not now: ${action.notNow})` : action.detail}`),
   ];
