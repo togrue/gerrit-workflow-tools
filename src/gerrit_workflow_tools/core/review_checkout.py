@@ -368,15 +368,17 @@ def close_review(state: ReviewState) -> tuple[list[str], list[str]]:
     return deleted, kept
 
 
-def chain_numbers(related: dict[str, Any]) -> list[int]:
-    """Open change numbers of a RelatedChangesInfo, base first. Merged and abandoned are skipped."""
+def chain_numbers(related: dict[str, Any], keep: int | None = None) -> list[int]:
+    """Open change numbers of a RelatedChangesInfo, base first. Merged and abandoned are skipped,
+    except *keep* (the change under review): closed meanwhile, it keeps its place, so the chain
+    still goes on from it."""
     rows = related.get("changes")
     numbers: list[int] = []
     for row in reversed(rows if isinstance(rows, list) else []):
         if not isinstance(row, dict):
             continue
         number, status = row.get("_change_number"), str(row.get("status") or "NEW").upper()
-        if isinstance(number, int) and status == "NEW" and number not in numbers:
+        if isinstance(number, int) and (status == "NEW" or number == keep) and number not in numbers:
             numbers.append(number)
     return numbers
 

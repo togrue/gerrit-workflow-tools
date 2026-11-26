@@ -32,10 +32,13 @@ from gerrit_workflow_tools.core.usage import Refusal, UsageError
 from gerrit_workflow_tools.core.votes import DEFAULT_LABEL, votes_ruled_out, your_votes
 
 
-def related_chain_numbers(service: GerritService, key: str, patch_set: int | str = "current") -> list[int]:
-    """Open change numbers of the review chain *key* sits in, base first; ``[]`` when Gerrit cannot say."""
+def related_chain_numbers(
+    service: GerritService, key: str, patch_set: int | str = "current", keep: int | None = None
+) -> list[int]:
+    """Open change numbers of the review chain *key* sits in, base first, and *keep* in its place
+    even when closed; ``[]`` when Gerrit cannot say."""
     try:
-        return chain_numbers(service.rest.get_related(key, patch_set))
+        return chain_numbers(service.rest.get_related(key, patch_set), keep)
     except GerritApiError:
         return []
 
@@ -49,7 +52,8 @@ def review_neighbour(
 
     Raises :class:`~gerrit_workflow_tools.core.review_checkout.ReviewChainEndError` at the end of the chain.
     """
-    chain = related_chain_numbers(service, state.key, state.patch_set)
+    # The change under review stays in the chain when it was abandoned or merged meanwhile: the walk goes on from it.
+    chain = related_chain_numbers(service, state.key, state.patch_set, keep=state.number)
     target, url = resolve_patchset(service, cwd, f"change:{neighbour(chain, state.number, step)}", None)
     return target, url, chain
 

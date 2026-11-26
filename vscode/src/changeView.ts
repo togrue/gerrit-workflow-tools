@@ -19,7 +19,7 @@ import { waitingFor } from "./state";
 import { NextAction, nextAction } from "./nextAction";
 import { changeScreen } from "./changeScreen";
 import { PROBLEM_ACTIONS, changeProblem, gerritAway, gerritProblem } from "./problemRows";
-import { focusedMember, reviewFocus } from "./reviewFocus";
+import { chainGoesOn, focusedMember, reviewFocus } from "./reviewFocus";
 import { markOf } from "./staleDiffs";
 import { feedback, offerWaysOn, ui } from "./ui";
 import { TaskMode, TaskVm, taskLines } from "./taskRows";
@@ -103,7 +103,7 @@ export class ChangeView extends WebView<ChangeVm> {
     }
     const stack = this.model.stack;
     const focus = this.holdsReview() ? reviewFocus(this.model.overview, stack) : undefined;
-    const { member, above } = focus ? focusedMember(focus) : { member: undefined, above: undefined };
+    const { member, above } = focus ? focusedMember(focus) : { member: undefined, above: this.holdsReview() ? chainGoesOn(this.model.reviewChain, this.target?.number) : undefined };
     return nextAction({
       stack,
       shown: this.detail.loading() ? undefined : this.shown,
@@ -115,7 +115,7 @@ export class ChangeView extends WebView<ChangeVm> {
       seenFiles: this.seenHere(),
       combinedActive: this.combinedActive(),
       yourTurn: member?.your_turn,
-      above: focus ? above : undefined,
+      above,
       newest: this.knownPatchsets()?.current ?? this.shown?.current_patch_set ?? null,
       reviewElsewhere: this.model.reviewElsewhere(this.target?.number),
     });

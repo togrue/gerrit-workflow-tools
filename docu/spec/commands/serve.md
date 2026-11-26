@@ -618,8 +618,9 @@ In `GET /show`, every comment chain carries `held`.
 ### `GET /review`
 
 The **review state**, as `ger review --status --json`, under `review`; `null` when none. With
-`chain=1` its `chain` is the review chain's open changes, base first, as `ger review` prints it
-(one Gerrit request); without, `null`.
+`chain=1` its `chain` is the review chain's open changes, base first, as `ger review` prints it,
+with the change under review in its place even when it was abandoned or merged since (one Gerrit
+request); without, `null`.
 
 ### `GET /vote?change=<changeish>`
 

@@ -868,6 +868,21 @@ def test_review_open_checks_out_in_the_review_worktree_and_done_leaves_it(stack_
     assert (staged["number"], staged["commit"], staged["branch"]) == (102, rows[2].sha, "change-102")
     assert _get(api, "/stack")["staged_review"] is None, "the review is staged in its worktree, not here"
     assert _get(api, "/review", chain="1")["review"]["chain"] == [100, 101, 102, 103]
+    # Abandoned while under review, it keeps its place in the chain; another closed change does not.
+    closed = {100: "MERGED", 102: "ABANDONED"}
+    for key in keys:
+        store.set_related(
+            key,
+            [
+                {"_change_number": n, "_revision_number": 1, "status": closed.get(n, "NEW")}
+                for n in (103, 102, 101, 100)
+            ],
+        )
+    assert _get(api, "/review", chain="1")["review"]["chain"] == [101, 102, 103]
+    for key in keys:
+        store.set_related(
+            key, [{"_change_number": n, "_revision_number": 1, "status": "NEW"} for n in (103, 102, 101, 100)]
+        )
     # ger review --next: the change above, in the review's own mode; at the top, the chain ends.
     walked = _post(api, "/review/open", {"step": 1})["review"]
     assert (walked["number"], walked["staged"], Path(walked["worktree"])) == (103, True, worktree)

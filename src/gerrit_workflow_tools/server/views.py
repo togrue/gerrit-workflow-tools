@@ -387,8 +387,13 @@ def agent_runbook(ctx: Context, req: Request) -> dict[str, Any]:
 def review(ctx: Context, req: Request) -> dict[str, Any]:
     """The **review state** of this checkout or its review worktree; ``review`` is ``null`` when there is none.
 
-    With ``chain=1``, its ``chain`` is the review chain's open changes, base first (one Gerrit request).
+    With ``chain=1``, its ``chain`` is the review chain's open changes, base first, and the change
+    under review in its place even when it was closed meanwhile (one Gerrit request).
     """
     state = find_review(ctx.cwd, ctx.settings)
-    chain = related_chain_numbers(ctx.service, state.key, state.patch_set) if state and req.flag("chain") else None
+    chain = (
+        related_chain_numbers(ctx.service, state.key, state.patch_set, keep=state.number)
+        if state and req.flag("chain")
+        else None
+    )
     return {"review": review_state_json(state, chain=chain, url=None) if state else None}
