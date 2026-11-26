@@ -743,7 +743,8 @@ export function changeLines(vm: ChangeVm): string[] {
   if (vm.files) {
     add(0, vm.files.title, vm.files.note || `${vm.files.rows.length} · +${vm.files.added} −${vm.files.deleted}`);
     for (const file of vm.files.rows) {
-      add(1, `${file.seen ? "✓ " : ""}${file.name}`, `${file.dir ? `${file.dir} · ` : ""}${file.state} ${file.added === null ? "binary" : `+${file.added} −${file.deleted}`}`);
+      // Not whether it was seen: that comes a moment after its diff is laid out, and the transcript would race it.
+      add(1, file.name, `${file.dir ? `${file.dir} · ` : ""}${file.state} ${file.added === null ? "binary" : `+${file.added} −${file.deleted}`}`);
     }
   }
   if (vm.comments) {

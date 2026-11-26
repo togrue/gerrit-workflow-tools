@@ -585,8 +585,6 @@ status bar message: Comment 1 of 2 to answer
 --- on screen:
 + change | [Next comment] — 2 comments left to answer here, 1 not gone to yet (Alt+Enter)
 - change | [Next comment] — 2 comments left to answer here, 2 not gone to yet (Alt+Enter)
-+ change |   ✓ b.txt — added +1 −0
-- change |   b.txt — added +1 −0
 + editor | b.txt (file, line 1)
 - editor | Preview ger-brief-<id>.md (webview)
 ```
@@ -1023,7 +1021,7 @@ browser opens: https://g.example/c/testproj/+/101
 + change | CI
 + change |   Widget #55 — 1 finding
 + change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 · introduced here
-- change |   ✓ b.txt — added +1 −0
+- change |   b.txt — added +1 −0
 - change | Comments — 2 answered by your drafts (push publishes them) · 3 of yours, not published
 - change |   This file needs a header. — your draft · b.txt  [yours]
 - change |   Please rename this. — your draft resolves it · suggested edit · b.txt:1 · Alice Reviewer · 1 reply  [open]
@@ -1931,8 +1929,6 @@ change | (the commit shown is only on the branch as it was before)
 **Expect:** e.txt opens with its conflict markers in the text editor (VS Code offers Accept Current / Incoming / Both there, and Resolve in Merge Editor), not in the merge editor; nothing else changes.
 
 ```
-+ change |   ✓ e.txt — added +1 −0
-- change |   e.txt — added +1 −0
 + editor | e.txt (file, line 1)
 - editor | Preview ger-runbook-<id>.md (webview)
 --- shown now:
@@ -1962,7 +1958,7 @@ change | Comparing — Base commit → Local commit <sha> · default: Against it
 change | Conflicts — 1 file
 change |   ⚠ e.txt — conflicted
 change | Files, as before the rebase — 1 · +1 −0
-change |   ✓ e.txt — added +1 −0
+change |   e.txt — added +1 −0
 change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
@@ -2013,7 +2009,7 @@ change | [Finish the rebase] — no commit after this one needs edits (Alt+Enter
 change | Commit message — Add e.txt  (read-only)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files, as before the rebase — 1 · +1 −0
-change |   ✓ e.txt — added +1 −0
+change |   e.txt — added +1 −0
 change | Comments — none
 change | (the commit shown is only on the branch as it was before)
 ```
@@ -2049,7 +2045,7 @@ notification (info): The rebase is finished. 1 commit of your stack still needs 
 + change | Files — 1 · +1 −0
 + change |   e.txt — modified +1 −0
 - change | Files, as before the rebase — 1 · +1 −0
-- change |   ✓ e.txt — added +1 −0
+- change |   e.txt — added +1 −0
 --- shown now:
 status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
@@ -2507,8 +2503,6 @@ diff tab | e.txt (<sha>) (ger-file on the right, active)
 **Expect:** e.txt opens on its own (the commit adds it), as your file: you stand on this commit.
 
 ```
-+ change |   ✓ e.txt — added +1 −0
-- change |   e.txt — added +1 −0
 + editor | e.txt (file, line 1)
 - editor | e.txt (<sha>) (diff, ger-file ↔ ger-file)
 --- shown now:
@@ -2536,7 +2530,7 @@ change | Commit message — Refactor parser init  (read-only)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 2 · +2 −0
 change |   a.txt — added +1 −0
-change |   ✓ e.txt — added +1 −0
+change |   e.txt — added +1 −0
 change | Comments — none
 change | CI
 change |   Widget #55 — from patchset 1, before your local changes · 1 finding
@@ -2577,7 +2571,7 @@ change | Commit message — Refactor parser init  (read-only)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 2 · +2 −0
 change |   a.txt — added +1 −0
-change |   ✓ e.txt — added +1 −0
+change |   e.txt — added +1 −0
 change | Comments — none
 change | CI
 change |   Widget #55 — from patchset 1, before your local changes · 1 finding
@@ -2623,7 +2617,7 @@ change | Commit message — Refactor parser init  (read-only)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 2 · +2 −0
 change |   a.txt — added +1 −0
-change |   ✓ e.txt — added +1 −0
+change |   e.txt — added +1 −0
 change | Comments — none
 change | CI
 change |   Widget #55 — from patchset 1, before your local changes · 1 finding
@@ -2658,8 +2652,8 @@ diff tab | e.txt (<sha>) (ger-file on the right)
 - change | Commit message — Refactor parser init  (read-only)
 + change | Files — 2 · +3 −0
 - change | Files — 2 · +2 −0
-+ change |   ✓ e.txt — added +2 −0
-- change |   ✓ e.txt — added +1 −0
++ change |   e.txt — added +2 −0
+- change |   e.txt — added +1 −0
 --- shown now:
 status bar | $(comment-unresolved) 2 unresolved comments on 101: Extract command routing  $(bell-dot) 1
 stack header | feature → origin/main
@@ -2682,7 +2676,7 @@ change | Commit message — Refactor parser init  (editable)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 2 · +3 −0
 change |   a.txt — added +1 −0
-change |   ✓ e.txt — added +2 −0
+change |   e.txt — added +2 −0
 change | Comments — none
 change | CI
 change |   Widget #55 — from patchset 1, before your local changes · 1 finding
@@ -2719,7 +2713,7 @@ change | Commit message — Refactor parser init  (editable)
 change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 change | Files — 2 · +3 −0
 change |   a.txt — added +1 −0
-change |   ✓ e.txt — added +2 −0
+change |   e.txt — added +2 −0
 change | Comments — none
 change | CI
 change |   Widget #55 — from patchset 1, before your local changes · 1 finding
@@ -2743,7 +2737,7 @@ change | (the commit shown is below HEAD)
 + change |   e.txt — modified +1 −0
 - change | Files — 2 · +3 −0
 - change |   a.txt — added +1 −0
-- change |   ✓ e.txt — added +2 −0
+- change |   e.txt — added +2 −0
 - change | CI
 - change |   Widget #55 — from patchset 1, before your local changes · 1 finding
 - change |     tests/test_calc.py::test_divide: ZeroDivisionError: division by zero — pytest · demo/calc.py:6 (line 6 on patchset 1, changed since)
@@ -3391,8 +3385,6 @@ notification (info): Change 900 (patchset 1) is checked out for review: this che
 ```
 (nothing said or done outside the views)
 --- on screen:
-+ change |   ✓ uploader.txt — added +1 −0
-- change |   uploader.txt — added +1 −0
 + editor | uploader.txt (file, line 1)
 - editor | Change 900 (<sha>) (1 file) (webview)
 ```
@@ -3484,7 +3476,7 @@ notification (info): Left the review of change 900.
 - change | Commit message — Add retry to the uploader  (read-only)
 - change | Comparing — Base commit → Local commit <sha> · default: Against its base commit
 - change | Files — 1 · +1 −0
-- change |   ✓ uploader.txt — added +1 −0
+- change |   uploader.txt — added +1 −0
 - change | Comments — 3 unresolved of 3 · 1 of yours, not published
 - change |   Should it back off between retries? — uploader.txt:1 · Bob Architect  [open]
 - change |   And cap the delay. — uploader.txt:1 · Bob Architect  [open]
