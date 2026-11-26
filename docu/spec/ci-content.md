@@ -94,7 +94,7 @@ Each **CI finding** carries a tool/kind tag. Precise finders run before generic 
 | | `jest`, `node-test` | `failed` | `●` headings under `FAIL file`; the entries under `✖ failing tests:` |
 | | `npm` | `error` | one finding per `npm error` / `npm ERR!` report: its code and first telling line |
 | Java | `javac` | `error`, `warning` | `Foo.java:12: error: msg`, also behind a wrapper's tag (`[javac]`, `[WARNING]`); through Maven `[ERROR] /path/Foo.java:[12,5] msg`, where the path may hold spaces |
-| | `junit` | `failed`, `error` | Surefire's `… <<< FAILURE!` test line, located by the stack frame in the test's class (else its `Failures:` / `Errors:` summary row); Gradle's `Class > test FAILED` |
+| | `junit` | `failed`, `error` | Surefire's `… <<< FAILURE!` test line, located by the stack frame in the test's class (else its `Failures:` / `Errors:` summary row); a message of several lines (a multi-line `assertEquals`) is read up to the first frame: its first line, joined to `Exception:` when that ends the line, is the message and the lines after it are `detail`; Gradle's `Class > test FAILED` |
 | | `maven`, `gradle` | `error` | `Failed to execute goal …`, `Task :x FAILED` |
 | Scala | `scalac` | `error`, `warning` | sbt's `[error] /path/Foo.scala:12[:5]: msg`, Scala 3's `-- [E007] … Error: path:line:col`, and through Maven `Foo.scala:12: warning: msg` |
 | | `scalatest` | `failed` | `- name *** FAILED ***` and the `(File.scala:12)` line under it |

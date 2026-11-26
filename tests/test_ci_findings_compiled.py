@@ -75,3 +75,44 @@ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
     [finding] = find_ci_findings(log)
     assert finding.message == "tests::adds: assertion `left == right` failed"
     assert finding.detail == "  left: -1\n right: 3"
+
+
+# --- Java: Maven, Surefire, javac ----------------------------------------------------
+
+
+def test_junit_assertion_over_several_lines_has_its_line_and_whole_message() -> None:
+    [junit, maven] = _findings("java-maven-surefire.txt")
+    assert (junit.tool, junit.kind, junit.location) == ("junit", "failed", "CsvTest.java:13")
+    assert junit.message == (
+        "CsvTest.toCsvWritesOneLinePerRow: org.opentest4j.AssertionFailedError: expected: <account,kind,balance"
+    )
+    assert junit.detail == "cash,asset,100.50\n> but was: <account,kind,balance\ncash,ASSET,100.50\n>"
+    assert maven.tool == "maven"
+
+
+def test_junit_summary_row_keeps_the_lines_its_message_goes_on_with() -> None:
+    log = """\
+[ERROR] Failures:
+[ERROR]   CsvTest.writes:13 expected: <a
+b
+> but was: <a
+c
+>
+[ERROR] Tests run: 1, Failures: 1, Errors: 0, Skipped: 0
+"""
+    [finding] = find_ci_findings(log)
+    assert (finding.location, finding.message) == ("CsvTest.java:13", "CsvTest.writes: expected: <a")
+    assert finding.detail == "b\n> but was: <a\nc\n>"
+
+
+def test_junit_failure_without_a_trace_does_not_swallow_the_next_test() -> None:
+    log = """\
+[ERROR] org.x.FooTest.a -- Time elapsed: 0.01 s <<< FAILURE!
+[ERROR] org.x.FooTest.b -- Time elapsed: 0.01 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: boom
+\tat org.x.FooTest.b(FooTest.java:9)
+"""
+    assert [(f.message, f.location) for f in find_ci_findings(log)] == [
+        ("FooTest.a", "FooTest.java"),
+        ("FooTest.b: org.opentest4j.AssertionFailedError: boom", "FooTest.java:9"),
+    ]

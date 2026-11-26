@@ -28,6 +28,9 @@ _SUREFIRE_TEST = (
 _SUREFIRE_CLASS = re.compile(r"^(?:\[\w+\]|Error:)?\s*Tests run: \d+, Failures: \d+, Errors: \d+.*$")
 _SUREFIRE_HEAD = re.compile(r"^\[ERROR\] (?P<what>Failures|Errors):\s*$")
 _SUREFIRE_ROW = re.compile(r"^\[ERROR\]\s{2,}(?P<cls>[\w.$]+)\.(?P<test>[\w$]+)(?::(?P<line>\d+))?(?: (?P<msg>.*))?$")
+_ANY_FRAME = re.compile(r"^\s+at \S")
+_SUREFIRE_STOP = re.compile(r"^(?:\[\w+\]|Error:|Tests run:|Running )")
+"""A line of Maven's or Surefire's own, not of the exception: where its message cannot go on."""
 _JAVA_FRAME = re.compile(r"^\s+at (?P<cls>[\w.$]+)\.[\w$<>]+\((?P<file>[\w$]+\.\w+):(?P<line>\d+)\)$")
 
 
@@ -36,20 +39,50 @@ def _simple(cls: str) -> str:
     return cls.rsplit(".", 1)[-1].split("$")[0]
 
 
+def _is_stop(line: str) -> bool:
+    return _SUREFIRE_STOP.match(line) is not None or any(rx.match(line) for rx in _SUREFIRE_TEST)
+
+
 def _surefire_trace(
     lines: Sequence[str], start: int, cls: str, claimed: set[int]
-) -> tuple[str, str | None, int | None]:
-    """Under a failed test's line: what was thrown, and the first frame in the test's own class."""
-    said = lines[start].strip() if start < len(lines) and not _JAVA_FRAME.match(lines[start]) else ""
+) -> tuple[str, str | None, str | None, int | None]:
+    """Under a failed test's line: what was thrown (first line, the rest), and the first frame in the test's class.
+
+    The message runs from *start* to the first stack frame, so an ``assertEquals`` that prints several
+    lines is whole; a trace without frames has the one line.
+    """
+    end = start
+    while end < len(lines) and not _ANY_FRAME.match(lines[end]) and not _is_stop(lines[end]):
+        end += 1
+    framed = end < len(lines) and _ANY_FRAME.match(lines[end]) is not None
+    if not framed:
+        end = start + (1 if start < len(lines) and not _is_stop(lines[start]) else 0)
+    said, rest = _said(lines[start:end])
     file: str | None = None
     lineno: int | None = None
-    end = start + (1 if said else 0)
-    while end < len(lines) and (frame := _JAVA_FRAME.match(lines[end])):
-        if file is None and _simple(frame.group("cls")) == _simple(cls):
+    frames = end
+    while frames < len(lines) and _ANY_FRAME.match(lines[frames]):
+        frame = _JAVA_FRAME.match(lines[frames])
+        if frame and file is None and _simple(frame.group("cls")) == _simple(cls):
             file, lineno = frame.group("file"), int(frame.group("line"))
-        end += 1
-    claimed.update(range(start, end))
-    return said, file, lineno
+        frames += 1
+    claimed.update(range(start, frames))
+    return said, rest, file, lineno
+
+
+def _said(message: Sequence[str]) -> tuple[str, str | None]:
+    """A multi-line message as its first line (``Exception:`` joined with the line it introduces) and the rest."""
+    rows = [row.rstrip() for row in message]
+    while rows and not rows[0].strip():
+        rows.pop(0)
+    while rows and not rows[-1].strip():
+        rows.pop()
+    if not rows:
+        return "", None
+    head, rest = rows[0].strip(), rows[1:]
+    if head.endswith(":") and rest:
+        head, rest = f"{head} {rest[0].strip()}", rest[1:]
+    return head, "\n".join(rest[:DETAIL_LINES]) or None
 
 
 def find_surefire(lines: Sequence[str], claimed: set[int]) -> list[CiFinding]:
@@ -63,7 +96,7 @@ def find_surefire(lines: Sequence[str], claimed: set[int]) -> list[CiFinding]:
         failed = next((m for rx in _SUREFIRE_TEST if (m := rx.match(line))), None)
         if failed is not None:
             cls, test = failed.group("cls"), failed.group("test")
-            said, file, lineno = _surefire_trace(lines, i + 1, cls, claimed)
+            said, rest, file, lineno = _surefire_trace(lines, i + 1, cls, claimed)
             name = f"{_simple(cls)}.{test}"
             seen.add(name)
             findings.append(
@@ -73,6 +106,7 @@ def find_surefire(lines: Sequence[str], claimed: set[int]) -> list[CiFinding]:
                     message=f"{name}: {said}" if said else name,
                     path=file or f"{_simple(cls)}.java",
                     line=lineno,
+                    detail=rest,
                 )
             )
         elif head := _SUREFIRE_HEAD.match(line):
@@ -80,6 +114,10 @@ def find_surefire(lines: Sequence[str], claimed: set[int]) -> list[CiFinding]:
         elif what is not None and (m := _SUREFIRE_ROW.match(line)):
             name = f"{_simple(m.group('cls'))}.{m.group('test')}"
             said = (m.group("msg") or "").strip()
+            more = i + 1  # an assertion message of several lines goes on without Maven's tag
+            while more < len(lines) and lines[more].strip() and not _is_stop(lines[more]):
+                more += 1
+            claimed.update(range(i + 1, more))
             if name not in seen:
                 seen.add(name)
                 findings.append(
@@ -89,6 +127,7 @@ def find_surefire(lines: Sequence[str], claimed: set[int]) -> list[CiFinding]:
                         message=f"{name}: {said}" if said else name,
                         path=f"{_simple(m.group('cls'))}.java",
                         line=int(m.group("line")) if m.group("line") else None,
+                        detail="\n".join(row.rstrip() for row in lines[i + 1 : more][:DETAIL_LINES]) or None,
                     )
                 )
         elif _SUREFIRE_CLASS.match(line):
