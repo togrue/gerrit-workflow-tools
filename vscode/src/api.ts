@@ -1,6 +1,8 @@
 // The `ger serve` API as this extension uses it. Contract: docu/spec/commands/serve.md.
 // No `vscode` import here: the client is plain Node, so it can be tested without an editor.
 
+import { activeTracer } from "./trace";
+
 export interface Hello {
   url: string;
   api: string;
@@ -664,13 +666,21 @@ export class GerClient {
     if (body !== undefined) {
       headers["Content-Type"] = "application/json";
     }
-    const response = await fetch(this.url(path, params), {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal,
-    });
-    const payload = (await response.json()) as { error?: ApiError } & T;
+    const span = activeTracer()?.request(method, path);
+    let payload: { error?: ApiError } & T;
+    let response: Response;
+    try {
+      response = await fetch(this.url(path, params), {
+        method,
+        headers: span ? { ...headers, ...span.headers } : headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal,
+      });
+      payload = (await response.json()) as { error?: ApiError } & T;
+      span?.end(response.status, response.headers.get("X-Ger-Trace"));
+    } finally {
+      span?.end(0, null);
+    }
     if (!response.ok) {
       const error = payload.error ?? { code: "INTERNAL", message: response.statusText };
       throw new GerApiError(error.code, error.message, response.status, error.reason);

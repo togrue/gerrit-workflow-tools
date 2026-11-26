@@ -112,7 +112,7 @@ flowchart TB
 
 | Layer | Location | Responsibility |
 |-------|----------|----------------|
-| **Entry** | `cli_ger.py` | Lazy command dispatch, global `--refresh` → `GER_CACHE_REFRESH` |
+| **Entry** | `cli_ger.py` | Lazy command dispatch, global `--refresh` → `GER_CACHE_REFRESH`, `GER_TRACE` (`call_trace.run_traced`) |
 | **CLI** | `cli_*.py`, `cli_common.py`, `cli_args.py` | Argparse, exit codes, stderr/stdout UX, logging/color init |
 | **Presentation** | `render/`, `summary_highlight.py`, push/rebase helpers | Column layout, ANSI color and hyperlinks (`render/style.py`), interactive push prompt, `GIT_SEQUENCE_EDITOR` wrappers |
 | **Service** | `server/` | A peer of the CLI layer: HTTP in, core call, JSON out. Imports core, `render/` JSON builders and `cli_common.failure_exit`; nothing imports it but `cli_serve.py` |
@@ -494,7 +494,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/rebase_next_step.py` | What to do at a rebase underway, in one set of words (`CONTINUE`, `SKIP`, `ABORT`, `FINISH`): the refusal a rebase underway causes (`rebase_refusal`), the one next step after a conflict (`conflict_next_step`) or at an edit stop (`edit_stop_next_step`), and why a way on is refused (`stop_refusal` from the stop alone, `go_on_refusal` before every ger "go on") |
 | `core/rewrite_refusal.py` | Why rewriting the local stack, or a switch, cannot start: the one wording each rewrite shares (`history_rewrite_refusal`), its parts over what the index and work tree hold (`uncommitted_changes_refusal`, `submodule_refusal`), and a target whose change Gerrit already closed (`closed_change_refusal`, for `ger edit` / `reword` / `fix`) |
 | `core/rebasing_stack.py` | The **rebasing stack**: the local stack while a rebase is underway, each commit with its **rebase step** (`load_rebasing_stack`, `RebasingStack`, `RebaseStep`), and where the rebase stopped as `GET /stack` serves it, the stop `ger rebase --continue|--skip` refuses by (`stopped_rebase`) |
-| `core/call_trace.py` | git/Gerrit call timing for `--debug-log`, as text (`format_call_trace_summary`); `cli_common.print_call_trace_summary` prints it |
+| `core/call_trace.py` | git/Gerrit call timing (`record_call`): for `--debug-log`, as text (`format_call_trace_summary`; `cli_common.print_call_trace_summary` prints it), and per piece of work (`collect_calls`: a `ger serve` request, a command under `GER_TRACE`, `run_traced`), as JSON (`call_trace_json`) |
 | `core/changeish.py` | The changeish grammar: what an input naming a commit or change looks like |
 | `core/change_id.py` | Change-Id footer: `parse_change_id_footer` (raw footer value), `validate_change_id_value`, `extract_valid_change_id`, `change_id_of_rev`, `classify_issues` and the errors its issues are worth (`change_id_issues_error`: `ChangeIdIssuesError`, `DuplicateChangeIdError`), generate and fix |
 | `core/stack.py` | Local stack: `Commit` (the one commit-row type), `get_stack_snapshot` (the one stack loader), `read_commit_rows` (a fold's squash template read as the message will be: `squash_cleaned`), `read_commit_meta`, `read_rewrite_rows`, ranges, merge-base |
@@ -644,7 +644,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `server/diff_views.py` | Read endpoints about what a change changed: diff (a commit, a patchset, the **review delta**, Gerrit against local), patchsets, file |
 | `server/actions.py` | Endpoints that change something: review checkout, draft reply, hold, stack rewrite, reword and their undo |
 | `server/vote.py` | The vote: what it would send (`GET /vote`, with the votes on offer) and sending it (`POST /vote`), through core's `plan_vote` and `send_vote` |
-| `server/httpd.py` | HTTP transport: loopback, bearer token, JSON bodies, `failure_response` (failure to status) |
+| `server/httpd.py` | HTTP transport: loopback, bearer token, JSON bodies, `failure_response` (failure to status), a request's trace (`ACTION_HEADER` in, `TRACE_HEADER` out) |
 | `server/activity.py` | The **activity sequence** (`Activity`: raised, long-polled by `GET /activity`) and `follow_events`: the **event stream** wired to it, applied under the request lock |
 
 ---

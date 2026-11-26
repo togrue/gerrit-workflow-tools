@@ -5,6 +5,8 @@
 import * as crypto from "node:crypto";
 import * as vscode from "vscode";
 
+import { activeTracer, traced } from "./trace";
+
 export interface Message {
   type: string;
   [field: string]: unknown;
@@ -46,8 +48,12 @@ export abstract class WebView<Vm> implements vscode.WebviewViewProvider {
       // The page says when it can listen: what was rendered before that is rendered again.
       if (message?.type === "ready") {
         this.render();
+      } else if (message?.type === "painted") {
+        activeTracer()?.painted(Number(message.trace), message.at as number | undefined);
       } else if (typeof message?.type === "string") {
-        void this.receive(message);
+        // A user action, timed from when the page saw it (`at`, sent while tracing is on).
+        const name = `${this.name}.${message.type}${typeof message.command === "string" ? ` ${message.command}` : ""}`;
+        void traced(name, "webview", () => this.receive(message), message.at as number | undefined);
       }
     });
     view.onDidDispose(() => {
@@ -67,7 +73,9 @@ export abstract class WebView<Vm> implements vscode.WebviewViewProvider {
     if (this.view) {
       const vm = this.vm();
       this.decorate(this.view);
-      this.post({ type: "render", vm });
+      const tracer = activeTracer();
+      // While tracing, `trace` asks the page to say when it painted this (`painted`).
+      this.post(tracer ? { type: "render", vm, trace: tracer.render(this.name) } : { type: "render", vm });
     }
   }
 

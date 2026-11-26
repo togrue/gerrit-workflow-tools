@@ -1,14 +1,27 @@
-"""High-level git/Gerrit call timing for ``--debug-log``."""
+"""High-level git/Gerrit call timing: for ``--debug-log``, and per ``ger serve`` request.
+
+Two sinks, one recording point (:func:`record_call`): the process-wide list ``--debug-log``
+prints at the end of a command, and the list :func:`collect_calls` opens for one piece of work
+(a ``ger serve`` request), which sees only the calls made in its own context: a background
+thread's calls stay out of it.
+"""
 
 from __future__ import annotations
 
+import json
 import re
+import time
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 
 _ENABLED = False
 _records: list[tuple[str, str, float]] = []
+_collected: ContextVar[list[tuple[str, str, float]] | None] = ContextVar("ger_collected_calls", default=None)
 _CHANGE_PATH_RE = re.compile(r"^(GET|POST|PUT|DELETE) changes/[^/]+/")
 
 
@@ -37,11 +50,52 @@ def reset_call_trace() -> None:
 
 
 def record_call(kind: str, label: str, seconds: float) -> None:
-    """Record one traced call when tracing is enabled."""
+    """Record one traced call: into the collection open in this context, and when ``--debug-log`` traces."""
 
-    if not _ENABLED:
-        return
-    _records.append((kind, label, seconds))
+    collected = _collected.get()
+    if collected is not None:
+        collected.append((kind, label, seconds))
+    if _ENABLED:
+        _records.append((kind, label, seconds))
+
+
+@contextmanager
+def collect_calls() -> Iterator[list[CallTraceEntry]]:
+    """Collect the calls made in this context into the list yielded, filled when the block ends.
+
+    Threads started with a copy of the context (``rest.parallel_map``) record into it too.
+    Costs one context lookup per call; nothing is recorded outside the block.
+    """
+    raw: list[tuple[str, str, float]] = []
+    entries: list[CallTraceEntry] = []
+    token = _collected.set(raw)
+    try:
+        yield entries
+    finally:
+        _collected.reset(token)
+        entries.extend(CallTraceEntry(kind, label, seconds) for kind, label, seconds in raw)
+
+
+TRACE_CALL_LIMIT = 40
+"""At most this many calls are listed one by one in :func:`call_trace_json` (the slowest); the totals count them all."""
+
+
+def call_trace_json(entries: Sequence[CallTraceEntry], *, limit: int = TRACE_CALL_LIMIT) -> dict[str, Any]:
+    """Per kind (``git``, ``gerrit``) the count and milliseconds, and the slowest calls in the order made."""
+    totals = {kind: {"count": 0, "ms": 0.0} for kind in ("git", "gerrit")}
+    for entry in entries:
+        total = totals.setdefault(entry.kind, {"count": 0, "ms": 0.0})
+        total["count"] += 1
+        total["ms"] += entry.seconds * 1000
+    kept = set(sorted(range(len(entries)), key=lambda index: entries[index].seconds, reverse=True)[:limit])
+    calls = [
+        [entry.kind, entry.label[:200], round(entry.seconds * 1000, 1)]
+        for index, entry in enumerate(entries)
+        if index in kept
+    ]
+    for total in totals.values():
+        total["ms"] = round(total["ms"], 1)
+    return {**totals, "calls": calls, "calls_left_out": len(entries) - len(calls)}
 
 
 def gerrit_request_label(
@@ -87,18 +141,46 @@ def gerrit_request_label_from_url(method: str, url: str) -> str:
     return gerrit_request_label(method, path, params=params)
 
 
+def run_traced(trace_file: str, argv: Sequence[str], run: Callable[[], int]) -> int:
+    """Run one command, then append how it went to *trace_file* as one JSON line (``kind: "cli"``).
+
+    For ``GER_TRACE``: a ger command a terminal runs is measured beside the VS Code extension's
+    records in the same file (``vscode/README.md#tracing``). Only a command that returns is written;
+    a file that cannot be written is skipped.
+    """
+    started = time.time()
+    began = time.perf_counter()
+    with collect_calls() as calls:
+        code = run()
+    took = time.perf_counter() - began
+    record = {
+        "kind": "cli",
+        "t": round(started * 1000, 1),
+        "argv": list(argv),
+        "exit": code,
+        "ms": round(took * 1000, 1),
+    }
+    record.update(call_trace_json(calls))
+    try:
+        with open(trace_file, "a", encoding="utf-8") as out:
+            out.write(json.dumps(record) + "\n")
+    except OSError:
+        pass
+    return code
+
+
 def _aggregate_label(kind: str, label: str) -> str:
     if kind != "gerrit":
         return label
     return _CHANGE_PATH_RE.sub(r"\1 changes/{change}/", label)
 
 
-def format_call_trace_summary() -> str:
-    """Return a human-readable timing report, or ``""`` when nothing was traced."""
+def format_call_trace_summary(collected: Sequence[CallTraceEntry] | None = None) -> str:
+    """A human-readable timing report of *collected*, else of what ``--debug-log`` recorded; ``""`` when empty."""
 
-    if not _records:
+    entries = list(collected) if collected is not None else [CallTraceEntry(*record) for record in _records]
+    if not entries:
         return ""
-    entries = [CallTraceEntry(kind, label, seconds) for kind, label, seconds in _records]
     total = sum(entry.seconds for entry in entries)
     lines = [f"request trace ({total * 1000:.0f}ms total):"]
     for kind in ("gerrit", "git"):

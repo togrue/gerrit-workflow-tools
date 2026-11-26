@@ -421,6 +421,7 @@ publishing is blocked (`GER_NO_PUBLISH`). Without that setting it is copied to t
 | `ger.pollSeconds` | `120` | Background refresh from Gerrit while the window has focus; a change applies at once. It also refreshes when the window regains focus. While Gerrit's event stream is live (below) it slows to every 15 minutes (or this, when longer), a safety net. |
 | `ger.notify` | `true` | Notify when a background refresh finds something new to be the most important change. Not for what you just did: the status bar shows that. |
 | `ger.closeDiffsOnRebase` | `false` | Close a diff tab opened from the Change view once it is stale: its commit left the stack (rewritten by a rebase, in the views or in a terminal, an amend or a reorder; dropped; or merged past the upstream), or, with your file on its right, HEAD moved off it. Off: the tab stays open and its title says *stale* (`b.txt (6827cbfe) — stale`). A tab that may hold unsaved edits is never closed. |
+| `ger.trace` | empty | A file to append one JSON line per user action to: how fast the views answered it ([Tracing](#tracing)). Empty: off. `GER_TRACE` in the editor's environment does the same and wins. |
 
 **Old setting names.** When the repository still uses git config keys under their old names
 (`gerrit.project` for `ger.project`), every ger command warns once, and so does the extension,
@@ -629,6 +630,44 @@ open your Gerrit repository in it. `npm run package` builds a `.vsix` to install
 **ger: Show Log** shows which repository is used, how `ger serve` was started, and anything it
 printed.
 
+## Tracing
+
+To see how fast the extension answers, set `ger.trace` to a file (or start VS Code with
+`GER_TRACE=<file>`). Each line of it is one JSON record; off, nothing is measured. Changing the
+setting applies at once to commands, clicks and keys in the two webview views, and requests;
+the Review chains tree and the prompts are measured from the next start of the window.
+
+- **`action`**: one per user action, a command (a key binding, a menu, a tree row) or a click or
+  key the page of a webview view sends (`stack.command ger.openChange`, `change.thread`). `t` is
+  when it began (ms since the epoch; for a page, when the page saw it), `first_ms` how long until
+  something showed in answer and `first` what: `paint:stack` / `paint:change` (the page painted the
+  new state: it says so after the next frame), `editor:…`, `cursor:…`, `tab`, `terminal:…`,
+  `tree` (VS Code asked for the Review chains rows), `ui:pick` / `ui:status` / `ui:progress` / …
+  (a prompt, a status message, a progress). `settled_ms` is when the last of it was done: no
+  request in flight and nothing waiting to be painted for 250 ms. With it, the totals of its
+  requests: `requests`, `request_ms`, `serve_ms`, `git` / `git_ms` (git subprocesses `ger serve`
+  ran), `gerrit` / `gerrit_ms` (Gerrit requests), `paints`. `inner` lists the commands it ran
+  (a webview button runs one). An action that waits on you (a picker, a dialog) settles while it
+  waits; your answer starts the next record, `<name> › pick` (`via: "answer"`). One still busy
+  after a minute is written with `timeout: true`.
+- **`request`**: one per request to `ger serve`: `action` (the action's `id`, null for a
+  background refresh), `rid`, `method`, `path`, `status`, `ms` as the extension saw it.
+- **`serve`**: what `ger serve` said that request cost, joined by `rid` and `action`: its
+  `X-Ger-Trace` ([serve.md](../docu/spec/commands/serve.md#tracing-a-request)): run and queue
+  time, git and Gerrit calls, the slowest of them.
+- **`cli`**: a ger command run in a terminal (Work on Next's `ger edit -n`, `ger push`) while
+  `GER_TRACE` is set in its environment, as it is in the integrated terminal when VS Code was
+  started with it: `argv`, `exit`, `ms` and its git and Gerrit calls, the same shape
+  ([SPEC.md](../docu/SPEC.md)). It has no action id: it joins by time.
+
+**The walk and its scorecard.** `npm run walk` drives a real VS Code through the review loop
+and the rework loop on a copy of the playground checkout, with clicks and keys as a user gives
+them and tracing on, and writes the trace, a picture per step and a scorecard (`scorecard.md`,
+`scorecard.json`): per step the user actions (clicks, keys, typed texts), the context switches,
+the time to the first response and to settled, the requests and subprocesses, a Windows
+estimate, the totals per loop and the steps over budget. See
+[test/walk/README.md](test/walk/README.md).
+
 ## Layout
 
 | File | Role |
@@ -657,11 +696,13 @@ printed.
 | `src/poller.ts` | Background refresh from Gerrit: on a timer while focused, and on regaining focus. |
 | `src/gitWatch.ts`, `src/repoWatcher.ts` | The views following local git: what to watch (pure, unit-tested), the debounce, the watcher. |
 | `src/extension.ts` | Wiring: views and commands. |
+| `src/trace.ts`, `src/tracing.ts` | Tracing (`ger.trace`): the record of each user action and the requests it caused (no `vscode` import, unit-tested); switching it on and hooking it to what VS Code shows. |
 | `src/snapshot.ts` | The snapshot file: the view models of the two webview views at one moment. Read by the gallery. No `vscode` import, unit-tested. |
 | `src/anonymize.ts`, `src/fakes.ts` | What becomes of every field of the view models in a report: kept, or replaced (default-deny); and the made-up words, names, paths and ids that replace. No `vscode` import, unit-tested. |
 | `src/report.ts` | The report of an issue: the anonymized views and the versions, as a snapshot file; the link to a new issue. No `vscode` import, unit-tested. |
 | `src/reportIssue.ts` | ger: Report Issue…: shows the report, then copies it for a GitHub issue or saves it. |
 | `test/fixtures.ts` | API-shaped commits, diffs, comment chains and CI logs: shared by the unit tests and the gallery's scenarios. |
+| `test/walk/` | The walk (`npm run walk`): the review and rework loops in a real VS Code against the playground Gerrit, real input through the DevTools protocol, and the scorecard of its trace. Not in the `.vsix`. |
 | `test/gallery/` | The webview gallery (`npm run gallery`): scenarios, the stand-in for VS Code (theme, `acquireVsCodeApi()`), the page around the frames, pictures. Not in the `.vsix`. |
 
 When the API grows a field, add it to `src/api.ts` first: the types there are the extension's

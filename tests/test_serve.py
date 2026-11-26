@@ -1098,6 +1098,25 @@ def test_debug_log_times_each_request_with_its_git_and_gerrit_calls(
     assert call_trace.format_call_trace_summary() == "", "each request's calls are its own"
 
 
+def test_a_request_naming_its_action_answers_with_its_trace(served: GerHttpServer) -> None:
+    """``X-Ger-Action`` in, ``X-Ger-Trace`` out: run and queue time, and the git and Gerrit calls it made."""
+
+    def get(headers: dict[str, str]) -> Any:
+        request = urllib.request.Request(
+            served.url + f"{V1}/stack", headers={"Authorization": "Bearer s3cret", **headers}
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            response.read()
+            return response.headers.get("X-Ger-Trace")
+
+    assert get({}) is None, "no trace unless asked"
+    trace = json.loads(get({"X-Ger-Action": "a7"}))
+    assert trace["action"] == "a7"
+    assert trace["ms"] >= 0 and trace["queued_ms"] >= 0
+    assert trace["git"]["count"] > 0 and trace["git"]["count"] == sum(1 for call in trace["calls"] if call[0] == "git")
+    assert set(trace) == {"action", "ms", "queued_ms", "git", "gerrit", "calls", "calls_left_out"}
+
+
 def test_http_maps_failures_to_statuses_and_shared_codes(served: GerHttpServer) -> None:
     assert _http(served, f"{V1}/nope") == (
         404,

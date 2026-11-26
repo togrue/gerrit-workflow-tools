@@ -124,3 +124,17 @@ test("a message that cannot be reworded is plain text: no box, no note saying so
     assert.ok(!block.textContent.includes(readOnly), "no note");
   }
 });
+
+test("Alt+F9 in the Change view walks the comments: VS Code's key binding does not reach a webview view", () => {
+  const inFile = { path: "src/parser.py", line: 12 };
+  const { root, posted } = changePage(changeVm(state({ chains: [chain("there", [comment("Rename this.", inFile)], inFile)] })));
+  const [text] = root.all(byClass("thread"));
+  const next = text.dispatch("keydown", { key: "F9", altKey: true });
+  assert.ok(next.defaultPrevented);
+  assert.deepEqual(posted.at(-1), { type: "command", command: "ger.nextComment" }, "from a row of the index, where Work on Next puts the keyboard");
+  text.dispatch("keydown", { key: "F9", altKey: true, shiftKey: true });
+  assert.deepEqual(posted.at(-1), { type: "command", command: "ger.prevComment" });
+  const count = posted.length;
+  text.dispatch("keydown", { key: "F9" });
+  assert.equal(posted.length, count, "F9 alone is not the walk");
+});
