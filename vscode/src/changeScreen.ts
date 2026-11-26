@@ -51,3 +51,14 @@ export function changeScreen(vm: ChangeVm, parts: ScreenParts): ChangeVm {
   const drawn = next && !onScreen && !inHeader ? { label: next.label, title: next.title } : undefined;
   return { ...vm, head, notes, next: drawn, busy, task: header };
 }
+
+/**
+ * What the Change view's title bar offers that goes to Gerrit (P6: nothing a press would refuse):
+ * Publish Drafts for a change on Gerrit, Vote and Publish also only on somebody else's open change.
+ * Neither while the change could not be read (`failed`): what was shown before is not this answer.
+ */
+export function gerritOffers(shown: { pushed: boolean; own?: boolean | null; change_status?: string | null } | undefined, failed: boolean): { onGerrit: boolean; votable: boolean } {
+  const known = failed ? undefined : shown;
+  const open = !known?.change_status || known.change_status === "NEW";
+  return { onGerrit: Boolean(known?.pushed), votable: Boolean(known?.pushed) && known?.own === false && open };
+}

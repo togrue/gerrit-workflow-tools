@@ -12,6 +12,13 @@ import { ThemeName, themeClass, themeCss } from "./theme";
 export const THEMES: ThemeName[] = ["dark", "light"];
 /** Side bar widths: the narrowest a side bar is used at, the usual one, and one dragged wider. */
 export const WIDTHS = [200, 300, 450];
+/** A task fills the side bar while it runs: its scenarios are drawn at the narrowest a side bar goes too (state 22). */
+export const NARROW = 170;
+
+/** The widths a scenario is drawn at: the task scenarios at 170 px besides. */
+export function widthsOf(scenario: Scenario): number[] {
+  return scenario.name.startsWith("Task:") ? [NARROW, ...WIDTHS] : WIDTHS;
+}
 export const VIEWS = ["stack", "change"] as const;
 export type View = (typeof VIEWS)[number];
 
@@ -102,7 +109,7 @@ export function indexHtml(scenarios: readonly Scenario[]): string {
   const sections = scenarios.map((scenario, index) => {
     const rows = VIEWS.map((view) => all.filter((frame) => frame.scenario === scenario && frame.view === view))
       .filter((row) => row.length)
-      .map((row) => `<div class="panes">\n${row.flatMap((frame) => WIDTHS.map((width) => pane(frame, width))).join("\n")}\n</div>`);
+      .map((row) => `<div class="panes">\n${row.flatMap((frame) => widthsOf(scenario).map((width) => pane(frame, width))).join("\n")}\n</div>`);
     return `<section id="${names[index]}">\n<h2>${escapeHtml(scenario.name)}</h2>\n${rows.join("\n")}\n</section>`;
   });
   const links = scenarios.map((scenario, index) => `<a href="#${names[index]}">${escapeHtml(scenario.name)}</a>`);

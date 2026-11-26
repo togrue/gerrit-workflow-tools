@@ -27,7 +27,15 @@
   }
 
   // The gallery page gives the frame the height of what it draws, so nothing is cut or scrolls.
-  const sayHeight = () => tell("height", { height: Math.ceil(document.body.getBoundingClientRect().height) });
+  // And how far it is wider than the frame: a side bar never scrolls sideways (`npm run gallery -- --png` lists those that do).
+  const sayHeight = () => {
+    const page = document.documentElement;
+    const wide = Math.max(0, page.scrollWidth - page.clientWidth);
+    // What sticks out: the first element whose right edge is past the view's, as tag.class.
+    const out = wide ? [...document.body.querySelectorAll("*")].find((element) => element.getBoundingClientRect().right > page.clientWidth + 0.5) : null;
+    const what = out ? `${out.tagName.toLowerCase()}.${[...out.classList].join(".")}` : "";
+    tell("height", { height: Math.ceil(document.body.getBoundingClientRect().height), wide, what });
+  };
 
   /** As the extension does: the view model arrives as a message event on the window. */
   function render() {

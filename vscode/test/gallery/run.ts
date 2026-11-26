@@ -11,8 +11,8 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { readSnapshot } from "../../src/snapshot";
-import { BROWSER_ENV, findBrowser, frameHeights, takePictures } from "./browser";
-import { WIDTHS, frames, writeGallery } from "./build";
+import { BROWSER_ENV, findBrowser, frameSizes, takePictures } from "./browser";
+import { frames, widthsOf, writeGallery } from "./build";
 import { Scenario, scenarios } from "./scenarios";
 
 const OUT = path.join(__dirname, "..", "..", "gallery");
@@ -62,8 +62,12 @@ function fromFile(file: string): Scenario {
 /** One picture per frame and width into `dir`; the number written. */
 async function pictures(browser: string, index: string, all: readonly Scenario[], dir: string): Promise<number> {
   fs.mkdirSync(dir, { recursive: true });
-  const heights = await frameHeights(browser, pathToFileURL(index).href);
-  const shots = frames(all).flatMap((frame) => WIDTHS.map((width) => ({ frame, width, name: `${frame.id}.${width}` })));
+  const { heights, wide } = await frameSizes(browser, pathToFileURL(index).href);
+  const shots = frames(all).flatMap((frame) => widthsOf(frame.scenario).map((width) => ({ frame, width, name: `${frame.id}.${width}` })));
+  if (wide.size) {
+    // A side bar never scrolls sideways: each of these has something wider than the view.
+    console.error(`${wide.size} frames scroll sideways: ${[...wide].map(([name, why]) => `${name} (${why})`).join(", ")}`);
+  }
   const unmeasured = shots.filter((shot) => !heights.has(shot.name));
   if (unmeasured.length) {
     console.error(`${unmeasured.length} of ${shots.length} frames did not say how tall they are (the first: ${unmeasured[0].name}); their pictures are ${UNKNOWN_HEIGHT}px high.`);
@@ -86,7 +90,7 @@ async function main(): Promise<number> {
     throw new Error(`no scenario has "${args.only}" in its name`);
   }
   const index = writeGallery(OUT, all);
-  console.log(`${all.length} scenarios, ${frames(all).length * WIDTHS.length} frames: ${index}`);
+  console.log(`${all.length} scenarios, ${frames(all).reduce((sum, frame) => sum + widthsOf(frame.scenario).length, 0)} frames: ${index}`);
   if (!args.png) {
     return 0;
   }

@@ -483,7 +483,7 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/git_run.py` | Running git: the subprocess wrapper (`git`, `git_out`, `commit_sha_or_none`, `GitError`) |
 | `core/config.py` | `Settings`: one `git config --list --show-scope` snapshot (values + winning scope) |
 | `core/config_keys.py` | The git config keys ger owns: `ConfigScope`, how git spells a key, built-in defaults, and `LEGACY_KEYS` (the `gerrit.*` / `inbox.*` names before `ger.*`) |
-| `core/config_write.py` | Write helpers for branch / attention-cursor git config keys |
+| `core/config_write.py` | Write helpers for branch / attention-cursor git config keys; `migrate_legacy_keys` and `scope_unscoped_secrets` (`ger config --migrate`, `ger setup`) |
 | `core/config_form.py` | Editable settings catalog for `ger config`: sections, defaults, resolution |
 | `core/config_editor_file.py` | Temp-file key=value render/parse/diff for `ger config` |
 | `core/git_editor.py` | Resolve and run `GIT_EDITOR` / `core.editor` / `VISUAL` / `EDITOR`; `module_editor_command` for a `GIT_SEQUENCE_EDITOR` that is one of our modules; `run_editor_cli` runs an editor's own command-line program, or the npm that builds its extension; `run_git_pager` shows text through git's pager |

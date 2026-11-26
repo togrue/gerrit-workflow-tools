@@ -120,6 +120,25 @@ def test_next_and_prev_walk_the_review_chain_and_stop_at_its_ends(
     assert (code, json_stdout(out)["number"], _head(worktree)) == (ExitCode.OK, 102, shas[1])
 
 
+def test_next_goes_on_from_a_change_abandoned_while_under_review(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gerrit's related changes still list it, closed: the walk goes on from its place, not "no chain"."""
+    store, keys, _shas = gerrit
+    worktree = _worktree(stack_repo)
+    _review(stack_repo, store, ["101"], monkeypatch)
+    related = [
+        {"_change_number": 100 + i, "_revision_number": 1, "status": "ABANDONED" if i == 1 else "NEW"} for i in range(4)
+    ]
+    for key in keys:
+        store.set_related(key, list(reversed(related)))
+    code, out, _ = _review(worktree, store, ["--next", "--json"], monkeypatch)
+    assert (code, json_stdout(out)["number"]) == (ExitCode.OK, 102)
+    # Abandoned changes other than the one under review stay out of the chain.
+    code, out, _ = _review(worktree, store, ["--prev", "--json"], monkeypatch)
+    assert (code, json_stdout(out)["number"]) == (ExitCode.OK, 100)
+
+
 def test_your_edits_stop_a_switch_and_are_kept(
     stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -266,6 +266,8 @@ export interface Rebase {
   unmerged: string[];
   /** At a stop with the commit applied: tracked files changed and not staged (a fix saved, not amended). Continue waits for them (API 1.8). */
   uncommitted?: string[];
+  /** At such a stop: tracked files staged against HEAD, which Continue amends into the commit without a word (API 1.9). */
+  staged?: string[];
   /** The stack is the branch as it was before the rebase (git's `am` backend keeps no todo): no commit has a step. */
   as_before: boolean;
   /** The ways on core allows from this stop, in order: the only ones to offer. */

@@ -58,4 +58,8 @@ test("Abort's question names the commits made in the rebase that go with it, and
   assert.equal(question.message, "Abort the rebase, and with it 1 rewritten commit?");
   assert.match(question.detail, /Gone from the branch with it, made in this rebase: 46e97e7 "ops: note on add"\./);
   assert.match(question.detail, /calc\/ops\.py, not committed, is kept in a stash: git stash apply brings it back\./);
+  // A button opens what would go, instead of a command to type (P1).
+  assert.doesNotMatch(question.detail, /git show/);
+  assert.deepEqual(question.show, { label: "Show What Would Go", shas: ["46e97e7aa"] });
+  assert.equal(abortQuestion({ uncommitted: [], rewritten: [], resolution: true, asks: true }).show, undefined, "a resolution alone: nothing to open");
 });

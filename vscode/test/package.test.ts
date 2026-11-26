@@ -236,3 +236,12 @@ test("Esc in a ger comment box first leaves the box, then closes the thread; edi
   assert.ok(close.every((when) => when.includes("!commentEditorFocused")), "Esc in a box never closes the thread at once");
   assert.deepEqual(esc.map((entry) => entry.command).filter((command) => !/^ger\.comment\.(escape|close)$/.test(command ?? "")), []);
 });
+
+test("Edit Commit Here is offered nowhere while a rebase is underway: ger edit would refuse (P6)", () => {
+  const offers = Object.entries(menus).flatMap(([menu, entries]) => entries.filter((entry) => entry.command === "ger.stack.edit").map((entry) => ({ menu, when: entry.when ?? "" })));
+  assert.ok(offers.length >= 3, "the title, Review chains and Local stack offer it");
+  assert.deepEqual(offers.filter((offer) => !/!ger\.rebasing\b/.test(offer.when)), []);
+  // The Local stack row's own pencil: drawn only while the stack can be rewritten.
+  const page = fs.readFileSync(path.join(root, "media", "stack.js"), "utf8");
+  assert.match(page, /vm\.frozen \? null : h\("button", \{ class: "codicon codicon-edit"/);
+});

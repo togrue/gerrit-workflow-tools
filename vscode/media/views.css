@@ -25,20 +25,51 @@ body {
   text-align: center;
 }
 
+/*
+ * The state colours, each a theme variable picked per theme kind so it reads on the side bar and
+ * on a selected row: 4.5:1 for words (a vote's +1), 3:1 for an icon that carries a state.
+ * test/contrast.test.ts measures every one in Dark and Light Modern and both high-contrast themes;
+ * a rule colours a state only through these. Where a theme's own variable falls short (Light
+ * Modern's green and blue are pale on white), a darker one of the same theme is mixed in.
+ */
+:root {
+  --ger-good: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+  --ger-bad: var(--vscode-list-errorForeground, var(--vscode-charts-red));
+  --ger-warn: var(--vscode-list-warningForeground, var(--vscode-charts-yellow));
+  --ger-info: var(--vscode-textLink-foreground);
+  /* Quiet, but readable: the only sign of "not on Gerrit" is a hollow circle in it (finding 28). */
+  --ger-dim: color-mix(in srgb, var(--vscode-foreground) 65%, var(--vscode-sideBar-background));
+  --ger-added: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-charts-green));
+  --ger-deleted: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-charts-red));
+  /* The focus ring on a selected row: the theme's own for that, else the selection's text colour (focusBorder is too close to it). */
+  --ger-focus-on-selected: var(--vscode-list-focusAndSelectionOutline, var(--vscode-contrastActiveBorder, var(--vscode-list-activeSelectionForeground, var(--vscode-foreground))));
+}
+/* Light: testing.iconPassed is the dark theme's pale green; git's green, darkened toward the text. */
+body[data-vscode-theme-kind="vscode-light"],
+body[data-vscode-theme-kind="vscode-high-contrast-light"] {
+  --ger-good: color-mix(in srgb, var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-charts-green)) 75%, var(--vscode-foreground));
+  --ger-added: var(--ger-good);
+}
+/* Dark: git's red for deleted lines is too dark for words on the side bar. */
+body[data-vscode-theme-kind="vscode-dark"],
+body[data-vscode-theme-kind="vscode-high-contrast"] {
+  --ger-deleted: var(--vscode-list-errorForeground, var(--vscode-charts-red));
+}
+
 .tone-good {
-  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+  color: var(--ger-good);
 }
 .tone-bad {
-  color: var(--vscode-list-errorForeground, var(--vscode-charts-red));
+  color: var(--ger-bad);
 }
 .tone-warn {
-  color: var(--vscode-list-warningForeground, var(--vscode-charts-yellow));
+  color: var(--ger-warn);
 }
 .tone-info {
-  color: var(--vscode-charts-blue, var(--vscode-textLink-foreground));
+  color: var(--ger-info);
 }
 .tone-dim {
-  color: var(--vscode-disabledForeground);
+  color: var(--ger-dim);
 }
 
 /* --- Rows, as in a tree ---------------------------------------------------------- */
@@ -86,6 +117,22 @@ body {
 .item:hover,
 .info.clickable:hover {
   background: var(--vscode-list-hoverBackground);
+}
+
+/*
+ * Everything the keyboard reaches shows where it is (state 23): a button, a link, a row, a step, a
+ * badge group. The focus border (measured in test/contrast.test.ts); the list itself shows its
+ * focused row instead.
+ */
+button:focus-visible,
+a:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+[tabindex="0"]:not(.list):focus-visible,
+.badges[tabindex]:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
 }
 
 .item:focus-visible,
@@ -190,12 +237,25 @@ button.twist:hover {
   outline-offset: -1px;
 }
 
-/* Not there yet: still to be replayed by the rebase, or stopped part-way on a conflict. */
+.list:focus .row.focused.selected {
+  outline-color: var(--ger-focus-on-selected);
+}
+
+/* Not there yet: still to be replayed by the rebase (its marker, a hollow circle, says it too). Faded, still readable. */
 .row.dim .label,
 .row.dim .detail,
 .row.dim .sync,
 .row.dim .badges {
-  opacity: 0.5;
+  opacity: 0.8;
+}
+/* High contrast: no fading at all; the marker says it. */
+body[data-vscode-theme-kind="vscode-high-contrast"] .row.dim .label,
+body[data-vscode-theme-kind="vscode-high-contrast"] .row.dim .detail,
+body[data-vscode-theme-kind="vscode-high-contrast-light"] .row.dim .label,
+body[data-vscode-theme-kind="vscode-high-contrast-light"] .row.dim .detail,
+body[data-vscode-theme-kind="vscode-high-contrast"] .step.phase-todo .step-title,
+body[data-vscode-theme-kind="vscode-high-contrast-light"] .step.phase-todo .step-title {
+  opacity: 1;
 }
 
 .list.dragging .row.selected {
@@ -225,6 +285,39 @@ button.twist:hover {
   background: var(--vscode-sideBar-background, var(--vscode-editor-background));
 }
 
+/* How much of the stack is where (stackSummary.ts), one quiet line above the rows; it wraps rather than cuts. */
+.stack-summary {
+  padding: 2px 8px 2px 12px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+/* The ready boundary, as ger log draws it: a dashed rule with its words, between held back and sent. */
+.boundary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 12px;
+  height: 16px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.85em;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.boundary::before,
+.boundary::after {
+  content: "";
+  flex: 1 1 8px;
+  border-top: 1px dashed currentColor;
+}
+.boundary span {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* The sync icon says how the commit relates to Gerrit. */
 .sync-same {
   color: inherit;
@@ -232,23 +325,23 @@ button.twist:hover {
 .sync-rebased,
 .sync-code-changed,
 .sync-ahead {
-  color: var(--vscode-charts-yellow);
+  color: var(--ger-warn);
 }
 .sync-outdated {
-  color: var(--vscode-charts-red);
+  color: var(--ger-bad);
 }
 .sync-diverged {
-  color: var(--vscode-charts-blue);
+  color: var(--ger-info);
 }
 .sync-not-pushed,
 .sync-unknown {
-  color: var(--vscode-disabledForeground);
+  color: var(--ger-dim);
 }
 .row.merge .codicon-git-merge {
   color: var(--vscode-descriptionForeground);
 }
 .sync-merged {
-  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+  color: var(--ger-good);
 }
 
 /* The selection colours a row's text; the sync icon and the votes keep their own meaning. */
@@ -293,8 +386,9 @@ button.twist:hover {
   stroke: currentColor;
 }
 
+/* A vote of the last pushed patchset: Gerrit may not keep it. Not only greyed: its value ends in "?" (stackRows.ts). */
 .badge.stale {
-  opacity: 0.5;
+  color: var(--vscode-descriptionForeground);
 }
 
 .head .badges {
@@ -597,6 +691,18 @@ button.twist:hover {
   flex: none;
 }
 
+/* The change's votes in words beside its state: on the same line where they fit, else whole under it at the right, never cut. */
+.head.wraps {
+  flex-wrap: wrap;
+}
+.head.wraps > .detail {
+  flex: 1 0 auto;
+  max-width: 100%;
+  overflow: visible;
+  white-space: normal;
+  text-align: right;
+}
+
 /* Raw words of git or Gerrit under a sentence of ger's: kept as they came, in the editor's font. */
 .words .raw {
   display: block;
@@ -644,6 +750,8 @@ select:focus {
 
 .section-summary {
   display: flex;
+  flex-wrap: wrap;
+  row-gap: 0;
   flex: 1 0 auto;
   max-width: 100%;
   align-items: center;
@@ -679,6 +787,43 @@ select:focus {
   padding-left: 66px;
 }
 
+/* A CI finding: the message wraps, at most three lines of it (the tooltip has it whole); where and whence under it. */
+.item.message-row {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  height: auto;
+  min-height: 22px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  line-height: 18px;
+  white-space: normal;
+}
+.message-row > .codicon {
+  margin-top: 1px;
+}
+.message-row > .label {
+  flex: 1 1 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.message-row > .detail {
+  flex: 1 0 100%;
+  box-sizing: border-box;
+  padding-left: 22px;
+  line-height: 18px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* The sticky Next bar covers the top of the view: a section brought into view keeps its head below it. */
+.section-head {
+  scroll-margin-top: 34px;
+}
+
 .reply .label {
   flex: none;
 }
@@ -691,7 +836,6 @@ select:focus {
   margin-left: auto;
   font-size: 0.9em;
   font-variant-numeric: tabular-nums;
-  opacity: 0.85;
 }
 
 .counts .added,
@@ -701,11 +845,11 @@ select:focus {
 }
 
 .added {
-  color: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-charts-green));
+  color: var(--ger-added);
 }
 
 .deleted {
-  color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-charts-red));
+  color: var(--ger-deleted);
 }
 
 /* --- Nothing to show ------------------------------------------------------------- */
@@ -843,6 +987,7 @@ select:focus {
 .task-busy {
   color: var(--vscode-descriptionForeground);
   line-height: 20px;
+  overflow-wrap: anywhere;
 }
 
 .task-label {
@@ -900,6 +1045,10 @@ select:focus {
   outline-offset: -1px;
 }
 
+.step.current:focus {
+  outline-color: var(--ger-focus-on-selected);
+}
+
 /* The change you are on: a bar in the margin and bold, not only a colour. */
 .step.current {
   border-left-color: var(--vscode-focusBorder);
@@ -908,7 +1057,7 @@ select:focus {
 }
 
 .step.phase-todo .step-title {
-  opacity: 0.75;
+  opacity: 0.8;
 }
 
 .step-position {
@@ -952,16 +1101,23 @@ select:focus {
   color: var(--vscode-descriptionForeground);
 }
 
+/* On the current step's selection background the quiet colour is too quiet for words. */
+.step.current .mark-text {
+  color: inherit;
+}
+
 .task-actions {
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
 
+/* A way on and what it does: beside the button where there is room, under it where not (never a tall narrow column). */
 .task-action {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  column-gap: 8px;
 }
 
 .task-action .button {
@@ -970,7 +1126,84 @@ select:focus {
 }
 
 .task-detail {
+  flex: 1 1 9em;
+  min-width: 0;
   color: var(--vscode-descriptionForeground);
+  overflow-wrap: anywhere;
+}
+
+/* The fold lines of a long chain: only in a narrow side bar (below). */
+.fold {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 4px 1px 6px;
+  margin-left: -4px;
+  line-height: 22px;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+.fold:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+.fold:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+/*
+ * A narrow side bar (170 px, state 22): the next step and the way out on screen without scrolling,
+ * nothing wider than the view. A step is one line, its states icons (their words in the tooltip,
+ * still read out); a long chain folds to the steps around the current one; the buttons sit in one
+ * row with what they do in their tooltip, a reason one would not run now said under them.
+ */
+@media (max-width: 240px) {
+  .task {
+    padding: 4px 6px 6px 10px;
+  }
+  .step {
+    flex-wrap: nowrap;
+    column-gap: 4px;
+  }
+  .step-title {
+    flex: 1 1 0;
+  }
+  .marks {
+    flex: none;
+    flex-wrap: nowrap;
+    column-gap: 2px;
+  }
+  .mark-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .steps.folds:not(.unfolded) .step.far {
+    display: none;
+  }
+  .steps.folds:not(.unfolded) .fold {
+    display: flex;
+  }
+  .task-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+  }
+  .task-action:not(.not-now) .task-detail {
+    display: none;
+  }
+  .task-action .button {
+    min-width: 0;
+  }
+  .next-bar .button {
+    min-width: 0;
+  }
+  .next-bar .info-buttons {
+    padding-left: 10px;
+  }
 }
 
 /* Change: a checkout under way, in place of Next. */
@@ -996,7 +1229,7 @@ select:focus {
   cursor: pointer;
 }
 .file .seen.tone-good {
-  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+  color: var(--ger-good);
 }
 .file.seen .label {
   opacity: 0.8;

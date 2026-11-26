@@ -92,7 +92,7 @@ Edits you make while staged show as **unstaged** changes, on top of the staged r
 
 `ger review CHANGEISH --bottom` starts at the **bottom** of CHANGEISH's review chain, its lowest open change, instead of CHANGEISH itself: `ger inbox` names a chain by its top, and review begins at the bottom (one more REST call, the related changes; not with `--patchset`). From there `--next` walks up.
 
-`--next` and `--prev` move to the change above or below in the change's **review chain**, using Gerrit's related changes for the reviewed patchset (one REST call). Merged and abandoned members are skipped. Each step fetches the new change and stages it like the first one.
+`--next` and `--prev` move to the change above or below in the change's **review chain**, using Gerrit's related changes for the reviewed patchset (one REST call). Merged and abandoned members are skipped, except the change under review: abandoned or merged since it was checked out, it keeps its place, so `--next` goes on from it. Each step fetches the new change and stages it like the first one.
 
 At either end of the chain, `ger review` exits `10`, the code scripts already loop on for the attention walk.
 

@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { Chain, Member, Overview, Rebase, ReviewState, Section } from "../src/api";
 import { commentEntries } from "../src/commentEntries";
 import { NextState, nextAction } from "../src/nextAction";
-import { focusedMember, reviewFocus } from "../src/reviewFocus";
+import { chainGoesOn, focusedMember, reviewFocus } from "../src/reviewFocus";
 import { changeVm, placeWords, seenWhere } from "../src/changeRows";
 import { chain, comment, commit, diff, shown, stack, state as fixtureState } from "./fixtures";
 
@@ -188,10 +188,20 @@ test("the Change view says unknown, with why, where Gerrit could not be asked: n
   const away = { code: "GERRIT", message: "Gerrit unreachable at g:8099 (connection refused)", reason: "unreachable" };
   const vm = changeVm(fixtureState({ shown: shown({ pushed: false, patchset_status: "unknown", attention_reasons: ["gerrit-unknown"], gerrit_unavailable: away }) }));
   assert.equal(vm.head?.detail, "");
-  assert.equal(vm.comments?.summary, "unknown: Gerrit could not be asked");
+  assert.equal(vm.comments?.summary, "unknown");
   const note = vm.notes?.find((n) => n.raw === away.message);
   assert.ok(note, "the reason is said once, under the head");
+  // "unknown" once on the view's top: in the head, not again in the note under it.
+  assert.equal([vm.head?.text, note?.text].join(" ").match(/unknown/g)?.length, 1, `${vm.head?.text} / ${note?.text}`);
   assert.deepEqual(note?.actions?.map((a) => [a.label, a.primary ?? false]), [["Retry", false], ["Check the Gerrit Address (ger setup)…", false], ["Show Log", false]]);
+});
+
+test("the inbox lost an abandoned change: whether the chain goes on is core's chain's to say", () => {
+  // /review?chain=1 keeps the change under review in its place, closed or not.
+  assert.equal(chainGoesOn([2300, 2301, 2302], 2301), true);
+  assert.equal(chainGoesOn([2300, 2301, 2302], 2302), false);
+  assert.equal(chainGoesOn([2300, 2302], 2301), undefined, "not in it: not known, so Next does not promise a next change");
+  assert.equal(chainGoesOn(undefined, 2301), undefined);
 });
 
 test("an abandoned change says so, and what becomes of the draft stranded on it (N5)", () => {

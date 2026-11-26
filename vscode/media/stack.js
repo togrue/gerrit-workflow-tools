@@ -4,7 +4,7 @@
 // (`webview/context` in package.json).
 
 (function () {
-  const { h, icon, info, post, panel, listen, rowSelection } = window.ger;
+  const { h, icon, info, post, panel, listen, rowSelection, badgeGroup, badgeWords } = window.ger;
   const root = document.getElementById("root");
 
   let vm = { info: [], rows: [], frozen: null, movable: 0 };
@@ -27,7 +27,25 @@
       gerMulti: rows.length > 1,
       gerReview: Boolean(vm.review),
     }),
+    // The focused row's badges are the one stop Tab reaches after the list: they follow the focus.
+    changed: () => rove(),
   });
+
+  /** The row whose badges Tab reaches: the focused one, else the first. */
+  const badgeStop = () => selection.focusedKey() ?? (vm.rows[0] && vm.rows[0].key);
+
+  function rove() {
+    if (!list) {
+      return;
+    }
+    const stop = badgeStop();
+    for (const element of list.querySelectorAll(".badges")) {
+      if (element.getAttribute("tabindex") === null) {
+        continue; // nothing to say there
+      }
+      element.setAttribute("tabindex", element.closest(".row").dataset.key === stop ? "0" : "-1");
+    }
+  }
 
   const BADGE_KINDS = ["comments", "review", "ci"];
 
@@ -38,7 +56,15 @@
     const { classes, ...attributes } = selection.attributes(row);
     const all = ["row", ...classes, row.dim ? "dim" : "", row.merge ? "merge" : "", row.pinned ? "pinned" : ""];
     // Stopped on a conflict: a red warning, the row not dimmed; stopped with the commit applied: a marker.
-    const marker = row.marker === "conflict" ? icon("warning", "bad", "The rebase stopped here on a conflict") : row.marker ? icon("debug-stackframe", "warn") : null;
+    // Still to be replayed: a hollow circle as the task header's "to come", not the fading alone (Q4).
+    const marker =
+      row.marker === "conflict"
+        ? icon("warning", "bad", "The rebase stopped here on a conflict")
+        : row.marker
+          ? icon("debug-stackframe", "warn")
+          : row.dim
+            ? icon("circle-large-outline", "dim", "Still to be replayed by the rebase")
+            : null;
     return h(
       "div",
       {
@@ -46,6 +72,8 @@
         ...attributes,
         draggable: "true",
         title: row.tooltip,
+        // Read out as a whole when the list's focus is on it: the subject, its notes, Gerrit's state, the badges' words.
+        "aria-label": [row.summary, row.notes.join(", "), row.syncTitle, badgeWords(row.badges)].filter(Boolean).join(". "),
       },
       h("span", { class: "marker" }, marker),
       h("span", { class: `codicon codicon-${row.syncIcon} sync sync-${row.sync}`, title: row.syncTitle }),
@@ -55,11 +83,22 @@
       h(
         "span",
         { class: "actions" },
-        h("button", { class: "codicon codicon-edit", title: "Edit Commit Here", "data-command": "ger.stack.edit" }),
+        // Not while the stack is frozen (a rebase underway, a staged review): ger edit would refuse.
+        vm.frozen ? null : h("button", { class: "codicon codicon-edit", title: "Edit Commit Here", "data-command": "ger.stack.edit" }),
         row.url ? h("button", { class: "codicon codicon-link-external", title: "Open in Gerrit", "data-command": "ger.openInGerrit" }) : null,
       ),
-      h("span", { class: "badges" }, slots.map((slot) => (slot === 0 && row.badges[0] ? commentBadge(row) : badge(row.badges[slot], slot)))),
+      badgeGroup(
+        row.badges,
+        slots.map((slot) => (slot === 0 && row.badges[0] ? commentBadge(row) : badge(row.badges[slot], slot))),
+        // Enter on them: the comments, as hovering the ring shows them.
+        { focusable: row.key === badgeStop(), open: row.badges[0] ? () => post("comments", { sha: row.sha }) : undefined },
+      ),
     );
+  }
+
+  /** The ready boundary between the commits held back (above) and those a push sends (below), as ger log draws it. */
+  function boundaryLine(boundary) {
+    return h("div", { class: "boundary", role: "separator", "aria-label": boundary.text, title: boundary.tooltip }, h("span", {}, boundary.text));
   }
 
   // --- The comments of a row, on hovering its comment badge --------------------------
@@ -153,12 +192,16 @@
         tabindex: "0",
         "aria-multiselectable": "true",
         "aria-label": "Local stack, newest first",
+        // The focused row is the one read out, across a redraw too.
+        "aria-activedescendant": selection.activeId() || undefined,
       },
-      vm.rows.map((row) => rowElement(row, slots)),
+      vm.rows.map((row) => (vm.boundary && row.key === vm.boundary.under ? [rowElement(row, slots), boundaryLine(vm.boundary)] : rowElement(row, slots))),
       line,
     );
     wire(list);
-    root.replaceChildren(h("div", { class: "infos" }, vm.info.map(info)), list);
+    // How much of the stack is where, in ger log's words: one line above the rows.
+    const summary = vm.summary ? h("div", { class: "stack-summary", role: "status" }, vm.summary) : null;
+    root.replaceChildren(...[h("div", { class: "infos" }, vm.info.map(info)), summary, list].filter(Boolean));
     if (document.scrollingElement) {
       document.scrollingElement.scrollTop = scroll;
     }

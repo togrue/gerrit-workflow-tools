@@ -2,6 +2,7 @@
 // version is compared with what, the files with their line counts, the comment chains and the
 // CI findings. The webview draws it, the end-to-end suite prints it. Pure: no `vscode`, no I/O.
 
+import { wholeMessage } from "./ciDiagnostics";
 import * as path from "node:path";
 
 import { Attended, CiContent, CiFinding, Comment, CommentChain, Diff, RebaseAction, Severity, ShownCommit } from "./api";
@@ -60,6 +61,8 @@ export interface ChangeState extends CompareState {
   stopped?: Stopped;
   /** The rebase stopped at this commit with it applied, and these files are changed and not amended (core's `uncommitted`). */
   notAmended?: string[];
+  /** At that stop, these files are staged: Continue amends them in (core's `staged`). */
+  staged?: string[];
   /**
    * The change a staged review holds here (core's `staged_review`): read as somebody else's change,
    * with what is new since your review; `behind` when Gerrit has a newer patchset than the one
@@ -235,12 +238,32 @@ export const STOPPED_WORDS = {
   notAmendedTitle: "Changed, not amended",
   notAmended: "changed, not amended",
   notAmendedTooltip: "Saved in the work tree, not in the commit: Continue waits for it. git commit --amend -a (in the terminal) takes it into this commit, git stash sets it aside.",
+  stagedTitle: "Staged, go into this commit",
+  staged: "staged, goes into this commit",
+  stagedTooltip: "Staged: Continue amends it into this commit. git restore --staged <file> (in the terminal) takes it out again and keeps it in the work tree.",
+  /** The section's title when it lists both. */
+  bothTitle: "Changed at this stop",
   filesTooltip: "The rebase has not applied this commit yet: these are its files as they were before the rebase, against its old parent. What is left to resolve is under Conflicts.",
 };
 
 /** A file changed and not amended at an edit stop: a click opens it. */
 function notAmendedRow(file: string): StackInfo {
   return { text: file, detail: STOPPED_WORDS.notAmended, icon: "diff-modified", tone: "warn", tooltip: STOPPED_WORDS.notAmendedTooltip, conflict: file };
+}
+
+/** A file staged at an edit stop, which Continue amends in: said before Continue is pressed; a click opens it. */
+function stagedRow(file: string): StackInfo {
+  return { text: file, detail: STOPPED_WORDS.staged, icon: "git-commit", tone: "info", tooltip: STOPPED_WORDS.stagedTooltip, conflict: file };
+}
+
+/** What an edit stop holds besides the commit: what Continue waits for, then what it amends in. One section. */
+function changedAtStop(notAmended: readonly string[], staged: readonly string[]): ChangeVm["conflicts"] {
+  const count = new Set([...notAmended, ...staged]).size;
+  if (!count) {
+    return undefined;
+  }
+  const title = notAmended.length && staged.length ? STOPPED_WORDS.bothTitle : notAmended.length ? STOPPED_WORDS.notAmendedTitle : STOPPED_WORDS.stagedTitle;
+  return { title, summary: plural(count, "file"), rows: [...notAmended.map(notAmendedRow), ...staged.map(stagedRow)] };
 }
 
 /** The head of a commit a rebase stopped at before applying it: what is left to do, and the buttons to go on. */
@@ -426,6 +449,7 @@ function thread(chain: CommentChain, applies: boolean, shownPatchset?: number): 
 }
 
 function finding(item: CiFinding, introduced: boolean | null, patchSet: number | null = null): FindingRow {
+  // (the row's text: `wholeMessage`, ciDiagnostics.ts, as the editor's problem says it)
   // A last pushed patchset's finding sits where its line is now; core says where CI saw it.
   const moved = patchSet && item.patchset_line ? ` (line ${item.patchset_line} on patchset ${patchSet}${item.line_changed ? ", changed since" : ""})` : "";
   const where = item.path ? `${item.path}${item.line ? `:${item.line}` : ""}${moved}` : "";
@@ -433,7 +457,8 @@ function finding(item: CiFinding, introduced: boolean | null, patchSet: number |
   const icon: Icon = introduced === null ? { icon: "question" } : introduced ? { icon: "flame", tone: "bad" } : { icon: "circle-outline", tone: "dim" };
   return {
     ...icon,
-    text: item.message,
+    // The message whole, its detail too (a JUnit assertion goes on there): the row wraps it to three lines, the tooltip has the rest.
+    text: wholeMessage(item),
     notes: [item.tool, item.severity === "warning" ? "warning" : "", where, origin].filter(Boolean),
     tooltip: [item.message, item.detail ?? "", origin].filter(Boolean).join("\n\n"),
     path: item.path,
@@ -601,9 +626,7 @@ export function changeVm(state: ChangeState): ChangeVm {
     },
     conflicts: stopped?.unmerged.length
       ? { summary: plural(stopped.unmerged.length, "file"), rows: stopped.unmerged.map(conflictRow) }
-      : state.notAmended?.length
-        ? { title: STOPPED_WORDS.notAmendedTitle, summary: plural(state.notAmended.length, "file"), rows: state.notAmended.map(notAmendedRow) }
-        : undefined,
+      : changedAtStop(state.notAmended ?? [], state.staged ?? []),
     notes,
     message: state.base?.message
       ? {
@@ -641,10 +664,13 @@ export function changeVm(state: ChangeState): ChangeVm {
   };
 }
 
-/** What the Change view says while Gerrit cannot be asked: unknown, never none. */
+/**
+ * What the Change view says while Gerrit cannot be asked: unknown, never none. The head says
+ * "Gerrit state unknown" once; the note under it says why, and what that covers.
+ */
 export const UNKNOWN_WORDS = {
-  note: "Gerrit could not be asked: what it says of this change (state, votes, comments) is unknown",
-  comments: "unknown: Gerrit could not be asked",
+  note: "Gerrit could not be asked for this change's state, votes or comments",
+  comments: "unknown",
 };
 
 /** The view's title bar: `Change <number>`. The subject is not repeated there: the commit message says it. */
@@ -712,7 +738,7 @@ export function changeLines(vm: ChangeVm): string[] {
     }
     for (const link of vm.ci.links) {
       add(1, link.text, link.detail);
-      link.findings.forEach((row) => add(2, row.text, row.notes.join(" · ")));
+      link.findings.forEach((row) => add(2, row.text.split("\n").join(" / "), row.notes.join(" · ")));
       if (link.warnings.length) {
         add(2, plural(link.warnings.length, "warning"), "collapsed");
       }

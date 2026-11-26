@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Chain, Member, Overview, Rebase, ReviewState, Section } from "../src/api";
-import { taskKey, taskLines, taskMode, taskVm } from "../src/taskRows";
+import { taskFold, taskKey, taskLines, taskMode, taskVm } from "../src/taskRows";
 import { chainCounts, changeVm } from "../src/changeRows";
 import { chain, comment, commit, shown, stack, state as fixtureState } from "./fixtures";
 
@@ -135,7 +135,7 @@ test("reworking, the header says which change of how many, what is left over the
   const shown = { key: commits[1].sha, counts: { comments_unresolved: 2, comments_to_answer: 1, comments_drafted: 1, comments_awaiting_reply: 0, comments_total: 3 } };
   const counted = taskVm(undefined, stack(commits, { rebase_in_progress: true, rebase }), { all: false, shown })!;
   assert.equal(taskLines(counted)[1], "Left: 1 comment to answer · CI failed on 1 commit · 2 commits need edits · 2 commits to replay");
-  assert.equal(taskLines(counted)[3], "▸ 2. stop — stopped here · 1 to answer · needs edits");
+  assert.equal(taskLines(counted)[3], "▸ 2. stop — stopped here · 1 to answer · your drafts · needs edits");
   // A step running in the terminal: the header says so, and its buttons wait for it.
   const busy = taskVm(undefined, stack(commits, { rebase_in_progress: true, rebase }), { all: false, busy: "Continuing the rebase in the ger terminal…" })!;
   assert.deepEqual(taskLines(busy).filter((line) => line.startsWith("…") || line.startsWith("[")), [
@@ -171,6 +171,24 @@ test("at an edit stop with a fix saved and not amended, the header says it, and 
   assert.equal(vm.actions[0].tooltip, refusal);
 });
 
+test("staged files at an edit stop are listed before Continue, which says it amends them in", () => {
+  // Continue amends what is staged without a word: the view lists those files beside the ones it waits for.
+  const rebase = { stop: "edit", applied: true, actions: ["continue", "abort"], refused: {}, unmerged: [], uncommitted: [], staged: ["calc/ops.py", "README.md"] } as unknown as Rebase;
+  const commits = [commit("stop", { rebase: "current" }), commit("above", { rebase: "todo" })];
+  const vm = taskVm(undefined, stack(commits, { rebase_in_progress: true, rebase }), { all: false })!;
+  assert.equal(vm.actions[0].detail, "amend the 2 staged files into this commit, then replay the 1 commit above");
+  const view = changeVm(fixtureState({ notAmended: ["calc/ops.py"], staged: ["calc/ops.py", "README.md"] }));
+  assert.equal(view.conflicts?.title, "Changed at this stop");
+  assert.equal(view.conflicts?.summary, "2 files", "a file staged and changed again is one file");
+  assert.deepEqual(view.conflicts?.rows.map((row) => [row.text, row.detail]), [
+    ["calc/ops.py", "changed, not amended"],
+    ["calc/ops.py", "staged, goes into this commit"],
+    ["README.md", "staged, goes into this commit"],
+  ]);
+  assert.equal(changeVm(fixtureState({ staged: ["README.md"] })).conflicts?.title, "Staged, go into this commit");
+  assert.equal(changeVm(fixtureState({})).conflicts, undefined);
+});
+
 test("how the last step ended is said in the header until the next action, in ger's words, and not while a step runs", () => {
   const rebase = { stop: "conflict", actions: ["abort", "skip"], refused: {}, unmerged: ["a.py"] } as unknown as Rebase;
   const commits = [commit("stop", { rebase: "current" })];
@@ -197,4 +215,17 @@ test("the header and the Change view say one number of comments for the change s
   assert.match(taskLines(header)[3], /1 to answer/);
   // Without the view's count (it is loading), the served one.
   assert.match(taskLines(taskVm(overview(members), stack([], { staged_review: review }), { all: false })!)[1], /3 comments to answer/);
+});
+
+test("a long chain folds, in a narrow side bar, to the steps around the current one and what the rest are (state 22)", () => {
+  const step = (position: number, phase: "done" | "current" | "todo") => ({ key: String(position), position, title: `matrix demo: step ${position}`, current: phase === "current", phase, marks: [], tooltip: "" });
+  const eight = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => step(n, n < 4 ? "done" : n === 4 ? "current" : "todo"));
+  assert.deepEqual(taskFold(eight, "rework"), { from: 2, to: 4, before: "2 replayed", after: "3 to come" });
+  // A fold of one step saves no line: it is shown.
+  const six = eight.slice(0, 6).map((_s, i) => step(i + 1, i < 1 ? "done" : i === 1 ? "current" : "todo"));
+  assert.deepEqual(taskFold(six, "rework"), { from: 0, to: 2, before: "", after: "3 to come" });
+  // Reviewing: earlier and later changes; five or fewer: nothing folds.
+  const review = eight.map((s) => ({ ...s, phase: undefined }));
+  assert.deepEqual(taskFold(review, "review"), { from: 2, to: 4, before: "2 earlier", after: "3 later" });
+  assert.equal(taskFold(eight.slice(0, 5), "rework"), undefined);
 });

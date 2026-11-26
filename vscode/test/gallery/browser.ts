@@ -55,16 +55,25 @@ function headless(browser: string, profile: string, args: string[], url: string)
  * every frame its content's height (index.js), and the browser prints the page once it settled.
  */
 export async function frameHeights(browser: string, indexUrl: string): Promise<Map<string, number>> {
+  return (await frameSizes(browser, indexUrl)).heights;
+}
+
+/** How tall each frame drew, and those wider than their side bar (`wide`: by how many pixels they would scroll sideways). */
+export async function frameSizes(browser: string, indexUrl: string): Promise<{ heights: Map<string, number>; wide: Map<string, string> }> {
   const profile = newProfile();
   const dom = await headless(browser, profile, ["--dump-dom", "--virtual-time-budget=20000", "--window-size=1700,1200", SCALED], indexUrl).finally(() => dropProfile(profile));
   const heights = new Map<string, number>();
+  const wide = new Map<string, string>();
   for (const [tag] of dom.matchAll(/<iframe\b[^>]*>/g)) {
-    const [shot, height] = [/data-shot="([^"]+)"/.exec(tag)?.[1], /data-height="(\d+)"/.exec(tag)?.[1]];
+    const [shot, height, over] = [/data-shot="([^"]+)"/.exec(tag)?.[1], /data-height="(\d+)"/.exec(tag)?.[1], /data-wide="(\d+)"/.exec(tag)?.[1]];
     if (shot && height) {
       heights.set(shot, Number(height));
     }
+    if (shot && Number(over) > 0) {
+      wide.set(shot, `+${over}px, ${/data-what="([^"]*)"/.exec(tag)?.[1] ?? "?"}`);
+    }
   }
-  return heights;
+  return { heights, wide };
 }
 
 /** A picture to take: the top left `width` × `height` CSS pixels of the document at `url`, into `file`. */

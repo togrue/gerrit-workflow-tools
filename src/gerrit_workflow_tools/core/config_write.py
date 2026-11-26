@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from gerrit_workflow_tools.core.config_keys import ConfigScope, current_key, legacy_key
+from gerrit_workflow_tools.core.config_keys import ConfigScope, current_key, gerrit_host_key, legacy_key
 from gerrit_workflow_tools.core.git_run import git
 
 
@@ -121,4 +121,29 @@ def migrate_legacy_keys(cwd: Path | str | None) -> list[MovedKey]:
                     git("config", flag, "--add", new, value, cwd=cwd)
             git("config", flag, "--unset-all", old, cwd=cwd, check=False)
             moved.append(MovedKey(legacy_key(new) or old, new, scope, dropped))
+    return moved
+
+
+def scope_unscoped_secrets(
+    cwd: Path | str | None, web_url: str, scopes: tuple[ConfigScope, ...] = (ConfigScope.LOCAL, ConfigScope.GLOBAL)
+) -> list[MovedKey]:
+    """Move ``ger.token`` and ``ger.password`` (or their old names) to ``ger.<web_url>.<name>`` at each
+    of *scopes*: an unscoped secret is sent to whatever host ``ger.webUrl`` names (#111). Where the
+    host has its own at that scope already, that one wins and the unscoped one is only removed.
+    """
+    moved: list[MovedKey] = []
+    for scope in scopes:
+        flag = scope.flag or ""
+        for name in ("token", "password"):
+            new = gerrit_host_key(web_url, name)
+            for old in filter(None, (f"ger.{name}", legacy_key(f"ger.{name}"))):
+                got = git("config", flag, "--get", old, cwd=cwd, check=False)
+                value = (got.stdout or "").strip() if got.returncode == 0 else ""
+                if not value:
+                    continue
+                dropped = git("config", flag, "--get", new, cwd=cwd, check=False).returncode == 0
+                if not dropped:
+                    git("config", flag, new, value, cwd=cwd)
+                git("config", flag, "--unset-all", old, cwd=cwd, check=False)
+                moved.append(MovedKey(old, new, scope, dropped))
     return moved

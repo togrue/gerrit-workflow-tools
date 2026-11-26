@@ -65,6 +65,52 @@ export interface TaskVm {
   busy?: string;
   /** How the last step ended, in ger's words, until the next action (core's step outcome, or a refusal said here). */
   outcome?: Outcome;
+  /**
+   * A long chain in a narrow side bar: the steps from `from` to `to` (around the current one) are
+   * shown, those before and after fold into one line each that says how many and what they are
+   * (`2 replayed`, `3 to come`), opened on a click. Undefined for a chain short enough to list.
+   */
+  fold?: TaskFold;
+}
+
+export interface TaskFold {
+  from: number;
+  to: number;
+  before: string;
+  after: string;
+}
+
+/** A chain longer than this folds in a narrow side bar (views.css): the current step and one each side stay. */
+export const FOLD_OVER = 5;
+
+/**
+ * Which steps a narrow side bar shows of a long chain, and what the folded ones are, in words:
+ * by where the rebase stands on them while reworking, earlier and later while reviewing.
+ */
+export function taskFold(steps: readonly TaskStep[], mode: TaskMode): TaskFold | undefined {
+  if (steps.length <= FOLD_OVER) {
+    return undefined;
+  }
+  const current = steps.findIndex((step) => step.current);
+  const at = current >= 0 ? current : Math.max(0, steps.findIndex((step) => step.phase === "todo"));
+  let [from, to] = [Math.max(0, Math.min(at - 1, steps.length - 3)), Math.min(steps.length - 1, Math.max(at + 1, 2))];
+  // A fold line for one step saves no line: that step is shown instead.
+  [from, to] = [from === 1 ? 0 : from, to === steps.length - 2 ? steps.length - 1 : to];
+  const words = (folded: readonly TaskStep[], side: "earlier" | "later") => {
+    if (!folded.length) {
+      return "";
+    }
+    if (mode === "review") {
+      return `${folded.length} ${side}`;
+    }
+    const counts = new Map<string, number>();
+    folded.forEach((step) => {
+      const word = step.phase ? PHASE_MARKS[step.phase].text : side;
+      counts.set(word, (counts.get(word) ?? 0) + 1);
+    });
+    return [...counts].map(([word, count]) => `${count} ${word}`).join(" · ");
+  };
+  return { from, to, before: words(steps.slice(0, from), "earlier"), after: words(steps.slice(to + 1), "later") };
 }
 
 /** A finished step's one line, and the lines after it (what was kept, what is gone, the next step) for the tooltip. */
@@ -133,7 +179,7 @@ function commentMark(item: Parameters<typeof commentState>[0]): TaskMark | undef
   if (!state || state.tone === "resolved") {
     return undefined;
   }
-  const words: Record<string, string> = { open: `${state.toAnswer} to answer`, draft: "your drafts", waiting: "waits on a reply" };
+  const words: Record<string, string> = { open: `${state.toAnswer} to answer`, draft: state.toAnswer ? `${state.toAnswer} to answer · your drafts` : "your drafts", waiting: "waits on a reply" };
   return { icon: "comment", text: words[state.tone] ?? state.label, tone: state.tone === "open" ? "warn" : state.tone === "draft" ? "info" : "plain", ring: { share: state.share, shape: state.shape } };
 }
 
@@ -230,6 +276,7 @@ function reviewTask(overview: Overview | undefined, stack: Stack, options: TaskO
     ],
     busy: options.busy,
     ...(options.outcome ? { outcome: options.outcome } : {}),
+    ...folded(steps, "review"),
   };
 }
 
@@ -259,12 +306,16 @@ function reworkTask(stack: Stack, options: TaskOptions): TaskVm {
     const notNow = options.busy ? "the step before it is still running" : refused ? notNowLine(rebase, action, refused) : undefined;
     return { label: REBASE_ACTIONS[action].label, detail, command: REBASE_ACTIONS[action].command, ...(notNow ? { notNow } : {}), ...(refused && !options.busy ? { tooltip: refused } : {}) };
   };
+  // Staged files go into the commit on Continue: its words say so, as the Change view lists them.
+  const staged = rebase?.applied ? (rebase.staged ?? []) : [];
+  const commitIt = staged.length ? `amend the ${plural(staged.length, "staged file")} into this commit` : "commit this stop as it is";
   const actions = [
-    go("continue", unmerged ? `once the ${plural(unmerged, "conflict")} ${unmerged === 1 ? "is" : "are"} resolved` : above ? `commit this stop as it is, then replay the ${plural(above, "commit")} above` : "commit this stop as it is and finish the rebase"),
+    go("continue", unmerged ? `once the ${plural(unmerged, "conflict")} ${unmerged === 1 ? "is" : "are"} resolved` : above ? `${commitIt}, then replay the ${plural(above, "commit")} above` : `${commitIt} and finish the rebase`),
     go("abort", "put the branch back as it was before the rebase"),
     ...(rebase?.actions.includes("skip") ? [go("skip", "leave this commit out and go on")] : []),
   ];
   const title = commits.at(-1)?.summary ?? stack.branch ?? "your stack";
+  const steps = commits.map((commit, index) => reworkStep(commit, index, options));
   return {
     mode: "rework",
     heading: `Reworking your chain${stack.branch ? ` on ${stack.branch}` : ""}`,
@@ -273,10 +324,11 @@ function reworkTask(stack: Stack, options: TaskOptions): TaskVm {
     left: left.join(" · ") || "nothing left to answer or fix",
     ...(options.outcome ? { outcome: options.outcome } : {}),
     // The chain, oldest first as while reviewing: Local stack steps aside, so the Change view has the room.
-    steps: commits.map((commit, index) => reworkStep(commit, index, options)),
+    steps,
     actions,
     views: options.all ? VIEWS.only : VIEWS.all,
     busy: options.busy,
+    ...folded(steps, "rework"),
   };
 }
 
@@ -294,6 +346,11 @@ export function notNowLine(rebase: Stack["rebase"], action: "continue" | "abort"
   }
   return refused.split(/; |: `| \(`/)[0];
 }
+
+const folded = (steps: readonly TaskStep[], mode: TaskMode) => {
+  const fold = taskFold(steps, mode);
+  return fold ? { fold } : {};
+};
 
 const PHASE_MARKS: Record<"done" | "current" | "todo", TaskMark> = {
   done: { icon: "check", text: "replayed", tone: "good" },

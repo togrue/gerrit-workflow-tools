@@ -6,7 +6,7 @@ import base64
 from dataclasses import dataclass, field
 
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.config_keys import ConfigScope, gerrit_host_key
+from gerrit_workflow_tools.core.config_keys import MIGRATE_COMMAND, ConfigScope, gerrit_host_key
 
 
 @dataclass(frozen=True)
@@ -72,6 +72,8 @@ def _unscoped_warning(old: str, new: str, scope: ConfigScope | None) -> str:
     why = f"git config key {old} is sent to whatever host ger.webUrl names"
     if scope is None or scope.flag is None:  # `git -c`: nothing on disk to move
         return f"{why}; use {new}"
+    if scope in (ConfigScope.LOCAL, ConfigScope.GLOBAL):
+        return f"{why}; move it to {new} with: {MIGRATE_COMMAND}"
     git_config = f"git config {scope.flag}"
     return f'{why}; move it with: {git_config} {new} "$({git_config} {old})" && {git_config} --unset {old}'
 

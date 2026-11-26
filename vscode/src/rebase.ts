@@ -100,9 +100,16 @@ async function confirmAbort(model: Model, hooks: StepHooks): Promise<boolean> {
   if (!check.discards?.asks) {
     return true;
   }
-  const { message, detail } = abortQuestion(check.discards);
+  const { message, detail, show } = abortQuestion(check.discards);
   const abort = REBASE_ACTIONS.abort.label;
-  return (await ui().message("warning", message, { modal: true, detail }, [abort])) === abort;
+  const pressed = await ui().message("warning", message, { modal: true, detail }, show ? [abort, show.label] : [abort]);
+  if (show && pressed === show.label) {
+    // Each commit that would go, its files in one editor (they are in Local stack, replayed): nothing aborted; Abort asks again.
+    for (const sha of show.shas) {
+      await vscode.commands.executeCommand("ger.openAllChanges", { sha });
+    }
+  }
+  return pressed === abort;
 }
 
 /**

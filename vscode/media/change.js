@@ -4,7 +4,7 @@
 // chains and CI findings are rows that open what they name.
 
 (function () {
-  const { h, icon, badge, actions, info, words, post, panel, listen, getState, setState, task } = window.ger;
+  const { h, icon, badge, badgeGroup, actions, info, words, post, panel, listen, getState, setState, task } = window.ger;
   const root = document.getElementById("root");
 
   let vm = {};
@@ -201,6 +201,9 @@
         "aria-expanded": isOpen ? "true" : "false",
         onclick: () => {
           toggled[name] = !isOpen;
+          if (!isOpen) {
+            opened = { name, at: Date.now() };
+          }
           if (!isOpen && onOpen) {
             onOpen();
           }
@@ -211,7 +214,35 @@
       h("span", { class: "label" }, title),
       h("span", { class: "section-summary" }, summary),
     );
-    return h("div", { class: "section" }, header, isOpen ? body() : null);
+    return h("div", { class: "section", "data-section": name }, header, isOpen ? body() : null);
+  }
+
+  /** The section just opened, until its first rows are on screen: findings come a moment after the click. */
+  let opened = null;
+
+  /**
+   * Bring the first rows of the section just opened into view: opening one at the bottom of a short
+   * view showed nothing of it (state 13: CI's findings below the fold). Once its rows came, or after a while.
+   */
+  function revealOpened() {
+    if (!opened || Date.now() - opened.at > 15000) {
+      opened = null;
+      return;
+    }
+    const element = document.querySelector(`.section[data-section="${CSS.escape(opened.name)}"]`);
+    if (!element || element.querySelector(".codicon-loading")) {
+      return; // still fetching: the next draw brings its rows
+    }
+    const rows = [...element.querySelectorAll(".item, .reply, .info")].filter((row) => !row.classList.contains("section-head"));
+    const last = rows[Math.min(2, rows.length - 1)];
+    const head = element.querySelector(".section-head");
+    if (last && typeof last.scrollIntoView === "function") {
+      last.scrollIntoView({ block: "nearest" });
+    }
+    if (head && typeof head.scrollIntoView === "function" && head.getBoundingClientRect().top < 0) {
+      head.scrollIntoView({ block: "start" });
+    }
+    opened = null;
   }
 
   function counts(added, deleted) {
@@ -341,10 +372,11 @@
     );
   }
 
+  /** A CI finding: its message wrapped to at most three lines (views.css `.message-row`), where and whence under it; the rest on hover. */
   function findingRow(finding, cls) {
     return item(
       {
-        class: cls,
+        class: `${cls} message-row`,
         title: finding.tooltip,
         onclick: finding.path ? () => post("finding", { path: finding.path, line: finding.line }) : undefined,
       },
@@ -489,7 +521,8 @@
     if (vm.head) {
       const head = vm.head;
       // Votes and comments as badges, drawn as the Local stack draws them; words only when there are none.
-      const right = head.badges.length ? h("span", { class: "badges" }, head.badges.map((item) => badge(item))) : h("span", { class: "detail" }, head.detail);
+      // One keyboard stop that says the badges' words (state 23: icons only, mouse only).
+      const right = head.badges.length ? badgeGroup(head.badges, head.badges.map((item) => badge(item))) : h("span", { class: "detail" }, head.detail);
       // What state the change is in: said whole, wrapping under itself in a narrow view.
       parts.push(h("div", { class: "head wraps", title: `${head.text} — ${head.detail}` }, icon(head.icon, head.tone), words(head.text), right));
       // A rebase stopped here: the way on, as Local stack's banner offers it.
@@ -553,6 +586,7 @@
     if (document.scrollingElement) {
       document.scrollingElement.scrollTop = scroll;
     }
+    revealOpened();
   }
 
   // Rows act on Enter and Space, and the arrow keys walk them, as in a tree.

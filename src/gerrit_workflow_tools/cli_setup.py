@@ -15,7 +15,7 @@ from gerrit_workflow_tools.cli_common import ExitCode, init_cli_runtime, run_cli
 from gerrit_workflow_tools.cli_terminal import confirm, prompt_toolkit_can_run
 from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.config_keys import ConfigScope, gerrit_host_key, legacy_key
-from gerrit_workflow_tools.core.config_write import ConfigWrite, apply_config_write
+from gerrit_workflow_tools.core.config_write import ConfigWrite, apply_config_write, scope_unscoped_secrets
 from gerrit_workflow_tools.core.gerrit.rest import GerritApiError, GerritRest
 from gerrit_workflow_tools.core.gerrit_setup import (
     INSECURE_HTTP,
@@ -184,16 +184,9 @@ def _scope_unscoped_secrets(web_url: str, *, scope: ConfigScope, cwd: Path | Non
     The token was just written for the host; a password moves to ``ger.<webUrl>.password``
     unless the host has one, so no secret is lost.
     """
-    global_config = scope is ConfigScope.GLOBAL
-    for name in ("token", "password"):
-        unscoped = _git_config_get(global_config=global_config, key=f"ger.{name}", cwd=cwd)
-        if not unscoped:
-            continue
-        host_key = gerrit_host_key(web_url, name)
-        if name == "password" and not _git_config_get(global_config=global_config, key=host_key, cwd=cwd):
-            apply_config_write(cwd, ConfigWrite(host_key, "set", unscoped, scope))
-        apply_config_write(cwd, ConfigWrite(f"ger.{name}", "unset", scope=scope))
-        print(f"Moved the unscoped ger.{name} to {host_key}: it went to any host ger.webUrl named.", file=sys.stderr)
+    for key in scope_unscoped_secrets(cwd, web_url, (scope,)):
+        name = key.new.rsplit(".", 1)[1]
+        print(f"Moved the unscoped ger.{name} to {key.new}: it went to any host ger.webUrl named.", file=sys.stderr)
 
 
 def _run_setup(args: argparse.Namespace, run: RunContext, gerrit: GerritRest | None) -> int:

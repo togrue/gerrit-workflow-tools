@@ -2,6 +2,7 @@
 // relates to Gerrit, where a rebase underway stands, and its votes as badges. The webview draws
 // it, the end-to-end suite prints it. Pure: no `vscode`, no I/O.
 
+import { BOUNDARY_WORDS, boundaryUnder, stackSummary } from "./stackSummary";
 import { AbortDiscards, CodeChange, CommitStatus, MoveConflict, Overview, Rebase, RebaseAction, Reviewer, Stack, StackCommit, UpstreamChoice, UpstreamStop } from "./api";
 import { CommentShape, CommentTone, commentState } from "./commentState";
 import { blockedMove, plural, reasonWords, sentence, wouldConflict } from "./format";
@@ -129,7 +130,8 @@ export function badges(commit: CommitStatus, drafts = 0): (Badge | null)[] {
           kind: "review",
           icon: review > 0 ? "thumbsup" : "thumbsdown",
           tone: review > 0 ? "good" : "bad",
-          text: signed(review),
+          // Of the last pushed patchset: "+2?", not only greyed (Q4).
+          text: `${signed(review)}${stale ? "?" : ""}`,
           title: [`Code-Review ${signed(review)}${note}`, who].filter(Boolean).join("\n"),
           stale,
         }
@@ -148,12 +150,12 @@ export function badges(commit: CommitStatus, drafts = 0): (Badge | null)[] {
           kind: "ci",
           icon: unstable ? "warning" : "error",
           tone: unstable ? "warn" : "bad",
-          text: "",
+          text: stale ? "?" : "",
           title: `${unstable ? "CI unstable" : "CI failed"}${commit.ci_failures.length ? `: ${commit.ci_failures.join(", ")}` : ""}${note}`,
           stale,
         }
       : verified
-        ? { kind: "ci", icon: "pass", tone: "good", text: "", title: `Verified ${signed(verified)}${note}`, stale }
+        ? { kind: "ci", icon: "pass", tone: "good", text: stale ? "?" : "", title: `Verified ${signed(verified)}${note}`, stale }
         : null,
   ];
 }
@@ -219,6 +221,10 @@ export interface StackVm {
   movable: number;
   /** A staged review: the rows are somebody else's commits, and offer review actions only. */
   review?: boolean;
+  /** How much of the stack is where, in `ger log`'s summary words (stackSummary.ts): above the rows. */
+  summary?: string;
+  /** The ready boundary: drawn under the row keyed `under` (the oldest commit held back), with its words. */
+  boundary?: { under: string; text: string; tooltip: string };
 }
 
 /** Where a rebase stopped, in the row's tooltip: why, by core's verdict. */
@@ -366,16 +372,23 @@ export function skipQuestion(stack: Stack | undefined): { message: string; detai
  * Abort's question (core's `discards`, asked only when `asks`): the commits made in this rebase that
  * go with it, named, and a resolution; what a stash keeps is said too, so nothing is a surprise after.
  */
-export function abortQuestion(discards: AbortDiscards): { message: string; detail: string } {
+export function abortQuestion(discards: AbortDiscards): { message: string; detail: string; show?: { label: string; shas: string[] } } {
   const gone = discards.rewritten.map((commit) => `${commit.short_sha} "${commit.summary}"`);
   const lines = [
     "The branch goes back to where it was before the rebase.",
-    gone.length ? `Gone from the branch with it, made in this rebase: ${gone.join(", ")}. git show <id> still shows ${gone.length === 1 ? "it" : "them"} while git keeps its reflog.` : "",
+    gone.length ? `Gone from the branch with it, made in this rebase: ${gone.join(", ")}. ${ABORT_SHOW} opens ${gone.length === 1 ? "its changes" : "their changes"} first; nothing is aborted then.` : "",
     discards.resolution ? "The conflict resolution of the commit it stopped at goes too." : "",
     discards.uncommitted.length ? `${discards.uncommitted.join(", ")}, not committed, ${discards.uncommitted.length === 1 ? "is" : "are"} kept in a stash: git stash apply brings ${discards.uncommitted.length === 1 ? "it" : "them"} back.` : "",
   ];
-  return { message: gone.length ? `Abort the rebase, and with it ${plural(gone.length, "rewritten commit")}?` : "Abort the rebase, and the resolution?", detail: lines.filter(Boolean).join("\n\n") };
+  return {
+    message: gone.length ? `Abort the rebase, and with it ${plural(gone.length, "rewritten commit")}?` : "Abort the rebase, and the resolution?",
+    detail: lines.filter(Boolean).join("\n\n"),
+    ...(gone.length ? { show: { label: ABORT_SHOW, shas: discards.rewritten.map((commit) => commit.sha) } } : {}),
+  };
 }
+
+/** The button beside Abort in its question: the commits that would go, opened before anything goes. */
+export const ABORT_SHOW = "Show What Would Go";
 
 /** What Push offers instead while a rebase blocks it: the ways on core allows, but Skip (finishing is the point). */
 export function pushWaysOn(stack: Stack | undefined): RebaseAction[] {
@@ -664,8 +677,12 @@ export function stackVm(
   const fixed = pinned(local);
   const rows = commits.map((commit, index) => row(commit, local, index, fixed, conflicts, drafts)).reverse();
   const review = Boolean(local.staged_review);
-  return { info, rows, frozen: frozen(local), movable: review ? 0 : commits.length - fixed, review };
+  // Somebody else's commits under review: neither a summary of your stack nor a boundary of your push.
+  const glance = review || !commits.length ? {} : { summary: stackSummary(commits), ...boundaryOf(boundaryUnder(commits, rows.map((r) => r.key))) };
+  return { info, rows, frozen: frozen(local), movable: review ? 0 : commits.length - fixed, review, ...glance };
 }
+
+const boundaryOf = (under: string | undefined) => (under ? { boundary: { under, ...BOUNDARY_WORDS } } : {});
 
 /** What Local stack says about Gerrit when it could not ask it, or has not yet: once, above the commits. */
 export const STACK_GERRIT_WORDS = {
@@ -696,18 +713,20 @@ export function stackLines(vm: StackVm): string[] {
   if (vm.waiting) {
     return [vm.waiting.text];
   }
-  const said = (badge: Badge | null) => (badge ? `${badge.stale ? "last pushed " : ""}${badge.kind}${badge.text ? ` ${badge.text}` : ` ${badge.tone}`}` : "");
+  const said = (badge: Badge | null) => (badge ? `${badge.stale ? "last pushed " : ""}${badge.kind}${badge.text && badge.text !== "?" ? ` ${badge.text}` : ` ${badge.tone}${badge.text}`}` : "");
   return [
     ...vm.info.map((info) => {
       const buttons = actionsText(info.actions);
       const raw = info.raw ? `  (${info.raw.split("\n").join(" / ")})` : "";
       return `${info.conflict ? "  ⚠ " : ""}${info.text}${info.detail ? ` — ${info.detail}` : ""}${raw}${buttons ? `  ${buttons}` : ""}`;
     }),
-    ...vm.rows.map((r) => {
+    ...(vm.summary ? [`summary: ${vm.summary}`] : []),
+    ...vm.rows.flatMap((r) => {
       // The conflict is drawn as a red warning; the commit it stopped at otherwise as a marker.
       const marker = r.marker ? (r.marker === "conflict" ? "⚠ " : "▶ ") : "";
       const right = r.badges.map(said).filter(Boolean).join(", ");
-      return `${marker}${r.summary} — ${[...r.notes, r.syncTitle.split(":")[0]].join(" · ")}${right ? `  [${right}]` : ""}${r.dim ? "  (dim)" : ""}`;
+      const line = `${marker}${r.summary} — ${[...r.notes, r.syncTitle.split(":")[0]].join(" · ")}${right ? `  [${right}]` : ""}${r.dim ? "  (dim)" : ""}`;
+      return r.key === vm.boundary?.under ? [line, `---- ${vm.boundary.text} ----`] : [line];
     }),
   ];
 }

@@ -31,9 +31,10 @@ stack draws what git alone knows at once (`/stack?local=1`). Then *Review chains
 reason with the ways on as rows (*Check Credentials (ger setup)…* for refused credentials, else
 *Retry*, *Check the Gerrit Address (ger setup)…*), *Show Log*, and that local work goes on; Local
 stack says once *Gerrit state unknown: …* with *Retry*; the Change view says the change's state,
-votes and comments are unknown (never *not on Gerrit* or *none*), keeps the task header and its
+votes and comments are unknown, once (never *not on Gerrit* or *none*), keeps the task header and its
 exit, and Next names the fix instead of the vote. The status bar item wears an error icon, never
-the check; Refresh answers *Not refreshed from Gerrit: …* with the ways on; a file marked seen is
+the check; Refresh answers *Not refreshed from Gerrit: …* in the status bar, not in a toast that
+would offer the views' ways on a second time; a file marked seen is
 ticked only once Gerrit took it (a refusal is said, once per reason); a vote, a draft, an edit or
 a delete that did not reach Gerrit is said as not done, with *Check Credentials* / *Retry* where
 that is the fix. While the views cannot follow Gerrit's event stream, the status bar's tooltip
@@ -104,11 +105,19 @@ The commits above your upstream, newest first. One row per commit:
 - The **comment badge** on the right (here, in the Change view and in the task header) draws the
   state so it cannot be misread: the number is how many chains are **open**, a **ring** around it
   is filled by their share of all chains, and the ring's shape says the state besides its colour:
-  **thick** and yellow while something waits for your answer, **dashed** and blue while drafts of
-  yours wait to be published, **thin** while they wait on the other side, a full ring with a
-  **tick** once all are resolved. The tooltip says it in words (*3 of 5 comment chains open · 1 to
-  answer · 2 answered by your drafts*). Hover it
-  a moment for the comments, with *Go there*, *Reply Done* and *Apply*.
+  **dashed** and blue while drafts of yours wait to be published (they lead: what is left to answer
+  besides is in the tooltip and in the task header's *1 to answer · your drafts*), **thick** and
+  yellow while something waits for your answer, **thin** while they wait on the other side, a full
+  ring with a **tick** once all are resolved. The tooltip says it in words (*3 of 5 comment chains
+  open · 1 to answer · 2 answered by your drafts*). Drafts are known from core's count of those
+  that answer an open chain, and for the change the Change view shows, all of them: a draft that
+  answers nothing on a commit not shown is not seen until it is shown (asking Gerrit for drafts on
+  every load would cost a request a warm `ger log` does not make). Hover it
+  a moment for the comments, with *Go there*, *Reply Done* and *Apply*. From the keyboard: the
+  list walks its rows with the arrow keys (each row read out with its notes, Gerrit's state and its
+  badges' words); **Tab** then reaches the focused row's badges, one stop named by their words, and
+  **Enter** there shows the comments. The Change view's head badges are one stop too, and every
+  button, row and step of both views shows the focus ring.
 - An **icon** in front says how the commit relates to Gerrit: a **full circle** when it is the
   same as on Gerrit; a **yellow arrow up** in a circle when it is only rebased since the last push
   (the same code by patch-id, whitespace and message aside: Gerrit usually keeps the votes); a **yellow diff** square when its code changed since (push it, and
@@ -119,12 +128,15 @@ The commits above your upstream, newest first. One row per commit:
   Gerrit's current patchset came from somewhere else). A dimmed **empty circle** is a commit
   Gerrit does not have yet; a green check, one that is merged. Hover it for the words.
 - On the right, as icons: **unresolved comments** (with their number), the **review vote** and the
-  **CI vote**. Dimmed, they are the last pushed patchset's: the commit's code changed since, and
-  Gerrit may not keep them. Hover any of them for the words; the review vote's tooltip names the
+  **CI vote**. Grey and ending in **?** (*+2?*), they are the last pushed patchset's: the commit's
+  code changed since, and Gerrit may not keep them. Hover any of them for the words; the review vote's tooltip names the
   reviewers (and who is CC'd). A pushed change with nobody to review it shows a **person +** icon
   where the review vote goes.
 - `HEAD`, the short commit id, *code changed* (see above), and *held back* where `ger push` would
-  stop at the ready boundary. A `fixup!` commit (`ger fix`) names the commit it folds into, *→ 2168*
+  stop at the ready boundary. The boundary itself is a dashed line, *ready boundary*, under the
+  oldest commit held back (Push sends what is below it), and one quiet line above the rows says
+  how much of the stack is where, in `ger log`'s summary words: *6 on Gerrit · 1 to upload · 2 held
+  back · 1 failed CI*. A `fixup!` commit (`ger fix`) names the commit it folds into, *→ 2168*
   (its change number, else its short id), and that commit says *1 fixup pending* until
   `ger rebase --autosquash` folds it in. They stay in commit order: a row's place is where the commit is.
 - Click a row, or walk the list with **↑ / ↓**: the *Change* view follows, with the commit
@@ -157,7 +169,8 @@ The commits above your upstream, newest first. One row per commit:
   what no stash keeps** — the commits made in this rebase that the branch before it does not have
   (an amend, a resolved conflict, a split: by patch id and message, so a commit only replayed is
   not one), named with their ids, and a resolved conflict (`GET /rebase/refusal?action=abort`'s
-  `discards`). A fix saved and not amended is no reason to ask: `ger rebase --abort` puts it in a
+  `discards`). Beside Abort, **Show What Would Go** opens those commits' files in one editor each
+  and aborts nothing; Abort asks again. A fix saved and not amended is no reason to ask: `ger rebase --abort` puts it in a
   stash before git resets the tree, and says so (*kept: your changes to calc/ops.py, not amended,
   in stash@{0}; `git stash apply` brings them back*). Where nothing is lost it does not ask. At an edit stop, or once you split a
   commit there, there is nothing to skip: the commit is already in, and `git rebase --skip` would
@@ -186,7 +199,10 @@ The commits above your upstream, newest first. One row per commit:
   So does Continue whenever files of the repository are changed and not amended or added. At an
   edit stop that is said before the press: core serves the files changed and not staged with the
   stop (`rebase.uncommitted`), Continue is drawn disabled with why, and the Change view of the
-  commit lists them under **Changed, not amended** (a click opens one). **Continue without saving** runs it with the edits left in the
+  commit lists them under **Changed, not amended** (a click opens one). Files staged there go into
+  the commit on Continue without a word from git: core serves them too (`rebase.staged`), the
+  Change view lists them as **Staged, go into this commit** (both kinds: *Changed at this stop*),
+  and Continue says *amend the 2 staged files into this commit, then …*. **Continue without saving** runs it with the edits left in the
   editor: git rewrites the files under them, and VS Code says so when you save. Cancel runs
   nothing. Nothing is saved unasked.
 - **Work on Next** (the step-over icon in *Local stack*'s and the Change view's title bars, the
@@ -431,8 +447,15 @@ The commits above your upstream, newest first. One row per commit:
   **To**, it is a draft on that patchset, on the lines its diff shows.
 - **CI**: opened on demand (it downloads build logs: this change's and its parent's, not the rest
   of its chain). Findings this change **introduced** are
-  on top with a flame; findings that already fail on its parent are dimmed. Click a finding to
-  jump to its file and line.
+  on top with a flame; findings that already fail on its parent are dimmed. A finding's message
+  wraps to three lines (a JUnit assertion goes on in its detail; the tooltip has it whole), where
+  and whence under it, and opening the section brings its first rows into view. Every finding with
+  a place in a file is also an editor problem of the change shown: a marker at its line, a row in
+  **Problems**, the whole message on hover, source *ger CI*, the build as the code (a link to its
+  log); they go when the Change view leaves the change. Nothing in it knows a language: a
+  compiler's error, a failed test and a linter's warning are a path, a line and words. Click a
+  finding to jump to its file and line; that opens the file, not its diff, so the file is not
+  ticked seen.
 - **Vote and Publish…** (check icon in the Change view's title bar for someone else's change, and
   on a *To review* row, where it takes the row's whole chain): `ger review --vote`. A picker offers
   the votes Gerrit lets you give there, each with what the project says it means, opening on
@@ -565,6 +588,14 @@ aside (their `when` clauses read `ger.task` and `ger.taskAll`) so the Change vie
 - **All chains** (top right of the header) brings the lists back for the rest of the task; there
   it reads **Only this task**. Something else that needs you stays on the status bar item, which
   opens it, the lists coming back when it is in one of them.
+
+In a narrow side bar (under 240 px; the gallery draws the task scenarios at 170 px too) the header
+keeps the mode, the next step and the way out on screen, with nothing wider than the view: a step
+is one line, its states as icons (their words in the tooltip, and read out by a screen reader); a
+chain longer than five folds to the steps around the current one, the others one line each before
+and after (*⋯ 2 replayed*, *⋯ 3 to come*; *2 earlier*, *3 later* while reviewing), which a click
+opens; the buttons sit in one row, what each does in its tooltip, and a *not now* reason stays under
+them. Wider, a button's words go beside it where they fit and under it where not.
 
 It is not a view of its own: VS Code gives a view that appears the room the others leave, and
 restores the Change view's stored height, so a separate header took two thirds of the side bar.
@@ -807,7 +838,7 @@ downloads that version instead, as CI does for pull requests. `GER_E2E_TIMEOUT_S
 
 **The gallery** is for how the two webview views look, without starting VS Code. `npm run gallery`
 writes `out/gallery/index.html` and prints its path: open it in a browser. It runs the pages of
-`media/` as they ship, each in an iframe 200, 300 and 450 pixels wide, in VS Code's Dark Modern and Light
+`media/` as they ship, each in an iframe 200, 300 and 450 pixels wide (the task scenarios 170 too), in VS Code's Dark Modern and Light
 Modern colours. What stands in for VS Code is in `test/gallery/`: `theme.ts` has the `--vscode-*`
 variables and a webview's default styles (a variable the pages use and it does not list fails
 `npm test`), and `frame.js` is `acquireVsCodeApi()`: it answers the page's `ready` with the view
@@ -818,6 +849,11 @@ is listed under the frame.
   would answer, built from the fixtures the unit tests use (`test/fixtures.ts`); the task scenarios
   put the Change view together as the window does (`changeScreen()` with `nextAction()`), so Next and
   the one primary button are what a user sees. A new state of a view gets a scenario there.
+- `test/contrast.test.ts` measures every state colour of the pages without a browser: the `--ger-*`
+  tokens of `views.css` resolved per theme kind with `theme.ts`'s values of Dark and Light Modern
+  and both high-contrast themes, against the side bar, a hovered and a selected row (WCAG: 4.5:1
+  for words, 3:1 for an icon that carries a state and for the focus ring). A rule that colours a
+  state without a token fails it.
 - `npm run gallery -- report.json` adds snapshot files as scenarios, in front of the built-in
   ones. A snapshot is `{ "format": 1, "name": "…", "stack": <StackVm or null>, "change": <ChangeVm or null> }`,
   other keys ignored (`src/snapshot.ts`). The report of **ger: Report Issue…** is one: this is how a
@@ -826,7 +862,8 @@ is listed under the frame.
   `<scenario>.<view>.<theme>.<width>.png`, at twice the size. It runs an installed Edge, Chrome or
   Chromium headless (`GER_GALLERY_BROWSER` names another one), once per picture: all of them take
   a few minutes, so `--only <words>` keeps the scenarios with those words in their name (several: `--only "conflict|ci findings"`). This is
-  how a coding agent looks at a layout change it made.
+  how a coding agent looks at a layout change it made. It also lists every frame that would scroll
+  sideways, by how much and the first element that sticks out: a side bar never should.
 
 Open the `vscode` folder in VS Code and press `F5` to start an Extension Development Host;
 open your Gerrit repository in it. `npm run package` builds a `.vsix` to install elsewhere; a release (`python scripts/build_release.py` in the repository root) builds it into ger, for `ger vscode install`.
@@ -896,6 +933,8 @@ estimate, the totals per loop and the steps over budget. See
 | `src/task.ts`, `src/taskRows.ts` | The task you are in (a review, a rework): its header (pure, unit-tested), and the context keys the lists step aside by. |
 | `src/changeScreen.ts` | The Change view as a screen: the change, the task header and Next put together, one primary button that is the next step. Pure, unit-tested. |
 | `src/nextAction.ts` | Next: the one thing to do now on the change shown. Pure, the rules are the table above, unit-tested row by row. |
+| `src/stackSummary.ts` | Local stack at a glance: `ger log`'s summary line, and the row the ready boundary is drawn under. Pure, unit-tested. |
+| `src/ciDiagnostics.ts`, `src/ciProblems.ts` | The CI findings of the change shown as editor problems: what each says (pure, unit-tested), and the diagnostic collection that holds them while the change is shown. |
 | `src/commentState.ts` | A change's comments at a glance: the state, the open count, the share for the ring, the words. Pure, unit-tested. |
 | `src/walk.ts` | Work on Next: the attention walk (`ger edit -n`) from the views, and what follows once it has stopped or the rebase is finished. |
 | `src/vote.ts`, `src/voteText.ts` | Vote and Publish, Publish Drafts: the questions, around `GET /vote` and `POST /vote`; their words (pure, unit-tested). |

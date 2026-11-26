@@ -46,6 +46,34 @@
     return h("span", { class: `${cls} tone-${item.tone}${item.stale ? " stale" : ""}`, title: item.title }, mark, item.text);
   }
 
+  /** What a row's badges say, in words: each one's tooltip, for a screen reader and the keyboard (they are icons on screen). */
+  function badgeWords(items) {
+    return items
+      .filter(Boolean)
+      .map((item) => (item.title || item.text || "").split("\n")[0])
+      .filter(Boolean)
+      .join("; ");
+  }
+
+  /**
+   * A row's badges as one stop for the keyboard (Q4, state 23): a group named by their words, so Tab
+   * reaches them and a screen reader says what the icons do not. `focusable`: in the tab order now
+   * (a list's rows rove: only the focused row's group is). `open`: what Enter or Space does there.
+   */
+  function badgeGroup(items, children, { focusable = true, open } = {}) {
+    const words = badgeWords(items);
+    const keys = open
+      ? (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            event.stopPropagation();
+            open();
+          }
+        }
+      : undefined;
+    return h("span", { class: "badges", role: words ? "group" : undefined, "aria-label": words || undefined, tabindex: words ? (focusable ? "0" : "-1") : undefined, onkeydown: keys }, children);
+  }
+
   const SVG = "http://www.w3.org/2000/svg";
   let masks = 0;
 
@@ -176,7 +204,7 @@
    * `context(row, rows)` is its `data-vscode-context`, `rows` being what a command on it acts on.
    * The page draws the list; `wire(list)` makes its `.row` elements (with `data-key`) answer.
    */
-  function rowSelection({ rows, open, context }) {
+  function rowSelection({ rows, open, context, changed }) {
     let selected = new Set();
     let focused = null;
     let anchor = null;
@@ -190,10 +218,14 @@
     /** What a command from the context menu gets: the row, and every selected row when it is one of several. */
     const contextOf = (row) => JSON.stringify(context(row, selected.has(row.key) && selected.size > 1 ? selectedRows() : [row]));
 
+    /** A row element's id, for the list's `aria-activedescendant`: the focused row is the one read out. */
+    const rowId = (key) => `row-${String(key).replace(/[^\w-]/g, "_")}`;
+
     /** What a row element needs from the selection: its classes, and its attributes. */
     function attributes(row) {
       return {
         classes: [selected.has(row.key) ? "selected" : "", focused === row.key ? "focused" : ""],
+        id: rowId(row.key),
         role: "option",
         "aria-selected": selected.has(row.key) ? "true" : "false",
         "data-key": row.key,
@@ -221,6 +253,10 @@
         element.classList.toggle("focused", focused === row.key);
         element.setAttribute("aria-selected", on ? "true" : "false");
         element.setAttribute("data-vscode-context", contextOf(row));
+      }
+      list.setAttribute("aria-activedescendant", focused === null ? "" : rowId(focused));
+      if (changed) {
+        changed();
       }
     }
 
@@ -318,18 +354,48 @@
       });
     }
 
-    return { attributes, keep, wire, select, selectedRows, rowOf, has: (key) => selected.has(key) };
+    return { attributes, keep, wire, select, selectedRows, rowOf, has: (key) => selected.has(key), focusedKey: () => focused, activeId: () => (focused === null ? "" : rowId(focused)) };
   }
 
   // --- The task header (src/taskRows.ts) ---------------------------------------------------
 
+  /** A state of a step: its icon and its word; in a narrow side bar the word folds into the tooltip (views.css), still read out. */
   function mark(item) {
     const glyph = item.ring ? ring(item.ring.share, item.ring.shape) : icon(item.icon);
-    return h("span", { class: `mark${item.tone ? ` tone-${item.tone}` : ""}` }, glyph, h("span", { class: "mark-text" }, item.text));
+    return h("span", { class: `mark${item.tone ? ` tone-${item.tone}` : ""}`, title: item.text }, glyph, h("span", { class: "mark-text" }, item.text));
   }
 
-  function step(item) {
-    const classes = ["step", item.current ? "current" : "", item.phase ? `phase-${item.phase}` : ""].filter(Boolean).join(" ");
+  /** Whether the folded steps of a long chain are opened: kept across redraws, as a section's toggle is. */
+  let unfolded = false;
+
+  /** One line for the steps folded before or after the ones shown, in a narrow side bar: how many, and what they are. A click opens them. */
+  function foldRow(words, side) {
+    const open = (event) => {
+      event.stopPropagation();
+      unfolded = true;
+      const list = event.currentTarget.closest(".steps");
+      if (list) {
+        list.classList.add("unfolded");
+      }
+    };
+    return h(
+      "li",
+      {
+        class: `fold fold-${side}`,
+        tabindex: "0",
+        role: "button",
+        "aria-label": `${words}: show them`,
+        title: `${words}: click to show them`,
+        onclick: open,
+        onkeydown: (event) => (event.key === "Enter" || event.key === " ") && (event.preventDefault(), open(event)),
+      },
+      icon("ellipsis"),
+      h("span", { class: "fold-text" }, words),
+    );
+  }
+
+  function step(item, far) {
+    const classes = ["step", item.current ? "current" : "", item.phase ? `phase-${item.phase}` : "", far ? "far" : ""].filter(Boolean).join(" ");
     const go = () => post("taskStep", { key: item.key });
     return h(
       "li",
@@ -351,6 +417,22 @@
       h("span", { class: "step-title" }, item.title),
       h("span", { class: "marks" }, item.marks.map(mark)),
     );
+  }
+
+  /**
+   * The chain's steps, oldest first. A long one (`vm.fold`) marks the steps away from the current one
+   * `far` and puts a fold line where they are: a narrow side bar shows those lines instead (views.css),
+   * a wider one every step, and no fold line.
+   */
+  function steps(vm) {
+    const fold = vm.fold;
+    const far = (index) => Boolean(fold) && (index < fold.from || index > fold.to);
+    const rows = vm.steps.flatMap((item, index) => [
+      fold && index === 0 && fold.before ? foldRow(fold.before, "before") : null,
+      step(item, far(index)),
+      fold && index === fold.to && fold.after ? foldRow(fold.after, "after") : null,
+    ]);
+    return h("ol", { class: `steps${fold ? " folds" : ""}${unfolded ? " unfolded" : ""}`, "aria-label": `The chain, oldest first: ${vm.title}` }, rows);
   }
 
   /** How the last step ended, in ger's words: its line, the lines after it on hover; tone and icon, never the colour alone. */
@@ -404,7 +486,7 @@
       h("div", { class: "task-left" }, h("span", { class: "task-label" }, "Left: "), vm.left),
       vm.busy ? h("div", { class: "task-busy" }, icon("loading"), h("span", {}, vm.busy)) : null,
       !vm.busy && vm.outcome ? outcome(vm.outcome) : null,
-      vm.steps.length ? h("ol", { class: "steps", "aria-label": `The chain, oldest first: ${vm.title}` }, vm.steps.map(step)) : null,
+      vm.steps.length ? steps(vm) : null,
       vm.actions.length ? h("div", { class: "task-actions" }, vm.actions.map(taskAction)) : null,
     );
   }
@@ -415,6 +497,8 @@
     h,
     icon,
     badge,
+    badgeGroup,
+    badgeWords,
     ring,
     actions,
     info,

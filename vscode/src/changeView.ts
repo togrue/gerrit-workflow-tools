@@ -8,10 +8,11 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerApiError, GerClient, Patchsets, ShownCommit } from "./api";
-import { ChangeDetail, ciRevs, notAmendedHere, sameChange, stoppedHere } from "./changeLoad";
+import { ChangeDetail, changedHere, ciRevs, sameChange, stoppedHere } from "./changeLoad";
 import { ChainCounts, ChangeState, ChangeVm, SeenWhere, chainCounts, seenWhere, CiView, NOTHING_SHOWN, NOT_FILES, READ_ONLY, changeHeading, changeLines, changeVm, isYours, toAnswer } from "./changeRows";
 import { From, MODES, Mode, Sides, Version, fitSides, modeSides } from "./compareRows";
 import { FILE_SCHEME, filePath, fileUri, openDiff } from "./diffTabs";
+import { CiProblems } from "./ciProblems";
 import { FilesSeen } from "./filesSeen";
 import { ChangeTarget, Model, describeError } from "./model";
 import { openConflict } from "./rebase";
@@ -19,7 +20,7 @@ import { waitingFor } from "./state";
 import { NextAction, nextAction } from "./nextAction";
 import { changeScreen } from "./changeScreen";
 import { PROBLEM_ACTIONS, changeProblem, gerritAway, gerritProblem } from "./problemRows";
-import { focusedMember, reviewFocus } from "./reviewFocus";
+import { chainGoesOn, focusedMember, reviewFocus } from "./reviewFocus";
 import { markOf } from "./staleDiffs";
 import { feedback, offerWaysOn, ui } from "./ui";
 import { TaskMode, TaskVm, taskLines } from "./taskRows";
@@ -52,6 +53,8 @@ export class ChangeView extends WebView<ChangeVm> {
   from: From = "base";
   private patchsets: Patchsets | undefined;
   private ci: CiView = { state: "closed" };
+  /** The CI findings of the change shown, as editor diagnostics: set when they come, gone when the change is left. */
+  readonly ciProblems = new CiProblems();
   /** Aborted with each open and close: the requests of a load nobody waits for any more are called off, so ger serve skips what it has not started. */
   private requests = new AbortController();
   private loading: Promise<void> = Promise.resolve();
@@ -103,7 +106,7 @@ export class ChangeView extends WebView<ChangeVm> {
     }
     const stack = this.model.stack;
     const focus = this.holdsReview() ? reviewFocus(this.model.overview, stack) : undefined;
-    const { member, above } = focus ? focusedMember(focus) : { member: undefined, above: undefined };
+    const { member, above } = focus ? focusedMember(focus) : { member: undefined, above: this.holdsReview() ? chainGoesOn(this.model.reviewChain, this.target?.number) : undefined };
     return nextAction({
       stack,
       shown: this.detail.loading() ? undefined : this.shown,
@@ -115,7 +118,7 @@ export class ChangeView extends WebView<ChangeVm> {
       seenFiles: this.seenHere(),
       combinedActive: this.combinedActive(),
       yourTurn: member?.your_turn,
-      above: focus ? above : undefined,
+      above,
       newest: this.knownPatchsets()?.current ?? this.shown?.current_patch_set ?? null,
       reviewElsewhere: this.model.reviewElsewhere(this.target?.number),
     });
@@ -178,6 +181,11 @@ export class ChangeView extends WebView<ChangeVm> {
     if (file) {
       await this.openDiff(file, diff);
     }
+  }
+
+  /** The change selected could not be read: the view says why, and nothing shown before stands for it. */
+  get failed(): boolean {
+    return Boolean(this.detail.problem);
   }
 
   /** `/show`'s answer for the change selected; undefined until it has come. */
@@ -279,6 +287,7 @@ export class ChangeView extends WebView<ChangeVm> {
     const same = keep || (this.target !== undefined && sameChange(this.target, target));
     if (!same) {
       this.patchsets = undefined;
+      this.ciProblems.clear(); // another change: the markers of the one left go
       // Another change: no save button of the one before until its own `/show` says which.
       void vscode.commands.executeCommand("setContext", "ger.newComment", "none");
     }
@@ -310,6 +319,7 @@ export class ChangeView extends WebView<ChangeVm> {
     const token = this.supersede(() => this.detail.select(target, false));
     this.startOn(target);
     this.ci = { state: "closed" };
+    this.ciProblems.clear();
     this.detail.arrive(token, "commit", shown);
     this.detail.arrive(token, "base", files);
     void vscode.commands.executeCommand("setContext", "ger.changeShown", true);
@@ -565,6 +575,7 @@ export class ChangeView extends WebView<ChangeVm> {
     this.supersede(() => this.detail.clear());
     this.patchsets = undefined;
     this.ci = { state: "closed" };
+    this.ciProblems.clear();
     void vscode.commands.executeCommand("setContext", "ger.changeShown", false);
     void vscode.commands.executeCommand("setContext", "ger.changeIsLocal", false);
     void vscode.commands.executeCommand("setContext", "ger.newComment", "none");
@@ -630,7 +641,7 @@ export class ChangeView extends WebView<ChangeVm> {
       ci: this.ci,
       // Which commit a rebase stopped at is in the stack ger serve sent: the Change view reads it there, as Local stack does.
       stopped: this.target && stoppedHere(this.target, this.model.stack),
-      notAmended: this.target ? notAmendedHere(this.target, this.model.stack) : [],
+      ...(this.target ? changedHere(this.target, this.model.stack) : { notAmended: [], staged: [] }),
       reviewing: this.reviewing(),
       seen: this.seenHere(),
       elsewhere: this.model.reviewElsewhere(this.target?.number),
@@ -788,6 +799,10 @@ export class ChangeView extends WebView<ChangeVm> {
     }
     if (this.detail.current(token)) {
       this.ci = ci;
+      if (ci.state === "loaded") {
+        // At their lines in the editor, in Problems and on hover, with the whole message (the row cuts it).
+        this.ciProblems.show(ci.contents, ci.introduced, (file) => this.locationUri(file));
+      }
       this.render();
     }
   }

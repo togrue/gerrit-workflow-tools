@@ -145,6 +145,10 @@ export async function run(): Promise<void> {
         `change | title: ${shown ? (api.changeView.heading ?? "(view not drawn)") : "(nothing shown)"}`,
         ...(await api.changeView.lines()).map((line) => `change | ${line}`),
         `editor | ${editor()}`,
+        // The CI findings handed to the editor (ciProblems.ts): what Problems and the markers show.
+        ...vscode.languages
+          .getDiagnostics()
+          .flatMap(([uri, found]) => found.filter((d) => d.source === "ger CI").map((d) => `problem | ${vscode.workspace.asRelativePath(uri)}:${d.range.start.line + 1} ${vscode.DiagnosticSeverity[d.severity]} [${typeof d.code === "object" ? d.code.value : d.code}] ${d.message.split("\n").join(" / ")}`)),
       ].map(normalize);
     };
     /** Let follow-up refreshes and the conflict preview land. */
@@ -598,6 +602,12 @@ export async function run(): Promise<void> {
       "Click \"test! temporary experiment\" in Local stack",
       "The Change view says CI failed; the CI group lists the findings, the ones this commit introduced first.",
       exec("ger.openChange", failing),
+    );
+    const changePage = api.changeView as unknown as { receive(message: { type: string; [field: string]: unknown }): Promise<unknown> };
+    await press(
+      "Change › click the CI finding (here at c.txt:1, a file of this commit)",
+      "The file opens at the finding's line. The file is not ticked seen: opening it at a line is not reading the change. The findings are editor problems (source ger CI, the build as the code, the whole message), and stay while the change is shown.",
+      () => changePage.receive({ type: "finding", path: "c.txt", line: 1 }),
     );
     await press(
       "Right-click it › Hand to Agent › Cancel",

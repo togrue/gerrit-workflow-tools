@@ -868,6 +868,21 @@ def test_review_open_checks_out_in_the_review_worktree_and_done_leaves_it(stack_
     assert (staged["number"], staged["commit"], staged["branch"]) == (102, rows[2].sha, "change-102")
     assert _get(api, "/stack")["staged_review"] is None, "the review is staged in its worktree, not here"
     assert _get(api, "/review", chain="1")["review"]["chain"] == [100, 101, 102, 103]
+    # Abandoned while under review, it keeps its place in the chain; another closed change does not.
+    closed = {100: "MERGED", 102: "ABANDONED"}
+    for key in keys:
+        store.set_related(
+            key,
+            [
+                {"_change_number": n, "_revision_number": 1, "status": closed.get(n, "NEW")}
+                for n in (103, 102, 101, 100)
+            ],
+        )
+    assert _get(api, "/review", chain="1")["review"]["chain"] == [101, 102, 103]
+    for key in keys:
+        store.set_related(
+            key, [{"_change_number": n, "_revision_number": 1, "status": "NEW"} for n in (103, 102, 101, 100)]
+        )
     # ger review --next: the change above, in the review's own mode; at the top, the chain ends.
     walked = _post(api, "/review/open", {"step": 1})["review"]
     assert (walked["number"], walked["staged"], Path(walked["worktree"])) == (103, True, worktree)
@@ -1163,6 +1178,34 @@ def test_rebase_refusal_is_the_check_every_go_on_makes_unstaged_changes_too(stac
         _get(api, "/rebase/refusal", action="onward")
 
 
+def test_a_stop_serves_what_continue_amends_in_apart_from_what_it_refuses_over(stack_repo: Path) -> None:
+    """Staged changes go into the commit on Continue without a word: listed, they are said before."""
+    api = GerApi(stack_repo, gerrit=_gerrit(stack_repo)[0])
+    git(
+        "rebase",
+        "-q",
+        "-i",
+        "HEAD~2",
+        cwd=stack_repo,
+        env={"GIT_SEQUENCE_EDITOR": "sed -i 1s/^pick/edit/"},
+        check=False,
+    )
+    tracked = sorted(git_out("ls-files", cwd=stack_repo).split())[:2]
+    for name in tracked:
+        (stack_repo / name).write_text(f"{name} edited at the stop\n", encoding="utf-8")
+    git("add", tracked[0], cwd=stack_repo)
+    rebase = _get(api, "/stack")["rebase"]
+    assert (rebase["staged"], rebase["uncommitted"]) == ([tracked[0]], [tracked[1]])
+    git("add", tracked[1], cwd=stack_repo)
+    rebase = _get(api, "/stack")["rebase"]
+    assert (rebase["staged"], rebase["uncommitted"], rebase["actions"]) == (tracked, [], ["continue", "abort"])
+    (stack_repo / tracked[0]).write_text("staged, then changed again\n", encoding="utf-8")
+    assert (_get(api, "/stack")["rebase"]["staged"], _get(api, "/stack")["rebase"]["uncommitted"]) == (
+        tracked,
+        [tracked[0]],
+    )
+
+
 # --- Transport ---------------------------------------------------------------------
 
 
@@ -1202,7 +1245,7 @@ def _http(
 def test_http_answers_only_with_the_token_on_a_loopback_host(served: GerHttpServer) -> None:
     status, body = _http(served, f"{V1}/health")
     assert status == 200
-    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.8.0", "feature", "g.example")
+    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.9.0", "feature", "g.example")
     assert _http(served, f"{V1}/health", token=None)[0] == 401
     assert _http(served, f"{V1}/health", token="wrong")[0] == 401
     # A page that rebinds its own name to 127.0.0.1 still sends its name as Host.

@@ -27,3 +27,12 @@ export function focusedMember(focus: ReviewFocus): { member: Member | undefined;
   const at = focus.chain.members.findIndex((member) => member.number === focus.number);
   return { member: focus.chain.members[at], above: at >= 0 && at < focus.chain.members.length - 1 };
 }
+
+/**
+ * Whether the chain goes on above `number`, by core's chain at the reviewed patchset (base first):
+ * for a change the inbox no longer lists (abandoned or merged under review). Undefined when not known.
+ */
+export function chainGoesOn(chain: readonly number[] | undefined, number: number | undefined): boolean | undefined {
+  const at = number === undefined ? -1 : (chain ?? []).indexOf(number);
+  return at < 0 ? undefined : at < chain!.length - 1;
+}
