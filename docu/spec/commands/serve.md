@@ -424,7 +424,9 @@ the same answer from one `merge-tree` per pick, which grows with the stack.
 ### `GET /stack/upstream`
 
 The working branch's upstream, and what to offer when it has none — `ger` cannot show a
-local stack without one. `branch` (`null` on a detached HEAD), `upstream` (now, or `null`),
+local stack without one. `branch` (`null` on a detached HEAD), `upstream` (now, or `null`), `gone`
+(the upstream it is configured with when that remote-tracking branch is gone, `origin/no-such-branch`:
+the error then says so instead of "No upstream configured"; else `null`),
 `suggested` and `why`, and `candidates`: the suggestion first, then upstreams you picked
 before, then every remote-tracking branch, at most 200.
 

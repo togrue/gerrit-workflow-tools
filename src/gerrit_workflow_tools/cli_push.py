@@ -30,7 +30,7 @@ from gerrit_workflow_tools.core.reviewer import ReviewerStrategy
 from gerrit_workflow_tools.core.reword import take_back
 from gerrit_workflow_tools.core.run_context import RunContext
 from gerrit_workflow_tools.core.step_outcome import record_outcome, refusal_recorded
-from gerrit_workflow_tools.core.upstream import missing_upstream_error
+from gerrit_workflow_tools.core.upstream import gone_upstream, missing_upstream_error
 from gerrit_workflow_tools.core.usage import UsageError
 from gerrit_workflow_tools.core.words import counted
 from gerrit_workflow_tools.push_confirm import confirm_gerrit_push, prompt_initial_options
@@ -378,7 +378,7 @@ def _push(run: RunContext, args: argparse.Namespace) -> int:
             return int(ExitCode.REFUSED)
         mode = ger_push_mode(cwd, branch, settings=settings)
     if mode is None:  # Already asked above, or chose not to (--yes, --dry-run, detached HEAD).
-        raise missing_upstream_error(branch, askable=False)
+        raise missing_upstream_error(branch, askable=False, gone=gone_upstream(cwd, branch))
     if args.i and mode == "vanilla":
         raise UsageError("-i applies only to Gerrit push (upstream on ger.remote)")
     if mode == "vanilla":
