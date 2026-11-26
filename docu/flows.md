@@ -90,6 +90,7 @@ A **gap** names the work that would close it.
 | `ger.openHeadline` | `ger inbox`, `ger show --first-attention` | |
 | `ger.markSeen` | **gap** | inbox watermark |
 | `ger.openChange` | `ger show CHANGEISH` | |
+| `ger.change.reload` | `ger show CHANGEISH` | the change shown asked for again, offered where it could not be shown |
 | `ger.openInGerrit` | `ger show CHANGEISH` | prints the Gerrit URL |
 | `ger.review` | `ger review CHANGEISH` | |
 | `ger.checkout` | `ger checkout CHANGEISH` | runs in a terminal, as it may ask to update an existing branch |
