@@ -92,11 +92,16 @@ export class Task implements vscode.Disposable {
     this.changed.fire();
   }
 
-  /** A step was refused before anything ran: said in the header until the next action, nothing under way. */
+  /**
+   * A step was refused before anything ran: said in the header until the next action, nothing under
+   * way. The refusal is core's fresh look, so the stack is read again: what the buttons under it say
+   * must not contradict it (state 16: Continue still offered "commit this stop as it is").
+   */
   refused(text: string): void {
     this.busy(undefined);
     this.said = { text, ok: false, more: [], at: Date.now(), head: this.model.stack?.head };
     this.changed.fire();
+    void this.model.refreshLocal();
   }
 
   /**

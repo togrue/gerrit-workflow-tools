@@ -582,12 +582,17 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   // Local git (a commit, a checkout, a rebase) is news Gerrit's events do not carry. Not news to notify about: you did it.
   const dirs = gitDirs(repo);
   const localGit = dirs
-    ? new RepoWatcher(dirs, (lastChange) => {
-        // A refresh that began after the last change (your own stack edit refreshes itself) already knows.
-        if (!waitsForYou(model.state) && !model.loadedSince(lastChange)) {
-          void model.refresh();
-        }
-      }, () => Boolean(model.stack?.rebase))
+    ? new RepoWatcher(dirs, repo, {
+        changed: (lastChange) => {
+          // A refresh that began after the last change (your own stack edit refreshes itself) already knows.
+          if (!waitsForYou(model.state) && !model.loadedSince(lastChange)) {
+            void model.refresh();
+          }
+        },
+        // What a stop or a review says of the files (changed, not amended; staged): the stack alone, one request.
+        treeChanged: (lastChange) => (model.state === "ready" && !model.loadedSince(lastChange) ? void model.refreshLocal() : undefined),
+        following: () => Boolean(model.stack?.rebase || model.stack?.staged_review),
+      })
     : undefined;
   // A command of ours ended in the ger terminal: look at once (the step outcome, a refusal that moved nothing).
   const terminalEnded = onTerminalCommandEnd((name) => {

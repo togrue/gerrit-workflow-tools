@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
 
-import { Quiet, Timers, indexWatch, watches } from "../src/gitWatch";
+import { Quiet, TREE_QUIET_MS, Timers, indexWatch, treeChange, watches } from "../src/gitWatch";
 import { gitDirs } from "../src/workspace";
 
 test("a plain checkout is watched in one place: HEAD, branches, the rebase state", () => {
@@ -109,4 +109,16 @@ test("a change is dated by the file git wrote, not by when its event arrived: an
 
 test("the index is its own watch, in the worktree's own git directory, for a rebase to follow git add", () => {
   assert.deepEqual(indexWatch({ gitDir: "/r/.git/worktrees/w", commonDir: "/r/.git" }), { base: "/r/.git/worktrees/w", pattern: "index" });
+});
+
+test("states 16 and 28: a file saved or changed in the work tree is a change to follow; the git directories are not", () => {
+  const dirs = { gitDir: "/r/.git", commonDir: "/r/.git" };
+  assert.ok(treeChange("/r/calc/ops.py", "/r", dirs));
+  assert.ok(treeChange("/r/README.md", "/r", dirs));
+  for (const other of ["/r/.git/index", "/r/.git/HEAD", "/r/sub/.git/index", "/other/file.py", "/r"]) {
+    assert.ok(!treeChange(other, "/r", dirs), other);
+  }
+  // A worktree's git directories live outside it, in the main checkout.
+  assert.ok(!treeChange("/main/.git/worktrees/w/index", "/main", { gitDir: "/main/.git/worktrees/w", commonDir: "/main/.git" }));
+  assert.ok(TREE_QUIET_MS < 1000, "within a moment of the save");
 });

@@ -7,7 +7,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
-import { Quiet, indexWatch, watches } from "./gitWatch";
+import { Quiet, TREE_QUIET_MS, indexWatch, treeChange, watches } from "./gitWatch";
 import { GitDirs } from "./workspace";
 
 /**
@@ -23,13 +23,24 @@ function changedAt(uri: vscode.Uri, deleted = false): number | undefined {
   }
 }
 
+/** What the watcher tells: git moved (`changed`), or the work tree did while `following()` (`treeChanged`). */
+export interface RepoChanges {
+  changed(lastChange: number): void;
+  /** The index (while rebasing), a saved file or one changed elsewhere: what a stop or a review says may differ now. */
+  treeChanged(lastChange: number): void;
+  /** A rebase is stopped, or a review is staged here: only then is the work tree followed. */
+  following(): boolean;
+}
+
 export class RepoWatcher implements vscode.Disposable {
   private readonly watchers: vscode.FileSystemWatcher[];
   private readonly quiet: Quiet;
+  private readonly tree: Quiet;
+  private readonly saves: vscode.Disposable;
 
-  /** `changed` gets the time (ms) of the last change it is told about; the index counts while `rebasing()`. */
-  constructor(dirs: GitDirs, changed: (lastChange: number) => void, rebasing: () => boolean = () => false) {
+  constructor(dirs: GitDirs, repo: string, { changed, treeChanged, following }: RepoChanges) {
     this.quiet = new Quiet(changed);
+    this.tree = new Quiet(treeChanged, undefined, TREE_QUIET_MS);
     this.watchers = watches(dirs).map(({ base, pattern }) => {
       const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(base), pattern));
       for (const event of [watcher.onDidCreate, watcher.onDidChange]) {
@@ -40,14 +51,24 @@ export class RepoWatcher implements vscode.Disposable {
     });
     const { base, pattern } = indexWatch(dirs);
     const index = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(base), pattern));
+    // The work tree: VS Code watches the workspace anyway, so this adds no watcher of the system's.
+    const files = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(repo), "**/*"));
+    const poke = (uri: vscode.Uri) => following() && uri.scheme === "file" && treeChange(uri.fsPath, repo, dirs) && this.tree.poke();
     for (const event of [index.onDidCreate, index.onDidChange, index.onDidDelete]) {
-      event(() => rebasing() && this.quiet.poke());
+      event(() => following() && this.tree.poke());
     }
-    this.watchers.push(index);
+    for (const event of [files.onDidCreate, files.onDidChange, files.onDidDelete]) {
+      event(poke);
+    }
+    // A save is told at once, ahead of the watcher's event of the same write: the same burst, one request.
+    this.saves = vscode.workspace.onDidSaveTextDocument((document) => poke(document.uri));
+    this.watchers.push(index, files);
   }
 
   dispose(): void {
     this.quiet.dispose();
+    this.tree.dispose();
+    this.saves.dispose();
     this.watchers.forEach((watcher) => watcher.dispose());
   }
 }

@@ -664,7 +664,11 @@ once per session, with **Run ger config --migrate**, which renames them all in t
 `ger edit` and its `git rebase --continue` (anything that moves `HEAD`, a branch or a rebase) or a fetch that moves the upstream, refresh *Local stack*,
 the *in your stack* markers and the Change view's buttons about a second after the last change, also when you
 work in the integrated terminal. This does not make Gerrit refetch anything (answers still fresh are reused), and says nothing
-in a notification, as you did it yourself.
+in a notification, as you did it yourself. While a rebase is stopped or a review is checked out here, the work tree is followed
+too: a file you save, or one changed elsewhere (a terminal, an agent), and the index (`git add`) bring
+the stop's *changed, not amended* and *staged* files, and Continue's words, within a moment, one
+`GET /stack` for each burst of changes (VS Code's own save and file events; git is not polled). A
+refused Continue or Work on Next reads the stack again too, so the buttons under the refusal agree with it.
 
 stream-events`: it needs ssh, a key Gerrit accepts and the *Stream Events* capability), the
 views refresh a second after review activity happens — a new patchset, comment, vote, reviewer,
