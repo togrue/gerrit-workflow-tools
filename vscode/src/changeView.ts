@@ -8,7 +8,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { CommentChain, Diff, FileChange, GerApiError, GerClient, Patchsets, ShownCommit } from "./api";
-import { ChangeDetail, changedHere, ciRevs, sameChange, stoppedHere } from "./changeLoad";
+import { ChangeDetail, changedHere, ciRevs, sameChange, stoppedHere, worktreeIsHead } from "./changeLoad";
 import { ChainCounts, ChangeState, ChangeVm, SeenWhere, chainCounts, seenWhere, CiView, NOTHING_SHOWN, NOT_FILES, READ_ONLY, changeHeading, changeLines, changeVm, isYours, toAnswer } from "./changeRows";
 import { From, MODES, Mode, Sides, Version, fitSides, modeSides } from "./compareRows";
 import { FILE_SCHEME, filePath, fileUri, openDiff } from "./diffTabs";
@@ -407,7 +407,7 @@ export class ChangeView extends WebView<ChangeVm> {
     if (!commit || !stack) {
       return false;
     }
-    return stack.staged_review?.commit === commit || (this.showsLocal() && stack.head === commit);
+    return stack.staged_review?.commit === commit || (this.showsLocal() && stack.head === commit && worktreeIsHead(stack));
   }
 
   /** A new selection token (from `select`): the loads under the previous ones are dropped, and their requests called off. */

@@ -133,6 +133,16 @@ export function changedHere(target: ChangeTarget, stack: Stack | undefined): { n
   return { notAmended: here?.uncommitted ?? [], staged: here?.staged ?? [] };
 }
 
+/**
+ * Whether the working files hold HEAD's commit, so a diff of it may show your file on its right: not
+ * while a rebase is stopped before applying the commit it stopped at (a conflict, or one resolved and
+ * not continued). The files hold that merge then, conflict markers and all, not the commit HEAD is
+ * (state 28: Show What Would Go showed the rewritten commit with the markers of the next one).
+ */
+export function worktreeIsHead(stack: Stack): boolean {
+  return !stack.rebase || (stack.rebase.applied && !stack.rebase.unmerged.length);
+}
+
 export class ChangeDetail {
   target: ChangeTarget | undefined;
   /** `/show`'s answer; undefined until it has come. */

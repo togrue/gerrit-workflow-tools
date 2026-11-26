@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Diff, Member, RebaseAction, ShownCommit, StackCommit } from "../src/api";
-import { ChangeDetail, ciRevs, memberStatus, memberTarget, sameChange, stoppedHere } from "../src/changeLoad";
+import { ChangeDetail, ciRevs, memberStatus, memberTarget, sameChange, stoppedHere, worktreeIsHead } from "../src/changeLoad";
 import { ChangeState, changeHeading, changeLines, changeVm } from "../src/changeRows";
 import { ChangeTarget } from "../src/model";
 import { badges } from "../src/stackRows";
@@ -271,4 +271,12 @@ test("the commit a rebase stopped at before applying it is told from the stack h
   assert.equal(stoppedHere(mine(commits[1]), undefined), undefined, "no stack held yet");
   const byHand = stack(commits, { rebase_in_progress: true, rebase: { branch: "feature", onto: null, orig_head: null, stop: null, applied: false, current: commits[1].sha, unmerged: [], as_before: false, actions: ["continue", "abort"], refused: {} } });
   assert.equal(stoppedHere(mine(commits[1]), byHand), undefined, "a resolution committed by hand as another commit: core serves no stop, so no conflict and no Conflicts resolved");
+});
+
+test("state 28: at a conflict the working files are not HEAD's commit, so its diff is read from git, not from your files", () => {
+  const rebase = (extra: object) => stack([], { rebase_in_progress: true, rebase: { applied: false, unmerged: [], ...extra } as never });
+  assert.equal(worktreeIsHead(stack([])), true, "no rebase: your files are HEAD's");
+  assert.equal(worktreeIsHead(rebase({ applied: true })), true, "an edit stop: the commit is applied, your fix goes in place");
+  assert.equal(worktreeIsHead(rebase({ unmerged: ["calc/ops.py"] })), false, "a conflict: the files hold the merge of the next commit");
+  assert.equal(worktreeIsHead(rebase({})), false, "resolved, not continued: still the next commit's merge");
 });
