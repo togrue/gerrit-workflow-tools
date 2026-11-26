@@ -47,6 +47,27 @@ needed to finish a review.
     are told what happened, what state things are in now and what their options are. Nobody is
     left guessing the state.
 
+## The questions every screen answers
+
+The standard an extension change is reviewed against. Agreed on 2026-11-26.
+
+1. Does the screen say which mode I am in and how to get out?
+2. Is there exactly one obvious next step, with its name on it?
+3. Can I see how much is left?
+4. Is every state shown by more than colour?
+5. Does every action answer within a moment, and say what happened?
+6. Can I undo it, and if not, was I asked first?
+7. If I am interrupted now, do I come back to the same place?
+8. When a limit is hit, am I told the state and my options?
+
+Three cautions that come with them:
+
+- A mode hides what is outside it. One line stays for "something else needs you", without
+  pulling the user out.
+- A result may be shown before it is confirmed only for what stays on the machine, such as a
+  draft. A push or a vote reads "sending" until Gerrit has answered.
+- One primary action must not hide the others: the alternatives are listed in words beside it.
+
 ## Roadmap
 
 ### Near: decided in the issues
