@@ -3,7 +3,7 @@
 | | |
 |--|--|
 | **Status** | **Implemented** |
-| **Module** | `cli_review.py`; the vote in `review_vote.py`, planned and sent by `core/review_target.py` (`plan_vote`, `send_vote`: `ger serve` sends through the same); checkout and review state in `core/review_checkout.py`; votes on `CommentApi` in `core/gerrit/comments.py`; the chain from `GerritRest.get_related` |
+| **Module** | `cli_review.py`; the files seen in `core/reviewed_files.py`; the vote in `review_vote.py`, planned and sent by `core/review_target.py` (`plan_vote`, `send_vote`: `ger serve` sends through the same); checkout and review state in `core/review_checkout.py`; votes on `CommentApi` in `core/gerrit/comments.py`; the chain from `GerritRest.get_related` |
 | **Requires** | A git repository, `ger.webUrl`, credentials |
 
 Review someone else's change in your editor. `ger review` checks the change out, shows *what this commit changed* to every git tool you already use, walks up and down its review chain, and publishes your comments with your vote.
@@ -33,6 +33,7 @@ ger review CHANGEISH [--patchset N | --bottom] [--stage | --no-stage] [--in-work
 ger review (--next | --prev) [--stage | --no-stage] [--force] [--json | --ai]
 ger review (--stage | --unstage) [--json | --ai]
 ger review --status [--json | --ai]
+ger review (--seen PATH ... | --seen --all | --unseen PATH ...) [--json | --ai]
 ger review --vote [LABEL]+N ... [--chain | --change CHANGEISH ...] [-m MSG | -F FILE] [--dry-run] [-y] [--json | --ai]
 ger review --done [--force] [--json | --ai]
 ```
@@ -118,6 +119,31 @@ You vote on the patchset you reviewed. When Gerrit's current patchset of the cha
 With **GER_NO_PUBLISH=1** set, `--vote` exits `2` without contacting Gerrit, the same guard as `ger reply --publish`.
 
 Local drafts are not sent by `--vote`. Uploading them is a later slice of [`ger comment`](comment.md#later-slices).
+
+---
+
+## Files seen
+
+`--seen PATH…` marks files of the patchset under review as read, `--unseen PATH…` takes the mark
+off, and `--seen --all` marks every file of it. The mark is **Gerrit's per-file reviewed flag**:
+yours, per patchset, the same ticks Gerrit's web UI shows beside each file and the VS Code
+extension's Change view draws (`N of M files seen`). PATH is a path in the repository, as the
+change lists it (calc/ops.py); a path the patchset does not change is refused with its files
+named, before anything is marked (exit `2`). A deleted file is one of them, as in Gerrit's list.
+
+Gerrit sets the flag one file per request, so N files cost N requests, then one more to read the
+marks back. It prints what it marked and what is left, with a `next:` line:
+
+```text
+seen on 2156 patchset 2: calc/ops.py, calc/percent.py
+  2 of 3 files seen; not yet: tests/test_percent.py
+next: ger review --seen tests/test_percent.py
+```
+
+**JSON**: `{change, patch_set, reviewed, marked, seen, files}`: `reviewed` false for `--unseen`,
+`marked` the paths set (each once), `seen` the files marked now, `files` the patchset's files.
+Without a review going on it exits `2`. `ger serve`'s `POST /reviewed` sets the same flag through
+the same function (`core/reviewed_files.py`; [serve](serve.md#get-reviewedchangenumberpatchsetn)).
 
 ---
 

@@ -294,6 +294,66 @@ def test_bad_combinations_are_usage_errors(
     assert _review(stack_repo, store, argv, monkeypatch)[0] == ExitCode.USAGE
 
 
+def test_seen_marks_files_of_the_change_under_review_on_gerrit(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--seen` sets Gerrit's reviewed flag on the patchset under review, as the extension's ticks do."""
+    store, keys, _shas = gerrit
+    _review(stack_repo, store, ["102"], monkeypatch)
+    worktree = _worktree(stack_repo)
+    code, out, _ = _review(worktree, store, ["--seen", "c.txt"], monkeypatch)
+    assert code == ExitCode.OK
+    assert "seen on 102 patchset 1: c.txt" in out and "1 of 1 files seen" in out
+    assert store.list_reviewed_files(keys[2], 1) == ["c.txt"]
+    code, out, _ = _review(worktree, store, ["--unseen", "c.txt", "--json"], monkeypatch)
+    payload = json_stdout(out)
+    assert (code, payload["marked"], payload["reviewed"], payload["seen"], payload["files"]) == (
+        ExitCode.OK,
+        ["c.txt"],
+        False,
+        [],
+        ["c.txt"],
+    )
+    code, out, _ = _review(worktree, store, ["--seen", "--all", "--json"], monkeypatch)
+    assert (code, json_stdout(out)["seen"]) == (ExitCode.OK, ["c.txt"])
+
+
+def test_seen_refuses_a_file_the_change_does_not_have_and_marks_nothing(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, keys, _shas = gerrit
+    _review(stack_repo, store, ["102"], monkeypatch)
+    code, _, err = _review(stack_repo, store, ["--seen", "c.txt", "a.txt"], monkeypatch)
+    assert code == ExitCode.USAGE and "not a file of 102 patchset 1: a.txt (its files: c.txt)" in err
+    assert store.list_reviewed_files(keys[2], 1) == []
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--seen"],
+        ["--all"],
+        ["--seen", "c.txt", "--all"],
+        ["--seen", "c.txt", "--unseen", "c.txt"],
+        ["--next", "--seen", "c.txt"],
+    ],
+)
+def test_seen_goes_alone_with_paths_or_all(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch, argv: list[str]
+) -> None:
+    store, _keys, _shas = gerrit
+    _review(stack_repo, store, ["102"], monkeypatch)
+    assert _review(stack_repo, store, argv, monkeypatch)[0] == ExitCode.USAGE
+
+
+def test_seen_without_a_review_is_a_usage_error(
+    stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, _keys, _shas = gerrit
+    code, _, err = _review(stack_repo, store, ["--seen", "c.txt"], monkeypatch)
+    assert code == ExitCode.USAGE and "no review going on" in err
+
+
 def test_walking_without_a_review_is_a_usage_error(
     stack_repo: Path, gerrit: tuple[ChangeStore, list[str], list[str]], monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -358,7 +358,7 @@ _ger_review() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
     if [[ "$cur" == -* ]]; then
-        __gwt_flags "$cur" -h --help --patchset --bottom --next --prev --status --done --stage --no-stage --unstage --in-worktree --in-place --force --vote --change --chain --dry-run -y --yes -m --message -F --file --json --format --ai --color --hyperlinks --debug-log --refresh
+        __gwt_flags "$cur" -h --help --patchset --bottom --next --prev --status --done --stage --no-stage --unstage --in-worktree --in-place --force --seen --unseen --all --vote --change --chain --dry-run -y --yes -m --message -F --file --json --format --ai --color --hyperlinks --debug-log --refresh
         return
     fi
     case "$prev" in
