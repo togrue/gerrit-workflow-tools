@@ -161,7 +161,7 @@ def find_cargo_test(lines: Sequence[str], claimed: set[int]) -> list[CiFinding]:
                 path=path,
                 line=lineno,
                 column=col,
-                detail="\n".join(said[:DETAIL_LINES]) or None,
+                detail="\n".join(said[1:DETAIL_LINES]) or None,  # the first line is the message
             )
         )
     return findings

@@ -86,7 +86,7 @@ Each **CI finding** carries a tool/kind tag. Precise finders run before generic 
 | | `gtest`, `ctest` | `failed` | `[  FAILED  ] Suite.Test`, located by `file:line: Failure`; the rows under `The following tests FAILED:` |
 | | `ninja` | `error` | `FAILED: <target>` |
 | Rust | `rustc`, `clippy` | `error`, `warning` | `error[E0308]: msg`, then `--> path:line:col`; clippy by its `clippy::` lint name |
-| | `cargo-test` | `failed` | `test name ... FAILED`, located by the panic in its `---- name stdout ----` section |
+| | `cargo-test` | `failed` | `test name ... FAILED`, located by the panic in its `---- name stdout ----` section; the first line of the panic is the message, the rest is `detail` |
 | | `rustfmt` | `format` | `Diff in path:line:`, one finding per file |
 | | `cargo` | `error` | ``could not compile `crate` `` |
 | JavaScript | `tsc` | `error`, `warning` | `a.ts(12,5): error TS2322: msg` and the pretty `a.ts:12:5 - error TS2322: msg` |

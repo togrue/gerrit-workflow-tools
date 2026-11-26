@@ -1,0 +1,49 @@
+Triggered by Gerrit: patchset-created
+Running as SYSTEM
+[EnvInject] - Loading node environment variables.
+Building on the built-in node in workspace /home/agent/ger-playground/.work-langs/rust/jenkins/workspace/ger-playground-rust
+Building in workspace /home/agent/ger-playground/.work-langs/rust/jenkins/workspace/ger-playground-rust
+ > git checkout -f 60b6001861455aa249aeeb2989079693338b4a82 # timeout=10
+Commit message: "report: export and read back rows as CSV"
+[ger-playground-rust] $ /bin/bash -xe /tmp/jenkins3484.sh
++ cargo build --workspace --all-targets --locked --offline
+   Compiling ledger v0.1.0 (/home/agent/ger-playground/.work-langs/rust/jenkins/workspace/ger-playground-rust/crates/ledger)
+   Compiling ledger-cli v0.1.0 (/home/agent/ger-playground/.work-langs/rust/jenkins/workspace/ger-playground-rust/crates/ledger-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.34s
++ cargo test --workspace --locked --offline
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.00s
+     Running unittests src/lib.rs (target/debug/build/ledger/6245c638f1ad3404/out/ledger-6245c638f1ad3404)
+
+running 14 tests
+test book::tests::accounts_are_sorted_by_name ... ok
+test book::tests::open_and_find ... ok
+test book::tests::transfer_moves_money ... ok
+test csv::tests::rejects_short_rows ... ok
+test money::tests::display_pads_cents ... ok
+test money::tests::from_units ... ok
+test money::tests::minmax ... ok
+test money::tests::split_adds_up ... ok
+test csv::tests::round_trip_of_every_row ... FAILED
+test money::tests::split_gives_remainder_to_first_shares ... ok
+test parse::tests::kind ... ok
+test parse::tests::rejects_garbage ... ok
+test parse::tests::thousands_separator ... ok
+test parse::tests::whole_and_fraction ... ok
+
+failures:
+
+---- csv::tests::round_trip_of_every_row stdout ----
+
+thread 'csv::tests::round_trip_of_every_row' (3475254) panicked at crates/ledger/src/csv.rs:45:45:
+called `Result::unwrap()` on an `Err` value: ParseError("not an amount: 'expense,800.00'")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    csv::tests::round_trip_of_every_row
+
+test result: FAILED. 13 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p ledger --lib`
+Build step 'Execute shell' marked build as failure
+Finished: FAILURE
