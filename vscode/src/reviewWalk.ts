@@ -100,10 +100,12 @@ export function reviewWalk({ model, changeView, task, open, voteChain }: WalkVie
       // Not asked ahead (the change below, or the one above before it was asked): asked now, one
       // request before the checkout, so it is drawn in ~0.2 s instead of after it.
       if (!ahead.has(next.member)) {
+        busy(`Checking out ${next.member.number}…`); // at the press: the answer takes a request
         ahead.fetch(next.member);
       }
       const got = await ahead.take(next.member);
       if (!got) {
+        busy(undefined);
         return undefined;
       }
       await changeView.closeCombined();
