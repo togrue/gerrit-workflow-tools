@@ -15,7 +15,8 @@
 import { randomInt } from "node:crypto";
 
 import { commentPhrases } from "./commentState";
-import { DISCARD, LOADING, MODES, MODE_ICONS, SIDE_WORDS, NOTHING_SHOWN, NOT_FILES, NO_CI_LINK, READ_ONLY, REVIEW_UPDATE, STOPPED_WORDS, YOURS } from "./changeRows";
+import { DISCARD, LOADING, NOTHING_SHOWN, NOT_FILES, NO_CI_LINK, READ_ONLY, REVIEW_UPDATE, STOPPED_WORDS, YOURS } from "./changeRows";
+import { MODES, MODE_ICONS, SIDE_WORDS } from "./compareRows";
 import { Names, Random } from "./fakes";
 import { ATTENTION_ICONS, FILE_STATES, REASON_WORDS } from "./format";
 import { SECTION_TITLES, TREE_WORDS, allRowContexts } from "./rows";

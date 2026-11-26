@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { CommentChain, Rebase, RebaseAction, StackCommit } from "../src/api";
-import { ChangeState, READ_ONLY, answeredByDraft, changeHeading, changeLines, changeVm, fitSides, modeSides, modesFor, toAnswer } from "../src/changeRows";
+import { ChangeState, READ_ONLY, answeredByDraft, changeHeading, changeLines, changeVm, toAnswer } from "../src/changeRows";
+import { fitSides, modeSides, modesFor } from "../src/compareRows";
 import { attentionIcon, reasonWords, votes } from "../src/format";
 import { commentState } from "../src/commentState";
 import { REBASE_WORDS, SYNC_ICONS, SYNC_WORDS, StackVm, workOnNext, badges, frozen, pinned, pinnedWhy, pushWaysOn, rebaseNotNow, rebaseNotNowFresh, reviewerWords, skipQuestion, stackLines, stoppedAt, sync, stackVm, stackWhere } from "../src/stackRows";
