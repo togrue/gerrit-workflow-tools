@@ -166,8 +166,10 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     void vscode.commands.executeCommand("setContext", "ger.canPush", offers.push);
   });
   let pausedLogged = false;
-  // A rebase that stops somewhere new is shown there (the keyboard stays where it is): openChange is defined below.
-  const follower = new ShownCommitFollower(model, changeView, (commit) => openChange(commitTarget(commit), true));
+  // What the Change view shows and why (shownChange.ts): the review's change, a rebase's stop (the keyboard stays
+  // where it is), your selection. openChange and the review walk are defined below.
+  let showReviewNow: () => Promise<unknown> = async () => undefined;
+  const follower = new ShownCommitFollower(model, changeView, { stop: (commit) => openChange(commitTarget(commit), true), review: () => showReviewNow() });
   const diffTabs = new DiffTabs(model, (line) => log.appendLine(line));
   model.onDidGetNewHeadline(async (headline) => {
     if (setting("notify", true) && (await ui().message("info", headline.text, {}, ["Open"])) === "Open") {
@@ -286,6 +288,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     changeView,
     task,
     open: (target) => openChange(target, true),
+    hold: (run) => follower.hold(run),
     voteChain: (number) => {
       const shown = changeView.target?.number === number ? changeView.target : { rev: `change:${number}`, title: String(number), number, local: false };
       return voteAndPublish(model, shown, { chain: true, after: afterVote });
@@ -301,22 +304,19 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     return commit ? openChange(commitTarget(commit), true) : undefined;
   };
   /**
-   * A window opened on a staged review (Open Review Worktree, or a reload there) opens on it: the
-   * Gerrit view, the change under review shown, and, in a window with no editor open yet, all its
-   * files. Once, on the first stack ger serve sends.
+   * The review here moved, from wherever (a shell's `ger review`, a restart): its change is shown. A
+   * window opened on a staged review (Open Review Worktree, or a reload there) opens on it the first
+   * time: the Gerrit view, and in a window with no editor open yet, all its files.
    */
-  const greet = model.onDidChange(() => {
-    if (model.state !== "ready" || !model.overview) {
-      return;
+  let greeted = false;
+  showReviewNow = () => {
+    if (greeted) {
+      return showReview(false);
     }
-    greet.dispose();
-    if (!model.stack?.staged_review || changeView.target) {
-      return;
-    }
+    greeted = true;
     const fresh = vscode.window.tabGroups.all.every((group) => group.tabs.length === 0);
-    void vscode.commands.executeCommand("workbench.view.extension.ger").then(() => showReview(fresh));
-  });
-  context.subscriptions.push(greet);
+    return Promise.resolve(vscode.commands.executeCommand("workbench.view.extension.ger")).then(() => showReview(fresh));
+  };
   /**
    * After a vote on the change a staged review holds: Next Change while the chain goes on above it,
    * Leave Review at its top (`ger review`'s own `next:` line, the vote done). Nothing elsewhere.

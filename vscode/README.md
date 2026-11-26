@@ -180,7 +180,11 @@ The commits above your upstream, newest first. One row per commit:
 - **The Change view follows the rebase.** Each time it stops somewhere new — an edit stop, a
   conflict, also from a `git rebase --continue` in a terminal — the Change view shows the commit it
   stopped at, whatever was clicked before (the keyboard stays where it is). While it stays at that
-  stop (you amend, resolve, or click another row) the view is yours.
+  stop (you amend, resolve, or click another row) the view is yours. A review follows the same way:
+  started, moved along its chain or updated anywhere (the views, `ger review` in a shell, a restart),
+  the Change view shows the change it holds; once you leave it, the change's page on Gerrit. Only a
+  commit of your own stack that left it is said to be *not in the local stack any more*, and it is
+  shown again once it is back.
 - **Stopped on a conflict**, the commit it stopped at has a red conflict icon and is not dimmed:
   it is what wants you. The files still conflicted are listed under the banner; click one to
   open it with its conflict markers in the text editor, where VS Code offers *Accept Current*,
@@ -923,7 +927,7 @@ estimate, the totals per loop and the steps over budget. See
 | `src/comments.ts` | Editor comment threads, stepping, draft replies, Suggest Edit and Apply. |
 | `src/suggestions.ts` | Suggested edits as a thread shows them (old → new), and where Apply writes one, or why not. Pure, unit-tested. |
 | `src/statusBar.ts` | The status bar item: the headline (a rebase underway, when core says so) and the activity bell. |
-| `src/follow.ts` | The Change view following its commit through rewrites and amends. |
+| `src/shownChange.ts`, `src/follow.ts` | Which change the Change view shows and why, the one owner of it: the change the review here holds (however the review moved: the views, a shell, a restart), the commit a rebase stopped at, your selection followed through rewrites and amends, said when it left the stack and shown again when it is back (the rule pure, unit-tested); applying it on every change of the views' state. |
 | `src/diffTabs.ts`, `src/staleDiffs.ts` | `ger-file:` documents and the diff tabs of them: opening one, knowing it again, marking it stale or closing it once its right side is no longer the commit its title names, unmarking it once it is again (the rule is pure, unit-tested); your files' repository paths; saving before a rebase continues. |
 | `src/compareRows.ts` | What the Change view compares: the From and To pickers, the default mode and its toggle, what the files compared are called. Pure, unit-tested. |
 | `src/problemRows.ts` | An error state of the two webview views: a sentence in ger's words, git's or Gerrit's under it, the options as buttons. Pure, unit-tested. |

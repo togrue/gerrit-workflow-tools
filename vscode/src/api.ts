@@ -332,6 +332,8 @@ export interface Stack {
   review_blocked?: { reason: string; message: string; files: string[] } | null;
   /** How far the upstream moved on past the stack, and the rebase onto it previewed; null without one, and during a rebase. */
   upstream?: UpstreamMoved | null;
+  /** The rebase underway as the headline `/overview` makes of it (API 1.10); null without one, undefined from an older ger. */
+  headline?: Headline | null;
   /** What the last rebase step or push run in a terminal said at its end (core's step outcome, API 1.8); null when none left one. */
   last_outcome?: StepOutcome | null;
   /** The branches are null without a working branch (a detached HEAD's rebase). */
@@ -574,6 +576,8 @@ export interface Patchsets {
 
 export interface ReviewState {
   number: number;
+  /** The change's Change-Id. */
+  change_id?: string;
   patch_set: number;
   /** The reviewed patchset's commit. */
   commit: string;
@@ -585,6 +589,8 @@ export interface ReviewState {
   branch: string;
   /** The review chain's open changes, base first; null unless asked for. */
   chain?: number[] | null;
+  /** Every change of that chain, base first, closed ones in their place with Gerrit's status (API 1.10); null unless asked for. */
+  members?: { number: number; subject: string; status: "NEW" | "MERGED" | "ABANDONED" }[] | null;
   /** Where Leave Review goes back to: the branch (or commit) checked out before the review. */
   return_to?: string | null;
 }

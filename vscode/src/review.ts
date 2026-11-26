@@ -43,6 +43,10 @@ export async function review(model: Model, target: ChangeTarget | undefined, wal
   if (!target) {
     return;
   }
+  return walk ? walk.hold(() => checkOutForReview(model, target, walk, mode)) : checkOutForReview(model, target, walk, mode);
+}
+
+async function checkOutForReview(model: Model, target: ChangeTarget, walk?: ReviewWalk, mode?: ReviewState["mode"]): Promise<void> {
   try {
     const client = await model.client();
     const opened = await ui().progress(vscode.ProgressLocation.Notification, `Checking out ${target.title}`, () =>
@@ -116,6 +120,8 @@ const OPEN_NEXT = "Open It";
 
 /** What moving a staged review along its chain needs from the rest of the extension. */
 export interface ReviewWalk {
+  /** Run a step that moves the review: it shows its own result, and nothing else follows the review meanwhile. */
+  hold<T>(run: () => Promise<T>): Promise<T>;
   /** Show the change the staged review holds now, with all its files; says when it is done (`busy`). */
   show(): Promise<void>;
   /** Close what showed the change it left (its combined diffs: their right side is your file). */
@@ -141,7 +147,11 @@ const LEAVE = "Leave Review";
  * of the chain it says so and offers what `ger review`'s own `next:` line does there: a vote on
  * the chain, and leaving the review.
  */
-export async function stepReview(model: Model, step: 1 | -1, walk: ReviewWalk): Promise<void> {
+export function stepReview(model: Model, step: 1 | -1, walk: ReviewWalk): Promise<void> {
+  return walk.hold(() => moveReview(model, step, walk));
+}
+
+async function moveReview(model: Model, step: 1 | -1, walk: ReviewWalk): Promise<void> {
   const here = model.stack?.staged_review;
   if (!here) {
     void ui().message("info", "No staged review here: Review Change on a change of Review chains starts one.", {}, []);
@@ -198,7 +208,11 @@ const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(
  * again at its newest patchset (`ger review CHANGE`, in the review's own mode), then shown from
  * what is new since your review, with all its files.
  */
-export async function updateReview(model: Model, walk: ReviewWalk): Promise<void> {
+export function updateReview(model: Model, walk: ReviewWalk): Promise<void> {
+  return walk.hold(() => updateNow(model, walk));
+}
+
+async function updateNow(model: Model, walk: ReviewWalk): Promise<void> {
   const here = model.stack?.staged_review;
   if (!here) {
     void ui().message("info", "No staged review here to update.", {}, []);
