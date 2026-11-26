@@ -185,7 +185,7 @@ a client words its own advice while `message` stays ger's.
 
 ## API version
 
-`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.9.0`); the URL
+`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.10.0`); the URL
 prefix carries only the major (`/api/v1`). It moves on its own, not with ger's package version:
 
 | Bump | When |
@@ -624,7 +624,10 @@ In `GET /show`, every comment chain carries `held`.
 The **review state**, as `ger review --status --json`, under `review`; `null` when none. With
 `chain=1` its `chain` is the review chain's open changes, base first, as `ger review` prints it,
 with the change under review in its place even when it was abandoned or merged since (one Gerrit
-request); without, `null`.
+request); without, `null`. With `chain=1` its `members` (API 1.10) are every change of that chain,
+base first, closed ones in their place: `number`, `subject` and Gerrit's `status` (`NEW`, `MERGED`,
+`ABANDONED`), from the same request; a client marks a closed member in words, counts it as no work
+left, and says so when the change reviewed builds on an abandoned one. Without `chain=1`, `null`.
 
 ### `GET /vote?change=<changeish>`
 

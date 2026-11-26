@@ -35,7 +35,7 @@ from gerrit_workflow_tools.core.rebase_state import RebaseAction, rebase_underwa
 from gerrit_workflow_tools.core.rebasing_stack import stopped_rebase
 from gerrit_workflow_tools.core.review_chain import host_from_web_base
 from gerrit_workflow_tools.core.review_checkout import find_review, staged_review
-from gerrit_workflow_tools.core.review_target import drafts_published_by, related_chain_numbers
+from gerrit_workflow_tools.core.review_target import drafts_published_by, related_chain, related_chain_numbers
 from gerrit_workflow_tools.core.rewrite_refusal import review_here_refusal
 from gerrit_workflow_tools.core.stack import merge_commits, pinned_below
 from gerrit_workflow_tools.core.step_outcome import StepOutcome, last_outcome
@@ -62,7 +62,7 @@ from gerrit_workflow_tools.server.diff_views import add_worktree_places, commit_
 from gerrit_workflow_tools.server.request import BadRequest, Context, Request, safe_rev
 
 
-API_VERSION = "1.9.0"
+API_VERSION = "1.10.0"
 """The serve contract's version, ``MAJOR.MINOR.PATCH`` (bump rules: ``docu/spec/commands/serve.md``)."""
 _T = TypeVar("_T")
 _NOT_ON_GERRIT = frozenset({Attention.NOT_PUSHED, Attention.AHEAD_OF_GERRIT, Attention.DIVERGED})
@@ -391,9 +391,8 @@ def review(ctx: Context, req: Request) -> dict[str, Any]:
     under review in its place even when it was closed meanwhile (one Gerrit request).
     """
     state = find_review(ctx.cwd, ctx.settings)
-    chain = (
-        related_chain_numbers(ctx.service, state.key, state.patch_set, keep=state.number)
-        if state and req.flag("chain")
-        else None
-    )
-    return {"review": review_state_json(state, chain=chain, url=None) if state else None}
+    if state is None:
+        return {"review": None}
+    asked = related_chain(ctx.service, state.key, state.patch_set, keep=state.number) if req.flag("chain") else None
+    chain, members = asked or (None, None)
+    return {"review": review_state_json(state, chain=chain, url=None, members=members)}

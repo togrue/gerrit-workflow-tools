@@ -879,7 +879,16 @@ def test_review_open_checks_out_in_the_review_worktree_and_done_leaves_it(stack_
                 for n in (103, 102, 101, 100)
             ],
         )
-    assert _get(api, "/review", chain="1")["review"]["chain"] == [101, 102, 103]
+    asked = _get(api, "/review", chain="1")["review"]
+    assert asked["chain"] == [101, 102, 103]
+    # Every member keeps its place with Gerrit's status: a client marks the closed ones in words.
+    assert [(m["number"], m["status"]) for m in asked["members"]] == [
+        (100, "MERGED"),
+        (101, "NEW"),
+        (102, "ABANDONED"),
+        (103, "NEW"),
+    ]
+    assert _get(api, "/review")["review"]["members"] is None, "only asked for with chain=1"
     for key in keys:
         store.set_related(
             key, [{"_change_number": n, "_revision_number": 1, "status": "NEW"} for n in (103, 102, 101, 100)]
@@ -1246,7 +1255,7 @@ def _http(
 def test_http_answers_only_with_the_token_on_a_loopback_host(served: GerHttpServer) -> None:
     status, body = _http(served, f"{V1}/health")
     assert status == 200
-    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.9.0", "feature", "g.example")
+    assert (body["name"], body["api"], body["branch"], body["host"]) == ("ger", "1.10.0", "feature", "g.example")
     assert _http(served, f"{V1}/health", token=None)[0] == 401
     assert _http(served, f"{V1}/health", token="wrong")[0] == 401
     # A page that rebinds its own name to 127.0.0.1 still sends its name as Host.
