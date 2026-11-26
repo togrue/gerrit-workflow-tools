@@ -124,8 +124,7 @@ make: *** [Makefile:12: app] Error 1
         ("clang-format", "format", "src/fmt.cc:7:12"),
         ("ld", "error", "main.c"),
         ("ld", "error", ""),
-        ("generic", "error", ""),
-    ]
+    ]  # make's "Error 1" echo says nothing the compiler did not
     assert findings[3].message == "undefined reference to `foo'"
 
 

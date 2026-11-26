@@ -86,20 +86,20 @@ Each **CI finding** carries a tool/kind tag. Precise finders run before generic 
 | | `gtest`, `ctest` | `failed` | `[  FAILED  ] Suite.Test`, located by `file:line: Failure`; the rows under `The following tests FAILED:` |
 | | `ninja` | `error` | `FAILED: <target>` |
 | Rust | `rustc`, `clippy` | `error`, `warning` | `error[E0308]: msg`, then `--> path:line:col`; clippy by its `clippy::` lint name |
-| | `cargo-test` | `failed` | `test name ... FAILED`, located by the panic in its `---- name stdout ----` section |
+| | `cargo-test` | `failed` | `test name ... FAILED`, located by the panic in its `---- name stdout ----` section; the first line of the panic is the message, the rest is `detail` |
 | | `rustfmt` | `format` | `Diff in path:line:`, one finding per file |
 | | `cargo` | `error` | ``could not compile `crate` `` |
 | JavaScript | `tsc` | `error`, `warning` | `a.ts(12,5): error TS2322: msg` and the pretty `a.ts:12:5 - error TS2322: msg` |
 | | `eslint` | `lint` | the default report: a file path, then `line:col  severity  msg  rule` rows |
 | | `jest`, `node-test` | `failed` | `●` headings under `FAIL file`; the entries under `✖ failing tests:` |
 | | `npm` | `error` | one finding per `npm error` / `npm ERR!` report: its code and first telling line |
-| Java | `javac` | `error`, `warning` | `Foo.java:12: error: msg`, also behind a wrapper's tag (`[javac]`, `[WARNING]`); through Maven `[ERROR] /path/Foo.java:[12,5] msg`, where the path may hold spaces |
-| | `junit` | `failed`, `error` | Surefire's `… <<< FAILURE!` test line, located by the stack frame in the test's class (else its `Failures:` / `Errors:` summary row); Gradle's `Class > test FAILED` |
+| Java | `javac` | `error`, `warning` | `Foo.java:12: error: msg`, also behind a wrapper's tag (`[javac]`, `[WARNING]`); through Maven `[ERROR] /path/Foo.java:[12,5] msg`, where the path may hold spaces; the rows javac adds under it (source line and caret, `symbol:`, `location:`, `required:`, `found:`, `reason:`) are the finding's `detail` |
+| | `junit` | `failed`, `error` | Surefire's `… <<< FAILURE!` test line, located by the stack frame in the test's class (else its `Failures:` / `Errors:` summary row); a message of several lines (a multi-line `assertEquals`) is read up to the first frame: its first line, joined to `Exception:` when that ends the line, is the message and the lines after it are `detail`; Gradle's `Class > test FAILED` |
 | | `maven`, `gradle` | `error` | `Failed to execute goal …`, `Task :x FAILED` |
 | Scala | `scalac` | `error`, `warning` | sbt's `[error] /path/Foo.scala:12[:5]: msg`, Scala 3's `-- [E007] … Error: path:line:col`, and through Maven `Foo.scala:12: warning: msg` |
 | | `scalatest` | `failed` | `- name *** FAILED ***` and the `(File.scala:12)` line under it |
 | | `sbt` | `error` | `[error] (Compile / compileIncremental) Compilation failed` |
-| any | `generic` | `error`, `verdict` | `Error:` lines, `make: ***`, non-zero exit statuses; the job's own verdict (`Build step '…' marked build as failure`, `Finished: FAILURE`) is kind `verdict`, and only where nothing else is found: then one finding, the first of them |
+| any | `generic` | `error`, `verdict` | `Error:` lines, make's own errors (`make: *** No rule to make target …`), non-zero exit statuses; what only restates that the build failed is kind `verdict`: the job's own verdict (`Build step '…' marked build as failure`, `Finished: FAILURE`) and make's echo of a failed recipe (`make[2]: *** [target] Error 1`). A `verdict` is a finding only where nothing else is found: then one finding, the first of them (of make's echoes, the innermost failed target). `make: *** Waiting for unfinished jobs` is never one |
 
 npm, Maven, Gradle, sbt, Ninja and Make mostly *wrap* another tool: the finding worth reading comes from what they ran, and their own line only says which step failed.
 
