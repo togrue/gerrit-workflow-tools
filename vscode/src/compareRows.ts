@@ -159,14 +159,18 @@ function fromPicker(state: CompareState): { options: Option[]; selected: string 
   return { options, selected: options.some((option) => option.value === wanted) ? wanted : "base" };
 }
 
+/** Whether From and To are the default mode's sides, as far as the patchsets known can say. */
+export function atDefault(state: Omit<CompareState, "shown"> & { pushed: boolean }): boolean {
+  const own = modeSides(state.mode, { pushed: state.pushed, local: state.local });
+  const same = (a: From | Version, b: From | Version) => resolveSide(a, state.patchsets) === resolveSide(b, state.patchsets);
+  return same(own.from, state.from) && same(own.to, state.version);
+}
+
 /** The toggle of the default mode: which it is, the next a click makes it, whether From and To are its sides. */
 function modeToggle(state: CompareState): CompareVm["mode"] {
-  const sides = { pushed: state.shown.pushed, local: state.local };
-  const allowed = modesFor(sides);
+  const allowed = modesFor({ pushed: state.shown.pushed, local: state.local });
   const next = allowed[(allowed.indexOf(state.mode) + 1) % allowed.length] ?? "base";
-  const own = modeSides(state.mode, sides);
-  const same = (a: From | Version, b: From | Version) => resolveSide(a, state.patchsets) === resolveSide(b, state.patchsets);
-  const active = same(own.from, state.from) && same(own.to, state.version);
+  const active = atDefault({ ...state, pushed: state.shown.pushed });
   const here = !allowed.includes(state.mode) ? " — not possible for this change" : active ? "" : " — From and To picked by hand for this change";
   return { mode: state.mode, icon: MODE_ICONS[state.mode], next, active, title: `Default comparison: ${MODES[state.mode]}${here}. Click for ${MODES[next]}.` };
 }

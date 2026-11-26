@@ -353,7 +353,8 @@ The commits above your upstream, newest first. One row per commit:
   wide); the trailers (`Bug:`, `Signed-off-by:`) small and dim, as the Change-Id is.
 - **From / To**: what is compared. In a task (reviewing, reworking), while they are the default
   mode's sides, they are one line that says it (*Base commit → Local commit 464bd89*) with
-  **Change** to open the pickers; picked by hand, they stay open. Reworking, the commit message box
+  **Change** to open the pickers; picked by hand, they stay open. Gerrit's list of patchsets
+  (`GET /patchsets`) is asked when *Change* opens them, not before: the line needs none. Reworking, the commit message box
   is two lines high until it has the keyboard: the comments and files you came for come up. *To* is the version you look at: your **local commit** (when
   the change is in your stack) or any patchset on Gerrit. *From* is what it is compared with:
   the **base commit** (what the change does) or any patchset older than *To*. Both lists run

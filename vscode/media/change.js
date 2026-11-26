@@ -448,7 +448,7 @@
    */
   function compareLine(compare) {
     const label = (side) => (side.options.find((option) => option.value === side.selected) || { label: side.selected }).label;
-    const open = h("button", { class: "link", title: "Choose From and To, and the default comparison", onclick: () => ((toggled.compare = true), draw(vm)) }, "Change");
+    const open = h("button", { class: "link", title: "Choose From and To, and the default comparison", onclick: () => ((toggled.compare = true), post("pickers"), draw(vm)) }, "Change");
     return h("div", { class: "head note wraps compare-line", title: compare.mode.title }, icon(compare.mode.icon), words(`${label(compare.from)} → ${label(compare.to)}`), open);
   }
 

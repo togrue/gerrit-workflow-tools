@@ -10,7 +10,7 @@ import * as vscode from "vscode";
 import { CommentChain, Diff, FileChange, GerApiError, GerClient, Patchsets, ShownCommit } from "./api";
 import { ChangeDetail, changedHere, ciRevs, sameChange, stoppedHere, worktreeIsHead } from "./changeLoad";
 import { ChainCounts, ChangeState, ChangeVm, SeenWhere, chainCounts, seenWhere, CiView, NOTHING_SHOWN, NOT_FILES, READ_ONLY, changeHeading, changeLines, changeVm, isYours, toAnswer } from "./changeRows";
-import { From, MODES, Mode, Sides, Version, fitSides, modeSides } from "./compareRows";
+import { From, MODES, Mode, Sides, Version, atDefault, fitSides, modeSides } from "./compareRows";
 import { FILE_SCHEME, filePath, fileUri, openDiff } from "./diffTabs";
 import { CiProblems } from "./ciProblems";
 import { FilesSeen } from "./filesSeen";
@@ -380,11 +380,14 @@ export class ChangeView extends WebView<ChangeVm> {
     if (!target || !change || !this.holdsReview(target) || this.from !== "base") {
       return;
     }
-    const patchsets = this.knownPatchsets() ?? (await (await this.model.client()).patchsets(change).catch(() => undefined));
+    // The delta from your review to your commit, asked with the change, names the patchset you reviewed: no more to ask.
+    const since = this.delta?.local_commit ? this.delta.since : undefined;
+    const patchsets = since ? undefined : (this.knownPatchsets() ?? (await (await this.model.client()).patchsets(change).catch(() => undefined)));
+    const reviewed = since ? since.patch_set : patchsets?.reviewed;
     const review = this.model.stack?.staged_review;
-    if (patchsets && this.target === target) {
-      this.patchsets = patchsets;
-      if (patchsets.reviewed !== null && review && patchsets.reviewed < review.patch_set) {
+    if ((since || patchsets) && this.target === target) {
+      this.patchsets = patchsets ?? this.patchsets;
+      if (reviewed != null && review && reviewed < review.patch_set) {
         await this.choose("reviewed", "local");
       }
     }
@@ -534,13 +537,17 @@ export class ChangeView extends WebView<ChangeVm> {
     return this.patchsets && (current == null || this.patchsets.current === current) ? this.patchsets : undefined;
   }
 
-  /** The patchsets to choose from. After the change itself, and only once it has stayed a moment: walking the stack with the arrow keys asks nothing. */
-  private async loadPatchsets(token: number, signal: AbortSignal): Promise<void> {
+  /**
+   * The patchsets to choose from. After the change itself, and only once it has stayed a moment:
+   * walking the stack with the arrow keys asks nothing. Not while the pickers are folded into one
+   * line (a task at the default comparison): asked at once when "Change" unfolds them (`unfolded`).
+   */
+  private async loadPatchsets(token: number, signal?: AbortSignal, unfolded = false): Promise<void> {
     const change = this.target && this.change(this.target);
-    if (!change || !this.shown?.pushed || this.knownPatchsets()) {
+    if (!change || !this.shown?.pushed || this.knownPatchsets() || (!unfolded && this.pickersFolded())) {
       return;
     }
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await new Promise((resolve) => setTimeout(resolve, unfolded ? 0 : 400));
     // Asked meanwhile (a staged review's re-review asks at once): not twice.
     if (!this.detail.current(token) || this.knownPatchsets()) {
       return;
@@ -554,6 +561,12 @@ export class ChangeView extends WebView<ChangeVm> {
     } catch {
       // Without the list, Gerrit's current patchset is still offered.
     }
+  }
+
+  /** In a task at the default comparison the page draws From and To as one line, no pickers (media/change.js, compareLine). */
+  private pickersFolded(): boolean {
+    const [target, shown] = [this.target, this.shown];
+    return Boolean(target && shown && this.task() && atDefault({ pushed: shown.pushed, local: Boolean(target.local), patchsets: this.patchsets, version: this.version, from: this.from, mode: this.mode }));
   }
 
   /** The shown change is (no longer) a commit of your stack: the title bar offers Edit instead of Review and Check Out, or the other way round. */
@@ -737,6 +750,8 @@ export class ChangeView extends WebView<ChangeVm> {
         return this.setMode(message.value as Mode);
       case "ci":
         return this.openCi();
+      case "pickers":
+        return this.loadPatchsets(this.detail.selection(), undefined, true);
       case "message":
         return this.applyMessage(message.text as string);
       case "command":
