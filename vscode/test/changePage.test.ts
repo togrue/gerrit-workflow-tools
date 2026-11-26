@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { ChangeVm, READ_ONLY, changeVm } from "../src/changeRows";
+import { PROBLEM_WORDS, changeProblem } from "../src/problemRows";
 import { FakeElement, fakePage } from "./fakePage";
 import { chain, comment, shown, state } from "./fixtures";
 
@@ -153,4 +154,26 @@ test("what says the state, or what went wrong, is drawn whole (wrapping); a sect
   const files = changePage(changeVm(state({})));
   const head = files.root.all(byClass("section-head"))[0];
   assert.equal(head.all(byClass("section-summary"))[0].all(byClass("counts")).length, 1, "the counts sit in the summary, which wraps under the title as a whole");
+});
+
+test("a change that could not be shown says the state in ger's words, git's words under it, and offers the ways on", () => {
+  const { root, posted } = changePage({ problem: changeProblem("fatal: bad object 3f9a2c1", true) });
+  assert.ok(root.textContent.includes(PROBLEM_WORDS.change));
+  assert.equal(root.all(byClass("raw"))[0].textContent, "fatal: bad object 3f9a2c1");
+  const labels = root.all((element) => element.tagName === "BUTTON").map((element) => element.textContent);
+  assert.deepEqual(labels, ["Show Again", "Show Local Stack", "Show Log"]);
+  button(root, "Show Again").click();
+  assert.deepEqual(posted.at(-1), { type: "command", command: "ger.change.reload", args: [] });
+  const theirs = changePage({ problem: changeProblem("Gerrit unreachable", false) });
+  assert.ok(button(theirs.root, "Show Review Chains"), "somebody's change is picked again from Review chains");
+});
+
+test("CI that could not be fetched offers Try Again; a failed build without a log, Open in Gerrit", () => {
+  const failing = { ci_failures: ["Verified"], verified: -1, attention_reasons: ["ci-failed"] };
+  const unreachable = changePage(changeVm(state({ shown: shown({ ...failing }), ci: { state: "error", error: "Gerrit unreachable" } })));
+  button(unreachable.root, "Try Again").click();
+  assert.deepEqual(unreachable.posted.at(-1), { type: "ci" });
+  const noLink = changePage(changeVm(state({ shown: shown({ ...failing }), ci: { state: "loaded", contents: [], introduced: null } })));
+  button(noLink.root, "Open in Gerrit").click();
+  assert.deepEqual(noLink.posted.at(-1), { type: "command", command: "ger.openInGerrit" });
 });

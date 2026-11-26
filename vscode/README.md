@@ -221,11 +221,23 @@ The commits above your upstream, newest first. One row per commit:
   checkout` and *Check Out to Work On* set it): the view says so and offers **Track origin/…** in one click — the branch it was created from, else
   the remote branch nearest to it — or **Choose another upstream branch…**. Later changes:
   *Set Upstream Branch…* in the view's `…` menu.
+- **The stack could not be read** (git refused, an upstream branch that is gone): the view says so
+  in ger's words, git's message under it as it came, and offers **Reload**, **Choose an Upstream
+  Branch…** and **Show Log**. Which of them helps is not known (core does not say what kind of
+  failure it was), so none is drawn as the one to press.
 
 **Change** — select any change or commit
 
 - The title bar names the change number. The subject is not repeated there: the commit message
   says it.
+- **When the change cannot be shown** (git or Gerrit refused, the commit is gone after a rebase),
+  the view says so in ger's words with their message under it, and offers **Show Again** (the one
+  to press: *Show the Change Again* in the palette), **Show Local Stack** for a commit of yours (pick
+  it as it is now) or **Show Review Chains** for somebody's change, and **Show Log**. Every error
+  state of the two views is built in `src/problemRows.ts`, so none says what went wrong and offers
+  nothing. Under **CI**, findings that could not be fetched offer **Try Again**; a failed build
+  with no log to read offers **Open in Gerrit**, where the change's messages say what CI reported;
+  a log that could not be read opens in the browser from its row.
 - What it needs, in words, with its votes.
 - **The commit a rebase stopped at on a conflict** says so instead: *Conflict in d.txt — resolve it,
   then Continue* (several files: how many), with the buttons of Local stack's banner: the same ways
@@ -775,6 +787,7 @@ estimate, the totals per loop and the steps over budget. See
 | `src/follow.ts` | The Change view following its commit through rewrites and amends. |
 | `src/diffTabs.ts`, `src/staleDiffs.ts` | `ger-file:` documents and the diff tabs of them: opening one, knowing it again, marking it stale or closing it once its right side is no longer the commit its title names, unmarking it once it is again (the rule is pure, unit-tested); your files' repository paths; saving before a rebase continues. |
 | `src/compareRows.ts` | What the Change view compares: the From and To pickers, the default mode and its toggle, what the files compared are called. Pure, unit-tested. |
+| `src/problemRows.ts` | An error state of the two webview views: a sentence in ger's words, git's or Gerrit's under it, the options as buttons. Pure, unit-tested. |
 | `src/changeLoad.ts` | Which change the Change view shows and what of it has come: drawn at once from the clicked row, filled in answer by answer, a stale answer dropped. Pure, unit-tested. |
 | `src/review.ts` | Review Change, Check Out to Work On, Leave Review Checkout, Edit Commit Here; moving a review along its chain. |
 | `src/reviewWalk.ts`, `src/reviewAhead.ts` | The review walk as the views do it: the change under review shown with all its files; the next one asked ahead and drawn from it before the checkout, its diff from git, then your files. |

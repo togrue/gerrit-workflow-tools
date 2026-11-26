@@ -10,6 +10,7 @@ import type { Commented } from "./commentState";
 import { Badge, SYNC_WORDS, StackAction, StackInfo, Tone, actionsText, badges, sync, conflictRow, rebaseButtons } from "./stackRows";
 import { Waiting } from "./state";
 import { latestSuggestion } from "./suggestions";
+import { Problem, problemLines } from "./problemRows";
 import { CompareState, CompareVm, MODES, Option, compareVm, deltaTitle } from "./compareRows";
 import type { TaskVm } from "./taskRows";
 
@@ -152,7 +153,8 @@ export interface ChangeVm {
   waiting?: Waiting;
   /** Nothing is shown: what to do to see a change. */
   empty?: string;
-  problem?: string;
+  /** The change could not be read: what state the view is in, git's or Gerrit's words, the ways on (problemRows.ts). */
+  problem?: Problem;
   /** Which change is drawn (its Change-Id, else its commit): the page keeps what you opened and typed per change. */
   key?: string;
   /** What is on its way: the page holds the commit message's place, its read-only note and plainness (as `message` will say) included. */
@@ -415,7 +417,7 @@ function ciLinks(ci: CiView): CiLinkRow[] {
       text: content.provenance.build ?? content.label,
       detail: [
         content.patch_set ? `from patchset ${content.patch_set}, before your local changes` : "",
-        ...(failed ? [`could not be read: ${content.provenance.error}`] : [unstable ? "unstable" : "", ...counted]),
+        ...(failed ? [`could not be read: ${content.provenance.error} — click to open it in the browser`] : [unstable ? "unstable" : "", ...counted]),
       ]
         .filter(Boolean)
         .join(" · "),
@@ -566,8 +568,11 @@ export function changeHeading(number: number | null | undefined): string {
 
 /** The view as text, one line per row: what the end-to-end transcript shows of it. */
 export function changeLines(vm: ChangeVm): string[] {
-  if (vm.waiting || vm.empty || vm.problem) {
-    return [vm.waiting?.text ?? vm.problem ?? vm.empty ?? ""];
+  if (vm.problem) {
+    return problemLines(vm.problem);
+  }
+  if (vm.waiting || vm.empty) {
+    return [vm.waiting?.text ?? vm.empty ?? ""];
   }
   const lines: string[] = [];
   const add = (depth: number, text: string, detail = "") => lines.push(`${"  ".repeat(depth)}${text}${detail ? ` — ${detail}` : ""}`);

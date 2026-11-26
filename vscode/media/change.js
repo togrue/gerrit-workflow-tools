@@ -314,12 +314,14 @@
     if (ci.state === "closed" || ci.state === "loading") {
       return h("div", { class: "reply" }, h("span", { class: "codicon codicon-loading codicon-modifier-spin" }), h("span", { class: "detail" }, "Fetching the findings…"));
     }
-    // Why there is nothing to read is said whole: it is the state the findings are in.
+    // Why there is nothing to read is said whole, with what can be done about it.
     if (ci.state === "error") {
-      return h("div", { class: "reply wraps" }, icon("error", "bad"), words(ci.error));
+      const again = h("button", { class: "link", title: "Fetch the CI findings again", onclick: () => post("ci") }, "Try Again");
+      return h("div", { class: "reply wraps" }, icon("error", "bad"), words("The CI findings could not be fetched.", "", ci.error), again);
     }
     if (!ci.links.length) {
-      return h("div", { class: "reply wraps" }, ci.noLinks ? words(ci.noLinks, ci.summary) : h("span", { class: "detail" }, ci.summary));
+      const gerrit = ci.noLinks ? h("button", { class: "link", title: "The change's messages on Gerrit say what CI reported", onclick: () => post("command", { command: "ger.openInGerrit" }) }, "Open in Gerrit") : null;
+      return h("div", { class: "reply wraps" }, ci.noLinks ? words(ci.noLinks, ci.summary) : h("span", { class: "detail" }, ci.summary), gerrit);
     }
     return h(
       "div",
@@ -408,9 +410,19 @@
 
   // --- The page ---------------------------------------------------------------------
 
+  /** The change could not be read (src/problemRows.ts): the state in ger's words, git's or Gerrit's under it, the ways on. */
+  function problemBlock(problem) {
+    return [h("div", { class: "head note wraps" }, icon("error", "bad"), words(problem.text, "", problem.raw)), actions(problem.actions)];
+  }
+
   function draw(next) {
     vm = next;
     const scroll = document.scrollingElement ? document.scrollingElement.scrollTop : 0;
+    if (vm.problem && typeof vm.problem === "object") {
+      root.replaceChildren(...(vm.task ? [task(vm.task)] : []), ...problemBlock(vm.problem));
+      return;
+    }
+    // A problem as a string is a snapshot from before it said its options.
     const plain = vm.waiting || (vm.problem ? { text: vm.problem } : vm.empty ? { text: vm.empty } : null);
     if (plain) {
       root.replaceChildren(...(vm.task ? [task(vm.task)] : []), panel(plain.text, plain.link));

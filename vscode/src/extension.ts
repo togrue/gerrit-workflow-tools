@@ -406,6 +406,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       feedback("All activity marked as seen");
     },
     "ger.openChange": (arg: unknown) => openChange(targetOf(arg)),
+    "ger.change.reload": () => changeView.open(),
     "ger.openInGerrit": (arg: unknown) => {
       const target = targetOf(arg);
       const url = target?.url ?? changeView.shown?.gerrit_url;

@@ -8,6 +8,7 @@ import { test } from "node:test";
 
 import { ICONS, anonymize } from "../src/anonymize";
 import { CommentChain, MoveConflict } from "../src/api";
+import { changeProblem } from "../src/problemRows";
 import { ChangeVm, changeVm } from "../src/changeRows";
 import { Random } from "../src/fakes";
 import { TreeRow, reportText } from "../src/report";
@@ -218,7 +219,7 @@ test("nothing from the repository or Gerrit is in a report: no word, name, path,
   const { stack, noUpstream, change, chains, secrets } = FIRST();
   for (const views of [
     { stack, change, chains },
-    { stack: noUpstream, change: { problem: "ger show failed: zqxv is not in /home/zqxv/repo" } as ChangeVm, chains: [] },
+    { stack: noUpstream, change: { problem: changeProblem("ger show failed: zqxv is not in /home/zqxv/repo", true) }, chains: [] },
     { stack: FIRST().rebasing, change: null, chains: null },
     { stack: null, change: { empty: "Loading 74211: zqxv subject…" } as ChangeVm, chains: null },
   ]) {

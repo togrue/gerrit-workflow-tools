@@ -17,6 +17,7 @@ import { ChangeTarget, Model, describeError } from "./model";
 import { openConflict } from "./rebase";
 import { waitingFor } from "./state";
 import { NextAction, nextAction } from "./nextAction";
+import { changeProblem } from "./problemRows";
 import { focusedMember, reviewFocus } from "./reviewFocus";
 import { markOf } from "./staleDiffs";
 import { feedback, ui } from "./ui";
@@ -575,7 +576,7 @@ export class ChangeView extends WebView<ChangeVm> {
       return { waiting };
     }
     if (this.detail.problem) {
-      return { problem: this.detail.problem };
+      return { problem: changeProblem(this.detail.problem, Boolean(this.target?.local)), task: this.task() };
     }
     const state = this.detail.state({
       chains: this.chains(),
@@ -727,8 +728,9 @@ export class ChangeView extends WebView<ChangeVm> {
   // --- CI ---------------------------------------------------------------------------
 
   /** CI content is fetched only when the CI section is opened: it means downloading build logs. */
+  /** Fetch the CI findings: when the section is opened, or once more after they could not be fetched. */
   async openCi(): Promise<void> {
-    if (this.ci.state !== "closed") {
+    if (this.ci.state !== "closed" && this.ci.state !== "error") {
       return;
     }
     const token = this.detail.selection();

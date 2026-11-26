@@ -5,7 +5,9 @@
 import { CodeChange, CommitStatus, MoveConflict, Overview, Rebase, RebaseAction, Reviewer, Stack, StackCommit, UpstreamChoice, UpstreamStop } from "./api";
 import { CommentShape, CommentTone, commentState } from "./commentState";
 import { blockedMove, reasonWords, sentence, wouldConflict } from "./format";
+import { stackProblem } from "./problemRows";
 import { Waiting } from "./state";
+
 
 /** How a commit relates to what Gerrit has: its icon and its colour. */
 export type Sync = "same" | "rebased" | "code-changed" | "ahead" | "outdated" | "diverged" | "not-pushed" | "merged" | "unknown";
@@ -201,6 +203,8 @@ export interface StackInfo {
   command?: { id: string; args: unknown[] };
   /** A path still unmerged (relative to the repository): clicking the row opens it to resolve. */
   conflict?: string;
+  /** The words of git or Gerrit that `text` puts in ger's words, as they came: drawn under it. */
+  raw?: string;
   actions?: StackAction[];
 }
 
@@ -539,7 +543,8 @@ export function stackVm(local: Overview["local"] | undefined, choice: UpstreamCh
   }
   if ("error" in local) {
     if (!local.needs_upstream) {
-      return { info: [{ text: local.error.message.split("\n")[0], tooltip: local.error.message, icon: "warning", tone: "warn" }], rows: [], frozen: null, movable: 0 };
+      const problem = stackProblem(local.error.message);
+      return { info: [{ text: problem.text, raw: problem.raw, icon: "warning", tone: "warn", actions: problem.actions }], rows: [], frozen: null, movable: 0 };
     }
     const info: StackInfo[] = [
       {
@@ -599,7 +604,8 @@ export function stackLines(vm: StackVm): string[] {
   return [
     ...vm.info.map((info) => {
       const buttons = actionsText(info.actions);
-      return `${info.conflict ? "  ⚠ " : ""}${info.text}${info.detail ? ` — ${info.detail}` : ""}${buttons ? `  ${buttons}` : ""}`;
+      const raw = info.raw ? `  (${info.raw.split("\n").join(" / ")})` : "";
+      return `${info.conflict ? "  ⚠ " : ""}${info.text}${info.detail ? ` — ${info.detail}` : ""}${raw}${buttons ? `  ${buttons}` : ""}`;
     }),
     ...vm.rows.map((r) => {
       // The conflict is drawn as a red warning; the commit it stopped at otherwise as a marker.

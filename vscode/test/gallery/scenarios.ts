@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 
 import { Chain, CommentChain, Member, MoveConflict, Overview, RebaseAction, RebaseStop, ReviewState, Section, ShownCommit, Stack, StackCommit } from "../../src/api";
 import { ChangeState, ChangeVm, changeVm } from "../../src/changeRows";
+import { changeProblem } from "../../src/problemRows";
 import { SNAPSHOT_FORMAT, Snapshot } from "../../src/snapshot";
 import { StackVm, stackVm } from "../../src/stackRows";
 import { waitingFor } from "../../src/state";
@@ -353,7 +354,7 @@ function changeScenarios(): Scenario[] {
     scenario("Change: loading someone's change", {
       change: change({ local: false, shown: theChange({ local_commit: false, comments_unresolved: 2, attention_reasons: ["unresolved-comments"] }), base: undefined, patchsets: undefined, version: "current", readOnly: REMOTE, loading: fromRow }),
     }),
-    scenario("Change: it could not be shown", { change: { problem: "ger show failed: the commit 3f9a2c1 is not in this repository (was it dropped by a rebase?)" } }),
+    scenario("Change: it could not be shown", { change: { problem: changeProblem("ger show failed: the commit 3f9a2c1 is not in this repository (was it dropped by a rebase?)", true) } }),
   ];
 }
 

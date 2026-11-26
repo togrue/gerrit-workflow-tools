@@ -21,6 +21,7 @@ import { Names, Random } from "./fakes";
 import { ATTENTION_ICONS, FILE_STATES, REASON_WORDS } from "./format";
 import { SECTION_TITLES, TREE_WORDS, allRowContexts } from "./rows";
 import { MARKER_WORDS, MERGE_WORDS, REBASE_ACTIONS, REBASE_WORDS, REVIEW_FROZEN, SYNC_ICONS, SYNC_WORDS } from "./stackRows";
+import { PROBLEM_ACTIONS, PROBLEM_WORDS } from "./problemRows";
 
 type Json = Record<string, unknown>;
 const isObject = (value: unknown): value is Json => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -188,14 +189,14 @@ const BADGE: Shape = {
 const ROW_KEY = string((text, names, row) => (text === row.changeId ? names.changeId(text) : names.key(text)));
 
 /** A banner's words, or a line about the upstream ("<branch> has no upstream…", "Track <branch>", an error of git's: filler). */
-const INFO_TEXT = ours([REBASE_WORDS.conflict, REBASE_WORDS.resolved, REBASE_WORDS.split, REBASE_WORDS.progress, "No local commits", "Choose another upstream branch…", "Choose an upstream branch…"]);
+const INFO_TEXT = ours([PROBLEM_WORDS.stack, REBASE_WORDS.conflict, REBASE_WORDS.resolved, REBASE_WORDS.split, REBASE_WORDS.progress, "No local commits", "Choose another upstream branch…", "Choose an upstream branch…"]);
 
-/** A rebase's buttons: Continue, Abort, Skip. */
+/** A rebase's buttons: Continue, Abort, Skip; and the ways on from an error state (problemRows.ts). */
 const ACTIONS: Shape = [
   {
-    label: ours(Object.values(REBASE_ACTIONS).map((action) => action.label)),
-    title: ours(Object.values(REBASE_ACTIONS).map((action) => action.title)),
-    command: { id: ours(Object.values(REBASE_ACTIONS).map((action) => action.command)), args: [TEXT] },
+    label: ours([...Object.values(REBASE_ACTIONS), ...Object.values(PROBLEM_ACTIONS)].map((action) => action.label)),
+    title: ours([...Object.values(REBASE_ACTIONS), ...Object.values(PROBLEM_ACTIONS)].map((action) => action.title)),
+    command: { id: ours([...Object.values(REBASE_ACTIONS).map((action) => action.command), ...Object.values(PROBLEM_ACTIONS).map((action) => action.command.id)]), args: [TEXT] },
     primary: KEEP,
   },
 ];
@@ -209,6 +210,8 @@ const CONFLICT_ROW = {
   tone: TONE,
   tooltip: TOOLTIP,
   conflict: PATH,
+  /** An error of git's, under the sentence that says what state the view is in: filler. */
+  raw: TEXT,
 };
 
 /** A change number or a commit id: what it became. */
@@ -338,8 +341,8 @@ const CHANGE: Shape = {
   waiting: WAITING,
   /** `Loading <subject>…` has the subject in it: filler. */
   empty: ours([NOTHING_SHOWN]),
-  /** An error as git or Gerrit worded it. */
-  problem: TEXT,
+  /** Our sentence, the error as git or Gerrit worded it (filler), the ways on. */
+  problem: { text: ours([PROBLEM_WORDS.change]), raw: TEXT, actions: ACTIONS },
   key: KEY,
   loading: { message: KEEP, readOnly: READ_ONLY_WORDS, plain: KEEP },
   head: {

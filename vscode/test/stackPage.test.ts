@@ -197,3 +197,12 @@ test("Local stack's lines that say what state the stack is in wrap; a conflicted
   const rows = fakePage("stack", stackVm(conflict, undefined, never)).root.querySelectorAll(".info");
   assert.deepEqual(rows.map((element) => element.classList.contains("wraps")), [true, false], "the banner wraps, the file does not");
 });
+
+test("a stack git could not read says so in ger's words, git's message under it, with Reload, Choose an Upstream Branch… and Show Log", () => {
+  const page = fakePage("stack", stackVm({ error: { code: "GIT", message: "fatal: bad revision 'origin/main..HEAD'" } }, undefined, never));
+  const [line] = page.root.querySelectorAll(".info");
+  assert.ok(line.textContent.startsWith("Your local stack could not be read"));
+  assert.equal(line.querySelector(".raw")?.textContent, "fatal: bad revision 'origin/main..HEAD'");
+  const labels = page.root.all((element) => element.tagName === "BUTTON").map((element) => element.textContent);
+  assert.deepEqual(labels, ["Reload", "Choose an Upstream Branch…", "Show Log"]);
+});
