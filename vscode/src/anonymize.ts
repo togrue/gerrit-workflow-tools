@@ -123,7 +123,7 @@ function around(pattern: RegExp, rebuild: (names: Names, ...theirs: string[]) =>
 export const ICONS = [
   ...Object.values(SYNC_ICONS),
   ...ATTENTION_ICONS,
-  ...["beaker", "check", "circle-large-outline", "circle-slash", "comment", "debug-continue", "edit", "error", "eye", "flame", "git-branch", "history", "list-selection", "loading", "note", "person", "person-add", "target", "thumbsdown", "thumbsup"],
+  ...["beaker", "check", "circle-large-outline", "circle-slash", "comment", "debug-continue", "debug-stackframe", "edit", "error", "eye", "flame", "git-branch", "history", "list-selection", "loading", "note", "person", "person-add", "target", "thumbsdown", "thumbsup"],
   ...Object.values(MODE_ICONS),
 ];
 const ICON = ours(ICONS);
@@ -227,7 +227,7 @@ const TASK: Shape = {
       new RegExp(`you voted on ${COUNT} of ${COUNT}`),
       new RegExp(`${COUNT} not ready for review`),
       new RegExp(`${COUNT} comments? to (read|answer)`),
-      new RegExp(`${COUNT} CI failures?`),
+      new RegExp(`CI failed on ${COUNT} commits?`),
       new RegExp(`${COUNT} commits? needs? edits`),
       "its chain is not in your inbox",
       "nothing left to answer or fix",
@@ -239,10 +239,11 @@ const TASK: Shape = {
       position: KEEP,
       title: TEXT,
       current: KEEP,
+      phase: ours(["done", "current", "todo"]),
       marks: [
         {
           icon: ICON,
-          text: ours(["reviewing", "to review", "CI failed", "your drafts", "waits on a reply", new RegExp(`you voted [+-]${COUNT}`), new RegExp(`${COUNT} to answer`)], around(/not ready: (.+)/, (names, why) => `not ready: ${names.text(why)}`)),
+          text: ours(["reviewing", "to review", "CI failed", "your drafts", "waits on a reply", "replayed", "stopped here", "to come", "needs edits", new RegExp(`you voted [+-]${COUNT}`), new RegExp(`${COUNT} to answer`)], around(/not ready: (.+)/, (names, why) => `not ready: ${names.text(why)}`)),
           tone: TONE,
           ring: { share: KEEP, shape: ours(["solid", "dashed", "thin", "tick"]) },
         },
@@ -254,14 +255,14 @@ const TASK: Shape = {
   actions: [
     {
       label: ours(["Leave review", "Continue", "Abort", "Skip"]),
-      detail: ours([/commit this stop as it is.*/, /once the .* resolved/, "put the branch back as it was before the rebase", "leave this commit out and go on", "end the review; its branches go"], around(/back to (.+); the review's branches go/, (names, branch) => `back to ${names.text(branch)}; the review's branches go`)),
+      detail: ours([/commit this stop as it is.*/, /once the .* resolved/, "the step before it is still running", "put the branch back as it was before the rebase", "leave this commit out and go on", "end the review; its branches go"], around(/back to (.+); the review's branches go/, (names, branch) => `back to ${names.text(branch)}; the review's branches go`)),
       command: ours(["ger.reviewDone", "ger.rebase.continue", "ger.rebase.abort", "ger.rebase.skip"]),
       /** Core's words about this repository: filler. */
       notNow: TEXT,
     },
   ],
   views: { label: ours(["All chains", "Only this task"]), detail: ours([/keep going; show the inbox and Local stack too/, /hide the inbox and Local stack again/]), command: ours(["ger.showAllChains", "ger.focusReview"]) },
-  busy: CHECKING_OUT,
+  busy: ours([/(Continuing the rebase|Aborting the rebase|Skipping the commit) in the ger terminal…/], CHECKING_OUT),
 };
 
 const STACK: Shape = {
@@ -396,6 +397,7 @@ const CHANGE: Shape = {
       new RegExp(`nothing new: you reviewed patchset ${PATCHSET}`),
       new RegExp(`identical to patchset ${PATCHSET}( — nothing to push)?`),
     ]),
+    markAll: ours(["Mark all seen"]),
     /** Lines added and removed, in all. */
     added: KEEP,
     deleted: KEEP,
@@ -438,8 +440,7 @@ const CHANGE: Shape = {
       ours([
         LOADING,
         "none",
-        new RegExp(`${COUNT} unresolved of ${COUNT}`),
-        new RegExp(`${COUNT} to answer`),
+        new RegExp(`${COUNT} to (answer|read)`),
         new RegExp(`${COUNT} answered by your drafts \\((push publishes them|Vote and Publish sends them)\\)`),
         new RegExp(`${COUNT} waiting on a reply`),
         new RegExp(`all ${COUNT} resolved`),

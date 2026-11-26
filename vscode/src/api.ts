@@ -766,6 +766,20 @@ export class GerClient {
     await this.call("POST", "/reviewed", undefined, { change, patchset: patchSet, path, reviewed });
   }
 
+  /** Mark each of `paths` of that patchset reviewed: one request (API 1.7); a ger serve before it, one per path. */
+  async markAllReviewed(change: number, patchSet: number, paths: readonly string[]): Promise<void> {
+    try {
+      await this.call("POST", "/reviewed", undefined, { change, patchset: patchSet, paths, reviewed: true });
+    } catch (error) {
+      if (!(error instanceof GerApiError) || error.status !== 400) {
+        throw error;
+      }
+      for (const path of paths) {
+        await this.markReviewed(change, patchSet, path, true);
+      }
+    }
+  }
+
   reviewDone(): Promise<{ done: number; deleted: string[]; kept: string[] }> {
     return this.call("POST", "/review/done", undefined, {});
   }

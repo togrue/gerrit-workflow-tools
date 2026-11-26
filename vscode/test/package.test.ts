@@ -136,11 +136,11 @@ test("the views that are webviews are declared so, and their pages are packaged"
 test("while a task is on, the views it replaces step aside, and All chains brings them back", () => {
   const views: { id: string; when?: string }[] = manifest.contributes.views.ger;
   const when = Object.fromEntries(views.map((view) => [view.id, view.when ?? "true"]));
-  // The Change view always: during a review the task header is drawn at its top.
+  // The Change view always: the task header is drawn at its top, reviewing and reworking.
   assert.equal(when["ger.change"], "true");
-  // Reviewing: both lists step aside; reworking: Local stack stays (it is the chain).
+  // Both lists step aside in either mode, so the Change view has the room; the header lists the chain.
   assert.equal(when["ger.overview"], "!ger.task || ger.taskAll");
-  assert.equal(when["ger.stack"], "ger.task != review || ger.taskAll");
+  assert.equal(when["ger.stack"], "!ger.task || ger.taskAll");
 });
 
 test("every command in a menu or keybinding is declared, and every declared command is registered", () => {

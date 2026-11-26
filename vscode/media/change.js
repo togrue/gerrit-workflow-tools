@@ -479,7 +479,22 @@
     }
     if (vm.files) {
       const files = vm.files;
-      const summary = [h("span", { class: "detail" }, files.summary), files.rows.length ? counts(files.added, files.deleted) : null];
+      // Read in the combined diff, which ticks no file on its own: one click ticks the rest.
+      const markAll = files.markAll
+        ? h(
+            "button",
+            {
+              class: "link mark-all",
+              title: "Tick every file not seen yet, on Gerrit too (its reviewed flag)",
+              onclick: (event) => {
+                event.stopPropagation();
+                post("seenAll");
+              },
+            },
+            files.markAll,
+          )
+        : null;
+      const summary = [h("span", { class: "detail" }, files.summary), markAll, files.rows.length ? counts(files.added, files.deleted) : null];
       parts.push(section("files", files.title, summary, true, () => h("div", { title: files.tooltip }, files.rows.map(fileRow))));
     }
     if (vm.comments) {

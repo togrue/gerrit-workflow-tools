@@ -128,10 +128,12 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   const stackView = new StackView(context.extensionUri, model);
   const changeView = new ChangeView(context.extensionUri, model, context.globalState);
   const task = new Task(model);
-  // The task header is drawn where the task is worked: the Change view reviewing, Local stack reworking.
-  changeView.task = () => (task.mode === "review" ? task.vm() : undefined);
+  // The task header is drawn where the task is worked, the Change view, in both modes; Local stack,
+  // while shown beside it (All chains), leaves out its rebase banner: Continue and Abort are said once.
+  changeView.task = () => task.vm();
   stackView.task = () => (task.mode === "rework" ? task.vm() : undefined);
-  changeView.taskStep = stackView.taskStep = (key) => (task.mode ? task.go(task.mode, key) : undefined);
+  changeView.taskStep = (key) => (task.mode ? task.go(task.mode, key) : undefined);
+  task.shown = () => changeView.shownCounts(task.mode);
   task.onDidChange(() => {
     changeView.render();
     stackView.render();
@@ -321,6 +323,13 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       ? { label: "Next Change", run: () => stepReview(model, 1, reviewSteps) }
       : { label: "Leave Review", run: () => leaveReview(model) };
   };
+  /** Abort or Skip in the ger terminal, the header saying so until the stack moves on. */
+  const stepInTerminal = async (step: "abort" | "skip", text: string) => {
+    task.busyUntilMoved(text);
+    if (!(await rebaseStep(model, step))) {
+      task.busy(undefined);
+    }
+  };
   /** A chain row of Review chains votes on its whole chain. */
   const isChainRow = (arg: unknown) => (arg as { kind?: unknown } | undefined)?.kind === "chain";
 
@@ -337,6 +346,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   const next: Record<NextKind, () => unknown> = {
     comment: () => threads.stepUnread(),
     file: () => changeView.openNextFile(),
+    seen: () => changeView.markAllSeen(),
     vote: () => vscode.commands.executeCommand("ger.vote"),
     nextChange: () => stepReview(model, 1, reviewSteps),
     leave: () => leaveReview(model),
@@ -420,13 +430,17 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
     "ger.publishDrafts": (arg: unknown) => voteAndPublish(model, targetOf(arg), { draftsOnly: true, after: afterVote }),
     "ger.push": () => push(model),
     "ger.rebase.continue": async () => {
+      // It runs in the terminal: the header says so from the click until the stack moves on.
+      task.busyUntilMoved("Continuing the rebase in the ger terminal…");
       if (await rebaseStep(model, "continue")) {
         walk.continued();
+      } else {
+        task.busy(undefined);
       }
     },
     "ger.workOnNext": () => walk.next(),
-    "ger.rebase.abort": () => rebaseStep(model, "abort"),
-    "ger.rebase.skip": () => rebaseStep(model, "skip"),
+    "ger.rebase.abort": () => stepInTerminal("abort", "Aborting the rebase in the ger terminal…"),
+    "ger.rebase.skip": () => stepInTerminal("skip", "Skipping the commit in the ger terminal…"),
     "ger.rebase.upstream": () => rebaseOntoUpstream(model),
     "ger.setup": () => {
       runInTerminal(repo, ["setup"]);

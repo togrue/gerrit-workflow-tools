@@ -1,12 +1,12 @@
 // The task header: while you review a chain (a staged review here) or rework your own (a rebase
 // underway), a compact block at the top of the side bar says the mode in words, where you are in
-// the chain and how much is left, and names the ways out in words. Reviewing, it lists the chain's
-// changes in reading order (oldest first), each one's state by an icon and a word; reworking,
-// Local stack right under it is that list. Pure: no `vscode`, no I/O; task.ts holds the state,
-// common.js draws it in the Change view (review) and Local stack (rework).
+// the chain and how much is left, and names the ways out in words. It lists the chain's changes in
+// reading order (oldest first), each one's state by an icon and a word: reviewing, your vote and
+// the comments; reworking, where the rebase stands on each commit. Pure: no `vscode`, no I/O;
+// task.ts holds the state, common.js draws it at the top of the Change view.
 
-import { Member, Overview, Stack } from "./api";
-import { commentState, commentTurns } from "./commentState";
+import { Member, Overview, Stack, StackCommit } from "./api";
+import { Commented, commentState, commentTurns } from "./commentState";
 import { plural } from "./format";
 import { reviewFocus } from "./reviewFocus";
 import { REBASE_ACTIONS, Tone } from "./stackRows";
@@ -28,6 +28,8 @@ export interface TaskStep {
   position: number;
   title: string;
   current: boolean;
+  /** Reworking, where the rebase stands on it: `todo` is drawn dimmed, besides its word. */
+  phase?: "done" | "current" | "todo";
   marks: TaskMark[];
   tooltip: string;
 }
@@ -65,6 +67,12 @@ export interface TaskOptions {
   all: boolean;
   /** A step of the review is under way: what it says while it runs. */
   busy?: string;
+  /**
+   * The change the Change view shows, with its comments counted from its chains (`chainCounts`):
+   * taken over the served counts for that change, so the header and the view say the same number.
+   * `key` is its change number (reviewing) or its commit (reworking).
+   */
+  shown?: { key: string; counts: Commented };
 }
 
 /** Which mode the checkout is in: a staged review here, else a rebase on your own stack. */
@@ -113,17 +121,23 @@ function voteMark(member: Member): TaskMark | undefined {
   return member.your_turn ? { icon: "circle-large-outline", text: "to review" } : undefined;
 }
 
+/** A change's comment counts: the Change view's, when it shows that change; else what was served with it. */
+function counted<T extends Commented>(item: T, key: string, options: TaskOptions): Commented {
+  return options.shown?.key === key ? options.shown.counts : item;
+}
+
 function reviewTask(overview: Overview | undefined, stack: Stack, options: TaskOptions): TaskVm {
   const review = stack.staged_review!;
   const focus = reviewFocus(overview, stack);
   const members = focus?.chain.members ?? [];
+  const comments = (member: Member) => counted(member, String(member.number), options);
   const at = members.findIndex((member) => member.number === review.number);
   const steps: TaskStep[] = members.map((member, index) => {
     const current = index === at;
     const marks = [
       current ? { icon: "eye", text: "reviewing", tone: "info" as const } : undefined,
       voteMark(member),
-      commentMark(member),
+      commentMark(comments(member)),
       failedCi(member) ? { icon: "error", text: "CI failed", tone: "bad" as const } : undefined,
     ].filter((mark): mark is TaskMark => Boolean(mark));
     return { key: String(member.number), position: index + 1, title: member.subject, current, marks, tooltip: `${member.number}: ${member.subject}\n${marks.map((m) => m.text).join(" · ") || "nothing to say"}` };
@@ -135,7 +149,7 @@ function reviewTask(overview: Overview | undefined, stack: Stack, options: TaskO
   const voted = members.filter((member) => member.your_votes?.["Code-Review"]).length;
   const toVote = members.filter((member) => !member.your_votes?.["Code-Review"] && !member.not_ready).length;
   const notReady = members.filter((member) => !member.your_votes?.["Code-Review"] && member.not_ready).length;
-  const toAnswer = members.reduce((sum, member) => sum + commentTurns(member).left, 0);
+  const toAnswer = members.reduce((sum, member) => sum + commentTurns(comments(member)).left, 0);
   const left = [
     members.length ? (toVote ? `${toVote} of ${members.length} to vote on` : `you voted on ${voted} of ${members.length}`) : "its chain is not in your inbox",
     notReady ? `${notReady} not ready for review` : "",
@@ -162,17 +176,23 @@ function reworkTask(stack: Stack, options: TaskOptions): TaskVm {
   const rebase = stack.rebase;
   const commits = stack.commits;
   const at = commits.findIndex((commit) => commit.rebase === "current");
-  const toAnswer = commits.reduce((sum, commit) => sum + commentTurns(commit).left, 0);
+  const toAnswer = commits.reduce((sum, commit) => sum + commentTurns(counted(commit, commit.sha ?? "", options)).left, 0);
+  // Counted by commit, as the rows show it: the findings are known only once a log is fetched.
   const failed = commits.filter(failedCi).length;
   const edits = commits.filter((commit) => commit.needs_edit).length;
-  const left = [toAnswer ? `${plural(toAnswer, "comment")} to answer` : "", failed ? `${plural(failed, "CI failure")}` : "", edits ? `${plural(edits, "commit")} need${edits === 1 ? "s" : ""} edits` : ""].filter(Boolean);
+  const left = [
+    toAnswer ? `${plural(toAnswer, "comment")} to answer` : "",
+    failed ? `CI failed on ${plural(failed, "commit")}` : "",
+    edits ? `${plural(edits, "commit")} need${edits === 1 ? "s" : ""} edits` : "",
+  ].filter(Boolean);
   const above = at >= 0 ? commits.length - at - 1 : commits.filter((commit) => commit.rebase === "todo").length;
   const unmerged = rebase?.unmerged.length ?? 0;
   const go = (action: "continue" | "abort" | "skip", detail: string): TaskAction => ({
     label: REBASE_ACTIONS[action].label,
     detail,
     command: REBASE_ACTIONS[action].command,
-    notNow: rebase && !rebase.actions.includes(action) ? (rebase.refused?.[action] ?? "not now") : undefined,
+    // While a step runs in the terminal, a second press would run another over it.
+    notNow: options.busy ? "the step before it is still running" : rebase && !rebase.actions.includes(action) ? (rebase.refused?.[action] ?? "not now") : undefined,
   });
   const actions = [
     go("continue", unmerged ? `once the ${plural(unmerged, "conflict")} ${unmerged === 1 ? "is" : "are"} resolved` : above ? `commit this stop as it is, then replay the ${plural(above, "commit")} above` : "commit this stop as it is and finish the rebase"),
@@ -186,11 +206,38 @@ function reworkTask(stack: Stack, options: TaskOptions): TaskVm {
     title,
     position: at >= 0 ? `change ${at + 1} of ${commits.length}` : `between changes, ${plural(above, "commit")} to come`,
     left: left.join(" · ") || "nothing left to answer or fix",
-    // Local stack, right under the header, is the chain: its rows mark what is replayed and what is to come.
-    steps: [],
+    // The chain, oldest first as while reviewing: Local stack steps aside, so the Change view has the room.
+    steps: commits.map((commit, index) => reworkStep(commit, index, options)),
     actions,
     views: options.all ? VIEWS.only : VIEWS.all,
     busy: options.busy,
+  };
+}
+
+const PHASE_MARKS: Record<"done" | "current" | "todo", TaskMark> = {
+  done: { icon: "check", text: "replayed", tone: "good" },
+  current: { icon: "debug-stackframe", text: "stopped here", tone: "warn" },
+  todo: { icon: "circle-large-outline", text: "to come", tone: "dim" },
+};
+
+/** A commit of the stack reworked: where the rebase stands on it, what is left on it in words, a click shows it. */
+function reworkStep(commit: StackCommit, index: number, options: TaskOptions): TaskStep {
+  const phase = commit.rebase ?? undefined;
+  const marks = [
+    phase ? PHASE_MARKS[phase] : undefined,
+    commentMark(counted(commit, commit.sha, options)),
+    commit.needs_edit && phase !== "done" ? { icon: "edit", text: "needs edits", tone: "warn" as const } : undefined,
+    failedCi(commit) ? { icon: "error", text: "CI failed", tone: "bad" as const } : undefined,
+  ].filter((mark): mark is TaskMark => Boolean(mark));
+  const name = commit.number ? String(commit.number) : commit.sha.slice(0, 8);
+  return {
+    key: commit.sha,
+    position: index + 1,
+    title: commit.summary,
+    current: phase === "current",
+    ...(phase ? { phase } : {}),
+    marks,
+    tooltip: `${name}: ${commit.summary}\n${marks.map((m) => m.text).join(" · ") || "nothing to say"}`,
   };
 }
 

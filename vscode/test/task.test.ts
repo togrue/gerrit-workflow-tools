@@ -5,7 +5,8 @@ import { test } from "node:test";
 
 import { Chain, Member, Overview, Rebase, ReviewState, Section } from "../src/api";
 import { taskKey, taskLines, taskMode, taskVm } from "../src/taskRows";
-import { commit, stack } from "./fixtures";
+import { chainCounts, changeVm } from "../src/changeRows";
+import { chain, comment, commit, shown, stack, state as fixtureState } from "./fixtures";
 
 const review: ReviewState = { number: 102, patch_set: 2, commit: "c".repeat(40), subject: "parser", staged: true, mode: "branch", worktree: "/repo", branch: "change-102", return_to: "main" };
 
@@ -93,17 +94,54 @@ test("reworking, the header says which change of how many, what is left over the
   const vm = taskVm(undefined, stack(commits, { rebase_in_progress: true, rebase }), { all: false })!;
   assert.deepEqual(taskLines(vm), [
     "Reworking your chain on feature: top — change 2 of 4  [All chains]",
-    "Left: 2 comments to answer · 1 CI failure · 2 commits need edits",
+    "Left: 2 comments to answer · CI failed on 1 commit · 2 commits need edits",
+    "  1. base — replayed",
+    "▸ 2. stop — stopped here · 2 to answer · needs edits",
+    "  3. next — to come · needs edits · CI failed",
+    "  4. top — to come",
     "[Continue] commit this stop as it is, then replay the 2 commits above",
     "[Abort] put the branch back as it was before the rebase",
   ]);
-  assert.deepEqual(vm.steps, [], "Local stack, right under the header, is the chain");
+  // The chain is the header's, oldest first, as while reviewing: Local stack steps aside. A click shows the commit.
+  assert.deepEqual(vm.steps.map((step) => [step.key, step.phase]), commits.map((c) => [c.sha, c.rebase]));
+  // The Change view's count of the commit it shows wins over the served one: the header and the view say one number.
+  const shown = { key: commits[1].sha, counts: { comments_unresolved: 2, comments_to_answer: 1, comments_drafted: 1, comments_awaiting_reply: 0, comments_total: 3 } };
+  const counted = taskVm(undefined, stack(commits, { rebase_in_progress: true, rebase }), { all: false, shown })!;
+  assert.equal(taskLines(counted)[1], "Left: 1 comment to answer · CI failed on 1 commit · 2 commits need edits");
+  assert.equal(taskLines(counted)[3], "▸ 2. stop — stopped here · 1 to answer · needs edits");
+  // A step running in the terminal: the header says so, and its buttons wait for it.
+  const busy = taskVm(undefined, stack(commits, { rebase_in_progress: true, rebase }), { all: false, busy: "Continuing the rebase in the ger terminal…" })!;
+  assert.deepEqual(taskLines(busy).filter((line) => line.startsWith("…") || line.startsWith("[")), [
+    "… Continuing the rebase in the ger terminal…",
+    "[Continue] (not now: the step before it is still running)",
+    "[Abort] (not now: the step before it is still running)",
+  ]);
   // A conflict: Continue says why it does not run, in core's words.
   const conflict = { ...rebase, stop: "conflict", actions: ["abort", "skip"], refused: { continue: "a.py is still conflicted" }, unmerged: ["a.py"] } as unknown as Rebase;
   const stopped = taskVm(undefined, stack(commits, { rebase_in_progress: true, rebase: conflict }), { all: false })!;
-  assert.deepEqual(taskLines(stopped).slice(2), [
+  assert.deepEqual(taskLines(stopped).slice(6), [
     "[Continue] (not now: a.py is still conflicted)",
     "[Abort] put the branch back as it was before the rebase",
     "[Skip] leave this commit out and go on",
   ]);
+});
+
+test("the header and the Change view say one number of comments for the change shown: the view's count wins over the served one", () => {
+  // Served with the inbox: 3 to answer. The Change view's chains: one yours to read, one your draft
+  // answers, one waiting on the author's reply to you, one resolved.
+  const members = [member(101, { your_votes: { "Code-Review": 1 } }), member(102, { comments_unresolved: 3, comments_total: 4, your_turn: true })];
+  const chains = [
+    chain("read", [comment("Why?")]),
+    chain("answered", [comment("Rename?"), comment("Done", { state: "draft", comment_id: "d", author: undefined })]),
+    chain("waiting", [comment("Typo"), comment("Which?", { author: "you" })], { turn: "theirs" }),
+    chain("done", [comment("Ok")], { resolved: true }),
+  ];
+  const view = changeVm(fixtureState({ local: false, shown: shown({ own: false }), chains }));
+  assert.equal(view.comments?.summary, "1 to read · 1 answered by your drafts (Vote and Publish sends them) · 1 waiting on a reply");
+  const counts = chainCounts(chains);
+  const header = taskVm(overview(members), stack([], { staged_review: review }), { all: false, shown: { key: "102", counts } })!;
+  assert.equal(taskLines(header)[1], "Left: 1 of 2 to vote on · 1 comment to read");
+  assert.match(taskLines(header)[3], /1 to answer/);
+  // Without the view's count (it is loading), the served one.
+  assert.match(taskLines(taskVm(overview(members), stack([], { staged_review: review }), { all: false })!)[1], /3 comments to read/);
 });

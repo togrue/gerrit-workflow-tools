@@ -4,8 +4,9 @@
 // seen once its diff, opened from the Change view (a click, Next file), was shown to its end, or by
 // a click on its tick.
 //
-// The combined diff (Open All Changes) does not count: VS Code reports every file in it as shown
-// whole, wherever it is scrolled, so only its ticks mark them there.
+// The combined diff (Open All Changes) does not tick a file on its own: VS Code reports every file in
+// it as shown whole, wherever it is scrolled. Read there, Next offers to mark them all seen (`markAll`),
+// and so does the Files header.
 
 import * as vscode from "vscode";
 
@@ -68,6 +69,20 @@ export class FilesSeen implements vscode.Disposable {
     this.changed.fire();
     if (where.number && where.patchSet) {
       await (await this.client()).markReviewed(where.number, where.patchSet, path, seen).catch(() => undefined);
+    }
+  }
+
+  /** Tick every one of `paths` of `where` not ticked yet: here at once, on Gerrit in one request behind it. */
+  async markAll(where: SeenWhere, paths: readonly string[]): Promise<void> {
+    const set = this.set(where);
+    const left = paths.filter((path) => !set.has(path));
+    if (!left.length) {
+      return;
+    }
+    left.forEach((path) => set.add(path));
+    this.changed.fire();
+    if (where.number && where.patchSet) {
+      await (await this.client()).markAllReviewed(where.number, where.patchSet, left).catch(() => undefined);
     }
   }
 
