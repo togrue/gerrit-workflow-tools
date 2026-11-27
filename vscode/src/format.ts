@@ -230,12 +230,17 @@ export function liveness(options: { live: boolean; checked?: Date; nextAt?: numb
 }
 
 /** What `ger review` did, in words. `inPlace`: it switched this checkout instead of using the review worktree. */
-export function reviewOpened(review: Pick<ReviewState, "number" | "patch_set" | "branch" | "worktree" | "staged">, inPlace: boolean): string {
+export function reviewOpened(
+  review: Pick<ReviewState, "number" | "patch_set" | "branch" | "worktree" | "staged"> & { set_aside?: string | null },
+  inPlace: boolean,
+): string {
+  // A folder this repository no longer knew was in the review worktree's place: said, since it is still on disk.
+  const aside = review.set_aside ? ` The folder that was there before, left over from an earlier review worktree, is kept as ${review.set_aside}.` : "";
   const change = `Change ${review.number} (patchset ${review.patch_set}) is checked out for review`;
   const staged = review.staged ? ", with its changes staged" : "";
   return inPlace
     ? `${change}: this checkout was switched to ${review.branch}${staged}. Leave Review Checkout switches back.`
-    : `${change} on ${review.branch} in ${review.worktree}${staged}.`;
+    : `${change} on ${review.branch} in ${review.worktree}${staged}.${aside}`;
 }
 
 export function plural(count: number, noun: string): string {

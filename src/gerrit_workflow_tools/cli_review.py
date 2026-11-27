@@ -251,7 +251,13 @@ def _open(args: argparse.Namespace, service: GerritService, cwd: Path, state: Re
         mode = state.mode
     stage = settings.review_stage if args.stage is None else args.stage
     options = CheckoutOptions(mode=mode, stage=stage, force=args.force)
-    new, moved_from = open_review(cwd, target, settings=settings, options=options)
+    new, moved_from, set_aside = open_review(cwd, target, settings=settings, options=options)
+    if set_aside is not None:
+        print(
+            f"{new.worktree} was left over from an earlier review worktree; it is kept as {set_aside} "
+            "(delete it when nothing in it is yours)",
+            file=sys.stderr,
+        )
     if moved_from is not None:
         print(f"moved {new.branch} off your commits; its old tip was {moved_from}", file=sys.stderr)
     chain = chain or related_chain_numbers(service, new.key, new.patch_set)

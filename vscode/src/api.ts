@@ -576,6 +576,9 @@ export interface Patchsets {
   patchsets: { number: number; commit: string; created: string | null }[];
 }
 
+/** What `POST /review/open` did: the review, and where a left-over folder in the review worktree's place was moved to (API 1.11). */
+export type ReviewOpened = ReviewState & { set_aside: string | null };
+
 export interface ReviewState {
   number: number;
   /** The change's Change-Id. */
@@ -827,9 +830,10 @@ export class GerClient {
     return (await this.call<{ review: ReviewState | null }>("GET", "/review", chain ? { chain: "1" } : undefined)).review;
   }
 
-  /** `ger review CHANGE`; `mode` as the review going on has it, else `ger.reviewCheckout` decides. */
-  async reviewOpen(change: number | string, mode?: ReviewState["mode"]): Promise<ReviewState> {
-    return (await this.call<{ review: ReviewState }>("POST", "/review/open", undefined, { change, mode })).review;
+  /** `ger review CHANGE`: the review, and where a left-over folder in the review worktree's place went (API 1.11); `mode` as the review going on has it, else `ger.reviewCheckout` decides. */
+  async reviewOpen(change: number | string, mode?: ReviewState["mode"]): Promise<ReviewOpened> {
+    const opened = await this.call<{ review: ReviewState; set_aside?: string | null }>("POST", "/review/open", undefined, { change, mode });
+    return { ...opened.review, set_aside: opened.set_aside ?? null };
   }
 
   /** `ger review --next` (1) or `--prev` (-1): the review moves along its chain. At its end a `GerApiError` with reason `chain-end`. */

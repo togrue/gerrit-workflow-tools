@@ -16,6 +16,7 @@ from gerrit_workflow_tools.core.config import Settings
 from gerrit_workflow_tools.core.gerrit_patchset import GerritPatchset, fetch_patchset
 from gerrit_workflow_tools.core.git_run import GitError, commit_sha_or_none, git, git_out
 from gerrit_workflow_tools.core.git_state import checked_out_branch_name, git_dir, repo_toplevel
+from gerrit_workflow_tools.core.review_worktree import ensure_review_worktree, review_worktree_path
 from gerrit_workflow_tools.core.rewrite_refusal import CheckoutOverEdits, submodule_refusal
 from gerrit_workflow_tools.core.tracked_changes import tracked_changes
 from gerrit_workflow_tools.core.upstream import track_remote_branch
@@ -170,27 +171,6 @@ def clear_state(worktree: Path | str) -> None:
         path.unlink()
 
 
-def main_worktree(cwd: Path | str) -> Path:
-    """The repository's main worktree (the first ``git worktree list`` entry)."""
-    for line in git_out("worktree", "list", "--porcelain", cwd=cwd).splitlines():
-        if line.startswith("worktree "):
-            return Path(line.removeprefix("worktree "))
-    top = repo_toplevel(cwd)
-    if top is None:
-        raise GitError("not inside a git worktree")
-    return top
-
-
-def review_worktree_path(cwd: Path | str, settings: Settings) -> Path:
-    """``ger.reviewWorktree`` (relative to the main worktree's parent), else ``<repo>-review`` beside it."""
-    main = main_worktree(cwd)
-    configured = (settings.review_worktree or "").strip()
-    if configured:
-        path = Path(configured).expanduser()
-        return path if path.is_absolute() else (main.parent / path)
-    return main.parent / f"{main.name}-review"
-
-
 def find_review(cwd: Path | str, settings: Settings) -> ReviewState | None:
     """The review going on here, else the one in the review worktree."""
     here = load_state(cwd)
@@ -198,15 +178,6 @@ def find_review(cwd: Path | str, settings: Settings) -> ReviewState | None:
         return here
     path = review_worktree_path(cwd, settings)
     return load_state(path) if path.is_dir() else None
-
-
-def ensure_review_worktree(cwd: Path | str, path: Path, commit: str) -> None:
-    """Create the review worktree at *path* (detached at *commit*) unless it is already there."""
-    if path.is_dir() and repo_toplevel(path) is not None:
-        return
-    if path.exists() and any(path.iterdir()):
-        raise ReviewUsageError(f"{path} exists and is not a worktree; set ger.reviewWorktree to another path")
-    git("worktree", "add", "--detach", str(path), commit, cwd=cwd)
 
 
 def refuse_own_edits(worktree: Path | str, state: ReviewState | None, *, rerun: str) -> None:
@@ -278,12 +249,13 @@ def set_staged(state: ReviewState, staged: bool) -> ReviewState:
 
 def open_review(
     cwd: Path | str, target: GerritPatchset, *, settings: Settings, options: CheckoutOptions
-) -> tuple[ReviewState, str | None]:
+) -> tuple[ReviewState, str | None, Path | None]:
     """Fetch *target*, check it out on its ``change-<number>`` branch, stage it, record the review.
 
     Raises :class:`UsageError` when the worktree holds your edits, :class:`ReviewRefusal` when the
     branch has your commits and ``options.force`` is not set. Never discards an edit. Also returns the old tip
-    of a branch ``force`` moved off commits of yours, so they can be recovered.
+    of a branch ``force`` moved off commits of yours, so they can be recovered, and where a left-over
+    folder in the review worktree's place was moved to (:mod:`core.review_worktree`).
     """
     mode = options.mode
     remote = settings.gerrit_remote
@@ -291,8 +263,7 @@ def open_review(
     if worktree is None:
         raise GitError("not inside a git worktree")
     fetch_patchset(cwd, remote, target)
-    if mode == "worktree":
-        ensure_review_worktree(cwd, worktree, target.commit)
+    set_aside = ensure_review_worktree(cwd, worktree, target.commit) if mode == "worktree" else None
     previous = load_state(worktree)
     refuse_own_edits(worktree, previous, rerun="ger review")
 
@@ -310,7 +281,7 @@ def open_review(
     if options.stage:
         state = _stage(worktree, state)
     save_state(state)
-    return state, moved_from
+    return state, moved_from, set_aside
 
 
 def _claim_branch(

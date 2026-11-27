@@ -78,10 +78,14 @@ def review_open(ctx: Context, req: Request) -> dict[str, Any]:
         stage=ctx.settings.review_stage if stage is None else stage,
         force=bool(req.body_field("force", bool)),
     )
-    state, moved_from = open_review(ctx.cwd, target, settings=ctx.settings, options=options)
+    state, moved_from, set_aside = open_review(ctx.cwd, target, settings=ctx.settings, options=options)
     # A step moves along the chain it found the change in: Gerrit is not asked for it again.
     chain = chain or related_chain_numbers(ctx.service, state.key, state.patch_set)
-    return {"review": review_state_json(state, chain=chain, url=url), "moved_from": moved_from}
+    return {
+        "review": review_state_json(state, chain=chain, url=url),
+        "moved_from": moved_from,
+        "set_aside": None if set_aside is None else str(set_aside),
+    }
 
 
 def review_done(ctx: Context, _req: Request) -> dict[str, Any]:

@@ -53,6 +53,8 @@ Two **review checkout** modes, set by `ger.reviewCheckout`:
 
 **First use asks.** When `ger.reviewCheckout` is unset and stdin is a terminal, `ger review` asks once: `Check out reviews in a separate worktree (w, default) or in this checkout (b)?` and writes the answer to the repository's local git config. Without a terminal, or with `--json` or `--ai`, it uses the review worktree and writes nothing. `--in-worktree` and `--in-place` override the setting for one run.
 
+**When the folder is already taken.** The review worktree's folder can outlive its entry in the repository: the repository was cloned again at the same place, or `git worktree prune` ran while the folder was out of reach. `ger review` moves such a left-over aside (`<folder>.left-over`, then `.left-over-2`, …), makes the worktree anew and says where the old folder is; it deletes nothing, since the folder may hold edits. Anything else there (another repository, another repository's worktree, plain files) is not ger's to move: the review is refused with nothing changed, and the message names the two ways on, `ger review --in-place` and another `ger.reviewWorktree`. A folder that is a worktree of another repository is never used as the review worktree.
+
 `ger review` acts on the review worktree whichever worktree you run it from. Its output names the worktree's path, so you can open it in your editor.
 
 ### The branch

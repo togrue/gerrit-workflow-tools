@@ -288,6 +288,10 @@ test("a review checkout says where the change is: the review worktree, or this c
   const review = { number: 900, patch_set: 2, branch: "change-900", worktree: "/r-review", staged: true };
   assert.equal(reviewOpened(review, false), "Change 900 (patchset 2) is checked out for review on change-900 in /r-review, with its changes staged.");
   assert.equal(
+    reviewOpened({ ...review, set_aside: "/r-review.left-over" }, false),
+    "Change 900 (patchset 2) is checked out for review on change-900 in /r-review, with its changes staged. The folder that was there before, left over from an earlier review worktree, is kept as /r-review.left-over.",
+  );
+  assert.equal(
     reviewOpened({ ...review, staged: false }, true),
     "Change 900 (patchset 2) is checked out for review: this checkout was switched to change-900. Leave Review Checkout switches back.",
   );

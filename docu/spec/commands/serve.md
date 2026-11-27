@@ -185,7 +185,7 @@ a client words its own advice while `message` stays ger's.
 
 ## API version
 
-`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.10.0`); the URL
+`/health` reports the contract's version as `api`, `MAJOR.MINOR.PATCH` (`1.11.0`); the URL
 prefix carries only the major (`/api/v1`). It moves on its own, not with ger's package version:
 
 | Bump | When |
@@ -668,7 +668,7 @@ a vote no change takes is `USAGE`, as on the command line.
 
 | Endpoint | Body | Does |
 |----------|------|------|
-| `/review/open` | `change`, optional `patchset`, `mode`, `stage`, `force`; or `step` instead of `change` | `ger review CHANGEISH`: the **review checkout**. `step` (`1` or `-1`) is `ger review --next` / `--prev`: the change above or below in the review chain of the review going on, at its current patchset, in that review's mode; at the end of the chain it is `NOT_FOUND`, with `ger review`'s words. Answers `review` (with `chain`) and `moved_from`. |
+| `/review/open` | `change`, optional `patchset`, `mode`, `stage`, `force`; or `step` instead of `change` | `ger review CHANGEISH`: the **review checkout**. `step` (`1` or `-1`) is `ger review --next` / `--prev`: the change above or below in the review chain of the review going on, at its current patchset, in that review's mode; at the end of the chain it is `NOT_FOUND`, with `ger review`'s words. `set_aside` (API 1.11) is where a left-over folder in the review worktree's place was moved to, else `null`; a folder ger does not move refuses the call with `reason` `review-worktree-blocked`, which the same call with `mode` `branch` gets around. Answers `review` (with `chain`) and `moved_from`. |
 | `/review/done` | — | `ger review --done`: `done` (the change), the `change-<n>` branches `deleted` and `kept`, and where the review's checkout is now: `mode`, `worktree`, `branch` (`null` when detached). |
 | `/reviewed` | `change`, `patchset` (numbers), `path`, optional `reviewed` | Mark `path` of that patchset reviewed on Gerrit (`reviewed` `true`, the default), or clear the mark (`false`): Gerrit's per-file flag, which its own web UI shows as a tick. One request; answers `change`, `patch_set`, `path`, `reviewed`. |
 | `/vote` | `change`, `patch_sets`, optional `chain`, `votes`, `message` | `ger review --vote`: publish your drafts on the change (with `chain`, on every open change of its chain), with `votes` (`{label: value}`; `{}` or none: the drafts go out without a vote, as `ger reply --publish CHANGEISH`) and `message` on each. With `chain`, a change that carries your vote on a label keeps it: the vote goes to the others, and your drafts and the message still go there. `patch_sets` (`{change number: patchset}`) is what `GET /vote` showed: when the changes or a patchset are not that any more, nothing is sent and it is `REFUSED`. A change that rules a vote out is skipped; when none takes it, or there is nothing to send (no draft, no vote, no message), or `GER_NO_PUBLISH` is set, it is `USAGE`. Answers as `ger review --vote --json` for several changes: `changes` (each `change`, `number`, `drafts`, `labels` (the votes that went there), `keeps` (your votes it kept), `message`, `status`) and `skipped` (`change`, `number`, `ruled_out`). |

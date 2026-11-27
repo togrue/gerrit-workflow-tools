@@ -521,7 +521,8 @@ One row per module, by package-relative path. **Owns** is the concept the module
 | `core/review_target.py` | What a review acts on: the review chain it walks (`related_chain_numbers`), the changes a vote goes to (`vote_changes`, `changes_by_number`, `vote_targets`: drafts and ruled-out votes per change), and the vote: `plan_vote` (a `VotePlan`), `send_vote`. `ger review --vote` and `ger serve` share both |
 | `core/change_checkout.py` | Checking a change out to work on it: the **local version** (`find_local_versions`), what to do with it (`plan_checkout`, `choose_action`), which commits above it take Gerrit's patchset (`gerrit_above`) |
 | `core/change_checkout_apply.py` | Doing what `ger checkout` decided (`apply_checkout`): moving the local version onto the patchset, taking the commits above as Gerrit has them or rebasing them, merging your edits into it; every outdated commit of the local stack (`update_stack`) |
-| `core/review_checkout.py` | Review checkout: the review worktree, `change-<number>` branches, staging, review state, walking a chain |
+| `core/review_checkout.py` | Review checkout: `change-<number>` branches, staging, review state, walking a chain |
+| `core/review_worktree.py` | The review worktree's folder: its path, creating it, a left-over folder moved aside, anything else refused |
 | `core/comment_chain.py` | The comment chain as data: `CommentChain`, `InlineComment`, `ContextLine`, whose turn it is (`ChainTurn`) and a comment's state (`CommentState`) |
 | `core/comment_chains.py` | Inline comment threads, resolved and unresolved; whose **turn** each is (`chain_turn`, `chain_turns`: to answer, answered by your drafts, waiting on the other side); how a chain is named (`ChainRef`: id, id prefix, `PATH:LINE`, URL) |
 | `core/suggested_edits.py` | A comment's suggested edits: Gerrit fix suggestions and ```` ```suggestion ```` blocks of its text, in one shape |

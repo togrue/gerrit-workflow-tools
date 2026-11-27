@@ -12,7 +12,7 @@ import { GerProcess } from "../src/server";
 /** A stand-in for `ger serve`: answers /health, says where it listens, warns once on stderr. */
 const SERVE = `
 const http = require("node:http");
-const server = http.createServer((_req, res) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify({ name: "ger", version: "0.1.0", api: "1.10.0" })); });
+const server = http.createServer((_req, res) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify({ name: "ger", version: "0.1.0", api: "1.11.0" })); });
 server.listen(0, "127.0.0.1", () => {
   process.stderr.write("warning: ger.token is stored in plain text\\n");
   process.stdout.write(JSON.stringify({ url: "http://127.0.0.1:" + server.address().port + "/api/v", api: "1", token: "t", repo: process.cwd(), pid: process.pid }) + "\\n");

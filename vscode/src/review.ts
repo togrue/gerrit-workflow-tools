@@ -8,7 +8,7 @@ import { GerApiError, ReviewState } from "./api";
 import { runInTerminal } from "./launch";
 import { leftReview, reviewOpened } from "./format";
 import { ChangeTarget, Model, describeError } from "./model";
-import { failureWays } from "./problemRows";
+import { PROBLEM_ACTIONS, failureWays } from "./problemRows";
 import { feedback, offerWaysOn, ui } from "./ui";
 
 /** How long Edit Commit Here says it is starting, at most: the terminal may be waiting on a question. */
@@ -111,9 +111,22 @@ async function checkOutForReview(model: Model, target: ChangeTarget, walk?: Revi
       }
       return;
     }
+    if (error instanceof GerApiError && error.reason === "review-worktree-blocked" && mode !== "branch") {
+      // Something that is not ger's is where the review worktree goes: this checkout can still take the review.
+      const picked = await ui().message("warning", `Not checked out for review: ${describeError(error)}`, {}, [BLOCKED.here, BLOCKED.log]);
+      if (picked === BLOCKED.here) {
+        await review(model, target, walk, "branch");
+      } else if (picked === BLOCKED.log) {
+        await vscode.commands.executeCommand(PROBLEM_ACTIONS.log.command.id, ...PROBLEM_ACTIONS.log.command.args);
+      }
+      return;
+    }
     void offerWaysOn("warning", `Not checked out for review: ${describeError(error)}`, failureWays(error));
   }
 }
+
+/** What a folder in the review worktree's place offers: the review in this checkout (ger's sentence names the setting for another folder). */
+export const BLOCKED = { here: "Review in This Checkout Instead", log: PROBLEM_ACTIONS.log.label };
 
 /** What a review over uncommitted changes here offers: the review worktree, or the changes to commit or stash. */
 export const OVER_EDITS = { worktree: "Review in a Worktree Instead", scm: "Commit or Stash Them…" };
