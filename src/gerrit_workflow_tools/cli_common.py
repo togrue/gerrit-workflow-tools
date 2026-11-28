@@ -49,8 +49,8 @@ HELP_JSON = "Write machine-readable JSON to stdout."
 HELP_COLOR = "Colorize output: always, auto, or never."
 HELP_HYPERLINKS = "Emit OSC 8 terminal hyperlinks: always, auto, or never."
 HELP_DEBUG_LOG = (
-    "Log diagnostics to stderr (git commands, outcomes, resolved refs/URLs, decisions, Gerrit API "
-    "response bodies, and a high-level request timing summary)."
+    "Log diagnostics to stderr (git commands, outcomes, resolved refs/URLs, decisions, and a "
+    "timing summary of the git, Gerrit and CI calls with the size of each response)."
 )
 
 
