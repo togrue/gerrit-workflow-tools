@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import re
 import sys
-from dataclasses import dataclass
+import time
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from urllib.parse import parse_qs, urlparse
 
 
@@ -117,6 +119,67 @@ def format_call_trace_summary() -> str:
             count_suffix = f" x{count}" if count > 1 else ""
             lines.append(f"    {seconds * 1000:6.0f}ms{count_suffix}  {label}")
     return "\n".join(lines)
+
+
+def call_totals() -> dict[str, tuple[int, float]]:
+    """Calls traced so far, by kind (``git``, ``gerrit``): how many and how long in all."""
+
+    totals: dict[str, tuple[int, float]] = {}
+    for kind, _label, seconds in _records:
+        count, spent = totals.get(kind, (0, 0.0))
+        totals[kind] = (count + 1, spent + seconds)
+    return totals
+
+
+@dataclass
+class _Window:
+    requests: int = 0
+    calls: dict[str, tuple[int, float]] = field(default_factory=dict)
+
+    def add(self, totals: dict[str, tuple[int, float]]) -> None:
+        self.requests += 1
+        for kind, (count, seconds) in totals.items():
+            had, spent = self.calls.get(kind, (0, 0.0))
+            self.calls[kind] = (had + count, spent + seconds)
+
+    def describe(self, *, timed: bool) -> str:
+        parts = [f"{self.requests} request(s)"]
+        for kind in ("git", "gerrit"):
+            count, seconds = self.calls.get(kind, (0, 0.0))
+            parts.append(f"{kind} {count} call(s), {seconds * 1000:.0f}ms" if timed else f"{kind} {count}")
+        return ", ".join(parts)
+
+
+class CallTally:
+    """Calls of a long-running process, summed per request; a summary line about once a *period*.
+
+    Each request's :func:`call_totals` is added with :meth:`add`, which returns the summary
+    of the period just past once it is over (``None`` until then): there is no timer, so a
+    quiet period says nothing.
+    """
+
+    def __init__(self, *, period: float = 60.0, clock: Callable[[], float] = time.monotonic) -> None:
+        self._period = period
+        self._clock = clock
+        self._started = self._window_start = clock()
+        self._window = _Window()
+        self._all = _Window()
+
+    def add(self, totals: dict[str, tuple[int, float]]) -> str | None:
+        """Count one request's calls; the summary line when this request closes a period."""
+
+        self._window.add(totals)
+        self._all.add(totals)
+        now = self._clock()
+        if now - self._window_start < self._period:
+            return None
+        line = (
+            f"calls in the last {now - self._window_start:.0f}s: {self._window.describe(timed=True)}"
+            f" (since start {(now - self._started) / 60:.0f} min: {self._all.describe(timed=False)})"
+        )
+        self._window_start = now
+        self._window = _Window()
+        return line
 
 
 def print_call_trace_summary() -> None:

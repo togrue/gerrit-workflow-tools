@@ -95,6 +95,11 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi | undef
   return start(context, log, choice);
 }
 
+/** What `ger serve` is started with besides `--exit-with-stdin`. */
+function serveArgs(): string[] {
+  return setting("debugLog", false) ? ["--debug-log"] : [];
+}
+
 function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choice: RepoChoice): ExtensionApi {
   const repo = choice.repo;
   const note = repoNote(choice);
@@ -102,7 +107,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
   void vscode.commands.executeCommand("setContext", "ger.state", "starting");
   const logLine = (line: string) => log.appendLine(line);
   const skew = versionSkewWarner(repo, context.extension.packageJSON, context.globalState, logLine);
-  const model = new Model(new GerProcess(repo, gerProgram, logLine, skew), context.workspaceState, repo);
+  const model = new Model(new GerProcess(repo, gerProgram, logLine, skew, serveArgs), context.workspaceState, repo);
   const overviewView = new OverviewView(model, context.workspaceState);
   const stackView = new StackView(context.extensionUri, model);
   const changeView = new ChangeView(context.extensionUri, model, context.globalState);
@@ -348,7 +353,7 @@ function start(context: vscode.ExtensionContext, log: vscode.OutputChannel, choi
       return paused;
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration("ger.executable")) {
+      if (event.affectsConfiguration("ger.executable") || event.affectsConfiguration("ger.debugLog")) {
         model.restart();
         void model.refresh();
       }

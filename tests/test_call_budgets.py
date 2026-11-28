@@ -20,10 +20,12 @@ from gerrit_workflow_tools.cli_resolve import main as resolve_main
 from gerrit_workflow_tools.cli_show import main as show_main
 from gerrit_workflow_tools.core.gerrit.rest import LIGHT_QUERY_OPTIONS, LOG_QUERY_OPTIONS
 from gerrit_workflow_tools.core.git_run import _run_git, git, git_out
+from gerrit_workflow_tools.server.api import GerApi
 from tests.change_store import ChangeStore, RecordedCall
 from tests.cli_gerrit_mocks import at_older_patchsets, build_details_by_change_id, stack_rows_mb_to_head
 from tests.conftest import run_cli
 from tests.fixtures import configure_gerrit_target
+from tests.test_serve import _gerrit, _get
 
 
 # Calibrated on cold ``ger log`` / ``ger show`` / ``ger fix`` / ``ger resolve`` (Aug 2026).
@@ -32,6 +34,8 @@ _LOG_GIT_BUDGET = 6
 _SHOW_GIT_BUDGET = 12
 _FIX_GIT_BUDGET = 10
 _RESOLVE_GIT_BUDGET = 10
+# One request of the editor's poll (`ger serve`: /overview, /stack), calibrated Nov 2026 at 6 each.
+_POLL_GIT_BUDGET = 8
 
 
 def _git_subcommand_counts(run: MagicMock) -> dict[str, int]:
@@ -471,3 +475,63 @@ def test_show_on_a_cold_cache_asks_for_the_change_once_in_full(
     assert lookup.args[0].startswith("change:I"), lookup.args[0]
     assert lookup.kwargs["options"] == list(LOG_QUERY_OPTIONS)
     assert store.calls_to("get_change") == []
+
+
+# --- The editor's poll (`ger serve`) ---------------------------------------------------
+
+
+def _poll(api: GerApi, store: ChangeStore, endpoint: str) -> tuple[int, list[RecordedCall]]:
+    """One request of the editor's poll: its git subprocesses and what it asked Gerrit."""
+    before = len(store.calls)
+    with _count_git() as run:
+        _get(api, endpoint)
+    assert run.call_count <= _POLL_GIT_BUDGET, (
+        f"{endpoint}: git subprocesses={run.call_count} budget={_POLL_GIT_BUDGET}; counts={_git_subcommand_counts(run)}"
+    )
+    return run.call_count, store.calls[before:]
+
+
+def _light(calls: list[RecordedCall]) -> bool:
+    return all(c.method == "query_changes" and c.kwargs.get("options") == ["SKIP_DIFFSTAT"] for c in calls)
+
+
+def test_the_editor_poll_stays_within_its_git_budget_and_asks_gerrit_lightly(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each poll is /overview then /stack (docu/Server-load.md): a few git calls, and Gerrit only for listings.
+
+    The local stack is read again on every request (ADR-0014), so the git count is the same
+    cold, warm and past the trust window; the stack's changes are asked for once, and later
+    only by the light probe that /overview sends past the trust window (ADR-0013).
+    """
+    import gerrit_workflow_tools.core.gerrit.cache as cache_mod
+
+    clock = {"t": 1000}
+    monkeypatch.setattr(cache_mod, "_now", lambda: clock["t"])
+    store, _keys, _rows = _gerrit(stack_repo)
+    api = GerApi(stack_repo, gerrit=store)
+
+    _poll(api, store, "/overview")
+    _git, stack_calls = _poll(api, store, "/stack")
+    assert stack_calls == [], "/overview has just read the stack's changes"
+
+    for now in (1001, 1200):  # inside the trust window, then past it
+        clock["t"] = now
+        _git, overview_calls = _poll(api, store, "/overview")
+        assert _light(overview_calls) and len(overview_calls) <= 3, overview_calls
+        _git, stack_calls = _poll(api, store, "/stack")
+        assert stack_calls == [], stack_calls
+
+
+def test_the_editor_poll_does_not_scale_with_stack_size(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A stack four times as long costs /stack the same git calls and one Gerrit request."""
+    counts: list[tuple[int, int, int]] = []
+    for n in (5, 20):
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / f"cache{n}"))
+        repo = _make_linear_stack(tmp_path / f"n{n}", n)
+        store = ChangeStore(build_details_by_change_id(stack_rows_mb_to_head(repo)))
+        git_calls, rest_calls = _poll(GerApi(repo, gerrit=store), store, "/stack")
+        counts.append((n, git_calls, len(rest_calls)))
+    (_small, git_small, rest_small), (_large, git_large, rest_large) = counts
+    assert git_large <= git_small, f"git scaled with N: {counts}"
+    assert rest_large == rest_small == 1, f"REST scaled with N: {counts}"

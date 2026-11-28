@@ -78,6 +78,10 @@ What `ger` sent, from the client:
 ger log --debug-log
 ```
 
+For the editor, turn on `ger.debugLog`: `ger serve` then logs each request of the views with
+its git and Gerrit calls to **ger: Show Log**, and about once a minute a line with how many
+requests, git calls and Gerrit calls that minute had, and how many since `ger serve` started.
+
 What the server received. Gerrit writes every request to `logs/httpd_log` in its site
 directory: client, time, request line, status, bytes, milliseconds. To see the lines one
 command caused on a Gerrit in a container you can reach over ssh:
@@ -98,5 +102,5 @@ Things worth looking for in a log:
 - a query without `change:` or `commit:` terms and without `owner:`/`reviewer:` (it scans a project);
 - requests that return the same bytes on every poll.
 
-The budgets are tests: `tests/test_call_budgets.py` and the listing tests in
+The budgets are tests: `tests/test_call_budgets.py` (the commands and the editor's poll, git and Gerrit) and the listing tests in
 `tests/test_inbox.py` fail when a command starts asking more.
