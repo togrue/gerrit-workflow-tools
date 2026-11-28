@@ -29,14 +29,6 @@ from gerrit_workflow_tools.core.http_connect import urlopen
 
 
 logger = logging.getLogger(__name__)
-_LOG_RESPONSE_BODIES = False
-
-
-def set_log_gerrit_response_bodies(enabled: bool) -> None:
-    """Configure whether full Gerrit JSON payloads should be debug-logged."""
-
-    global _LOG_RESPONSE_BODIES  # pylint: disable=global-statement
-    _LOG_RESPONSE_BODIES = enabled
 
 
 def _change_path(change_id: str, suffix: str = "") -> str:
@@ -149,9 +141,11 @@ class HttpGerritRest:
         req = Request(url, headers=headers, method=method, data=data)
         label = gerrit_request_label_from_url(method, url)
         t0 = time.perf_counter()
+        body: bytes | None = None
         try:
             with urlopen(req, timeout=120) as resp:
-                raw = resp.read().decode("utf-8", errors="replace")
+                body = resp.read()
+            raw = body.decode("utf-8", errors="replace")
         except HTTPError as e:
             if e.code == 401:
                 raise GerritUnavailableError(
@@ -165,7 +159,7 @@ class HttpGerritRest:
         except (URLError, OSError) as e:
             raise GerritUnavailableError(f"Gerrit unreachable at {self.host} ({_why_unreachable(e)})") from e
         finally:
-            record_call("gerrit", label, time.perf_counter() - t0)
+            record_call("gerrit", label, time.perf_counter() - t0, None if body is None else len(body))
 
         if not raw.strip():
             return {}
@@ -175,8 +169,6 @@ class HttpGerritRest:
             parsed = strip_terminal_controls(json.loads(_strip_magic_json_prefix(raw)))
         except json.JSONDecodeError as e:
             raise GerritApiError(f"invalid JSON from Gerrit: {e}") from e
-        if _LOG_RESPONSE_BODIES:
-            logger.debug("response body: %s", json.dumps(parsed, indent=2))
         return parsed
 
     def get_json(

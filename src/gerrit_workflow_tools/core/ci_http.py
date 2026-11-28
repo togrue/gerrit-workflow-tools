@@ -88,6 +88,7 @@ class UrllibCiHttp:
         logger.info("GET %s", url)
         req = Request(url, headers={"Accept": "*/*", "Accept-Encoding": "gzip", **(headers or {})}, method="GET")
         t0 = time.perf_counter()
+        raw: bytes | None = None
         try:
             with urlopen(req, timeout=self.timeout) as resp:
                 gzipped = (resp.headers.get("Content-Encoding") or "").strip().lower() == "gzip"
@@ -100,7 +101,9 @@ class UrllibCiHttp:
         except (OSError, zlib.error) as e:
             raise CiHttpError(f"request to {url} failed: {e}") from e
         finally:
-            record_call("ci", f"GET {urlparse(url).netloc}", time.perf_counter() - t0)
+            record_call(
+                "ci", f"GET {urlparse(url).netloc}", time.perf_counter() - t0, None if raw is None else len(raw)
+            )
         truncated = len(raw) > max_bytes
         return HttpText(url=final, text=raw[:max_bytes].decode("utf-8", errors="replace"), truncated=truncated)
 
