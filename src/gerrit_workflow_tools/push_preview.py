@@ -27,11 +27,11 @@ from gerrit_workflow_tools.core.push import (
     PushPlan,
     change_ref_of,
     publish_drafts_with,
+    publishable_drafts,
     push_argvs,
     revise,
     sent_commits,
     state_updates,
-    unsent_short_shas,
     wip_commits,
 )
 from gerrit_workflow_tools.core.push_checks import PushBoundary
@@ -151,7 +151,8 @@ def print_gpush_preview(plan: PushPlan, *, summary_highlighter: SummaryHighlight
     if sent and (idle := len(plan.commits) - len(sent) - len(updates) - len(plan.outdated)):
         print(color_text(f"{_commits(idle)} not sent again", ANSI_DIM))
     if not sent and not updates:
-        print(NOTHING_TO_PUSH)
+        drafts = publishable_drafts(plan)
+        print(color_text(f"No new commits to push; {drafts} draft(s) of yours", heading) if drafts else NOTHING_TO_PUSH)
     print_outdated(plan)
     print_ready_boundary_notice(plan.boundary, summary_highlighter=summary_highlighter)
 
@@ -197,8 +198,7 @@ def print_plan_status(plan: PushPlan) -> None:
     ]
     if options.strategy != ReviewerStrategy.PUSH:
         fields.append(("Strategy", color_text(strategy_status_label(options.strategy), ANSI_DIM)))
-    unsent = unsent_short_shas(plan)
-    stuck = [sha for sha in plan.drafts if sha in unsent]
+    stuck = sorted({change.commit.short_sha for change in plan.outdated} & plan.drafts.keys())
     updated = sum(count for sha, count in plan.drafts.items() if sha not in stuck)
     if updated:
         decision = "publish" if options.publish_comments else "keep"
@@ -207,7 +207,7 @@ def print_plan_status(plan: PushPlan) -> None:
         )
     print(color_text("  |  ", ANSI_DIM).join(f"{color_text(label, ANSI_DIM)} {value}" for label, value in fields))
     if stuck:
-        print(color_text(f"drafts on {', '.join(stuck)} stay drafts: Gerrit gets no new patchset there", ANSI_DIM))
+        print(color_text(f"drafts on {', '.join(stuck)} stay drafts: Gerrit keeps a newer patchset there", ANSI_DIM))
 
 
 def ask_push_action(drafts: int, *, sends: bool = True) -> str:

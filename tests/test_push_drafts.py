@@ -117,14 +117,93 @@ def test_guard_never_offers_to_publish(stack_repo: Path, monkeypatch: pytest.Mon
     assert "no-publish-comments" in _options(refspec)
 
 
-def test_drafts_on_unchanged_commits_are_named(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Gerrit publishes only on changes the push updates; the preview says which drafts stay."""
+def _published(store: ChangeStore) -> list[str]:
+    """The changes whose drafts were published over REST, in order."""
+    return [str(call.args[0]) for call in store.calls_to("publish_drafts")]
+
+
+def _answering(monkeypatch: pytest.MonkeyPatch, answer: str) -> list[str]:
+    """A terminal on stdin that types *answer* at every question; the questions asked."""
+    prompts: list[str] = []
+
+    def _input(prompt: str = "") -> str:
+        prompts.append(prompt)
+        return answer
+
+    monkeypatch.setattr(sys, "stdin", _Tty())
+    monkeypatch.setattr("builtins.input", _input)
+    return prompts
+
+
+def test_drafts_on_commits_gerrit_already_has_are_published_over_rest(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing to push is no reason to refuse the drafts: they go up as a review, with no ``git push``."""
     store, rows, keys = _pushed(stack_repo, updated=False)
     _with_draft(store, keys[0])
-    code, out, _err, _refspec = _run_push(stack_repo, monkeypatch, ["--dry-run"], store)
+    code, out, err, refspec = _run_push(stack_repo, monkeypatch, ["-y", "--publish-comments"], store)
+    assert code == ExitCode.OK, err
+    assert refspec is None
+    assert _published(store) == [keys[0]]
+    assert f"set {rows[0].short_sha}" in out and "publish-comments (1 draft)" in out
+    assert "nothing to push" not in out
+
+
+def test_yes_without_publish_comments_keeps_the_drafts_and_says_how(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, _rows, keys = _pushed(stack_repo, updated=False)
+    _with_draft(store, keys[0])
+    code, out, _err, refspec = _run_push(stack_repo, monkeypatch, ["-y"], store)
     assert code == ExitCode.OK
-    assert f"drafts on {rows[0].short_sha} stay drafts" in out
-    assert "Drafts" not in out.replace(f"drafts on {rows[0].short_sha}", "")
+    assert refspec is None and _published(store) == []
+    assert "nothing to push: Gerrit already has these commits" in out
+    assert "1 draft(s) kept: --publish-comments publishes them" in out
+
+
+@pytest.mark.parametrize(("answer", "published"), [(None, True), ("", False), ("-publish-drafts", False)])
+def test_with_nothing_to_push_the_options_line_offers_the_drafts(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch, answer: str | None, published: bool
+) -> None:
+    """The usual push options line, starting with publish-drafts: Enter publishes them over REST."""
+    store, _rows, keys = _pushed(stack_repo, updated=False)
+    _with_draft(store, keys[1])
+    calls = _line_answers(monkeypatch, answer)
+    code, out, _err, refspec = _run_push(stack_repo, monkeypatch, [], store)
+    assert code == ExitCode.OK
+    assert calls[0]["suffix"] == "publish-drafts"
+    assert calls[0]["message"] == "Push options (Enter sets them on Gerrit, Up: history, Ctrl-C cancels): "
+    assert "No new commits to push; 1 draft(s) of yours" in out
+    assert refspec is None
+    assert _published(store) == ([keys[1]] if published else [])
+
+
+def test_the_push_publishes_its_own_drafts_and_rest_those_below_it(
+    stack_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A sent commit's drafts ride on ``publish-comments``; Gerrit does not publish where it gets no patchset."""
+    rows = commits_in_range(stack_repo, "main..feature")[:2]
+    details = build_details_by_change_id(rows)
+    keys = list(details)
+    at_older_patchsets({keys[1]: details[keys[1]]}, stack_repo)  # only the top one gets a new patchset
+    store = ChangeStore(details)
+    _with_draft(store, keys[0])
+    _with_draft(store, keys[1])
+    code, _out, err, refspec = _run_push(stack_repo, monkeypatch, ["-y", "--publish-comments"], store)
+    assert code == ExitCode.OK, err
+    assert "publish-comments" in _options(refspec)
+    assert _published(store) == [keys[0]]
+
+
+def test_guard_keeps_drafts_on_commits_gerrit_already_has(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, _rows, keys = _pushed(stack_repo, updated=False)
+    _with_draft(store, keys[0])
+    monkeypatch.setenv("GER_NO_PUBLISH", "1")
+    prompts = _answering(monkeypatch, "")
+    code, out, _err, refspec = _run_push(stack_repo, monkeypatch, [], store)
+    assert code == ExitCode.OK
+    assert prompts == [] and refspec is None and _published(store) == []
+    assert "nothing to push: Gerrit already has these commits" in out
 
 
 def test_drafts_on_an_outdated_change_are_named(stack_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:

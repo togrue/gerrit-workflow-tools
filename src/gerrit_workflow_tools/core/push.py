@@ -73,7 +73,8 @@ class PushPlan:
     outdated: tuple[OutdatedChange, ...] = ()
     """Commits Gerrit already has as older patchsets: not sent, so Gerrit keeps its newer one."""
     drafts: dict[str, int] = field(default_factory=dict)
-    """Your unpublished drafts per pushed commit (short SHA -> count)."""
+    """Your unpublished drafts per pushed commit (short SHA -> count). On a commit Gerrit already has
+    at that commit, they are published over REST, as Gerrit's ``publish-comments`` does on the rest."""
     wip_from: str | None = None
     """The first commit pushed as work-in-progress; those below it go up ready. ``None``: the options
     decide for every commit."""
@@ -161,11 +162,6 @@ def sent_commits(plan: PushPlan) -> tuple[Commit, ...]:
     return tuple(commit for commit in plan.commits if commit.sha not in known)
 
 
-def unsent_short_shas(plan: PushPlan) -> set[str]:
-    """The commits *plan* gives no new patch set: drafts on them cannot be published with it."""
-    return {c.short_sha for c in plan.commits} - {c.short_sha for c in sent_commits(plan)}
-
-
 def _reviewed_commits(plan: PushPlan) -> tuple[Commit, ...]:
     """The commits reviewers reach over REST: all but the outdated ones, whose newer patchset Gerrit keeps."""
     outdated = {change.commit.sha for change in plan.outdated}
@@ -174,15 +170,18 @@ def _reviewed_commits(plan: PushPlan) -> tuple[Commit, ...]:
 
 def state_updates(plan: PushPlan) -> tuple[StateUpdate, ...]:
     """What *plan* sets over REST on the changes Gerrit already has at that commit."""
-    return planned_updates(plan.options, plan.unchanged)
+    return planned_updates(plan.options, plan.unchanged, plan.drafts)
 
 
 def publishable_drafts(plan: PushPlan) -> int:
-    """Drafts this push would publish if asked: on changes it updates, while the guard allows it."""
+    """Drafts this push would publish if asked: on every change but the outdated ones, while the guard allows it.
+
+    Those it sends get Gerrit's ``publish-comments``; those Gerrit already has at that commit get a review.
+    """
     if publish_blocked():
         return 0
-    unsent = unsent_short_shas(plan)
-    return sum(count for sha, count in plan.drafts.items() if sha not in unsent)
+    outdated = {change.commit.short_sha for change in plan.outdated}  # Gerrit keeps its newer patch set there
+    return sum(count for sha, count in plan.drafts.items() if sha not in outdated)
 
 
 def publish_drafts_with(plan: PushPlan, publish: bool) -> PushPlan:
