@@ -131,7 +131,7 @@ With `--json`: `{"changes": [{"change": <triplet>, "url": ..., "drafts": N, "lab
 
 - **On a TTY**, the push options line is the usual one with `publish-drafts` at its end, and the status line shows `Drafts publish N`. Enter adds Gerrit's `publish-comments` push option ([Gerrit: publish-comments](https://gerrit-review.googlesource.com/Documentation/user-upload.html#publish-comments)), which publishes your drafts on every change the push updates. Without `publish-drafts` on the line, the push keeps them. `ger.pushPublishDrafts = false` starts the line without it ([Configuration](../../Configuration.md)). Without a terminal on stdout the prompt is `Push and publish N draft(s)? [Y/n/p/r]`, and `p` pushes without publishing.
 - **With `-y`**, drafts are published only when `--publish-comments` is also given. Scripts and agents never publish by accident.
-- Drafts on a change the push does **not** update (behind the ready boundary, or with nothing new) stay drafts. The preview lists them by change.
+- Drafts on a change the push pushes but gives no new patchset (Gerrit already has that commit) are published over REST (`POST …/review`) with the same decision, since `publish-comments` cannot reach them. This works when the push has nothing else to send. Drafts on an outdated change, or behind the ready boundary, stay drafts; the preview lists the outdated ones by change.
 
 **Account preference.** Gerrit has an account preference that publishes drafts on every push (publish_comments_on_push in the account preferences). With it on, every push would publish. `ger push` therefore passes `no-publish-comments` whenever there are drafts and it is not publishing, so the answer above is the only thing that decides. Without drafts it sends neither option.
 

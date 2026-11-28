@@ -9,7 +9,7 @@ from pathlib import Path
 from gerrit_workflow_tools.cli_common import ExitCode
 from gerrit_workflow_tools.cli_style import color_short_sha
 from gerrit_workflow_tools.core.config import Settings
-from gerrit_workflow_tools.core.push import PushPlan, PushRefusal
+from gerrit_workflow_tools.core.push import PushPlan, PushRefusal, publishable_drafts
 from gerrit_workflow_tools.core.push_result import NOTHING_TO_PUSH, PushResult
 from gerrit_workflow_tools.core.push_reviewers import ReviewerApplyChangeOutcome
 from gerrit_workflow_tools.core.push_unchanged import StateUpdateFailure
@@ -74,6 +74,8 @@ def print_push_outcome(result: PushResult, plan: PushPlan | None) -> None:
         print(NOTHING_TO_PUSH)
         if plan is not None:
             print_outdated(plan)
+            if drafts := publishable_drafts(plan):
+                print(f"{drafts} draft(s) kept: --publish-comments publishes them")
     if result.error_message:
         print(result.error_message, file=sys.stderr)
     if result.reviewers is not None and plan is not None:

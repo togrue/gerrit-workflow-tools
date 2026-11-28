@@ -313,7 +313,8 @@ def _push_gerrit(run: RunContext, args: argparse.Namespace, *, branch: str) -> i
     plan = prepared
     if args.i:
         plan = prompt_initial_options(cwd, plan, args, settings=settings)
-    if changes_nothing(plan) and not args.dry_run:  # nothing to confirm, so -y is not needed either
+    offer = publishable_drafts(plan) and not args.yes and stdin_is_terminal()  # the question offers the drafts
+    if changes_nothing(plan) and not offer and not args.dry_run:  # nothing to confirm, so -y is not needed either
         return finish_push(execute(run, plan), plan)
     highlighter = branch_summary_highlighter(cwd, plan.branch, first_parent=first_parent, settings=settings)
     confirmed = _confirm_gerrit_push(cwd, plan, args, settings=settings, summary_highlighter=highlighter)

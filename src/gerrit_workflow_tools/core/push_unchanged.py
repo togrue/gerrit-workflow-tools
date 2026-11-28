@@ -5,7 +5,9 @@ changes a push gives a new patch set. For a commit that already is its change's 
 patch set, a push changes nothing, so ``ger push`` sets the same state through the change's
 REST endpoints instead: ``POST …/wip`` / ``…/ready``, ``POST`` / ``DELETE …/private``, ``PUT …/topic`` and
 the reviewer batch. Only what differs from the change's current state is sent, so a push
-without these options makes no extra call.
+without these options makes no extra call. ``publish-comments`` is the same: your drafts on such
+a change are published with a review (``POST …/review``), since the push gives Gerrit nothing to
+publish them with.
 
 A commit Gerrit has as an older patch set of its change (**outdated**) gets nothing: neither
 a patch set nor options over REST, so Gerrit keeps its newer patch set as it is.
@@ -13,7 +15,7 @@ a patch set nor options over REST, so Gerrit keeps its newer patch set as it is.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from gerrit_workflow_tools.core.gerrit.change_view import ChangeView
@@ -78,6 +80,8 @@ class StateUpdate:
     private: bool | None = None
     topic: str | None = None
     reviewers: tuple[str, ...] = ()
+    drafts: int = 0
+    """Your drafts on the change to publish; ``0`` leaves them drafts."""
 
     def describe(self) -> str:
         """The update in push-option words: ``wip``, ``ready``, ``private``, ``remove-private``, ``topic=x``…"""
@@ -85,6 +89,7 @@ class StateUpdate:
         parts += [] if self.private is None else ["private" if self.private else "remove-private"]
         parts += [f"topic={self.topic}"] if self.topic else []
         parts += [f"r={name}" for name in self.reviewers]
+        parts += [f"publish-comments ({self.drafts} draft{'s' if self.drafts > 1 else ''})"] if self.drafts else []
         return ",".join(parts)
 
 
@@ -94,8 +99,13 @@ class StateUpdateFailure:
     error: str
 
 
-def planned_updates(options: PushOptions, unchanged: Sequence[UnchangedChange]) -> tuple[StateUpdate, ...]:
-    """The REST updates *options* ask for on *unchanged*: only where a change's state differs."""
+def planned_updates(
+    options: PushOptions, unchanged: Sequence[UnchangedChange], drafts: Mapping[str, int] | None = None
+) -> tuple[StateUpdate, ...]:
+    """The REST updates *options* ask for on *unchanged*: only where a change's state differs.
+
+    *drafts* counts your drafts per short SHA; they are published where *options* publish comments.
+    """
     updates: list[StateUpdate] = []
     for change in unchanged:
         wip = True if options.wip and not change.wip else False if options.ready and change.wip else None
@@ -103,7 +113,8 @@ def planned_updates(options: PushOptions, unchanged: Sequence[UnchangedChange]) 
         private = False if options.remove_private and change.private else private
         topic = options.topic if options.topic and options.topic != change.topic else None
         reviewers = _missing_reviewers(options, change)
-        update = StateUpdate(change, wip=wip, private=private, topic=topic, reviewers=reviewers)
+        published = (drafts or {}).get(change.commit.short_sha, 0) if options.publish_comments else 0
+        update = StateUpdate(change, wip=wip, private=private, topic=topic, reviewers=reviewers, drafts=published)
         if update.describe():
             updates.append(update)
     return tuple(updates)
@@ -156,6 +167,8 @@ def apply_updates(service: GerritService, updates: Sequence[StateUpdate]) -> lis
                 service.rest.set_topic(triplet, update.topic)
             if update.reviewers:
                 service.changes.set_reviewers(triplet, add=list(update.reviewers))
+            if update.drafts:
+                service.comments.publish_drafts(triplet)
         except GerritApiError as error:
             failures.append(StateUpdateFailure(update, str(error)))
         finally:
